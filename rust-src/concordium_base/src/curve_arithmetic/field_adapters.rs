@@ -17,7 +17,9 @@ pub struct FFField<F>(pub(crate) F);
 /// Serialization is implemented by delegating the functionality to the wrapped
 /// type.
 impl<F: Serial> Serial for FFField<F> {
-    fn serial<B: crate::common::Buffer>(&self, out: &mut B) { self.0.serial(out) }
+    fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
+        self.0.serial(out)
+    }
 }
 
 /// Deserialization is implemented by delegating the functionality to the
@@ -33,25 +35,45 @@ impl<F: Deserial> Deserial for FFField<F> {
 /// `ff::Field`. This gives an implementation of our `Field` trait for
 /// `FFField<F>` for any `F` that implements `ff::Field`.
 impl<F: ff::Field> Field for FFField<F> {
-    fn random<R: RngCore + ?std::marker::Sized>(rng: &mut R) -> Self { F::random(rng).into() }
+    fn random<R: RngCore + ?std::marker::Sized>(rng: &mut R) -> Self {
+        F::random(rng).into()
+    }
 
-    fn zero() -> Self { F::ZERO.into() }
+    fn zero() -> Self {
+        F::ZERO.into()
+    }
 
-    fn one() -> Self { F::ONE.into() }
+    fn one() -> Self {
+        F::ONE.into()
+    }
 
-    fn is_zero(&self) -> bool { self.0.is_zero_vartime() }
+    fn is_zero(&self) -> bool {
+        self.0.is_zero_vartime()
+    }
 
-    fn square(&mut self) { self.0 = self.0.square() }
+    fn square(&mut self) {
+        self.0 = self.0.square()
+    }
 
-    fn double(&mut self) { self.0 = self.0.double() }
+    fn double(&mut self) {
+        self.0 = self.0.double()
+    }
 
-    fn negate(&mut self) { self.0 = self.0.neg() }
+    fn negate(&mut self) {
+        self.0 = self.0.neg()
+    }
 
-    fn add_assign(&mut self, other: &Self) { self.0.add_assign(other.0) }
+    fn add_assign(&mut self, other: &Self) {
+        self.0.add_assign(other.0)
+    }
 
-    fn sub_assign(&mut self, other: &Self) { self.0.sub_assign(other.0) }
+    fn sub_assign(&mut self, other: &Self) {
+        self.0.sub_assign(other.0)
+    }
 
-    fn mul_assign(&mut self, other: &Self) { self.0.mul_assign(other.0) }
+    fn mul_assign(&mut self, other: &Self) {
+        self.0.mul_assign(other.0)
+    }
 
     fn inverse(&self) -> Option<Self> {
         let res: Option<_> = self.0.invert().into();

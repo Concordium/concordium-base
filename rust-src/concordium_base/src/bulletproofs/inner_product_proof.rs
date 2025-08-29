@@ -11,8 +11,8 @@ use crate::{
 pub struct InnerProductProof<C: Curve> {
     #[size_length = 4]
     pub lr_vec: Vec<(C, C)>,
-    pub a:      C::Scalar,
-    pub b:      C::Scalar,
+    pub a: C::Scalar,
+    pub b: C::Scalar,
 }
 
 /// This function computes an inner product proof,
@@ -208,9 +208,9 @@ pub fn prove_inner_product_with_scalars<C: Curve>(
 /// Both u_sq and u_inv_sq have to be of equal length k, and s has to be of
 /// length 2^k.
 pub struct VerificationScalars<C: Curve> {
-    pub u_sq:     Vec<C::Scalar>,
+    pub u_sq: Vec<C::Scalar>,
     pub u_inv_sq: Vec<C::Scalar>,
-    pub s:        Vec<C::Scalar>,
+    pub s: Vec<C::Scalar>,
 }
 
 /// This function calculates the verification scalars

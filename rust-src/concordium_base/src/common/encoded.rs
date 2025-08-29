@@ -11,14 +11,15 @@ use super::{Deserial, ParseResult, Serial};
 pub struct Encoded<A> {
     #[serde(with = "crate::internal::byte_array_hex")]
     pub(crate) bytes: Vec<u8>,
-    _kind:            std::marker::PhantomData<A>,
+    _kind: std::marker::PhantomData<A>,
 }
 
 impl<A> Encoded<A> {
     /// Serialize `A` into `Encoded<A>`.
     pub fn encode(item: &A) -> Self
     where
-        A: Serial, {
+        A: Serial,
+    {
         Self {
             bytes: super::to_bytes(item),
             _kind: Default::default(),
@@ -31,7 +32,8 @@ impl<A> Encoded<A> {
     /// trailing bytes.
     pub fn decode(&self) -> ParseResult<A>
     where
-        A: Deserial, {
+        A: Deserial,
+    {
         use super::Get;
         let mut source = std::io::Cursor::new(&self.bytes);
         let payload = source.get()?;
@@ -56,7 +58,9 @@ impl<A> From<Vec<u8>> for Encoded<A> {
 }
 
 impl<A> AsRef<[u8]> for Encoded<A> {
-    fn as_ref(&self) -> &[u8] { &self.bytes }
+    fn as_ref(&self) -> &[u8] {
+        &self.bytes
+    }
 }
 
 #[cfg(test)]

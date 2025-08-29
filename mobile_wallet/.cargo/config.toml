@@ -1,6 +1,3 @@
-[net]
-git-fetch-with-cli = true
-
 [target.aarch64-linux-android]
 rustflags = ["-C", "link-args=-Wl,-z,max-page-size=16384"]
 

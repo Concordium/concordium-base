@@ -795,7 +795,9 @@ pub fn concordium_test(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Sets the cfg for testing targeting either Wasm and native.
 #[cfg(feature = "wasm-test")]
 #[proc_macro_attribute]
-pub fn concordium_cfg_test(_attr: TokenStream, item: TokenStream) -> TokenStream { item }
+pub fn concordium_cfg_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
 
 /// Sets the cfg for testing targeting either Wasm and native.
 #[cfg(not(feature = "wasm-test"))]

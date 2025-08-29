@@ -92,7 +92,7 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
                 let h_r = h.mul_by_scalar(&randomness);
                 let prover = Dlog {
                     public: h_r, // C g^-x = h^r
-                    coeff:  h,   // h
+                    coeff: h,    // h
                 };
                 let secret = DlogSecret {
                     secret: Value::new(*randomness),

@@ -294,7 +294,9 @@ mod tests {
     }
 
     #[test]
-    fn chunking_test_g1() { test_chunking_generic::<ArkGroup<G1Projective>>() }
+    fn chunking_test_g1() {
+        test_chunking_generic::<ArkGroup<G1Projective>>()
+    }
 
     // This is a generic helper function that tests encryption/decryption in chunks.
     // It is parameterized by a curve, and the intention is that concrete tests are

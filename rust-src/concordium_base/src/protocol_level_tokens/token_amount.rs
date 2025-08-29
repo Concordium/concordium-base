@@ -25,7 +25,7 @@ use std::str::FromStr;
 #[serde(try_from = "TokenAmountJson", into = "TokenAmountJson")]
 pub struct TokenAmount {
     /// The amount of tokens as an unscaled integer value.
-    value:    u64,
+    value: u64,
     /// The number of decimals in the token amount.
     decimals: u8,
 }
@@ -46,7 +46,8 @@ impl CborSerialize for TokenAmount {
 impl CborDeserialize for TokenAmount {
     fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         let decimal_fraction = UnsignedDecimalFraction::deserialize(decoder)?;
 
         let decimals = decimal_fraction
@@ -73,19 +74,25 @@ impl TokenAmount {
     /// Construct a [`TokenAmount`] from a value without decimal places and the
     /// number of decimals, meaning the token amount is computed as `value *
     /// 10^(-decimals)`.
-    pub fn from_raw(value: u64, decimals: u8) -> Self { Self { value, decimals } }
+    pub fn from_raw(value: u64, decimals: u8) -> Self {
+        Self { value, decimals }
+    }
 
     /// The number of decimals in the token amount.
     ///
     /// The numerical amount represented by the `TokenAmount`
     /// is `value * 10^(-decimals)`
-    pub fn decimals(&self) -> u8 { self.decimals }
+    pub fn decimals(&self) -> u8 {
+        self.decimals
+    }
 
     /// The amount of tokens as an unscaled integer value.
     ///
     /// The numerical amount represented by the `TokenAmount`
     /// is `value * 10^(-decimals)`
-    pub fn value(&self) -> u64 { self.value }
+    pub fn value(&self) -> u64 {
+        self.value
+    }
 
     /// Converts [`rust_decimal::Decimal`] to a token amount of the same
     /// numerical value but represented with the given number of `decimals`.
@@ -211,14 +218,14 @@ impl PartialOrd for TokenAmount {
 /// SDKs.
 #[derive(serde::Serialize, serde::Deserialize)]
 struct TokenAmountJson {
-    value:    String,
+    value: String,
     decimals: u8,
 }
 
 impl From<TokenAmount> for TokenAmountJson {
     fn from(amount: TokenAmount) -> Self {
         Self {
-            value:    amount.value.to_string(),
+            value: amount.value.to_string(),
             decimals: amount.decimals,
         }
     }
@@ -229,7 +236,7 @@ impl TryFrom<TokenAmountJson> for TokenAmount {
 
     fn try_from(json: TokenAmountJson) -> Result<Self, Self::Error> {
         Ok(Self {
-            value:    json.value.parse()?,
+            value: json.value.parse()?,
             decimals: json.decimals,
         })
     }
@@ -245,13 +252,13 @@ mod test {
     #[test]
     fn test_display() {
         let amount = TokenAmount {
-            value:    123450,
+            value: 123450,
             decimals: 3,
         };
         assert_eq!(amount.to_string().as_str(), "123.450");
 
         let amount = TokenAmount {
-            value:    10,
+            value: 10,
             decimals: 5,
         };
         assert_eq!(amount.to_string().as_str(), "0.00010");
@@ -355,7 +362,7 @@ mod test {
         assert_eq!(token_amount_decoded, token_amount);
 
         let token_amount = TokenAmount {
-            value:    u64::MAX,
+            value: u64::MAX,
             decimals: 3,
         };
         let cbor = cbor::cbor_encode(&token_amount).unwrap();

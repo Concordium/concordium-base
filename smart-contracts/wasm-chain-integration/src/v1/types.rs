@@ -28,38 +28,38 @@ pub enum InitResult<A> {
     /// Execution succeeded and a new instance is to be created.
     Success {
         /// Logs produced by the execution.
-        logs:             v0::Logs,
+        logs: v0::Logs,
         /// The return value produced by execution.
-        return_value:     ReturnValue,
+        return_value: ReturnValue,
         /// The remaining interpreter energy after execution.
         remaining_energy: InterpreterEnergy,
         /// Initial state of the contract.
-        state:            MutableState,
+        state: MutableState,
         /// Debug trace.
-        trace:            A,
+        trace: A,
     },
     /// Execution failed due to the initialization function's logic.
     Reject {
         /// Error code returned by the init function.
-        reason:           i32,
+        reason: i32,
         /// Return value produced. This would typically be an a serialization of
         /// an error variant providing more details than the error code, but in
         /// principle it is arbitrary.
-        return_value:     ReturnValue,
+        return_value: ReturnValue,
         /// The remaining interpreter energy after execution.
         remaining_energy: InterpreterEnergy,
         /// Debug trace.
-        trace:            A,
+        trace: A,
     },
     /// Execution stopped due to a runtime error.
     Trap {
         /// The error returned by the Wasm interpreter.
-        error:            anyhow::Error, /* this error is here so that we can print it in
-                                          * cargo-concordium */
+        error: anyhow::Error, /* this error is here so that we can print it in
+                               * cargo-concordium */
         /// The remaining interpreter energy after execution.
         remaining_energy: InterpreterEnergy,
         /// Debug trace.
-        trace:            A,
+        trace: A,
     },
     /// Execution exceeded its allocated energy bound and was terminated.
     OutOfEnergy {
@@ -119,7 +119,7 @@ impl InitResult<()> {
 /// Host that is saved between handling of operations. This contains sufficient
 /// information to resume execution once control returns to the contract.
 pub struct SavedHost<Ctx> {
-    pub(crate) stateless:          StateLessReceiveHost<ParameterVec, Ctx>,
+    pub(crate) stateless: StateLessReceiveHost<ParameterVec, Ctx>,
     /// Current generation of the state. This is the generation before the
     /// handler for the operation is invoked. When control is handed back to the
     /// contract the contract is told whether its state has changed. If it
@@ -128,10 +128,10 @@ pub struct SavedHost<Ctx> {
     pub(crate) current_generation: InstanceCounter,
     /// A list of entries that were handed out before the handler of the
     /// operation was invoked.
-    pub(crate) entry_mapping:      Vec<trie::EntryId>,
+    pub(crate) entry_mapping: Vec<trie::EntryId>,
     /// A list of iterators that were handed out before the handler of the
     /// operation was invoked.
-    pub(crate) iterators:          Vec<Option<trie::Iterator>>,
+    pub(crate) iterators: Vec<Option<trie::Iterator>>,
 }
 
 /// Chain context accessible to receive methods of V1 contracts.
@@ -139,7 +139,7 @@ pub struct SavedHost<Ctx> {
 #[serde(rename_all = "camelCase")]
 pub struct ReceiveContext<Policies> {
     #[serde(flatten)]
-    pub common:     v0::ReceiveContext<Policies>,
+    pub common: v0::ReceiveContext<Policies>,
     /// The entrypoint that was intended to be called.
     pub entrypoint: OwnedEntrypointName,
 }
@@ -147,7 +147,7 @@ pub struct ReceiveContext<Policies> {
 impl<'a> From<ReceiveContext<v0::PolicyBytes<'a>>> for ReceiveContext<v0::OwnedPolicyBytes> {
     fn from(borrowed: ReceiveContext<v0::PolicyBytes<'a>>) -> Self {
         Self {
-            common:     borrowed.common.into(),
+            common: borrowed.common.into(),
             entrypoint: borrowed.entrypoint,
         }
     }
@@ -164,17 +164,17 @@ pub enum ReceiveResult<R, A: DebugInfo, Ctx = ReceiveContext<v0::OwnedPolicyByte
     /// Execution terminated.
     Success {
         /// Logs produced since the last interrupt (or beginning of execution).
-        logs:             v0::Logs,
+        logs: v0::Logs,
         /// Whether the state has changed as a result of execution. Note that
         /// the meaning of this is "since the start of the last resume".
-        state_changed:    bool,
+        state_changed: bool,
         /// Return value that was produced. There is always a return value,
         /// although it might be empty.
-        return_value:     ReturnValue,
+        return_value: ReturnValue,
         /// Remaining interpreter energy.
         remaining_energy: InterpreterEnergy,
         /// Debug trace.
-        trace:            A,
+        trace: A,
     },
     /// Execution triggered an operation.
     Interrupt {
@@ -182,35 +182,35 @@ pub enum ReceiveResult<R, A: DebugInfo, Ctx = ReceiveContext<v0::OwnedPolicyByte
         remaining_energy: InterpreterEnergy,
         /// Whether the state has changed as a result of execution. Note that
         /// the meaning of this is "since the start of the last resume".
-        state_changed:    bool,
+        state_changed: bool,
         /// Logs produced since the last interrupt (or beginning of execution).
-        logs:             v0::Logs,
+        logs: v0::Logs,
         /// Stored execution state that can be used to resume execution.
-        config:           Box<ReceiveInterruptedState<R, Ctx>>,
+        config: Box<ReceiveInterruptedState<R, Ctx>>,
         /// The operation that needs to be handled.
-        interrupt:        Interrupt,
+        interrupt: Interrupt,
         /// Debug trace.
-        trace:            A,
+        trace: A,
     },
     /// Contract execution terminated with a "logic error", i.e., contract
     /// decided to signal an error.
     Reject {
         /// Return code.
-        reason:           i32,
+        reason: i32,
         /// Return value, that may describe the error in more detail.
-        return_value:     ReturnValue,
+        return_value: ReturnValue,
         /// Remaining interpreter energy.
         remaining_energy: InterpreterEnergy,
         /// Debug trace.
-        trace:            A,
+        trace: A,
     },
     /// Execution stopped due to a runtime error.
     Trap {
-        error:            anyhow::Error, /* this error is here so that we can print it in
-                                          * cargo-concordium */
+        error: anyhow::Error, /* this error is here so that we can print it in
+                               * cargo-concordium */
         remaining_energy: InterpreterEnergy,
         /// Debug trace.
-        trace:            A,
+        trace: A,
     },
     /// Execution consumed all available interpreter energy.
     OutOfEnergy {
@@ -225,14 +225,14 @@ pub enum ReceiveResult<R, A: DebugInfo, Ctx = ReceiveContext<v0::OwnedPolicyByte
 pub(crate) struct ReceiveResultExtract<R> {
     /// Encoding of the status (i.e., whether it is success, interrupt, ...),
     /// see [ReceiveResult::extract] for the format.
-    pub status:          Vec<u8>,
+    pub status: Vec<u8>,
     /// Whether the state of the contract changed or not.
-    pub state_changed:   bool,
+    pub state_changed: bool,
     /// If execution triggered an operation, this is the current state of
     /// execution.
     pub interrupt_state: Option<Box<ReceiveInterruptedState<R>>>,
     /// If execution terminated, this is the return value that was produced.
-    pub return_value:    Option<ReturnValue>,
+    pub return_value: Option<ReturnValue>,
 }
 
 impl<R> ReceiveResult<R, ()> {
@@ -479,12 +479,20 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportFunc {
             22 => Ok(ImportFunc::Common(CommonFunc::WriteOutput)),
             23 => Ok(ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin)),
             24 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveInvoker)),
-            25 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfAddress)),
-            26 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfBalance)),
+            25 => Ok(ImportFunc::ReceiveOnly(
+                ReceiveOnlyFunc::GetReceiveSelfAddress,
+            )),
+            26 => Ok(ImportFunc::ReceiveOnly(
+                ReceiveOnlyFunc::GetReceiveSelfBalance,
+            )),
             27 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSender)),
             28 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveOwner)),
-            29 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveEntrypointSize)),
-            30 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveEntryPoint)),
+            29 => Ok(ImportFunc::ReceiveOnly(
+                ReceiveOnlyFunc::GetReceiveEntrypointSize,
+            )),
+            30 => Ok(ImportFunc::ReceiveOnly(
+                ReceiveOnlyFunc::GetReceiveEntryPoint,
+            )),
             31 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Invoke)),
             32 => Ok(ImportFunc::Common(CommonFunc::VerifyEd25519)),
             33 => Ok(ImportFunc::Common(CommonFunc::VerifySecp256k1)),
@@ -554,7 +562,7 @@ impl Output for ImportFunc {
 /// into an enum with integer tags.
 pub struct ProcessedImports {
     pub(crate) tag: ImportFunc,
-    ty:             FunctionType,
+    ty: FunctionType,
 }
 
 impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ProcessedImports {
@@ -564,10 +572,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ProcessedImports {
     ) -> concordium_wasm::parse::ParseResult<Self> {
         let tag = cursor.next(ctx)?;
         let ty = cursor.next(ctx)?;
-        Ok(Self {
-            tag,
-            ty,
-        })
+        Ok(Self { tag, ty })
     }
 }
 
@@ -586,7 +591,7 @@ pub struct ConcordiumAllowedImports {
     pub support_upgrade: bool,
     /// Allow host functions to enable debugging support. This is intended for
     /// off-chain use.
-    pub enable_debug:    bool,
+    pub enable_debug: bool,
 }
 
 impl validate::ValidateImportExport for ConcordiumAllowedImports {
@@ -750,20 +755,17 @@ impl TryFromImport for ProcessedImports {
             bail!("Unsupported import module {}.", m)
         };
         let ty = match import.description {
-            concordium_wasm::types::ImportDescription::Func {
-                type_idx,
-            } => ctx
+            concordium_wasm::types::ImportDescription::Func { type_idx } => ctx
                 .get(type_idx as usize)
                 .ok_or_else(|| anyhow::anyhow!("Unknown type, this should not happen."))?
                 .clone(),
         };
-        Ok(Self {
-            tag,
-            ty,
-        })
+        Ok(Self { tag, ty })
     }
 
-    fn ty(&self) -> &FunctionType { &self.ty }
+    fn ty(&self) -> &FunctionType {
+        &self.ty
+    }
 }
 
 /// The runtime representation of the contract state. This collects all the
@@ -772,17 +774,17 @@ impl TryFromImport for ProcessedImports {
 pub struct InstanceState<'a, BackingStore> {
     /// The backing store that allows accessing any contract state that is not
     /// in-memory yet.
-    backing_store:                 BackingStore,
+    backing_store: BackingStore,
     /// A flag indicating whether any of the state change functions have been
     /// called.
-    pub(crate) changed:            bool,
+    pub(crate) changed: bool,
     /// Current generation of the state.
     pub(crate) current_generation: InstanceCounter,
-    pub(crate) entry_mapping:      Vec<trie::EntryId>,
-    pub(crate) iterators:          Vec<Option<trie::Iterator>>,
+    pub(crate) entry_mapping: Vec<trie::EntryId>,
+    pub(crate) iterators: Vec<Option<trie::Iterator>>,
     /// Opaque pointer to the state of the instance in consensus. Note that this
     /// is in effect a mutable reference.
-    state_trie:                    trie::StateTrie<'a>,
+    state_trie: trie::StateTrie<'a>,
 }
 
 /// first bit is ignored, the next 31 indicate a generation,
@@ -829,9 +831,7 @@ pub(crate) struct InstanceStateEntryOption {
 }
 
 impl InstanceStateEntryOption {
-    pub const NEW_NONE: Self = Self {
-        index: u64::MAX,
-    };
+    pub const NEW_NONE: Self = Self { index: u64::MAX };
 
     #[inline]
     /// Construct a new index from a generation and index.
@@ -869,9 +869,7 @@ impl InstanceStateEntryResultOption {
     pub const NEW_ERR: Self = Self {
         index: u64::MAX & !(1u64 << 62), // second bit is 0
     };
-    pub const NEW_OK_NONE: Self = Self {
-        index: u64::MAX,
-    };
+    pub const NEW_OK_NONE: Self = Self { index: u64::MAX };
 
     /// Construct a new index from a generation and index.
     /// This assumes both values are small enough, in particular that idx <=
@@ -915,9 +913,7 @@ impl InstanceStateIteratorResultOption {
     pub const NEW_ERR: Self = Self {
         index: u64::MAX & !(1u64 << 62), // second bit is 0
     };
-    pub const NEW_OK_NONE: Self = Self {
-        index: u64::MAX,
-    };
+    pub const NEW_OK_NONE: Self = Self { index: u64::MAX };
 
     /// Construct a new index from a generation and index.
     /// This assumes both values are small enough, in particular that idx <=
@@ -1037,11 +1033,20 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     /// encoding of) [None].
     pub(crate) fn create_entry(&mut self, key: &[u8]) -> StateResult<InstanceStateEntryOption> {
         self.changed = true;
-        ensure!(key.len() <= constants::MAX_KEY_SIZE, "Maximum key length exceeded.");
-        if let Ok(id) = self.state_trie.insert(&mut self.backing_store, key, Vec::new()) {
+        ensure!(
+            key.len() <= constants::MAX_KEY_SIZE,
+            "Maximum key length exceeded."
+        );
+        if let Ok(id) = self
+            .state_trie
+            .insert(&mut self.backing_store, key, Vec::new())
+        {
             let idx = self.entry_mapping.len();
             self.entry_mapping.push(id.0);
-            Ok(InstanceStateEntryOption::new_some(self.current_generation, idx))
+            Ok(InstanceStateEntryOption::new_some(
+                self.current_generation,
+                idx,
+            ))
         } else {
             Ok(InstanceStateEntryOption::NEW_NONE)
         }
@@ -1078,7 +1083,10 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         key: &[u8],
     ) -> StateResult<u32> {
         self.changed = true;
-        if let Ok(b) = self.state_trie.delete_prefix(&mut self.backing_store, key, energy)? {
+        if let Ok(b) = self
+            .state_trie
+            .delete_prefix(&mut self.backing_store, key, energy)?
+        {
             if b {
                 Ok(2)
             } else {
@@ -1124,10 +1132,16 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
             return Ok(InstanceStateEntryResultOption::NEW_ERR);
         }
         if let Some(iter) = self.iterators.get_mut(idx).and_then(Option::as_mut) {
-            if let Some(id) = self.state_trie.next(&mut self.backing_store, iter, energy)? {
+            if let Some(id) = self
+                .state_trie
+                .next(&mut self.backing_store, iter, energy)?
+            {
                 let idx = self.entry_mapping.len();
                 self.entry_mapping.push(id);
-                Ok(InstanceStateEntryResultOption::new_ok_some(self.current_generation, idx))
+                Ok(InstanceStateEntryResultOption::new_ok_some(
+                    self.current_generation,
+                    idx,
+                ))
             } else {
                 Ok(InstanceStateEntryResultOption::NEW_OK_NONE)
             }
@@ -1221,12 +1235,14 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
             return u32::MAX;
         }
         if let Some(entry) = self.entry_mapping.get(idx) {
-            let res = self.state_trie.with_entry(*entry, &mut self.backing_store, |v| {
-                let offset = std::cmp::min(v.len(), offset as usize);
-                let num_copied = std::cmp::min(v.len().saturating_sub(offset), dest.len());
-                dest[0..num_copied].copy_from_slice(&v[offset..offset + num_copied]);
-                num_copied as u32
-            });
+            let res = self
+                .state_trie
+                .with_entry(*entry, &mut self.backing_store, |v| {
+                    let offset = std::cmp::min(v.len(), offset as usize);
+                    let num_copied = std::cmp::min(v.len().saturating_sub(offset), dest.len());
+                    dest[0..num_copied].copy_from_slice(&v[offset..offset + num_copied]);
+                    num_copied as u32
+                });
             if let Some(res) = res {
                 res
             } else {
@@ -1253,7 +1269,10 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
             return Ok(u32::MAX);
         }
         if let Some(entry) = self.entry_mapping.get(idx) {
-            if let Some(v) = self.state_trie.get_mut(*entry, &mut self.backing_store, energy)? {
+            if let Some(v) = self
+                .state_trie
+                .get_mut(*entry, &mut self.backing_store, energy)?
+            {
                 let offset = offset as usize;
                 if offset <= v.len() {
                     // by state invariants, v.len() <= MAX_ENTRY_SIZE.
@@ -1295,8 +1314,9 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
             return u32::MAX;
         }
         if let Some(entry) = self.entry_mapping.get(idx) {
-            let res =
-                self.state_trie.with_entry(*entry, &mut self.backing_store, |v| v.len() as u32);
+            let res = self
+                .state_trie
+                .with_entry(*entry, &mut self.backing_store, |v| v.len() as u32);
             if let Some(res) = res {
                 res
             } else {
@@ -1331,10 +1351,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
             if let Some(v) = self.state_trie.get_mut(
                 entry,
                 &mut self.backing_store,
-                &mut ResizeAllocateCounter {
-                    new_size,
-                    energy,
-                },
+                &mut ResizeAllocateCounter { new_size, energy },
             )? {
                 let existing_len = v.len();
                 if new_size > existing_len as u64 {
@@ -1367,7 +1384,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
 /// retain excess memory.
 struct ResizeAllocateCounter<'a> {
     new_size: u64,
-    energy:   &'a mut InterpreterEnergy,
+    energy: &'a mut InterpreterEnergy,
 }
 
 impl<'a> trie::AllocCounter<trie::Value> for ResizeAllocateCounter<'a> {
@@ -1380,9 +1397,11 @@ impl<'a> trie::AllocCounter<trie::Value> for ResizeAllocateCounter<'a> {
     fn allocate(&mut self, data: &trie::Value) -> Result<(), Self::Err> {
         let existing_size = data.len() as u64;
         if self.new_size > existing_size {
-            self.energy.tick_energy(constants::additional_entry_size_cost(existing_size))
+            self.energy
+                .tick_energy(constants::additional_entry_size_cost(existing_size))
         } else {
-            self.energy.tick_energy(constants::additional_entry_size_cost(self.new_size))
+            self.energy
+                .tick_energy(constants::additional_entry_size_cost(self.new_size))
         }
     }
 }

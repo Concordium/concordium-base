@@ -26,11 +26,13 @@ pub struct VecCommitmentKey<C: Curve> {
     #[size_length = 4]
     pub gs: Vec<C>,
     /// Base to raise the randomness to when committing.
-    pub h:  C,
+    pub h: C,
 }
 
 impl<C: Curve> CommitmentKey<C> {
-    pub fn new(g: C, h: C) -> Self { CommitmentKey { g, h } }
+    pub fn new(g: C, h: C) -> Self {
+        CommitmentKey { g, h }
+    }
 
     /// Commit to the given value using a freshly generated randomness, and
     /// return the randomness that was generated.
@@ -40,7 +42,8 @@ impl<C: Curve> CommitmentKey<C> {
         csprng: &mut T,
     ) -> (Commitment<C>, Randomness<C>)
     where
-        T: Rng, {
+        T: Rng,
+    {
         let r = Randomness::<C>::generate(csprng);
         (self.hide(s, &r), r)
     }
@@ -69,7 +72,8 @@ impl<C: Curve> CommitmentKey<C> {
 
     pub fn generate<T>(csprng: &mut T) -> CommitmentKey<C>
     where
-        T: Rng, {
+        T: Rng,
+    {
         let h = C::generate(csprng);
         let g = C::generate(csprng);
         CommitmentKey { g, h }
@@ -77,7 +81,9 @@ impl<C: Curve> CommitmentKey<C> {
 }
 
 impl<C: Curve> VecCommitmentKey<C> {
-    pub fn new(gs: Vec<C>, h: C) -> Self { VecCommitmentKey { gs, h } }
+    pub fn new(gs: Vec<C>, h: C) -> Self {
+        VecCommitmentKey { gs, h }
+    }
 
     /// Commit to the given values using a freshly generated randomness, and
     /// return the randomness that was generated.
@@ -87,7 +93,8 @@ impl<C: Curve> VecCommitmentKey<C> {
         csprng: &mut T,
     ) -> Option<(Commitment<C>, Randomness<C>)>
     where
-        T: Rng, {
+        T: Rng,
+    {
         let r = Randomness::<C>::generate(csprng);
         Some((self.hide(s, &r)?, r))
     }
@@ -135,7 +142,8 @@ impl<C: Curve> VecCommitmentKey<C> {
     /// key.
     pub fn generate<T>(csprng: &mut T, n: usize) -> VecCommitmentKey<C>
     where
-        T: Rng, {
+        T: Rng,
+    {
         let h = C::generate(csprng);
         let mut gs = Vec::with_capacity(n);
         for _ in 0..n {

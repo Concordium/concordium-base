@@ -64,7 +64,9 @@ impl Logs {
 
     /// Iterate over the logs in order, i.e., the log produced first is returned
     /// first.
-    pub fn iterate(&self) -> impl Iterator<Item = &Vec<u8>> { self.logs.iter() }
+    pub fn iterate(&self) -> impl Iterator<Item = &Vec<u8>> {
+        self.logs.iter()
+    }
 
     #[cfg(feature = "enable-ffi")]
     /// Serialize for the purposes of FFI transfer.
@@ -91,7 +93,9 @@ pub(crate) struct Outcome {
 }
 
 impl Outcome {
-    pub fn new() -> Outcome { Self::default() }
+    pub fn new() -> Outcome {
+        Self::default()
+    }
 
     /// Add a new `accept` action to the list.
     pub(crate) fn accept(&mut self) -> u32 {
@@ -109,9 +113,7 @@ impl Outcome {
             to_addr,
             amount: Amount::from_micro_ccd(micro_ccd),
         });
-        self.cur_state.push(Action::SimpleTransfer {
-            data,
-        });
+        self.cur_state.push(Action::SimpleTransfer { data });
         Ok(response as u32)
     }
 
@@ -131,11 +133,14 @@ impl Outcome {
         let rn = ReceiveName::new(name_str)?;
         let name = rn.to_owned();
 
-        ensure!(parameter_bytes.len() <= max_parameter_size, "Parameter exceeds max size.");
+        ensure!(
+            parameter_bytes.len() <= max_parameter_size,
+            "Parameter exceeds max size."
+        );
         let parameter = OwnedParameter::new_unchecked(parameter_bytes.to_vec());
 
         let to_addr = ContractAddress {
-            index:    addr_index,
+            index: addr_index,
             subindex: addr_subindex,
         };
         let data = std::rc::Rc::new(SendAction {
@@ -144,9 +149,7 @@ impl Outcome {
             amount: Amount::from_micro_ccd(micro_ccd),
             parameter,
         });
-        self.cur_state.push(Action::Send {
-            data,
-        });
+        self.cur_state.push(Action::Send { data });
         Ok(response as u32)
     }
 
@@ -155,10 +158,7 @@ impl Outcome {
     pub(crate) fn combine_and(&mut self, l: u32, r: u32) -> ExecResult<u32> {
         let response = self.cur_state.len() as u32;
         ensure!(l < response && r < response, "Combining unknown actions.");
-        self.cur_state.push(Action::And {
-            l,
-            r,
-        });
+        self.cur_state.push(Action::And { l, r });
         Ok(response)
     }
 
@@ -167,37 +167,37 @@ impl Outcome {
     pub(crate) fn combine_or(&mut self, l: u32, r: u32) -> ExecResult<u32> {
         let response = self.cur_state.len() as u32;
         ensure!(l < response && r < response, "Combining unknown actions.");
-        self.cur_state.push(Action::Or {
-            l,
-            r,
-        });
+        self.cur_state.push(Action::Or { l, r });
         Ok(response)
     }
 }
 
 impl State {
-    pub fn is_empty(&self) -> bool { self.state.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.state.is_empty()
+    }
 
     /// Create a new copy of the state.
     pub fn new(st: Option<&[u8]>) -> Self {
         match st {
-            None => Self {
-                state: Vec::new(),
-            },
+            None => Self { state: Vec::new() },
             Some(bytes) => Self {
                 state: Vec::from(bytes),
             },
         }
     }
 
-    pub fn len(&self) -> u32 { self.state.len() as u32 }
+    pub fn len(&self) -> u32 {
+        self.state.len() as u32
+    }
 
     pub(crate) fn write_state(&mut self, offset: u32, bytes: &[u8]) -> ExecResult<u32> {
         let length = bytes.len();
         ensure!(offset <= self.len(), "Cannot write past the offset.");
         let offset = offset as usize;
-        let end =
-            offset.checked_add(length).ok_or_else(|| anyhow!("Writing past the end of memory."))?;
+        let end = offset
+            .checked_add(length)
+            .ok_or_else(|| anyhow!("Writing past the end of memory."))?;
         let end = std::cmp::min(end, constants::MAX_CONTRACT_STATE as usize) as u32;
         if self.len() < end {
             self.state.resize(end as usize, 0u8);
@@ -348,21 +348,33 @@ pub trait HasInitContext {
 impl<'a, X: HasInitContext> HasInitContext for &'a X {
     type MetadataType = X::MetadataType;
 
-    fn metadata(&self) -> &Self::MetadataType { (*self).metadata() }
+    fn metadata(&self) -> &Self::MetadataType {
+        (*self).metadata()
+    }
 
-    fn init_origin(&self) -> ExecResult<&AccountAddress> { (*self).init_origin() }
+    fn init_origin(&self) -> ExecResult<&AccountAddress> {
+        (*self).init_origin()
+    }
 
-    fn sender_policies(&self) -> ExecResult<&[u8]> { (*self).sender_policies() }
+    fn sender_policies(&self) -> ExecResult<&[u8]> {
+        (*self).sender_policies()
+    }
 }
 
 impl<X: AsRef<[u8]>> HasInitContext for InitContext<X> {
     type MetadataType = ChainMetadata;
 
-    fn metadata(&self) -> &Self::MetadataType { &self.metadata }
+    fn metadata(&self) -> &Self::MetadataType {
+        &self.metadata
+    }
 
-    fn init_origin(&self) -> ExecResult<&AccountAddress> { Ok(&self.init_origin) }
+    fn init_origin(&self) -> ExecResult<&AccountAddress> {
+        Ok(&self.init_origin)
+    }
 
-    fn sender_policies(&self) -> ExecResult<&[u8]> { Ok(self.sender_policies.as_ref()) }
+    fn sender_policies(&self) -> ExecResult<&[u8]> {
+        Ok(self.sender_policies.as_ref())
+    }
 }
 
 /// Types which can act as receive contexts.
@@ -394,37 +406,65 @@ pub trait HasReceiveContext {
 impl<'a, X: HasReceiveContext> HasReceiveContext for &'a X {
     type MetadataType = X::MetadataType;
 
-    fn metadata(&self) -> &Self::MetadataType { (*self).metadata() }
+    fn metadata(&self) -> &Self::MetadataType {
+        (*self).metadata()
+    }
 
-    fn invoker(&self) -> ExecResult<&AccountAddress> { (*self).invoker() }
+    fn invoker(&self) -> ExecResult<&AccountAddress> {
+        (*self).invoker()
+    }
 
-    fn self_address(&self) -> ExecResult<&ContractAddress> { (*self).self_address() }
+    fn self_address(&self) -> ExecResult<&ContractAddress> {
+        (*self).self_address()
+    }
 
-    fn self_balance(&self) -> ExecResult<Amount> { (*self).self_balance() }
+    fn self_balance(&self) -> ExecResult<Amount> {
+        (*self).self_balance()
+    }
 
-    fn sender(&self) -> ExecResult<&Address> { (*self).sender() }
+    fn sender(&self) -> ExecResult<&Address> {
+        (*self).sender()
+    }
 
-    fn owner(&self) -> ExecResult<&AccountAddress> { (*self).owner() }
+    fn owner(&self) -> ExecResult<&AccountAddress> {
+        (*self).owner()
+    }
 
-    fn sender_policies(&self) -> ExecResult<&[u8]> { (*self).sender_policies() }
+    fn sender_policies(&self) -> ExecResult<&[u8]> {
+        (*self).sender_policies()
+    }
 }
 
 impl<X: AsRef<[u8]>> HasReceiveContext for ReceiveContext<X> {
     type MetadataType = ChainMetadata;
 
-    fn metadata(&self) -> &Self::MetadataType { &self.metadata }
+    fn metadata(&self) -> &Self::MetadataType {
+        &self.metadata
+    }
 
-    fn invoker(&self) -> ExecResult<&AccountAddress> { Ok(&self.invoker) }
+    fn invoker(&self) -> ExecResult<&AccountAddress> {
+        Ok(&self.invoker)
+    }
 
-    fn self_address(&self) -> ExecResult<&ContractAddress> { Ok(&self.self_address) }
+    fn self_address(&self) -> ExecResult<&ContractAddress> {
+        Ok(&self.self_address)
+    }
 
-    fn self_balance(&self) -> ExecResult<Amount> { Ok(self.self_balance) }
+    fn self_balance(&self) -> ExecResult<Amount> {
+        Ok(self.self_balance)
+    }
 
-    fn sender(&self) -> ExecResult<&Address> { Ok(&self.sender) }
+    fn sender(&self) -> ExecResult<&Address> {
+        Ok(&self.sender)
+    }
 
-    fn owner(&self) -> ExecResult<&AccountAddress> { Ok(&self.owner) }
+    fn owner(&self) -> ExecResult<&AccountAddress> {
+        Ok(&self.owner)
+    }
 
-    fn sender_policies(&self) -> ExecResult<&[u8]> { Ok(self.sender_policies.as_ref()) }
+    fn sender_policies(&self) -> ExecResult<&[u8]> {
+        Ok(self.sender_policies.as_ref())
+    }
 }
 
 /// A trait implemented by types that give access to information about the chain
@@ -436,7 +476,9 @@ pub trait HasChainMetadata {
 }
 
 impl HasChainMetadata for ChainMetadata {
-    fn slot_time(&self) -> ExecResult<SlotTime> { Ok(self.slot_time) }
+    fn slot_time(&self) -> ExecResult<SlotTime> {
+        Ok(self.slot_time)
+    }
 }
 
 /// Low-level implementations of host functions. They are written in this way so
@@ -608,7 +650,10 @@ pub(crate) mod host {
         init_origin: ExecResult<&AccountAddress>,
     ) -> machine::RunResult<()> {
         let start = unsafe { stack.pop_u32() } as usize;
-        ensure!(start + 32 <= memory.len(), "Illegal memory access for init origin.");
+        ensure!(
+            start + 32 <= memory.len(),
+            "Illegal memory access for init origin."
+        );
         (&mut memory[start..start + 32]).write_all(init_origin?.as_ref())?;
         Ok(())
     }
@@ -710,7 +755,10 @@ pub(crate) mod host {
         invoker: ExecResult<&AccountAddress>,
     ) -> machine::RunResult<()> {
         let start = unsafe { stack.pop_u32() } as usize;
-        ensure!(start + 32 <= memory.len(), "Illegal memory access for receive invoker.");
+        ensure!(
+            start + 32 <= memory.len(),
+            "Illegal memory access for receive invoker."
+        );
         (&mut memory[start..start + 32]).write_all(invoker?.as_ref())?;
         Ok(())
     }
@@ -722,7 +770,10 @@ pub(crate) mod host {
         self_address: ExecResult<&ContractAddress>,
     ) -> machine::RunResult<()> {
         let start = unsafe { stack.pop_u32() } as usize;
-        ensure!(start + 16 <= memory.len(), "Illegal memory access for receive owner.");
+        ensure!(
+            start + 16 <= memory.len(),
+            "Illegal memory access for receive owner."
+        );
         let self_address = self_address?;
         (&mut memory[start..start + 8]).write_all(&self_address.index.to_le_bytes())?;
         (&mut memory[start + 8..start + 16]).write_all(&self_address.subindex.to_le_bytes())?;
@@ -745,7 +796,10 @@ pub(crate) mod host {
         sender: ExecResult<&Address>,
     ) -> machine::RunResult<()> {
         let start = unsafe { stack.pop_u32() } as usize;
-        ensure!(start < memory.len(), "Illegal memory access for receive sender.");
+        ensure!(
+            start < memory.len(),
+            "Illegal memory access for receive sender."
+        );
         sender?
             .serial::<&mut [u8]>(&mut &mut memory[start..])
             .map_err(|_| anyhow!("Memory out of bounds."))?;
@@ -759,7 +813,10 @@ pub(crate) mod host {
         owner: ExecResult<&AccountAddress>,
     ) -> machine::RunResult<()> {
         let start = unsafe { stack.pop_u32() } as usize;
-        ensure!(start + 32 <= memory.len(), "Illegal memory access for receive owner.");
+        ensure!(
+            start + 32 <= memory.len(),
+            "Illegal memory access for receive owner."
+        );
         (&mut memory[start..start + 32]).write_all(owner?.as_ref())?;
         Ok(())
     }
@@ -775,7 +832,9 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    pub(crate) fn track_return(activation_frames: &mut u32) { *activation_frames += 1; }
+    pub(crate) fn track_return(activation_frames: &mut u32) {
+        *activation_frames += 1;
+    }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     pub(crate) fn charge_memory_alloc(
@@ -861,7 +920,9 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasInitContext> machine::Host<ProcessedImports
     }
 
     #[inline(always)]
-    fn track_return(&mut self) { host::track_return(&mut self.activation_frames) }
+    fn track_return(&mut self) {
+        host::track_return(&mut self.activation_frames)
+    }
 }
 
 impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImports>
@@ -972,20 +1033,22 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImpo
     }
 
     #[inline(always)]
-    fn track_return(&mut self) { host::track_return(&mut self.activation_frames) }
+    fn track_return(&mut self) {
+        host::track_return(&mut self.activation_frames)
+    }
 }
 
 /// Collection of information relevant to invoke an init-function.
 #[derive(Debug)]
 pub struct InitInvocation<'a> {
     /// The amount included in the transaction.
-    pub amount:    u64,
+    pub amount: u64,
     /// The name of the init function to invoke.
     pub init_name: &'a str,
     /// A parameter to provide the init function.
     pub parameter: Parameter<'a>,
     /// The limit on the energy to be used for execution.
-    pub energy:    InterpreterEnergy,
+    pub energy: InterpreterEnergy,
 }
 
 /// Invokes an init-function from a given artifact.
@@ -1005,17 +1068,13 @@ pub fn invoke_init<C: RunnableCode, Ctx: HasInitContext>(
         init_ctx,
     };
 
-    let res = match artifact
-        .run(&mut host, init_invocation.init_name, &[Value::I64(init_invocation.amount as i64)])
-    {
-        Ok(ExecutionOutcome::Success {
-            result,
-            ..
-        }) => result,
-        Ok(ExecutionOutcome::Interrupted {
-            reason,
-            ..
-        }) => match reason {}, // impossible case, InitHost has no interrupts
+    let res = match artifact.run(
+        &mut host,
+        init_invocation.init_name,
+        &[Value::I64(init_invocation.amount as i64)],
+    ) {
+        Ok(ExecutionOutcome::Success { result, .. }) => result,
+        Ok(ExecutionOutcome::Interrupted { reason, .. }) => match reason {}, // impossible case, InitHost has no interrupts
         Err(e) => {
             if e.downcast_ref::<OutOfEnergy>().is_some() {
                 return Ok(InitResult::OutOfEnergy);
@@ -1032,13 +1091,13 @@ pub fn invoke_init<C: RunnableCode, Ctx: HasInitContext>(
     if let Some(Value::I32(n)) = res {
         if n == 0 {
             Ok(InitResult::Success {
-                logs:             host.logs,
-                state:            host.state,
+                logs: host.logs,
+                state: host.state,
                 remaining_energy: remaining_energy.into(),
             })
         } else {
             Ok(InitResult::Reject {
-                reason:           reason_from_wasm_error_code(n)?,
+                reason: reason_from_wasm_error_code(n)?,
                 remaining_energy: remaining_energy.into(),
             })
         }
@@ -1083,8 +1142,12 @@ pub fn invoke_init_from_source<Ctx: HasInitContext>(
     limit_logs_and_return_values: bool,
     energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
-    let artifact =
-        utils::instantiate(ValidationConfig::V0, &ConcordiumAllowedImports, source_bytes)?.artifact;
+    let artifact = utils::instantiate(
+        ValidationConfig::V0,
+        &ConcordiumAllowedImports,
+        source_bytes,
+    )?
+    .artifact;
     invoke_init(
         &artifact,
         init_ctx,
@@ -1136,13 +1199,13 @@ pub fn invoke_init_with_metering_from_source<Ctx: HasInitContext>(
 #[derive(Debug)]
 pub struct ReceiveInvocation<'a> {
     /// The amount included in the transaction.
-    pub amount:       u64,
+    pub amount: u64,
     /// The name of the receive function to invoke.
     pub receive_name: &'a str,
     /// A parameter to provide the receive function.
-    pub parameter:    Parameter<'a>,
+    pub parameter: Parameter<'a>,
     /// The limit on the energy to be used for execution.
-    pub energy:       InterpreterEnergy,
+    pub energy: InterpreterEnergy,
 }
 
 /// Invokes a receive-function from a given artifact
@@ -1166,17 +1229,13 @@ pub fn invoke_receive<C: RunnableCode, Ctx: HasReceiveContext>(
         outcomes: Outcome::new(),
     };
 
-    let res = match artifact.run(&mut host, receive_invocation.receive_name, &[Value::I64(
-        receive_invocation.amount as i64,
-    )]) {
-        Ok(ExecutionOutcome::Success {
-            result,
-            ..
-        }) => result,
-        Ok(ExecutionOutcome::Interrupted {
-            reason,
-            ..
-        }) => match reason {}, // impossible case, ReceiveHost has no interrupts
+    let res = match artifact.run(
+        &mut host,
+        receive_invocation.receive_name,
+        &[Value::I64(receive_invocation.amount as i64)],
+    ) {
+        Ok(ExecutionOutcome::Success { result, .. }) => result,
+        Ok(ExecutionOutcome::Interrupted { reason, .. }) => match reason {}, // impossible case, ReceiveHost has no interrupts
         Err(e) => {
             if e.downcast_ref::<OutOfEnergy>().is_some() {
                 return Ok(ReceiveResult::OutOfEnergy);
@@ -1203,7 +1262,7 @@ pub fn invoke_receive<C: RunnableCode, Ctx: HasReceiveContext>(
             bail!("Invalid return.")
         } else {
             Ok(ReceiveResult::Reject {
-                reason:           reason_from_wasm_error_code(n)?,
+                reason: reason_from_wasm_error_code(n)?,
                 remaining_energy: remaining_energy.into(),
             })
         }
@@ -1257,8 +1316,12 @@ pub fn invoke_receive_from_source<Ctx: HasReceiveContext>(
     max_parameter_size: usize,
     limit_logs_and_return_values: bool,
 ) -> ExecResult<ReceiveResult> {
-    let artifact =
-        utils::instantiate(ValidationConfig::V0, &ConcordiumAllowedImports, source_bytes)?.artifact;
+    let artifact = utils::instantiate(
+        ValidationConfig::V0,
+        &ConcordiumAllowedImports,
+        source_bytes,
+    )?
+    .artifact;
     invoke_receive(
         &artifact,
         receive_ctx,

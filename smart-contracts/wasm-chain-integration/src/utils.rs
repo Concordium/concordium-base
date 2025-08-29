@@ -32,7 +32,9 @@ pub struct TrapHost;
 impl<I> machine::Host<I> for TrapHost {
     type Interrupt = NoInterrupt;
 
-    fn tick_initial_memory(&mut self, _num_pages: u32) -> machine::RunResult<()> { Ok(()) }
+    fn tick_initial_memory(&mut self, _num_pages: u32) -> machine::RunResult<()> {
+        Ok(())
+    }
 
     fn call(
         &mut self,
@@ -43,9 +45,13 @@ impl<I> machine::Host<I> for TrapHost {
         bail!("TrapHost traps on all host calls.")
     }
 
-    fn tick_energy(&mut self, _energy: u64) -> machine::RunResult<()> { Ok(()) }
+    fn tick_energy(&mut self, _energy: u64) -> machine::RunResult<()> {
+        Ok(())
+    }
 
-    fn track_call(&mut self) -> machine::RunResult<()> { Ok(()) }
+    fn track_call(&mut self) -> machine::RunResult<()> {
+        Ok(())
+    }
 
     fn track_return(&mut self) {}
 }
@@ -55,31 +61,31 @@ impl<I> machine::Host<I> for TrapHost {
 /// generator.
 pub struct TestHost<'a, R, BackingStore> {
     /// A RNG for randomised testing.
-    rng:                Option<R>,
+    rng: Option<R>,
     /// A flag set to `true` if the RNG was used.
-    pub rng_used:       bool,
+    pub rng_used: bool,
     /// Debug statements in the order they were emitted.
-    pub debug_events:   Vec<EmittedDebugStatement>,
+    pub debug_events: Vec<EmittedDebugStatement>,
     /// In-memory instance state used for state-related host calls.
-    state:              InstanceState<'a, BackingStore>,
+    state: InstanceState<'a, BackingStore>,
     /// Time in milliseconds at the beginning of the smart contract's block.
-    slot_time:          Option<u64>,
+    slot_time: Option<u64>,
     /// The address of this smart contract.
-    address:            Option<ContractAddress>,
+    address: Option<ContractAddress>,
     /// The current balance of this smart contract.
-    balance:            Option<u64>,
+    balance: Option<u64>,
     /// The parameters of the smart contract.
-    parameters:         HashMap<u32, Vec<u8>>,
+    parameters: HashMap<u32, Vec<u8>>,
     /// Events logged by the contract.
-    events:             Vec<Vec<u8>>,
+    events: Vec<Vec<u8>>,
     /// Account address of the sender.
-    init_origin:        Option<AccountAddress>,
+    init_origin: Option<AccountAddress>,
     /// Invoker of the top-level transaction.
-    receive_invoker:    Option<AccountAddress>,
+    receive_invoker: Option<AccountAddress>,
     /// Immediate sender of the message.
-    receive_sender:     Option<Address>,
+    receive_sender: Option<Address>,
     /// Owner of the contract.
-    receive_owner:      Option<AccountAddress>,
+    receive_owner: Option<AccountAddress>,
     /// The receive entrypoint name.
     receive_entrypoint: Option<OwnedEntrypointName>,
 }
@@ -144,15 +150,13 @@ pub enum ReportError {
     /// An error reported by `report_error`
     Reported {
         filename: String,
-        line:     u32,
-        column:   u32,
-        msg:      String,
+        line: u32,
+        column: u32,
+        msg: String,
     },
     /// Some other source of error. We only have the description, and no
     /// location.
-    Other {
-        msg: String,
-    },
+    Other { msg: String },
 }
 
 impl std::fmt::Display for ReportError {
@@ -164,9 +168,7 @@ impl std::fmt::Display for ReportError {
                 column,
                 msg,
             } => write!(f, "{}, {}:{}:{}", msg, filename, line, column),
-            ReportError::Other {
-                msg,
-            } => msg.fmt(f),
+            ReportError::Other { msg } => msg.fmt(f),
         }
     }
 }
@@ -183,8 +185,14 @@ pub(crate) fn extract_debug(
     let filename_start = unsafe { stack.pop_u32() } as usize;
     let msg_length = unsafe { stack.pop_u32() } as usize;
     let msg_start = unsafe { stack.pop_u32() } as usize;
-    ensure!(filename_start + filename_length <= memory.len(), "Illegal memory access.");
-    ensure!(msg_start + msg_length <= memory.len(), "Illegal memory access.");
+    ensure!(
+        filename_start + filename_length <= memory.len(),
+        "Illegal memory access."
+    );
+    ensure!(
+        msg_start + msg_length <= memory.len(),
+        "Illegal memory access."
+    );
     let msg = std::str::from_utf8(&memory[msg_start..msg_start + msg_length])?.to_owned();
     let filename =
         std::str::from_utf8(&memory[filename_start..filename_start + filename_length])?.to_owned();
@@ -288,7 +296,9 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let addr_ptr = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(addr_ptr)).map_err(|_| CallErr::Seek)?;
+                cursor
+                    .seek(SeekFrom::Start(addr_ptr))
+                    .map_err(|_| CallErr::Seek)?;
 
                 self.address = Some(ContractAddress::deserial(&mut cursor)?);
             }
@@ -315,7 +325,9 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let mut param = vec![0; param_size as usize];
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(param_ptr)).map_err(|_| CallErr::Seek)?;
+                cursor
+                    .seek(SeekFrom::Start(param_ptr))
+                    .map_err(|_| CallErr::Seek)?;
                 cursor.read_exact(&mut param)?;
 
                 self.parameters.insert(param_index, param);
@@ -344,8 +356,10 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                     ))?;
 
                     let mut mem = &mut memory[param_bytes..];
-                    let bytes_written: i32 =
-                        mem.write(self_param).map_err(|_| CallErr::Write)?.try_into()?;
+                    let bytes_written: i32 = mem
+                        .write(self_param)
+                        .map_err(|_| CallErr::Write)?
+                        .try_into()?;
 
                     stack.push_value(bytes_written)
                 } else {
@@ -360,10 +374,14 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                     stack.push_value(-1i32);
                 } else {
                     let mut cursor = Cursor::new(memory);
-                    cursor.seek(SeekFrom::Start(event_start)).map_err(|_| CallErr::Seek)?;
+                    cursor
+                        .seek(SeekFrom::Start(event_start))
+                        .map_err(|_| CallErr::Seek)?;
 
                     let mut buf = vec![0; event_length as usize];
-                    cursor.read(&mut buf).context("Unable to read provided event")?;
+                    cursor
+                        .read(&mut buf)
+                        .context("Unable to read provided event")?;
 
                     self.events.push(buf);
 
@@ -400,7 +418,9 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let addr_bytes = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| CallErr::Seek)?;
+                cursor
+                    .seek(SeekFrom::Start(addr_bytes))
+                    .map_err(|_| CallErr::Seek)?;
 
                 self.init_origin = Some(AccountAddress::deserial(&mut cursor)?);
             }
@@ -417,7 +437,9 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let addr_bytes = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| CallErr::Seek)?;
+                cursor
+                    .seek(SeekFrom::Start(addr_bytes))
+                    .map_err(|_| CallErr::Seek)?;
 
                 self.receive_invoker = Some(AccountAddress::deserial(&mut cursor)?);
             }
@@ -434,7 +456,9 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let addr_bytes = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| CallErr::Seek)?;
+                cursor
+                    .seek(SeekFrom::Start(addr_bytes))
+                    .map_err(|_| CallErr::Seek)?;
 
                 self.receive_sender = Some(Address::deserial(&mut cursor)?);
             }
@@ -451,7 +475,9 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let addr_bytes = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| CallErr::Seek)?;
+                cursor
+                    .seek(SeekFrom::Start(addr_bytes))
+                    .map_err(|_| CallErr::Seek)?;
 
                 self.receive_owner = Some(AccountAddress::deserial(&mut cursor)?);
             }
@@ -468,7 +494,9 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let addr_bytes = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| CallErr::Seek)?;
+                cursor
+                    .seek(SeekFrom::Start(addr_bytes))
+                    .map_err(|_| CallErr::Seek)?;
 
                 self.receive_entrypoint = Some(OwnedEntrypointName::deserial(&mut cursor)?);
             }
@@ -502,17 +530,23 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
 
                 let mut cursor = Cursor::new(memory);
 
-                cursor.seek(SeekFrom::Start(public_key_ptr)).map_err(|_| CallErr::Seek)?;
+                cursor
+                    .seek(SeekFrom::Start(public_key_ptr))
+                    .map_err(|_| CallErr::Seek)?;
                 let mut public_key_bytes = [0; 32];
                 cursor.read(&mut public_key_bytes)?;
                 let z_pk = ed25519_zebra::VerificationKey::try_from(public_key_bytes)?;
 
-                cursor.seek(SeekFrom::Start(signature_ptr)).map_err(|_| CallErr::Seek)?;
+                cursor
+                    .seek(SeekFrom::Start(signature_ptr))
+                    .map_err(|_| CallErr::Seek)?;
                 let mut signature_bytes = [0; 64];
                 cursor.read(&mut signature_bytes)?;
                 let z_sig = ed25519_zebra::Signature::from_bytes(&signature_bytes);
 
-                cursor.seek(SeekFrom::Start(message_ptr)).map_err(|_| CallErr::Seek)?;
+                cursor
+                    .seek(SeekFrom::Start(message_ptr))
+                    .map_err(|_| CallErr::Seek)?;
                 let mut msg = vec![0; message_len as usize];
                 cursor.read(&mut msg)?;
 
@@ -532,17 +566,23 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let mut cursor = Cursor::new(memory);
                 let secp = secp256k1::Secp256k1::verification_only();
 
-                cursor.seek(SeekFrom::Start(public_key_ptr)).map_err(|_| CallErr::Seek)?;
+                cursor
+                    .seek(SeekFrom::Start(public_key_ptr))
+                    .map_err(|_| CallErr::Seek)?;
                 let mut public_key_bytes = [0; 33];
                 cursor.read(&mut public_key_bytes)?;
                 let pk = secp256k1::PublicKey::from_slice(&public_key_bytes)?;
 
-                cursor.seek(SeekFrom::Start(signature_ptr)).map_err(|_| CallErr::Seek)?;
+                cursor
+                    .seek(SeekFrom::Start(signature_ptr))
+                    .map_err(|_| CallErr::Seek)?;
                 let mut signature_bytes = [0; 64];
                 cursor.read(&mut signature_bytes)?;
                 let sig = secp256k1::ecdsa::Signature::from_compact(&signature_bytes)?;
 
-                cursor.seek(SeekFrom::Start(message_hash_ptr)).map_err(|_| CallErr::Seek)?;
+                cursor
+                    .seek(SeekFrom::Start(message_hash_ptr))
+                    .map_err(|_| CallErr::Seek)?;
                 let mut message_hash_bytes = [0; 32];
                 cursor.read(&mut message_hash_bytes)?;
                 let msg = secp256k1::Message::from_slice(&message_hash_bytes)?;
@@ -591,16 +631,24 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 mem.write(&data_hash).map_err(|_| CallErr::Write)?;
             }
             item_name => {
-                bail!("Unsupported host function call: {:?} {:?}", f.get_mod_name(), item_name)
+                bail!(
+                    "Unsupported host function call: {:?} {:?}",
+                    f.get_mod_name(),
+                    item_name
+                )
             }
         }
 
         Ok(None)
     }
 
-    fn tick_energy(&mut self, _energy: u64) -> machine::RunResult<()> { Ok(()) }
+    fn tick_energy(&mut self, _energy: u64) -> machine::RunResult<()> {
+        Ok(())
+    }
 
-    fn track_call(&mut self) -> machine::RunResult<()> { Ok(()) }
+    fn track_call(&mut self) -> machine::RunResult<()> {
+        Ok(())
+    }
 
     fn track_return(&mut self) {}
 }
@@ -650,7 +698,9 @@ pub fn generate_contract_schema_v0(
                     .entry(contract_name.to_owned())
                     .or_insert_with(schema::ContractV0::default);
 
-                contract_schema.receive.insert(function_name.to_owned(), schema_type);
+                contract_schema
+                    .receive
+                    .insert(function_name.to_owned(), schema_type);
             } else {
                 // do nothing, some other function that is neither init nor
                 // receive.
@@ -698,7 +748,9 @@ pub fn generate_contract_schema_v1(
                     .entry(contract_name.to_owned())
                     .or_insert_with(schema::ContractV1::default);
 
-                contract_schema.receive.insert(function_name.to_owned(), function_schema);
+                contract_schema
+                    .receive
+                    .insert(function_name.to_owned(), function_schema);
             } else {
                 // do nothing, some other function that is neither init nor
                 // receive.
@@ -746,7 +798,9 @@ pub fn generate_contract_schema_v2(
                     .entry(contract_name.to_owned())
                     .or_insert_with(schema::ContractV2::default);
 
-                contract_schema.receive.insert(function_name.to_owned(), function_schema);
+                contract_schema
+                    .receive
+                    .insert(function_name.to_owned(), function_schema);
             } else {
                 // do nothing, some other function that is neither init nor
                 // receive.
@@ -809,7 +863,9 @@ pub fn generate_contract_schema_v3(
                     .entry(contract_name.to_owned())
                     .or_insert_with(schema::ContractV3::default);
 
-                contract_schema.receive.insert(function_name.to_owned(), function_schema);
+                contract_schema
+                    .receive
+                    .insert(function_name.to_owned(), function_schema);
             } else {
                 // do nothing: no event schema and not a schema that was
                 // attached to an init/ receive function
@@ -844,7 +900,10 @@ fn generate_schema_run<I: TryFromImport, C: RunnableCode, SchemaType: Deserial>(
         .map_err(|_| anyhow!("Cannot read schema length."))?;
 
     // Read the schema with offset of the u32
-    ensure!(ptr + 4 + len as usize <= memory.len(), "Illegal memory access when reading schema.");
+    ensure!(
+        ptr + 4 + len as usize <= memory.len(),
+        "Illegal memory access when reading schema."
+    );
     let schema_bytes = &memory[ptr + 4..ptr + 4 + len as usize];
     SchemaType::deserial(&mut Cursor::new(schema_bytes))
         .map_err(|_| anyhow!("Failed deserialising the schema."))
@@ -855,10 +914,7 @@ pub fn get_inits(module: &Module) -> Vec<&Name> {
     let mut out = Vec::new();
     for export in module.export.exports.iter() {
         if export.name.as_ref().starts_with("init_") && !export.name.as_ref().contains('.') {
-            if let ExportDescription::Func {
-                ..
-            } = export.description
-            {
+            if let ExportDescription::Func { .. } = export.description {
                 out.push(&export.name);
             }
         }
@@ -871,10 +927,7 @@ pub fn get_receives(module: &Module) -> Vec<&Name> {
     let mut out = Vec::new();
     for export in module.export.exports.iter() {
         if export.name.as_ref().contains('.') {
-            if let ExportDescription::Func {
-                ..
-            } = export.description
-            {
+            if let ExportDescription::Func { .. } = export.description {
                 out.push(&export.name);
             }
         }
@@ -950,11 +1003,11 @@ pub struct BuildInfo {
     /// The SHA256 hash of the tar file used to build.
     /// Note that this is the hash of the **tar** file alone, not of any
     /// compressed version.
-    pub archive_hash:  hashes::Hash,
+    pub archive_hash: hashes::Hash,
     /// The link to where the source code will be located.
-    pub source_link:   Option<String>,
+    pub source_link: Option<String>,
     /// The build image that was used.
-    pub image:         String,
+    pub image: String,
     /// The exact command invocation inside the image that was used to produce
     /// the contract.
     pub build_command: Vec<String>,
@@ -988,7 +1041,9 @@ pub enum CustomSectionLookupError {
 
 impl CustomSectionLookupError {
     /// Returns whether the value is of the [`Missing`](Self::Missing) variant.
-    pub fn is_missing(&self) -> bool { matches!(self, Self::Missing) }
+    pub fn is_missing(&self) -> bool {
+        matches!(self, Self::Missing)
+    }
 }
 
 /// Extract the embedded [`VersionedBuildInfo`] from a Wasm module.

@@ -6,7 +6,9 @@ use concordium_contracts_common::{constants::SHA256, hashes::HashBytes, NonZeroT
 use super::serialize::*;
 
 impl Serial for concordium_contracts_common::Timestamp {
-    fn serial<B: Buffer>(&self, out: &mut B) { self.timestamp_millis().serial(out) }
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        self.timestamp_millis().serial(out)
+    }
 }
 
 impl Deserial for concordium_contracts_common::Timestamp {
@@ -114,13 +116,17 @@ impl<L: Serial, R: Serial> Serial for Either<L, R> {
 use std::rc::Rc;
 /// Use the underlying type's instance.
 impl<T: Serial> Serial for Rc<T> {
-    fn serial<B: Buffer>(&self, out: &mut B) { out.put(self.as_ref()) }
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.put(self.as_ref())
+    }
 }
 
 /// Use the underlying type's instance. Note that serial + deserial does not
 /// preserve sharing. It will allocate a new copy of the structure.
 impl<T: Deserial> Deserial for Rc<T> {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> { Ok(Rc::new(source.get()?)) }
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        Ok(Rc::new(source.get()?))
+    }
 }
 
 /// Deserialization is strict. It only accepts `0` or `1` tags.

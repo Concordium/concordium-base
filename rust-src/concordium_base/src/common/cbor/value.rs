@@ -71,13 +71,16 @@ impl CborSerialize for Value {
         }
     }
 
-    fn is_null(&self) -> bool { matches!(self, Value::Null) }
+    fn is_null(&self) -> bool {
+        matches!(self, Value::Null)
+    }
 }
 
 impl CborDeserialize for Value {
     fn deserialize<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         Ok(match decoder.peek_data_item_header()? {
             DataItemHeader::Positive(_) => Value::Positive(decoder.decode_positive()?),
             DataItemHeader::Negative(_) => Value::Negative(decoder.decode_negative()?),
@@ -119,7 +122,8 @@ impl CborDeserialize for Value {
 
     fn null() -> Option<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         Some(Value::Null)
     }
 }

@@ -18,20 +18,20 @@ fn attach_error<A>(mut v: syn::Result<A>, msg: &str) -> syn::Result<A> {
 /// smart contract.
 struct OptionalArguments {
     /// If set, the contract can receive CCD.
-    pub(crate) payable:           bool,
+    pub(crate) payable: bool,
     /// If enabled, the function has access to logging facilities.
-    pub(crate) enable_logger:     bool,
+    pub(crate) enable_logger: bool,
     /// The function is a low-level one, with direct access to contract memory.
-    pub(crate) low_level:         bool,
+    pub(crate) low_level: bool,
     /// Which type, if any, is the parameter type of the function.
     /// This is used when generating schemas.
-    pub(crate) parameter:         Option<syn::LitStr>,
+    pub(crate) parameter: Option<syn::LitStr>,
     /// Which type, if any, is the return value of the function.
     /// This is used when generating schemas.
-    pub(crate) return_value:      Option<syn::LitStr>,
+    pub(crate) return_value: Option<syn::LitStr>,
     /// Which type, if any, is the error type of the function.
     /// This is used when generating schemas.
-    pub(crate) error:             Option<syn::LitStr>,
+    pub(crate) error: Option<syn::LitStr>,
     /// If enabled, the function has access to cryptographic primitives.
     pub(crate) crypto_primitives: bool,
 }
@@ -40,7 +40,7 @@ struct OptionalArguments {
 struct InitAttributes {
     /// Which type, if any, is the event type of the function.
     /// This is used when generating schemas.
-    pub(crate) event:    Option<syn::LitStr>,
+    pub(crate) event: Option<syn::LitStr>,
     /// Name of the contract.
     pub(crate) contract: syn::LitStr,
     pub(crate) optional: OptionalArguments,
@@ -51,18 +51,18 @@ struct ReceiveAttributes {
     /// Name of the contract the method applies to.
     pub(crate) contract: syn::LitStr,
     /// Name of the method.
-    pub(crate) name:     syn::LitStr,
+    pub(crate) name: syn::LitStr,
     pub(crate) optional: OptionalArguments,
     /// If enabled, the function has access to a mutable state, which will also
     /// be stored after the function returns.
-    pub(crate) mutable:  bool,
+    pub(crate) mutable: bool,
 }
 
 #[derive(Default)]
 struct ParsedAttributes {
     /// We use BTreeSet to have consistent order of iteration when reporting
     /// errors.
-    pub(crate) flags:  BTreeSet<syn::Ident>,
+    pub(crate) flags: BTreeSet<syn::Ident>,
     /// We use BTreeMap to have consistent order of iteration when reporting
     /// errors.
     pub(crate) values: BTreeMap<syn::Ident, syn::LitStr>,
@@ -227,8 +227,9 @@ fn parse_init_attributes<'a, I: IntoIterator<Item = &'a Meta>>(
     attrs: I,
 ) -> syn::Result<InitAttributes> {
     let mut attributes = parse_attributes(attrs)?;
-    let contract: syn::LitStr =
-        attributes.extract_value(INIT_ATTRIBUTE_CONTRACT).ok_or_else(|| {
+    let contract: syn::LitStr = attributes
+        .extract_value(INIT_ATTRIBUTE_CONTRACT)
+        .ok_or_else(|| {
             syn::Error::new(
                 Span::call_site(),
                 "A name for the contract must be provided, using the 'contract' attribute.\n\nFor \
@@ -237,7 +238,9 @@ fn parse_init_attributes<'a, I: IntoIterator<Item = &'a Meta>>(
         })?;
     let parameter: Option<syn::LitStr> = attributes.extract_value(INIT_ATTRIBUTE_PARAMETER);
     let payable = attributes.extract_flag(INIT_ATTRIBUTE_PAYABLE).is_some();
-    let enable_logger = attributes.extract_flag(INIT_ATTRIBUTE_ENABLE_LOGGER).is_some();
+    let enable_logger = attributes
+        .extract_flag(INIT_ATTRIBUTE_ENABLE_LOGGER)
+        .is_some();
     let low_level = attributes.extract_flag(INIT_ATTRIBUTE_LOW_LEVEL).is_some();
     let return_value = attributes.extract_ident_and_value(INIT_ATTRIBUTE_RETURN_VALUE);
     if let Some((ident, _)) = return_value {
@@ -248,7 +251,9 @@ fn parse_init_attributes<'a, I: IntoIterator<Item = &'a Meta>>(
     }
     let error = attributes.extract_value(INIT_ATTRIBUTE_ERROR);
     let event = attributes.extract_value(INIT_ATTRIBUTE_EVENT);
-    let crypto_primitives = attributes.extract_flag(INIT_ATTRIBUTE_CRYPTO_PRIMITIVES).is_some();
+    let crypto_primitives = attributes
+        .extract_flag(INIT_ATTRIBUTE_CRYPTO_PRIMITIVES)
+        .is_some();
 
     // Make sure that there are no unrecognized attributes. These would typically be
     // there due to an error. An improvement would be to find the nearest valid one
@@ -296,10 +301,14 @@ fn parse_receive_attributes<'a, I: IntoIterator<Item = &'a Meta>>(
         attributes.extract_value(RECEIVE_ATTRIBUTE_RETURN_VALUE);
     let error: Option<syn::LitStr> = attributes.extract_value(RECEIVE_ATTRIBUTE_ERROR);
     let payable = attributes.extract_flag(RECEIVE_ATTRIBUTE_PAYABLE).is_some();
-    let enable_logger = attributes.extract_flag(RECEIVE_ATTRIBUTE_ENABLE_LOGGER).is_some();
+    let enable_logger = attributes
+        .extract_flag(RECEIVE_ATTRIBUTE_ENABLE_LOGGER)
+        .is_some();
     let low_level = attributes.extract_flag(RECEIVE_ATTRIBUTE_LOW_LEVEL);
     let mutable = attributes.extract_flag(RECEIVE_ATTRIBUTE_MUTABLE);
-    let crypto_primitives = attributes.extract_flag(RECEIVE_ATTRIBUTE_CRYPTO_PRIMITIVES).is_some();
+    let crypto_primitives = attributes
+        .extract_flag(RECEIVE_ATTRIBUTE_CRYPTO_PRIMITIVES)
+        .is_some();
 
     if let (Some(mutable), Some(low_level)) = (&mutable, &low_level) {
         let mut error = syn::Error::new(
@@ -407,7 +416,10 @@ fn is_valid_contract_name(name: &str) -> Result<(), &str> {
     if name.contains('.') {
         return Err("Contract names cannot contain a '.'");
     }
-    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation()) {
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation())
+    {
         return Err("Contract names can only contain ascii alphanumeric or punctuation characters");
     }
     Ok(())
@@ -425,15 +437,20 @@ fn is_valid_receive_name(name: &str) -> Result<(), &str> {
     if name.len() > 100 {
         return Err("Receive names have a max length of 100");
     }
-    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation()) {
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation())
+    {
         return Err("Receive names can only contain ascii alphanumeric or punctuation characters");
     }
     Ok(())
 }
 
 pub fn init_worker(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> {
-    let ast: syn::ItemFn =
-        attach_error(syn::parse(item), "#[init] can only be applied to functions.")?;
+    let ast: syn::ItemFn = attach_error(
+        syn::parse(item),
+        "#[init] can only be applied to functions.",
+    )?;
 
     let attrs = Punctuated::<Meta, Token![,]>::parse_terminated.parse(attr)?;
 
@@ -548,7 +565,11 @@ pub fn init_worker(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStr
     )?);
 
     // Adding the event schema
-    out.extend(contract_function_event_schema(event_option, rust_name_cloned, wasm_name_cloned)?);
+    out.extend(contract_function_event_schema(
+        event_option,
+        rust_name_cloned,
+        wasm_name_cloned,
+    )?);
 
     ast.to_tokens(&mut out);
 
@@ -556,8 +577,10 @@ pub fn init_worker(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStr
 }
 
 pub fn receive_worker(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> {
-    let ast: syn::ItemFn =
-        attach_error(syn::parse(item), "#[receive] can only be applied to functions.")?;
+    let ast: syn::ItemFn = attach_error(
+        syn::parse(item),
+        "#[receive] can only be applied to functions.",
+    )?;
 
     let attrs = Punctuated::<Meta, Token![,]>::parse_terminated.parse(attr)?;
 
@@ -647,13 +670,16 @@ pub fn receive_worker(attr: TokenStream, item: TokenStream) -> syn::Result<Token
         }
     } else {
         let (host_ref, save_state_if_mutable) = if receive_attributes.mutable {
-            (quote!(&mut host), quote! {
-                // look up the root entry again, since we might be in a different generation now
-                let mut root_entry_end = host.state_builder.into_inner().lookup_entry(&[]).unwrap_abort();
-                host.state.serial(&mut root_entry_end).unwrap_abort();
-                let new_state_size = root_entry_end.size().unwrap_abort();
-                root_entry_end.truncate(new_state_size).unwrap_abort();
-            })
+            (
+                quote!(&mut host),
+                quote! {
+                    // look up the root entry again, since we might be in a different generation now
+                    let mut root_entry_end = host.state_builder.into_inner().lookup_entry(&[]).unwrap_abort();
+                    host.state.serial(&mut root_entry_end).unwrap_abort();
+                    let new_state_size = root_entry_end.size().unwrap_abort();
+                    root_entry_end.truncate(new_state_size).unwrap_abort();
+                },
+            )
         } else {
             (quote!(&host), quote!())
         };
@@ -892,8 +918,10 @@ fn contract_function_event_schema(
 /// "wasm-test" is enabled, otherwise behaves like `#[test]`.
 #[cfg(feature = "wasm-test")]
 pub fn concordium_test_worker(_attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> {
-    let test_fn_ast: syn::ItemFn =
-        attach_error(syn::parse(item), "#[concordium_test] can only be applied to functions.")?;
+    let test_fn_ast: syn::ItemFn = attach_error(
+        syn::parse(item),
+        "#[concordium_test] can only be applied to functions.",
+    )?;
 
     let test_fn_name = &test_fn_ast.sig.ident;
     let rust_export_fn_name = format_ident!("concordium_test_{}", test_fn_name);
@@ -916,8 +944,10 @@ pub fn concordium_test_worker(_attr: TokenStream, item: TokenStream) -> syn::Res
 /// "wasm-test" is enabled, otherwise behaves like `#[test]`.
 #[cfg(not(feature = "wasm-test"))]
 pub fn concordium_test_worker(_attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> {
-    let test_fn_ast: syn::ItemFn =
-        attach_error(syn::parse(item), "#[concordium_test] can only be applied to functions.")?;
+    let test_fn_ast: syn::ItemFn = attach_error(
+        syn::parse(item),
+        "#[concordium_test] can only be applied to functions.",
+    )?;
 
     let test_fn = quote! {
         #[test]
@@ -972,8 +1002,9 @@ pub mod quickcheck {
                 "unexpected attribute value, expected a non-negative integer",
             ));
         };
-        let num_tests =
-            i.base10_parse::<u64>().map_err(|e| syn::Error::new_spanned(i, e.to_string()))?;
+        let num_tests = i
+            .base10_parse::<u64>()
+            .map_err(|e| syn::Error::new_spanned(i, e.to_string()))?;
         if num_tests > QUICKCHECK_MAX_PASSED_TESTS {
             Err(syn::Error::new_spanned(
                 i,
@@ -1044,14 +1075,14 @@ pub mod quickcheck {
 
         for input in item_fn.sig.inputs.iter() {
             match input {
-                FnArg::Typed(PatType {
-                    ref ty,
-                    ..
-                }) => {
+                FnArg::Typed(PatType { ref ty, .. }) => {
                     inputs.push(parse_quote!(_: #ty));
                 }
                 FnArg::Receiver(_) => {
-                    return Err(syn::Error::new(input.span(), "`self` arguments are not supported"))
+                    return Err(syn::Error::new(
+                        input.span(),
+                        "`self` arguments are not supported",
+                    ))
                 }
             }
         }

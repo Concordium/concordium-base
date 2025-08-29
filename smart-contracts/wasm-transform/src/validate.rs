@@ -22,19 +22,17 @@ use std::{borrow::Borrow, collections::BTreeSet, convert::TryInto, rc::Rc};
 
 #[derive(Debug)]
 pub enum ValidationError {
-    TooManyLocals {
-        actual: u32,
-        max:    u32,
-    },
+    TooManyLocals { actual: u32, max: u32 },
 }
 
 impl std::fmt::Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ValidationError::TooManyLocals {
-                actual,
-                max,
-            } => write!(f, "The number of locals ({}) is more than allowed ({}).", actual, max),
+            ValidationError::TooManyLocals { actual, max } => write!(
+                f,
+                "The number of locals ({}) is more than allowed ({}).",
+                actual, max
+            ),
         }
     }
 }
@@ -79,7 +77,9 @@ impl ControlStack {
     }
 
     /// Get the outermost frame, target of the return jump.
-    pub fn outermost(&self) -> Option<&ControlFrame> { self.stack.first() }
+    pub fn outermost(&self) -> Option<&ControlFrame> {
+        self.stack.first()
+    }
 }
 
 #[derive(Debug)]
@@ -88,15 +88,15 @@ impl ControlStack {
 /// with reference to the ControlStack
 pub(crate) struct ControlFrame {
     /// Whether the current control frame is started by an if.
-    pub(crate) is_if:       bool,
+    pub(crate) is_if: bool,
     /// Label type of the block, this is the type that is used when
     /// jumping to the label of the block.
-    pub(crate) label_type:  BlockType,
+    pub(crate) label_type: BlockType,
     /// end type of the block, this is the type that is used when
     /// ending the block in a normal way.
-    pub(crate) end_type:    BlockType,
+    pub(crate) end_type: BlockType,
     /// height of the stack at the entry of this block.
-    pub(crate) height:      usize,
+    pub(crate) height: usize,
     /// whether we are in the unreachable part of this block or not.
     /// the unreachable part is any part after an unconditional jump or
     /// a trap instruction.
@@ -108,13 +108,13 @@ pub(crate) struct ControlFrame {
 /// this is the same state as described by the validation algorithm of the wasm
 /// specification appendix.
 pub struct ValidationState {
-    pub(crate) opds:                 OperandStack,
-    pub(crate) ctrls:                ControlStack,
+    pub(crate) opds: OperandStack,
+    pub(crate) ctrls: ControlStack,
     /// Maximum reachable stack height.
     pub(crate) max_reachable_height: usize,
     /// The smallest index of a control frame that has entered unreachable
     /// section, if any.
-    pub(crate) unreachable_section:  Option<usize>,
+    pub(crate) unreachable_section: Option<usize>,
 }
 
 impl ValidationState {
@@ -123,7 +123,7 @@ impl ValidationState {
     /// instruction is reachable.
     pub fn reachability(&self) -> Reachability {
         let Some(idx) = self.unreachable_section else {
-            return Reachability::Reachable
+            return Reachability::Reachable;
         };
         if idx + 1 < self.ctrls.stack.len() {
             Reachability::UnreachableFrame
@@ -134,7 +134,9 @@ impl ValidationState {
 
     /// Check whether we are done, meaning that the control stack is
     /// exhausted.
-    pub fn done(&self) -> bool { self.ctrls.stack.is_empty() }
+    pub fn done(&self) -> bool {
+        self.ctrls.stack.is_empty()
+    }
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy)]
@@ -149,7 +151,9 @@ pub(crate) enum MaybeKnown {
 use MaybeKnown::*;
 
 impl MaybeKnown {
-    pub(crate) fn is_unknown(self) -> bool { self == MaybeKnown::Unknown }
+    pub(crate) fn is_unknown(self) -> bool {
+        self == MaybeKnown::Unknown
+    }
 }
 
 impl ValidationState {
@@ -253,13 +257,21 @@ impl ValidationState {
         // We first check for the last element, and use it without removing it.
         // This is so that pop_expect_opd, which pops elements from the stack, can see
         // whether we are in the unreachable state for the stack or not.
-        match self.ctrls.stack.last().map(|frame| (frame.end_type, frame.height, frame.is_if)) {
+        match self
+            .ctrls
+            .stack
+            .last()
+            .map(|frame| (frame.end_type, frame.height, frame.is_if))
+        {
             None => bail!("Control stack exhausted."),
             Some((end_type, height, opcode)) => {
                 if let BlockType::ValueType(ty) = end_type {
                     self.pop_expect_opd(Known(ty))?;
                 }
-                ensure!(self.opds.stack.len() == height, "Operand stack not exhausted.");
+                ensure!(
+                    self.opds.stack.len() == height,
+                    "Operand stack not exhausted."
+                );
                 // Finally pop after we've made sure the stack is properly cleared.
                 self.ctrls.stack.pop();
                 // If the just-popped control frame was the lowest one that was unreachable
@@ -296,21 +308,21 @@ impl ValidationState {
 /// The local types, at indices start, start+1,..<end (not including end).
 pub(crate) struct LocalsRange {
     pub(crate) start: LocalIndex,
-    pub(crate) end:   LocalIndex,
-    pub(crate) ty:    ValueType,
+    pub(crate) end: LocalIndex,
+    pub(crate) ty: ValueType,
 }
 
 /// Context for the validation of a function.
 pub(crate) struct FunctionContext<'a> {
     pub(crate) return_type: BlockType,
-    pub(crate) globals:     &'a [Global],
-    pub(crate) funcs:       &'a [TypeIndex],
-    pub(crate) types:       &'a [Rc<FunctionType>],
-    pub(crate) locals:      Vec<LocalsRange>,
+    pub(crate) globals: &'a [Global],
+    pub(crate) funcs: &'a [TypeIndex],
+    pub(crate) types: &'a [Rc<FunctionType>],
+    pub(crate) locals: Vec<LocalsRange>,
     // Whether memory exists or not.
-    pub(crate) memory:      bool,
+    pub(crate) memory: bool,
     // Whether the table exists or not.
-    pub(crate) table:       bool,
+    pub(crate) table: bool,
 }
 
 /// Make a locals structure used to validate a function body.
@@ -322,16 +334,13 @@ fn make_locals(ty: &FunctionType, locals: &[Local]) -> ValidateResult<(Vec<Local
     let mut start = 0;
     for &ty in ty.parameters.iter() {
         let end = start + 1;
-        out.push(LocalsRange {
-            start,
-            end,
-            ty,
-        });
+        out.push(LocalsRange { start, end, ty });
         start = end;
     }
     for local in locals.iter() {
-        let end =
-            start.checked_add(local.multiplicity).ok_or_else(|| anyhow!("Too many locals"))?;
+        let end = start
+            .checked_add(local.multiplicity)
+            .ok_or_else(|| anyhow!("Too many locals"))?;
         out.push(LocalsRange {
             start,
             end,
@@ -340,10 +349,13 @@ fn make_locals(ty: &FunctionType, locals: &[Local]) -> ValidateResult<(Vec<Local
         start = end;
     }
     let num_locals = start;
-    ensure!(num_locals <= ALLOWED_LOCALS, ValidationError::TooManyLocals {
-        actual: num_locals,
-        max:    ALLOWED_LOCALS,
-    });
+    ensure!(
+        num_locals <= ALLOWED_LOCALS,
+        ValidationError::TooManyLocals {
+            actual: num_locals,
+            max: ALLOWED_LOCALS,
+        }
+    );
     Ok((out, num_locals))
 }
 
@@ -402,9 +414,13 @@ impl<'a> HasValidationContext for FunctionContext<'a> {
         }
     }
 
-    fn memory_exists(&self) -> bool { self.memory }
+    fn memory_exists(&self) -> bool {
+        self.memory
+    }
 
-    fn table_exists(&self) -> bool { self.table }
+    fn table_exists(&self) -> bool {
+        self.table
+    }
 
     fn get_func(&self, idx: FuncIndex) -> ValidateResult<&Rc<FunctionType>> {
         if let Some(&type_idx) = self.funcs.get(idx as usize) {
@@ -415,10 +431,14 @@ impl<'a> HasValidationContext for FunctionContext<'a> {
     }
 
     fn get_type(&self, idx: TypeIndex) -> ValidateResult<&Rc<FunctionType>> {
-        self.types.get(idx as usize).ok_or_else(|| anyhow!("Type index out of range."))
+        self.types
+            .get(idx as usize)
+            .ok_or_else(|| anyhow!("Type index out of range."))
     }
 
-    fn return_type(&self) -> BlockType { self.return_type }
+    fn return_type(&self) -> BlockType {
+        self.return_type
+    }
 }
 
 /// A helper type used to ensure alignment.
@@ -433,16 +453,32 @@ enum Type {
 fn ensure_alignment(num: u32, align: Type) -> ValidateResult<()> {
     match align {
         Type::I8 => {
-            ensure!(num == 0, "Type I8 alignment must be less than 0, but is {}.", num);
+            ensure!(
+                num == 0,
+                "Type I8 alignment must be less than 0, but is {}.",
+                num
+            );
         }
         Type::I16 => {
-            ensure!(num <= 1, "Type I16 alignment must be less than 1, but is {}.", num);
+            ensure!(
+                num <= 1,
+                "Type I16 alignment must be less than 1, but is {}.",
+                num
+            );
         }
         Type::I32 => {
-            ensure!(num <= 2, "Type I32 alignment must be less than 2, but is {}", num);
+            ensure!(
+                num <= 2,
+                "Type I32 alignment must be less than 2, but is {}",
+                num
+            );
         }
         Type::I64 => {
-            ensure!(num <= 3, "Type I64 alignment must be less than 3, but is {}.", num);
+            ensure!(
+                num <= 3,
+                "Type I64 alignment must be less than 3, but is {}.",
+                num
+            );
         }
     }
     Ok(())
@@ -524,10 +560,10 @@ pub fn validate<O: Borrow<OpCode>, Ctx: HasValidationContext, H: Handler<Ctx, O>
     mut handler: H,
 ) -> ValidateResult<H::Outcome> {
     let mut state = ValidationState {
-        opds:                 OperandStack::default(),
-        ctrls:                ControlStack::default(),
+        opds: OperandStack::default(),
+        ctrls: ControlStack::default(),
         max_reachable_height: 0,
-        unreachable_section:  None,
+        unreachable_section: None,
     };
     state.push_ctrl(false, context.return_type(), context.return_type());
     for opcode in opcodes {
@@ -560,9 +596,7 @@ pub fn validate<O: Borrow<OpCode>, Ctx: HasValidationContext, H: Handler<Ctx, O>
             OpCode::Loop(ty) => {
                 state.push_ctrl(false, BlockType::EmptyType, *ty);
             }
-            OpCode::If {
-                ty,
-            } => {
+            OpCode::If { ty } => {
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_ctrl(true, *ty, *ty);
             }
@@ -588,10 +622,7 @@ pub fn validate<O: Borrow<OpCode>, Ctx: HasValidationContext, H: Handler<Ctx, O>
                     bail!("Conditional jump to non-existent label.")
                 }
             }
-            OpCode::BrTable {
-                labels,
-                default,
-            } => {
+            OpCode::BrTable { labels, default } => {
                 ensure!(
                     labels.len() <= MAX_SWITCH_SIZE,
                     "Size of switch statement exceeds maximum."
@@ -940,7 +971,7 @@ pub struct ValidationConfig {
     /// data and element sections. In protocols 1-5 this was allowed, but we
     /// need to disallow it in following protocols since the Wasm spec has been
     /// updated to not allow this anymore. See [issue](https://github.com/WebAssembly/spec/issues/1522) on the Wasm spec repository.
-    pub allow_globals_in_init:      bool,
+    pub allow_globals_in_init: bool,
     /// Allow sign extension instructions. See [proposal](https://github.com/WebAssembly/sign-extension-ops/blob/master/proposals/sign-extension-ops/Overview.md).
     pub allow_sign_extension_instr: bool,
 }
@@ -948,12 +979,12 @@ pub struct ValidationConfig {
 impl ValidationConfig {
     /// Validation configuration valid in protocols 1-5.
     pub const V0: Self = Self {
-        allow_globals_in_init:      true,
+        allow_globals_in_init: true,
         allow_sign_extension_instr: false,
     };
     /// Validation configuration valid in protocol 6 and onward.
     pub const V1: Self = Self {
-        allow_globals_in_init:      false,
+        allow_globals_in_init: false,
         allow_sign_extension_instr: true,
     };
 }
@@ -980,9 +1011,7 @@ pub fn validate_module(
         let mut seen_imports = BTreeSet::new();
         for i in import.imports.iter() {
             match i.description {
-                ImportDescription::Func {
-                    type_idx,
-                } => {
+                ImportDescription::Func { type_idx } => {
                     if let Some(ty) = ty.get(type_idx) {
                         let is_new = seen_imports.insert((&i.mod_name, &i.item_name));
                         ensure!(
@@ -1025,15 +1054,22 @@ pub fn validate_module(
     // The code section then needs to match.
     let func: FunctionSection = parse_sec_with_default(EMPTY_CTX, &skeleton.func)?;
     for &type_idx in func.types.iter() {
-        ensure!(ty.get(type_idx).is_some(), "Function refers to a type that does not exist.")
+        ensure!(
+            ty.get(type_idx).is_some(),
+            "Function refers to a type that does not exist."
+        )
     }
 
     // Number of functions that can be referred to.
     // Since all imports must be functions we could just use length, but
     // in the interest of being more robust to changes we count imported functions
     // instead.
-    let total_funcs =
-        import.imports.iter().filter(|&x| Import::is_func(x)).count() + func.types.len();
+    let total_funcs = import
+        .imports
+        .iter()
+        .filter(|&x| Import::is_func(x))
+        .count()
+        + func.types.len();
 
     let code: CodeSkeletonSection = parse_sec_with_default(EMPTY_CTX, &skeleton.code)?;
     ensure!(
@@ -1045,9 +1081,7 @@ pub fn validate_module(
         .imports
         .iter()
         .map(|i| match i.description {
-            ImportDescription::Func {
-                type_idx,
-            } => type_idx,
+            ImportDescription::Func { type_idx } => type_idx,
         })
         .chain(func.types.iter().copied())
         .collect::<Vec<TypeIndex>>();
@@ -1094,17 +1128,25 @@ pub fn validate_module(
     // they are all distinct.
     let export: ExportSection = parse_sec_with_default(EMPTY_CTX, &skeleton.export)?;
     let mut export_names = BTreeSet::new();
-    ensure!(export.exports.len() <= MAX_NUM_EXPORTS, "Module exceeds maximum number of exports.");
+    ensure!(
+        export.exports.len() <= MAX_NUM_EXPORTS,
+        "Module exceeds maximum number of exports."
+    );
     for e in export.exports.iter() {
         // ensure the name is unique.
-        ensure!(export_names.insert(&e.name), "Duplicate exports {}.", e.name);
+        ensure!(
+            export_names.insert(&e.name),
+            "Duplicate exports {}.",
+            e.name
+        );
 
         match e.description {
-            ExportDescription::Func {
-                index,
-            } => {
+            ExportDescription::Func { index } => {
                 if let Some(ty) = funcs.get(index as usize).and_then(|ty_idx| ty.get(*ty_idx)) {
-                    ensure!(imp.validate_export_function(&e.name, ty), "Export function not valid.")
+                    ensure!(
+                        imp.validate_export_function(&e.name, ty),
+                        "Export function not valid."
+                    )
                 } else {
                     bail!("Trying to export a function that does not exist.")
                 }
@@ -1121,9 +1163,7 @@ pub fn validate_module(
                     "Trying to export a memory, but no memory is declared."
                 );
             }
-            ExportDescription::Global {
-                index,
-            } => {
+            ExportDescription::Global { index } => {
                 ensure!(
                     global.get(index).is_some(),
                     "Trying to export a global that does not exist."
@@ -1138,7 +1178,7 @@ pub fn validate_module(
     // We additionally need to check that all the functions referred
     // to in the table are defined.
     let instr_validation_ctx = InstructionValidationContext {
-        globals_allowed:            if config.allow_globals_in_init {
+        globals_allowed: if config.allow_globals_in_init {
             Some(&global)
         } else {
             None
@@ -1205,7 +1245,11 @@ pub fn validate_module(
             ensure!(
                 // by validation we have that memory_type.limits.min <= MAX_INIT_MEMORY_SIZE <
                 // 2^16, so this cannot overflow but we're still being safe
-                memory_type.limits.min.checked_mul(PAGE_SIZE).map_or(false, |l| end <= l),
+                memory_type
+                    .limits
+                    .min
+                    .checked_mul(PAGE_SIZE)
+                    .map_or(false, |l| end <= l),
                 "Initialization expression for the data segment exceeds initial memory size {} > \
                  {}.",
                 end,
@@ -1214,7 +1258,10 @@ pub fn validate_module(
         }
     } else {
         // There is no memory, so there should be no data section.
-        ensure!(data.sections.is_empty(), "There are data sections, but no declared memory.");
+        ensure!(
+            data.sections.is_empty(),
+            "There are data sections, but no declared memory."
+        );
     }
     Ok(Module {
         ty,
@@ -1226,9 +1273,7 @@ pub fn validate_module(
         export,
         start,
         element,
-        code: CodeSection {
-            impls: parsed_code,
-        },
+        code: CodeSection { impls: parsed_code },
         data,
     })
 }

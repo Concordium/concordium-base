@@ -120,9 +120,9 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // Additionally prove that RegID = PRF(key_PRF, 0):
     let prover_prf_regid = com_eq::ComEq {
         commitment: prover.first.second.commitment_1,
-        y:          context.global_context.on_chain_commitment_key.g,
-        g:          pub_info_for_ip.reg_id,
-        cmm_key:    prover.first.second.cmm_key_1,
+        y: context.global_context.on_chain_commitment_key.g,
+        g: pub_info_for_ip.reg_id,
+        cmm_key: prover.first.second.cmm_key_1,
     };
 
     let secret_prf_regid = com_eq::ComEqSecret {
@@ -263,13 +263,13 @@ type IpArDataClosures<'a, C> = Vec<(
 /// `generate_pio` and `generate_pio_v1` in order to produce the relevant
 /// pre-identity object.
 struct CommonPioGenerationOutput<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    prover:                CommonPioProverType<P, C>,
-    secret:                <CommonPioProverType<P, C> as SigmaProtocol>::SecretData,
-    bulletproofs:          Vec<RangeProof<C>>,
-    ip_ar_data:            IpArDataClosures<'a, C>,
-    choice_ar_parameters:  ChoiceArParameters,
+    prover: CommonPioProverType<P, C>,
+    secret: <CommonPioProverType<P, C> as SigmaProtocol>::SecretData,
+    bulletproofs: Vec<RangeProof<C>>,
+    ip_ar_data: IpArDataClosures<'a, C>,
+    choice_ar_parameters: ChoiceArParameters,
     cmm_prf_sharing_coeff: Vec<Commitment<C>>,
-    id_cred_pub:           C,
+    id_cred_pub: C,
 }
 
 /// Function for generating the common parts of a pre-identity object. This
@@ -322,7 +322,7 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
         .mul_by_scalar(id_cred_sec);
     let prover = dlog::Dlog::<C> {
         public: id_cred_pub,
-        coeff:  context.global_context.on_chain_commitment_key.g,
+        coeff: context.global_context.on_chain_commitment_key.g,
     };
     let secret = dlog::DlogSecret {
         secret: id_cred_sec.clone(),
@@ -331,18 +331,21 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
     // Next the proof that id_cred_sec is the same both in id_cred_pub
     // and in the commitment to id_cred_sec (cmm_sc).
     let prover = AndAdapter {
-        first:  prover,
+        first: prover,
         second: com_eq::ComEq {
             commitment: cmm_sc,
-            y:          id_cred_pub,
-            cmm_key:    sc_ck,
-            g:          context.global_context.on_chain_commitment_key.g,
+            y: id_cred_pub,
+            cmm_key: sc_ck,
+            g: context.global_context.on_chain_commitment_key.g,
         },
     };
-    let secret = (secret, com_eq::ComEqSecret::<P::G1> {
-        r: cmm_sc_rand.clone(),
-        a: id_cred_sec.view(),
-    });
+    let secret = (
+        secret,
+        com_eq::ComEqSecret::<P::G1> {
+            r: cmm_sc_rand.clone(),
+            a: id_cred_sec.view(),
+        },
+    );
 
     // Commit to the PRF key for the IP and prove equality for the secret-shared PRF
     // key
@@ -363,14 +366,17 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
     let prover = prover.add_prover(com_eq_different_groups::ComEqDiffGroups {
         commitment_1: cmm_prf,
         commitment_2: *snd_cmm_prf,
-        cmm_key_1:    commitment_key_prf,
-        cmm_key_2:    *ar_commitment_key,
+        cmm_key_1: commitment_key_prf,
+        cmm_key_2: *ar_commitment_key,
     });
-    let secret = (secret, com_eq_different_groups::ComEqDiffGroupsSecret {
-        value:      prf_key.to_value(),
-        rand_cmm_1: rand_cmm_prf,
-        rand_cmm_2: rand_snd_cmm_prf,
-    });
+    let secret = (
+        secret,
+        com_eq_different_groups::ComEqDiffGroupsSecret {
+            value: prf_key.to_value(),
+            rand_cmm_1: rand_cmm_prf,
+            rand_cmm_2: rand_snd_cmm_prf,
+        },
+    );
 
     // Now we produce a list of proofs relating to the encryption to the anonymity
     // revoker of all the shares.
@@ -415,8 +421,8 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
         let combined_rands = inner_product::<C::Scalar>(&rands_as_scalars, &scalars);
         let combined_encryption_randomness = crate::elgamal::Randomness::new(combined_rands);
         let secret = com_enc_eq::ComEncEqSecret {
-            value:         item.share.clone(),
-            elgamal_rand:  combined_encryption_randomness,
+            value: item.share.clone(),
+            elgamal_rand: combined_encryption_randomness,
             pedersen_rand: item.randomness_cmm_to_share.clone(),
         };
         // FIXME: Need some context in the challenge computation.
@@ -479,11 +485,11 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
 
 /// Convenient data structure to collect data related to a single AR
 pub struct SingleArData<'a, C: Curve> {
-    pub ar:                  &'a ArInfo<C>,
-    share:                   Value<C>,
-    pub encrypted_share:     Cipher<C>,
-    encryption_randomness:   crate::elgamal::Randomness<C>,
-    pub cmm_to_share:        Commitment<C>,
+    pub ar: &'a ArInfo<C>,
+    share: Value<C>,
+    pub encrypted_share: Cipher<C>,
+    encryption_randomness: crate::elgamal::Randomness<C>,
+    pub cmm_to_share: Commitment<C>,
     randomness_cmm_to_share: PedersenRandomness<C>,
 }
 
@@ -783,9 +789,12 @@ pub fn create_unsigned_credential<
     let ar_data = id_cred_data
         .iter()
         .map(|item| {
-            (item.ar.ar_identity, ChainArData {
-                enc_id_cred_pub_share: item.encrypted_share,
-            })
+            (
+                item.ar.ar_identity,
+                ChainArData {
+                    enc_id_cred_pub_share: item.encrypted_share,
+                },
+            )
         })
         .collect::<BTreeMap<_, _>>();
 
@@ -837,8 +846,8 @@ pub fn create_unsigned_credential<
     // create provers for knowledge of id_cred_sec.
     for item in id_cred_data.iter() {
         let secret = com_enc_eq::ComEncEqSecret {
-            value:         item.share.clone(),
-            elgamal_rand:  item.encryption_randomness.clone(),
+            value: item.share.clone(),
+            elgamal_rand: item.encryption_randomness.clone(),
             pedersen_rand: item.randomness_cmm_to_share.clone(),
         };
 
@@ -888,7 +897,7 @@ pub fn create_unsigned_credential<
     )?;
 
     let prover = AndAdapter {
-        first:  prover_reg_id,
+        first: prover_reg_id,
         second: prover_sig,
     };
     let prover = prover.add_prover(ReplicateAdapter {
@@ -1079,8 +1088,8 @@ fn compute_pok_sig<
         blinded_sig: blinded_sig.clone(),
         commitments: comm_vec,
         // FIXME: Figure out how to get rid of the clone
-        ps_pub_key:  ip_pub_key.clone(),
-        comm_key:    *commitment_key,
+        ps_pub_key: ip_pub_key.clone(),
+        comm_key: *commitment_key,
     };
     Ok((prover, secret))
 }
@@ -1206,7 +1215,7 @@ fn compute_pok_reg_id<C: Curve>(
     let secret = com_mult::ComMultSecret { values, rands };
 
     let prover = com_mult::ComMult {
-        cmms:    public,
+        cmms: public,
         cmm_key: *on_chain_commitment_key,
     };
     (prover, secret)
@@ -1231,7 +1240,7 @@ pub fn generate_id_recovery_request<P: Pairing, C: Curve<Scalar = P::ScalarField
     let id_cred_pub = g.mul_by_scalar(id_cred_sec);
     let prover = dlog::Dlog::<C> {
         public: id_cred_pub,
-        coeff:  g,
+        coeff: g,
     };
     let secret = dlog::DlogSecret {
         secret: id_cred_sec.clone(),
@@ -1395,7 +1404,7 @@ mod tests {
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let id_use_data = test_create_id_use_data(&mut csprng);
         let acc_data = InitialAccountData {
-            keys:      {
+            keys: {
                 let mut keys = BTreeMap::new();
                 keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
                 keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));

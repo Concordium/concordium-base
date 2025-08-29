@@ -9,7 +9,9 @@ use crate::{
 };
 
 /// Strip the custom sections from the module Wasm module.
-pub fn strip(skeleton: &mut Skeleton<'_>) { skeleton.custom = Vec::new(); }
+pub fn strip(skeleton: &mut Skeleton<'_>) {
+    skeleton.custom = Vec::new();
+}
 
 /// The result of module instantiation. The type parameter `I` indicates how
 /// imports are represented in the artifact, and will typically have to
@@ -19,7 +21,7 @@ pub struct InstantiatedModule<I> {
     /// The size of custom sections that were dropped from the module.
     pub custom_sections_size: u64,
     /// The compiled artifact.
-    pub artifact:             Artifact<I, CompiledFunction>,
+    pub artifact: Artifact<I, CompiledFunction>,
 }
 
 /// Parse a Wasm module, validate, and compile to a runnable artifact.

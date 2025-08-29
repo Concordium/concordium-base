@@ -10,7 +10,9 @@ const HARDENED_OFFSET: u32 = 0x80000000;
 /// Note that if the index is already hardened this function does nothing.
 /// See also [`checked_harden`] for a version which checks whether the value is
 /// not hardened.
-pub fn harden(index: u32) -> u32 { index | HARDENED_OFFSET }
+pub fn harden(index: u32) -> u32 {
+    index | HARDENED_OFFSET
+}
 
 /// Check that the value is not yet hardened, and harden it.
 pub fn checked_harden(index: u32) -> Result<u32, DeriveError> {
@@ -37,7 +39,7 @@ pub struct HdKeys {
     pub private_key: [u8; 32],
     /// The chain code part of the hierarchical deterministic key derivation.
     /// This is only used internally in the algorithm.
-    chain_code:      [u8; 32],
+    chain_code: [u8; 32],
 }
 
 fn get_master_key_from_seed(seed: &[u8]) -> HdKeys {
@@ -51,7 +53,7 @@ fn get_master_key_from_seed(seed: &[u8]) -> HdKeys {
 
     HdKeys {
         private_key: il,
-        chain_code:  ir,
+        chain_code: ir,
     }
 }
 
@@ -75,7 +77,7 @@ fn ckd_priv(parent_keys: HdKeys, index: u32) -> Result<HdKeys, DeriveError> {
 
     Ok(HdKeys {
         private_key: il,
-        chain_code:  ir,
+        chain_code: ir,
     })
 }
 

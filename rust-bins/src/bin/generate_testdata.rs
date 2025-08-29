@@ -39,13 +39,13 @@ struct GenerateTestData {
         long = "ip-data",
         help = "File with all information about the identity provider (public and private)."
     )]
-    ip_data:            PathBuf,
+    ip_data: PathBuf,
     #[structopt(
         long = "global",
         help = "File with global parameters.",
         default_value = GLOBAL_CONTEXT
     )]
-    global:             PathBuf,
+    global: PathBuf,
     #[structopt(
         long = "ars",
         help = "File with a list of anonymity revokers..",
@@ -132,7 +132,7 @@ fn main() {
 
     let context = IpContext::new(&ip_info, &ars_infos.anonymity_revokers, &global_ctx);
     let initial_acc_data = InitialAccountData {
-        keys:      {
+        keys: {
             let mut keys = BTreeMap::new();
             keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
             keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
@@ -171,8 +171,8 @@ fn main() {
 
     let id_object = IdentityObject {
         pre_identity_object: pio,
-        alist:               attributes.clone(),
-        signature:           ip_sig,
+        alist: attributes.clone(),
+        signature: ip_sig,
     };
 
     let policy = Policy {
@@ -216,7 +216,7 @@ fn main() {
         keys_2.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
         keys_2.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
         let acc_data_2 = CredentialData {
-            keys:      acc_data.keys,
+            keys: acc_data.keys,
             threshold: SignatureThreshold::ONE,
         };
 
@@ -365,7 +365,7 @@ fn main() {
                 // if it is a new account we output a full message
                 let cred = AccountCredentialMessage {
                     message_expiry: *message_expiry,
-                    credential:     AccountCredential::Normal { cdi },
+                    credential: AccountCredential::Normal { cdi },
                 };
                 let out = Versioned::new(VERSION_0, cred);
                 serde_json::to_value(out).expect("JSON serialization does not fail")
@@ -432,7 +432,7 @@ fn main() {
         };
         let aci = AccCredentialInfo {
             cred_holder_info: ah_info,
-            prf_key:          prf,
+            prf_key: prf,
         };
 
         let id_use_data = IdObjectUseData {
@@ -456,7 +456,7 @@ fn main() {
         );
         let cred = AccountCredentialMessage::<IpPairing, ArCurve, _> {
             message_expiry: EXPIRY,
-            credential:     AccountCredential::Initial { icdi },
+            credential: AccountCredential::Initial { icdi },
         };
         let versioned_msg = Versioned::new(VERSION_0, cred);
 

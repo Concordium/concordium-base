@@ -300,7 +300,8 @@ pub fn merge_iter<'a, K: Ord + 'a, V1: 'a, V2: 'a, I1, I2, F>(i1: I1, i2: I2, mu
 where
     I1: std::iter::IntoIterator<Item = (&'a K, &'a V1)>,
     I2: std::iter::IntoIterator<Item = (&'a K, &'a V2)>,
-    F: FnMut(Either<&'a V1, &'a V2>), {
+    F: FnMut(Either<&'a V1, &'a V2>),
+{
     let mut iter_1 = i1.into_iter().peekable();
     let mut iter_2 = i2.into_iter().peekable();
     while let (Some(&(tag_1, v_1)), Some(&(tag_2, v_2))) = (iter_1.peek(), iter_2.peek()) {

@@ -112,15 +112,20 @@ impl Pairing for Bls12 {
     type TargetField = ArkField<<Bls12 as ark_ec::pairing::Pairing>::TargetField>;
 
     #[inline(always)]
-    fn g1_prepare(g: &Self::G1) -> Self::G1Prepared { g.into_ark().into_affine().into() }
+    fn g1_prepare(g: &Self::G1) -> Self::G1Prepared {
+        g.into_ark().into_affine().into()
+    }
 
     #[inline(always)]
-    fn g2_prepare(g: &Self::G2) -> Self::G2Prepared { g.into_ark().into_affine().into() }
+    fn g2_prepare(g: &Self::G2) -> Self::G2Prepared {
+        g.into_ark().into_affine().into()
+    }
 
     #[inline(always)]
     fn miller_loop<'a, I>(i: I) -> Self::TargetField
     where
-        I: IntoIterator<Item = &'a (&'a Self::G1Prepared, &'a Self::G2Prepared)>, {
+        I: IntoIterator<Item = &'a (&'a Self::G1Prepared, &'a Self::G2Prepared)>,
+    {
         let (xs, ys): (Vec<_>, Vec<_>) = i.into_iter().copied().unzip();
         let res = <Bls12 as ark_ec::pairing::Pairing>::multi_miller_loop(
             xs.into_iter().cloned(),
@@ -431,11 +436,14 @@ mod hash_to_curve_tests {
         let msg = "".as_bytes();
         let dst = b"QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_";
         let p = hash_to_curve(msg, &dst[..]);
-        assert_eq!(to_bytes(&p), vec![
-            133, 41, 38, 173, 210, 32, 123, 118, 202, 79, 165, 122, 135, 52, 65, 108, 141, 201, 94,
-            36, 80, 23, 114, 200, 20, 39, 135, 0, 238, 214, 209, 228, 232, 207, 98, 217, 192, 157,
-            176, 250, 195, 73, 97, 43, 117, 158, 121, 161
-        ]);
+        assert_eq!(
+            to_bytes(&p),
+            vec![
+                133, 41, 38, 173, 210, 32, 123, 118, 202, 79, 165, 122, 135, 52, 65, 108, 141, 201,
+                94, 36, 80, 23, 114, 200, 20, 39, 135, 0, 238, 214, 209, 228, 232, 207, 98, 217,
+                192, 157, 176, 250, 195, 73, 97, 43, 117, 158, 121, 161
+            ]
+        );
         // The point should have (in hex)
         // P.x     = 052926add2207b76ca4fa57a8734416c8dc95e24501772c8142787
         //           00eed6d1e4e8cf62d9c09db0fac349612b759e79a1
@@ -447,11 +455,14 @@ mod hash_to_curve_tests {
             Fq::one()));
         let msg = "abc".as_bytes();
         let p = hash_to_curve(msg, &dst[..]);
-        assert_eq!(to_bytes(&p), vec![
-            131, 86, 123, 197, 239, 156, 105, 12, 42, 178, 236, 223, 106, 150, 239, 28, 19, 156,
-            192, 178, 242, 132, 220, 160, 169, 167, 148, 51, 136, 164, 154, 58, 238, 102, 75, 165,
-            55, 154, 118, 85, 211, 198, 137, 0, 190, 47, 105, 3
-        ]);
+        assert_eq!(
+            to_bytes(&p),
+            vec![
+                131, 86, 123, 197, 239, 156, 105, 12, 42, 178, 236, 223, 106, 150, 239, 28, 19,
+                156, 192, 178, 242, 132, 220, 160, 169, 167, 148, 51, 136, 164, 154, 58, 238, 102,
+                75, 165, 55, 154, 118, 85, 211, 198, 137, 0, 190, 47, 105, 3
+            ]
+        );
         // The point should have (in hex)
         // P.x     = 03567bc5ef9c690c2ab2ecdf6a96ef1c139cc0b2f284dca0a9a794
         //           3388a49a3aee664ba5379a7655d3c68900be2f6903
@@ -463,11 +474,14 @@ mod hash_to_curve_tests {
             Fq::one()));
         let msg = "abcdef0123456789".as_bytes();
         let p = hash_to_curve(msg, &dst[..]);
-        assert_eq!(to_bytes(&p), vec![
-            145, 224, 176, 121, 222, 162, 154, 104, 240, 56, 62, 233, 79, 237, 27, 148, 9, 149, 39,
-            36, 7, 227, 187, 145, 107, 191, 38, 140, 38, 61, 221, 87, 166, 162, 114, 0, 167, 132,
-            203, 194, 72, 232, 79, 53, 124, 232, 45, 152
-        ]);
+        assert_eq!(
+            to_bytes(&p),
+            vec![
+                145, 224, 176, 121, 222, 162, 154, 104, 240, 56, 62, 233, 79, 237, 27, 148, 9, 149,
+                39, 36, 7, 227, 187, 145, 107, 191, 38, 140, 38, 61, 221, 87, 166, 162, 114, 0,
+                167, 132, 203, 194, 72, 232, 79, 53, 124, 232, 45, 152
+            ]
+        );
         // The point should have (in hex)
         // P.x     = 11e0b079dea29a68f0383ee94fed1b940995272407e3bb916bbf26
         //           8c263ddd57a6a27200a784cbc248e84f357ce82d98
@@ -479,11 +493,14 @@ mod hash_to_curve_tests {
             Fq::one()));
         let msg = "q128_qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq".as_bytes();
         let p = hash_to_curve(msg, &dst[..]);
-        assert_eq!(to_bytes(&p), vec![
-            181, 246, 142, 170, 105, 59, 149, 204, 184, 82, 21, 220, 101, 250, 129, 3, 141, 105,
-            98, 159, 112, 174, 238, 13, 15, 103, 124, 242, 34, 133, 231, 191, 88, 215, 203, 134,
-            238, 254, 143, 46, 155, 195, 248, 203, 132, 250, 196, 136
-        ]);
+        assert_eq!(
+            to_bytes(&p),
+            vec![
+                181, 246, 142, 170, 105, 59, 149, 204, 184, 82, 21, 220, 101, 250, 129, 3, 141,
+                105, 98, 159, 112, 174, 238, 13, 15, 103, 124, 242, 34, 133, 231, 191, 88, 215,
+                203, 134, 238, 254, 143, 46, 155, 195, 248, 203, 132, 250, 196, 136
+            ]
+        );
         // The point should have (in hex)
         // P.x     = 15f68eaa693b95ccb85215dc65fa81038d69629f70aeee0d0f677c
         //           f22285e7bf58d7cb86eefe8f2e9bc3f8cb84fac488
@@ -495,11 +512,14 @@ mod hash_to_curve_tests {
             Fq::one()));
         let msg = "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".as_bytes();
         let p = hash_to_curve(msg, &dst[..]);
-        assert_eq!(to_bytes(&p), vec![
-            136, 42, 171, 174, 139, 125, 237, 176, 231, 138, 235, 97, 154, 211, 191, 217, 39, 122,
-            47, 119, 186, 127, 173, 32, 239, 106, 171, 220, 108, 49, 209, 155, 165, 166, 209, 34,
-            131, 85, 50, 148, 193, 130, 92, 75, 60, 162, 220, 254
-        ]);
+        assert_eq!(
+            to_bytes(&p),
+            vec![
+                136, 42, 171, 174, 139, 125, 237, 176, 231, 138, 235, 97, 154, 211, 191, 217, 39,
+                122, 47, 119, 186, 127, 173, 32, 239, 106, 171, 220, 108, 49, 209, 155, 165, 166,
+                209, 34, 131, 85, 50, 148, 193, 130, 92, 75, 60, 162, 220, 254
+            ]
+        );
         // The point should have (in hex)
         // P.x     = 082aabae8b7dedb0e78aeb619ad3bfd9277a2f77ba7fad20ef6aab
         //           dc6c31d19ba5a6d12283553294c1825c4b3ca2dcfe

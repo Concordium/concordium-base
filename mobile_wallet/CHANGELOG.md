@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.25.4
+
+- The library is now built with 16 KB alignment for 64-bit Android architectures
+
 ## 0.25.3
 
 - Changed the base64 schema decoding to allow padded and not padded strings.
