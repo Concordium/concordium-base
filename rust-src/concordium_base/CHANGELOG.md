@@ -5,8 +5,9 @@
 - Support decoding unsigned and negative CBOR bignums to fixed-size machine integers (`i8`, ..., `i64`, `u8`, ..., `u64`)
 - Introduce `Encoded<A>` a wrapper for byte encoded types using Concordium custom binary serialization format (`Serial`/`Deserial`).
 - BREAKING: Field `payload` in `UpdateInstruction` is now `Encoded<UpdatePayload>` meaning the payload stays encoded and require and additional step to decode, ensuring `UpdateInstruction` can be constructed even for future unknown `UpdatePayload` variants.
-- Support decoding indefinite length CBOR byte and text strings
+- Added a newly defined type `WasmVersionInt` to make the Wasm Version (Smart contract version) forwards compatible by storing it there as a u8.
 - Remove `CborTokenHolder` wrapper.
+- Support decoding indefinite length CBOR byte and text strings
 
 ## 8.0.0 (2025-08-18)
 
