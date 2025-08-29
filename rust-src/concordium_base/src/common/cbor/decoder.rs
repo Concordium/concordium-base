@@ -480,7 +480,6 @@ mod test {
         assert_eq!(decoder.inner.offset(), bytes.len());
     }
 
-    // assert_eq!(hex::encode(&bytes), "");
     /// Test skipping data items during decode
     #[test]
     fn test_skip_data_item() {
