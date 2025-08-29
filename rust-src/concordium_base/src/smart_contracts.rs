@@ -260,7 +260,6 @@ impl ContractEvent {
 }
 
 /// Represents the wasm version (smart contract version) as a u8
-/// Copy, PartialOrd, Ord and Hash
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, PartialEq, Eq, Copy, PartialOrd, Ord, Hash, derive_more::Display,)]
 #[serde(transparent)]
 #[repr(transparent)]
