@@ -33,26 +33,26 @@ pub struct SchemaRef {
 #[serde(rename_all = "camelCase")]
 pub struct CredentialInfo {
     /// The holder's identifier.
-    pub holder_id:        CredentialHolderId,
+    pub holder_id: CredentialHolderId,
     /// Whether the holder is allowed to revoke the credential or not.
     pub holder_revocable: bool,
     /// The date from which the credential is considered valid.
-    pub valid_from:       contracts_common::Timestamp,
+    pub valid_from: contracts_common::Timestamp,
     /// After this date, the credential becomes expired. `None` corresponds to a
     /// credential that cannot expire.
-    pub valid_until:      Option<contracts_common::Timestamp>,
+    pub valid_until: Option<contracts_common::Timestamp>,
     /// Metadata URL of the credential.
-    pub metadata_url:     MetadataUrl,
+    pub metadata_url: MetadataUrl,
 }
 
 /// Response to a credential data query.
 #[derive(serde::Serialize, serde::Deserialize, contracts_common::Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialEntry {
-    pub credential_info:  CredentialInfo,
+    pub credential_info: CredentialInfo,
     /// A schema URL or DID address pointing to the JSON schema for a verifiable
     /// credential.
-    pub schema_ref:       SchemaRef,
+    pub schema_ref: SchemaRef,
     /// The nonce is used to avoid replay attacks when checking the holder's
     /// signature on a revocation message. This is the nonce that should be used
     /// when signing a revocation.
@@ -99,7 +99,7 @@ pub type RevocationKey = Ed25519PublicKey<RevocationKeyRole>;
 /// Revocation key together with a nonce that needs to be used for signing the
 /// next revocation transaction.
 pub struct RevocationKeyWithNonce {
-    pub key:   RevocationKey,
+    pub key: RevocationKey,
     pub nonce: u64,
 }
 
@@ -107,9 +107,9 @@ pub struct RevocationKeyWithNonce {
 #[derive(contracts_common::Serialize, Debug, Clone)]
 pub struct RegistryMetadata {
     /// A reference to the issuer's metadata.
-    pub issuer_metadata:   MetadataUrl,
+    pub issuer_metadata: MetadataUrl,
     /// The type of credentials used.
-    pub credential_type:   CredentialType,
+    pub credential_type: CredentialType,
     /// A reference to the JSON schema corresponding to this type.
     pub credential_schema: SchemaRef,
 }
@@ -124,13 +124,13 @@ pub type IssuerKey = Ed25519PublicKey<IssuerKeyRole>;
 #[derive(contracts_common::Serialize, Debug, Clone)]
 pub struct CredentialEventData {
     /// A public key of the credential's holder.
-    pub holder_id:       CredentialHolderId,
+    pub holder_id: CredentialHolderId,
     /// A reference to the credential JSON schema.
-    pub schema_ref:      SchemaRef,
+    pub schema_ref: SchemaRef,
     /// Type of the credential.
     pub credential_type: CredentialType,
     /// The metadata URL of the newly registered credential.
-    pub metadata_url:    MetadataUrl,
+    pub metadata_url: MetadataUrl,
 }
 
 /// A type for specifying who is revoking a credential, when registering a
@@ -151,11 +151,11 @@ pub struct RevokeCredentialEvent {
     /// A public key of the credential's holder.
     pub holder_id: CredentialHolderId,
     /// Who revokes the credential.
-    pub revoker:   Revoker,
+    pub revoker: Revoker,
     /// An optional text clarifying the revocation reasons.
     /// The issuer can use this field to comment on the revocation, so the
     /// holder can observe it in the wallet.
-    pub reason:    Option<Reason>,
+    pub reason: Option<Reason>,
 }
 
 #[derive(Debug, contracts_common::Serialize, Clone)]
@@ -169,14 +169,14 @@ pub struct IssuerMetadataEvent {
 /// The schema reference has been updated for the credential type.
 #[derive(contracts_common::Serialize, Debug, Clone)]
 pub struct CredentialSchemaRefEvent {
-    pub r#type:     CredentialType,
+    pub r#type: CredentialType,
     pub schema_ref: SchemaRef,
 }
 
 #[derive(Debug, Clone, contracts_common::Serialize)]
 pub struct CredentialMetadataEvent {
     pub credential_id: CredentialHolderId,
-    pub metadata_url:  MetadataUrl,
+    pub metadata_url: MetadataUrl,
 }
 
 #[derive(contracts_common::Serialize, Debug, Clone)]
@@ -191,7 +191,7 @@ pub enum RevocationKeyAction {
 #[derive(contracts_common::Serialize, Debug, Clone)]
 pub struct RevocationKeyEvent {
     /// The public key that is registered/removed
-    pub key:    RevocationKey,
+    pub key: RevocationKey,
     /// A register/remove action.
     pub action: RevocationKeyAction,
 }

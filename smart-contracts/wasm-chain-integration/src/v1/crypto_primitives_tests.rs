@@ -32,11 +32,10 @@ static CONTRACT_BYTES: &[u8] =
 /// Construct the initial state for the benchmark from given key-value pairs.
 fn mk_state<A: AsRef<[u8]>, B: Copy>(inputs: &[(A, B)]) -> (MutableState, Loader<Vec<u8>>)
 where
-    Vec<u8>: From<B>, {
+    Vec<u8>: From<B>,
+{
     let mut node = MutableTrie::empty();
-    let mut loader = Loader {
-        inner: Vec::new(),
-    };
+    let mut loader = Loader { inner: Vec::new() };
     for (k, v) in inputs {
         node.insert(&mut loader, k.as_ref(), trie::Value::from(*v))
             .expect("No locks, so cannot fail.");
@@ -60,7 +59,7 @@ fn test_crypto_prims() -> anyhow::Result<()> {
             ValidationConfig::V1,
             &ConcordiumAllowedImports {
                 support_upgrade: true,
-                enable_debug:    false,
+                enable_debug: false,
             },
             &skeleton,
         )
@@ -82,13 +81,13 @@ fn test_crypto_prims() -> anyhow::Result<()> {
     let owner = concordium_contracts_common::AccountAddress([0u8; 32]);
 
     let receive_ctx: ReceiveContext<&[u8]> = ReceiveContext {
-        common:     v0::ReceiveContext {
+        common: v0::ReceiveContext {
             metadata: ChainMetadata {
                 slot_time: Timestamp::from_timestamp_millis(0),
             },
             invoker: owner,
             self_address: ContractAddress {
-                index:    0,
+                index: 0,
                 subindex: 0,
             },
             self_balance: Amount::from_ccd(1000),
@@ -112,9 +111,7 @@ fn test_crypto_prims() -> anyhow::Result<()> {
         };
         let receive_ctx = &receive_ctx;
         let args = &args[..];
-        let mut backing_store = Loader {
-            inner: Vec::new(),
-        };
+        let mut backing_store = Loader { inner: Vec::new() };
         let inner = mutable_state.get_inner(&mut backing_store);
         let state = InstanceState::new(backing_store, inner);
         let mut host = ReceiveHost::<_, Vec<u8>, _, _> {
@@ -133,12 +130,8 @@ fn test_crypto_prims() -> anyhow::Result<()> {
         let r = artifact.run(&mut host, name, args);
         match r {
             Ok(res) => match res {
-                machine::ExecutionOutcome::Success {
-                    ..
-                } => host.stateless.return_value,
-                machine::ExecutionOutcome::Interrupted {
-                    ..
-                } => {
+                machine::ExecutionOutcome::Success { .. } => host.stateless.return_value,
+                machine::ExecutionOutcome::Interrupted { .. } => {
                     panic!(
                         "Execution terminated with an interruption, but was expected to succeed \
                          for {}..",
@@ -146,7 +139,10 @@ fn test_crypto_prims() -> anyhow::Result<()> {
                     );
                 }
             },
-            Err(e) => panic!("Execution failed, but was expected to succeed for {}: {}.", name, e),
+            Err(e) => panic!(
+                "Execution failed, but was expected to succeed for {}: {}.",
+                name, e
+            ),
         }
     };
 

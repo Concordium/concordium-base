@@ -58,12 +58,12 @@ pub struct AttributeInRangeStatement<
     pub attribute_tag: TagType,
     /// The lower bound on the range.
     #[serde(rename = "lower")]
-    pub lower:         AttributeType,
+    pub lower: AttributeType,
     #[serde(rename = "upper")]
     /// The upper bound of the range.
-    pub upper:         AttributeType,
+    pub upper: AttributeType,
     #[serde(skip)]
-    pub _phantom:      PhantomData<C>,
+    pub _phantom: PhantomData<C>,
 }
 
 /// For the case where the verifier wants the user to prove that an attribute is
@@ -85,9 +85,9 @@ pub struct AttributeInSetStatement<
     pub attribute_tag: TagType,
     /// The set that the attribute should lie in.
     #[serde(rename = "set")]
-    pub set:           std::collections::BTreeSet<AttributeType>,
+    pub set: std::collections::BTreeSet<AttributeType>,
     #[serde(skip)]
-    pub _phantom:      PhantomData<C>,
+    pub _phantom: PhantomData<C>,
 }
 
 /// For the case where the verifier wants the user to prove that an attribute is
@@ -110,9 +110,9 @@ pub struct AttributeNotInSetStatement<
     pub attribute_tag: TagType,
     /// The set that the attribute should not lie in.
     #[serde(rename = "set")]
-    pub set:           std::collections::BTreeSet<AttributeType>,
+    pub set: std::collections::BTreeSet<AttributeType>,
     #[serde(skip)]
-    pub _phantom:      PhantomData<C>,
+    pub _phantom: PhantomData<C>,
 }
 
 /// Statements are composed of one or more atomic statements.
@@ -228,7 +228,7 @@ pub enum AtomicProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
     RevealAttribute {
         attribute: AttributeType, /* The verifier has to learn this, so it is sent together with
                                    * the proof. */
-        proof:     crate::sigma_protocols::common::SigmaProof<DlogResponse<C>>,
+        proof: crate::sigma_protocols::common::SigmaProof<DlogResponse<C>>,
     },
     /// A proof that an attribute is in a range
     AttributeInRange {
@@ -320,7 +320,7 @@ pub struct StatementWithContext<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// The credential that the statement is about.
     pub credential: CredId<C>,
     /// The statement composed by one or more atomic statements.
-    pub statement:  Statement<C, AttributeType>,
+    pub statement: Statement<C, AttributeType>,
 }
 
 /// A statement is a list of atomic statements.
@@ -336,7 +336,9 @@ pub struct Statement<C: Curve, AttributeType: Attribute<C::Scalar>> {
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Default for Statement<C, AttributeType> {
-    fn default() -> Self { Statement { statements: vec![] } }
+    fn default() -> Self {
+        Statement { statements: vec![] }
+    }
 }
 
 /// Helper functions for constructing statements
@@ -449,7 +451,9 @@ impl Statement<G1, AttributeKind> {
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> {
     /// For constructing the empty statement.
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// For revealing an attribute. This is resquests the user to reveal the
     /// attribute value corresponding to `attribute_tag` and to prove that

@@ -19,7 +19,7 @@ fn bench_aggr_dlog_commit_message(c: &mut Criterion) {
     let public_key = G1::generate(&mut csprng);
     let dlog = AggregateDlog {
         public: public_key,
-        coeff:  coeffs,
+        coeff: coeffs,
     };
     c.bench_function("Aggregate dlog commit message", move |b| {
         b.iter(|| dlog.compute_commit_message(&mut csprng))

@@ -47,7 +47,9 @@ const VALID_CONCORDIUM_FIELD_ATTRIBUTES: [&str; 3] = ["size_length", "ensure_ord
 /// A list of valid concordium attributes.
 const VALID_CONCORDIUM_ATTRIBUTES: [&str; 4] = ["state_parameter", "bound", "transparent", "repr"];
 
-fn get_root() -> proc_macro2::TokenStream { quote!(concordium_std) }
+fn get_root() -> proc_macro2::TokenStream {
+    quote!(concordium_std)
+}
 
 /// Extend a punctuated list of tokens with another list, making sure that
 /// the punctuation is correctly maintained, i.e., if the original list ends
@@ -130,7 +132,12 @@ fn find_length_attribute(attributes: &[syn::Attribute]) -> syn::Result<Option<u3
 
     let value = match value {
         syn::Lit::Int(int) => int,
-        _ => return Err(syn::Error::new(value_span, "Length attribute value must be an integer.")),
+        _ => {
+            return Err(syn::Error::new(
+                value_span,
+                "Length attribute value must be an integer.",
+            ))
+        }
     };
     let value = match value.base10_parse() {
         Ok(v) => v,
@@ -143,7 +150,10 @@ fn find_length_attribute(attributes: &[syn::Attribute]) -> syn::Result<Option<u3
     };
     match value {
         1 | 2 | 4 | 8 => Ok(Some(value)),
-        _ => Err(syn::Error::new(value_span, "Length info must be either 1, 2, 4, or 8.")),
+        _ => Err(syn::Error::new(
+            value_span,
+            "Length info must be either 1, 2, 4, or 8.",
+        )),
     }
 }
 
@@ -189,7 +199,10 @@ fn get_valid_concordium_attributes(
     for_field: bool,
 ) -> syn::Result<Vec<syn::Meta>> {
     let (valid_attributes, attribute_type) = if for_field {
-        (&VALID_CONCORDIUM_FIELD_ATTRIBUTES[..], "concordium field attribute")
+        (
+            &VALID_CONCORDIUM_FIELD_ATTRIBUTES[..],
+            "concordium field attribute",
+        )
     } else {
         (&VALID_CONCORDIUM_ATTRIBUTES[..], "concordium attribute")
     };
@@ -221,7 +234,10 @@ fn find_state_parameter_attribute(
 
     match value {
         syn::Lit::Str(value) => Ok(Some(value.parse().map_err(|err| {
-            syn::Error::new(err.span(), "state_parameter attribute value is not a valid type path")
+            syn::Error::new(
+                err.span(),
+                "state_parameter attribute value is not a valid type path",
+            )
         })?)),
         _ => Err(syn::Error::new(
             value.span(),
@@ -307,9 +323,9 @@ impl BoundAttribute {
 #[derive(Debug)]
 struct SeparateBoundValue {
     /// Bounds set for Deserial and DeserialWithState.
-    deserial:    Option<BoundAttributeValue>,
+    deserial: Option<BoundAttributeValue>,
     /// Bounds set for Serial.
-    serial:      Option<BoundAttributeValue>,
+    serial: Option<BoundAttributeValue>,
     /// Bounds set for SchemaType.
     schema_type: Option<BoundAttributeValue>,
 }
@@ -319,13 +335,13 @@ struct SeparateBoundValue {
 struct ContainerAttributes {
     /// All of the `bound` attributes, either of the form `bound(serial = "..",
     /// deserial = "..", schema_type = "..")` or `bound = ".."`
-    bounds:          Vec<BoundAttribute>,
+    bounds: Vec<BoundAttribute>,
     /// The state parameter attribute. `state_parameter = ".."`
     state_parameter: Option<syn::TypePath>,
     /// The 'transparent' attribute. Is false when not present.
-    transparent:     bool,
+    transparent: bool,
     /// The 'repr(..)' attribute.
-    repr:            Option<ReprAttribute>,
+    repr: Option<ReprAttribute>,
 }
 
 impl ContainerAttributes {
@@ -335,7 +351,9 @@ impl ContainerAttributes {
         let mut bounds: Option<BoundAttributeValue> = None;
         for attribute in self.bounds.iter() {
             if let Some(bound) = attribute.deserial_bound() {
-                bounds.get_or_insert(BoundAttributeValue::new()).extend(bound.clone());
+                bounds
+                    .get_or_insert(BoundAttributeValue::new())
+                    .extend(bound.clone());
             }
         }
         bounds
@@ -347,7 +365,9 @@ impl ContainerAttributes {
         let mut bounds: Option<BoundAttributeValue> = None;
         for attribute in self.bounds.iter() {
             if let Some(bound) = attribute.serial_bound() {
-                bounds.get_or_insert(BoundAttributeValue::new()).extend(bound.clone());
+                bounds
+                    .get_or_insert(BoundAttributeValue::new())
+                    .extend(bound.clone());
             }
         }
         bounds
@@ -359,7 +379,9 @@ impl ContainerAttributes {
         let mut bounds: Option<BoundAttributeValue> = None;
         for attribute in self.bounds.iter() {
             if let Some(bound) = attribute.schema_type_bound() {
-                bounds.get_or_insert(BoundAttributeValue::new()).extend(bound.clone());
+                bounds
+                    .get_or_insert(BoundAttributeValue::new())
+                    .extend(bound.clone());
             }
         }
         bounds
@@ -382,7 +404,10 @@ impl ContainerAttributes {
         } else if variants_len <= usize::from(u16::MAX) + 1 {
             Ok(ReprAttributeValue::U16)
         } else {
-            abort!(Span::call_site(), "Too many variants. Maximum 65536 are supported.",);
+            abort!(
+                Span::call_site(),
+                "Too many variants. Maximum 65536 are supported.",
+            );
         }
     }
 
@@ -495,12 +520,14 @@ struct ReprAttribute {
     /// The size length to use.
     value: ReprAttributeValue,
     /// The span of the attribute.
-    span:  proc_macro2::Span,
+    span: proc_macro2::Span,
 }
 
 impl ReprAttribute {
     /// Construct a ['syn::Ident'] from the value.
-    fn ident(&self) -> syn::Ident { self.value.ident() }
+    fn ident(&self) -> syn::Ident {
+        self.value.ident()
+    }
 
     /// Maximum tag value with the value of the 'repr' attribute.
     fn max_tag_value(&self) -> usize {
@@ -513,7 +540,9 @@ impl ReprAttribute {
 
     /// Maximum number of variants distiguishable with the value of the 'repr'
     /// attribute
-    fn max_num_variants(&self) -> usize { self.max_tag_value() + 1 }
+    fn max_num_variants(&self) -> usize {
+        self.max_tag_value() + 1
+    }
 }
 
 impl TryFrom<&syn::Meta> for ReprAttribute {
@@ -521,25 +550,41 @@ impl TryFrom<&syn::Meta> for ReprAttribute {
 
     fn try_from(meta: &syn::Meta) -> Result<Self, Self::Error> {
         let syn::Meta::List(list) = meta else {
-            abort!(meta.span(), "repr attribute value can only be provided as 'repr(...)'",);
+            abort!(
+                meta.span(),
+                "repr attribute value can only be provided as 'repr(...)'",
+            );
         };
         let nested = list.parse_args_with(
             syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
         )?;
-        check!(nested.len() == 1, nested.span(), "'repr(..)' must be provided a single value",);
+        check!(
+            nested.len() == 1,
+            nested.span(),
+            "'repr(..)' must be provided a single value",
+        );
         // Safe to unwrap below because we already checked the length to be 1.
         let syn::Meta::Path(path) = nested.first().unwrap() else {
-            abort!(nested.span(), "'repr(..)' only supports the values 'u8' or 'u16'");
+            abort!(
+                nested.span(),
+                "'repr(..)' only supports the values 'u8' or 'u16'"
+            );
         };
         let Some(ident) = path.get_ident() else {
-            abort!(path.span(), "'repr(..)' only supports the values 'u8' or 'u16'");
+            abort!(
+                path.span(),
+                "'repr(..)' only supports the values 'u8' or 'u16'"
+            );
         };
         let value = if ident == "u8" {
             ReprAttributeValue::U8
         } else if ident == "u16" {
             ReprAttributeValue::U16
         } else {
-            abort!(ident.span(), "'repr(..)' only supports the values 'u8' or 'u16'",);
+            abort!(
+                ident.span(),
+                "'repr(..)' only supports the values 'u8' or 'u16'",
+            );
         };
         Ok(Self {
             value,
@@ -617,7 +662,11 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
             syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
         )?;
 
-        check!(!items.is_empty(), list.span(), "bound attribute cannot be empty");
+        check!(
+            !items.is_empty(),
+            list.span(),
+            "bound attribute cannot be empty"
+        );
 
         let mut deserial: Option<BoundAttributeValue> = None;
         let mut serial: Option<BoundAttributeValue> = None;
@@ -625,7 +674,10 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
 
         for item in &items {
             let syn::Meta::NameValue(name_value) = item else {
-                abort!(item.span(), "bound attribute list must contain named values");
+                abort!(
+                    item.span(),
+                    "bound attribute list must contain named values"
+                );
             };
             if name_value.path.is_ident("serial") {
                 let syn::Expr::Lit(syn::ExprLit {
@@ -633,7 +685,10 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
                     ..
                 }) = &name_value.value
                 else {
-                    abort!(name_value.value.span(), "bound attribute must be a string literal");
+                    abort!(
+                        name_value.value.span(),
+                        "bound attribute must be a string literal"
+                    );
                 };
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
                 if let Some(serial_value) = serial.as_mut() {
@@ -647,7 +702,10 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
                     ..
                 }) = &name_value.value
                 else {
-                    abort!(name_value.value.span(), "bound attribute must be a string literal");
+                    abort!(
+                        name_value.value.span(),
+                        "bound attribute must be a string literal"
+                    );
                 };
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
                 if let Some(deserial_value) = deserial.as_mut() {
@@ -661,7 +719,10 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
                     ..
                 }) = &name_value.value
                 else {
-                    abort!(name_value.value.span(), "bound attribute must be a string literal");
+                    abort!(
+                        name_value.value.span(),
+                        "bound attribute must be a string literal"
+                    );
                 };
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
                 if let Some(schema_type_value) = schema_type.as_mut() {
@@ -691,16 +752,19 @@ impl TryFrom<&syn::Meta> for BoundAttribute {
 
     fn try_from(meta: &syn::Meta) -> Result<Self, Self::Error> {
         match meta {
-            syn::Meta::List(list) => {
-                Ok(BoundAttribute::Separated(SeparateBoundValue::try_from(list)?))
-            }
+            syn::Meta::List(list) => Ok(BoundAttribute::Separated(SeparateBoundValue::try_from(
+                list,
+            )?)),
             syn::Meta::NameValue(name_value) => {
                 let syn::Expr::Lit(syn::ExprLit {
                     lit: syn::Lit::Str(lit_str),
                     ..
                 }) = &name_value.value
                 else {
-                    abort!(name_value.value.span(), "bound attribute must be a string literal");
+                    abort!(
+                        name_value.value.span(),
+                        "bound attribute must be a string literal"
+                    );
                 };
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
                 Ok(BoundAttribute::Shared(value))
@@ -718,9 +782,9 @@ impl TryFrom<&syn::Meta> for BoundAttribute {
 #[derive(Debug)]
 struct EnumVariantAttributes {
     /// Override tag to use for (de)serializing this variant e.g. 'tag = 42'
-    tag:      Option<TagAttribute>,
+    tag: Option<TagAttribute>,
     /// Override variant name in the derived 'SchemaType'.
-    rename:   Option<RenameAttribute>,
+    rename: Option<RenameAttribute>,
     /// Forward the (de)serialization to nested type for a provided list of tag
     /// values e.g. 'forward = [255, 254, 253, 252]'.
     forwards: Vec<ForwardAttribute>,
@@ -732,7 +796,7 @@ struct TagAttribute {
     /// The literal to use as the tag.
     value: syn::LitInt,
     /// The span of the attribute.
-    span:  proc_macro2::Span,
+    span: proc_macro2::Span,
 }
 
 /// Attribute 'rename' for providing a name to use in the schema instead of the
@@ -742,7 +806,7 @@ struct RenameAttribute {
     /// The string to use as the name.
     value: String,
     /// The span of the attribute.
-    span:  proc_macro2::Span,
+    span: proc_macro2::Span,
 }
 
 /// Represents the value (and its span) of a 'forward' variant attribute when
@@ -752,7 +816,7 @@ struct PredefinedForwardSpannedValue {
     /// The predefined set of forwarded values.
     value: PredefinedForwardValue,
     /// Span of the provided value.
-    span:  Span,
+    span: Span,
 }
 
 /// Value supported by the `forward` attribute.
@@ -805,7 +869,9 @@ impl PredefinedForwardValue {
             Cis3 => [250].iter(),
             Cis4 => [249, 248, 247, 246, 245, 244].iter(),
         };
-        iter.copied().map(proc_macro2::Literal::u8_suffixed).collect()
+        iter.copied()
+            .map(proc_macro2::Literal::u8_suffixed)
+            .collect()
     }
 
     /// Get the expected 'repr' value for this value.
@@ -837,7 +903,7 @@ struct ForwardAttribute {
     /// The tag values to forward.
     values: Vec<ForwardAttributeValue>,
     /// The span of the attribute.
-    span:   proc_macro2::Span,
+    span: proc_macro2::Span,
 }
 
 impl TryFrom<&[syn::Attribute]> for EnumVariantAttributes {
@@ -953,18 +1019,24 @@ impl TryFrom<&syn::Meta> for TagAttribute {
 
     fn try_from(meta: &syn::Meta) -> Result<Self, Self::Error> {
         let syn::Meta::NameValue(name_value) = meta else {
-            abort!(meta.span(), "'tag' attribute value can only be provided as 'tag = ...'.",);
+            abort!(
+                meta.span(),
+                "'tag' attribute value can only be provided as 'tag = ...'.",
+            );
         };
         let syn::Expr::Lit(syn::ExprLit {
             lit: syn::Lit::Int(value),
             ..
         }) = &name_value.value
         else {
-            abort!(name_value.value.span(), "'tag' attribute must be an integer.");
+            abort!(
+                name_value.value.span(),
+                "'tag' attribute must be an integer."
+            );
         };
         Ok(TagAttribute {
             value: value.clone(),
-            span:  meta.span(),
+            span: meta.span(),
         })
     }
 }
@@ -974,18 +1046,24 @@ impl TryFrom<&syn::Meta> for RenameAttribute {
 
     fn try_from(meta: &syn::Meta) -> Result<Self, Self::Error> {
         let syn::Meta::NameValue(name_value) = meta else {
-            abort!(meta.span(), "'rename' attribute value can only be provided as 'rename = ...'.",);
+            abort!(
+                meta.span(),
+                "'rename' attribute value can only be provided as 'rename = ...'.",
+            );
         };
         let syn::Expr::Lit(syn::ExprLit {
             lit: syn::Lit::Str(lit_str),
             ..
         }) = &name_value.value
         else {
-            abort!(name_value.value.span(), "'rename' attribute must be a string.");
+            abort!(
+                name_value.value.span(),
+                "'rename' attribute must be a string."
+            );
         };
         Ok(Self {
             value: lit_str.value(),
-            span:  meta.span(),
+            span: meta.span(),
         })
     }
 }
@@ -1862,7 +1940,10 @@ pub fn reject_derive_worker(input: TokenStream) -> syn::Result<TokenStream> {
     let ast: syn::DeriveInput = syn::parse(input)?;
     let enum_data = match &ast.data {
         syn::Data::Enum(data) => Ok(data),
-        _ => Err(syn::Error::new(ast.span(), "Reject can only be derived for enums.")),
+        _ => Err(syn::Error::new(
+            ast.span(),
+            "Reject can only be derived for enums.",
+        )),
     }?;
     let enum_ident = &ast.ident;
 
@@ -1969,7 +2050,10 @@ fn generate_variant_error_conversions(
             // but the general case of this requires evaluating constant expressions,
             // which is not easily supported at the moment.
             if let Some((_, discriminant)) = variant.discriminant.as_ref() {
-                abort!(discriminant.span(), "Explicit discriminants are not yet supported.",);
+                abort!(
+                    discriminant.span(),
+                    "Explicit discriminants are not yet supported.",
+                );
             }
             let variant_attributes = variant.attrs.iter();
             variant_attributes
@@ -2051,16 +2135,15 @@ fn impl_deletable_field(ident: &proc_macro2::TokenStream) -> syn::Result<proc_ma
 
 pub fn impl_deletable(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
     let data_name = &ast.ident;
-    let state_parameter = match find_state_parameter_attribute(&ast.attrs)? {
-        Some(state_param) => state_param,
-        None => {
-            return Err(syn::Error::new(
+    let state_parameter =
+        match find_state_parameter_attribute(&ast.attrs)? {
+            Some(state_param) => state_param,
+            None => return Err(syn::Error::new(
                 Span::call_site(),
                 "Deletable requires the attribute #[concordium(state_parameter = \"S\")], where \
                  \"S\" should be the HasStateApi generic parameter.",
-            ))
-        }
-    };
+            )),
+        };
 
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
     let where_predicates = where_clauses.map(|c| c.predicates.clone());
@@ -2252,9 +2335,7 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
                     }
 
                     let inner_field = variant.fields.iter().next().unwrap().clone(); // Safe to unwrap because of the above check of the length.
-                    SchemaTypeVariantData::Forwards {
-                        inner_field,
-                    }
+                    SchemaTypeVariantData::Forwards { inner_field }
                 };
                 variant_data.push(data);
             }
@@ -2301,13 +2382,8 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
                 let variant_tokens: Vec<_> = variant_data
                     .iter()
                     .map(|data| match data {
-                        SchemaTypeVariantData::Tagged {
-                            variant_tokens,
-                            ..
-                        } => Ok(variant_tokens),
-                        SchemaTypeVariantData::Forwards {
-                            ..
-                        } => {
+                        SchemaTypeVariantData::Tagged { variant_tokens, .. } => Ok(variant_tokens),
+                        SchemaTypeVariantData::Forwards { .. } => {
                             abort!(
                                 ast.span(),
                                 "Invariant violated for deriving SchemaType: Forwarding data is \
@@ -2366,7 +2442,7 @@ enum SchemaTypeVariantData {
     /// A tagged variant, either implicitly or explicit.
     Tagged {
         /// The integer literal to used for this variant.
-        tag_lit:        syn::LitInt,
+        tag_lit: syn::LitInt,
         /// Tokens of a string of the variant name paired with the tokens to
         /// implement fields
         variant_tokens: proc_macro2::TokenStream,
@@ -2389,7 +2465,10 @@ fn find_rename_attribute(attributes: &[syn::Attribute]) -> syn::Result<Option<(S
 
     match value {
         syn::Lit::Str(value) => Ok(Some((value.value(), value.span()))),
-        _ => Err(syn::Error::new(value.span(), "Rename attribute value must be a string.")),
+        _ => Err(syn::Error::new(
+            value.span(),
+            "Rename attribute value must be a string.",
+        )),
     }
 }
 
@@ -2453,8 +2532,10 @@ fn schema_type_fields(fields: &syn::Fields) -> syn::Result<proc_macro2::TokenStr
             )
         }
         syn::Fields::Unnamed(_) => {
-            let fields_tokens: Vec<_> =
-                fields.iter().map(schema_type_field_type).collect::<syn::Result<_>>()?;
+            let fields_tokens: Vec<_> = fields
+                .iter()
+                .map(schema_type_field_type)
+                .collect::<syn::Result<_>>()?;
             Ok(quote! { concordium_std::schema::Fields::Unnamed([ #(#fields_tokens),* ].to_vec()) })
         }
         syn::Fields::Unit => Ok(quote! { concordium_std::schema::Fields::None }),
@@ -2478,9 +2559,18 @@ mod test {
         let parsed = ContainerAttributes::try_from(ast.attrs.as_slice())
             .expect("Failed to parse container attributes");
 
-        assert!(parsed.deserial_bounds().is_some(), "Failed to add shared bound");
-        assert!(parsed.serial_bounds().is_some(), "Failed to add shared bound");
-        assert!(parsed.schema_type_bounds().is_some(), "Failed to add shared bound");
+        assert!(
+            parsed.deserial_bounds().is_some(),
+            "Failed to add shared bound"
+        );
+        assert!(
+            parsed.serial_bounds().is_some(),
+            "Failed to add shared bound"
+        );
+        assert!(
+            parsed.schema_type_bounds().is_some(),
+            "Failed to add shared bound"
+        );
     }
 
     /// Test parsing for bound attribute when using syntax for Deserial
@@ -2497,9 +2587,18 @@ mod test {
         let parsed = ContainerAttributes::try_from(ast.attrs.as_slice())
             .expect("Failed to parse container attributes");
 
-        assert!(parsed.deserial_bounds().is_some(), "Failed to add explicit bound");
-        assert!(parsed.serial_bounds().is_none(), "Unexpected bound added for Serial");
-        assert!(parsed.schema_type_bounds().is_none(), "Unexpected bound added for SchemaType");
+        assert!(
+            parsed.deserial_bounds().is_some(),
+            "Failed to add explicit bound"
+        );
+        assert!(
+            parsed.serial_bounds().is_none(),
+            "Unexpected bound added for Serial"
+        );
+        assert!(
+            parsed.schema_type_bounds().is_none(),
+            "Unexpected bound added for SchemaType"
+        );
     }
 
     /// Test parsing for bound attribute when using syntax for Serial explicit.
@@ -2515,9 +2614,18 @@ mod test {
         let parsed = ContainerAttributes::try_from(ast.attrs.as_slice())
             .expect("Failed to parse container attributes");
 
-        assert!(parsed.serial_bounds().is_some(), "Failed to add explicit bound");
-        assert!(parsed.deserial_bounds().is_none(), "Unexpected bound added for Deserial");
-        assert!(parsed.schema_type_bounds().is_none(), "Unexpected bound added for SchemaType");
+        assert!(
+            parsed.serial_bounds().is_some(),
+            "Failed to add explicit bound"
+        );
+        assert!(
+            parsed.deserial_bounds().is_none(),
+            "Unexpected bound added for Deserial"
+        );
+        assert!(
+            parsed.schema_type_bounds().is_none(),
+            "Unexpected bound added for SchemaType"
+        );
     }
 
     /// Test parsing for bound attribute when using syntax for SchemaType
@@ -2534,9 +2642,18 @@ mod test {
         let parsed = ContainerAttributes::try_from(ast.attrs.as_slice())
             .expect("Failed to parse container attributes");
 
-        assert!(parsed.deserial_bounds().is_none(), "Unexpected bound added for Deserial");
-        assert!(parsed.serial_bounds().is_none(), "Unexpected bound added for Serial");
-        assert!(parsed.schema_type_bounds().is_some(), "Failed to add explicit bound");
+        assert!(
+            parsed.deserial_bounds().is_none(),
+            "Unexpected bound added for Deserial"
+        );
+        assert!(
+            parsed.serial_bounds().is_none(),
+            "Unexpected bound added for Serial"
+        );
+        assert!(
+            parsed.schema_type_bounds().is_some(),
+            "Failed to add explicit bound"
+        );
     }
 
     /// Test parsing for transparent attribute.

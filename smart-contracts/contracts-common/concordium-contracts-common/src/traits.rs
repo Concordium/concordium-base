@@ -125,7 +125,9 @@ pub trait Read {
     }
 
     /// Load an array of the given size.
-    fn read_array<const N: usize>(&mut self) -> ParseResult<[u8; N]> { Ok(read_n_bytes!(N, self)) }
+    fn read_array<const N: usize>(&mut self) -> ParseResult<[u8; N]> {
+        Ok(read_n_bytes!(N, self))
+    }
 }
 
 /// The `Write` trait provides functionality for writing to byte streams.
@@ -150,28 +152,44 @@ pub trait Write {
     }
 
     /// Write a single byte to the output.
-    fn write_u8(&mut self, x: u8) -> Result<(), Self::Err> { self.write_all(&x.to_le_bytes()) }
+    fn write_u8(&mut self, x: u8) -> Result<(), Self::Err> {
+        self.write_all(&x.to_le_bytes())
+    }
 
     /// Write a `u16` in little endian.
-    fn write_u16(&mut self, x: u16) -> Result<(), Self::Err> { self.write_all(&x.to_le_bytes()) }
+    fn write_u16(&mut self, x: u16) -> Result<(), Self::Err> {
+        self.write_all(&x.to_le_bytes())
+    }
 
     /// Write a `u32` in little endian.
-    fn write_u32(&mut self, x: u32) -> Result<(), Self::Err> { self.write_all(&x.to_le_bytes()) }
+    fn write_u32(&mut self, x: u32) -> Result<(), Self::Err> {
+        self.write_all(&x.to_le_bytes())
+    }
 
     /// Write a `u64` in little endian.
-    fn write_u64(&mut self, x: u64) -> Result<(), Self::Err> { self.write_all(&x.to_le_bytes()) }
+    fn write_u64(&mut self, x: u64) -> Result<(), Self::Err> {
+        self.write_all(&x.to_le_bytes())
+    }
 
     /// Write a `i8` to the output.
-    fn write_i8(&mut self, x: i8) -> Result<(), Self::Err> { self.write_all(&x.to_le_bytes()) }
+    fn write_i8(&mut self, x: i8) -> Result<(), Self::Err> {
+        self.write_all(&x.to_le_bytes())
+    }
 
     /// Write a `i16` in little endian.
-    fn write_i16(&mut self, x: i16) -> Result<(), Self::Err> { self.write_all(&x.to_le_bytes()) }
+    fn write_i16(&mut self, x: i16) -> Result<(), Self::Err> {
+        self.write_all(&x.to_le_bytes())
+    }
 
     /// Write a `i32` in little endian.
-    fn write_i32(&mut self, x: i32) -> Result<(), Self::Err> { self.write_all(&x.to_le_bytes()) }
+    fn write_i32(&mut self, x: i32) -> Result<(), Self::Err> {
+        self.write_all(&x.to_le_bytes())
+    }
 
     /// Write a `i64` in little endian.
-    fn write_i64(&mut self, x: i64) -> Result<(), Self::Err> { self.write_all(&x.to_le_bytes()) }
+    fn write_i64(&mut self, x: i64) -> Result<(), Self::Err> {
+        self.write_all(&x.to_le_bytes())
+    }
 }
 
 /// The `write` method always appends data to the end of the vector.
@@ -295,7 +313,9 @@ pub trait Get<T> {
 
 impl<R: Read, T: Deserial> Get<T> for R {
     #[inline(always)]
-    fn get(&mut self) -> ParseResult<T> { T::deserial(self) }
+    fn get(&mut self) -> ParseResult<T> {
+        T::deserial(self)
+    }
 }
 
 #[cfg(test)]
@@ -305,13 +325,37 @@ mod tests {
     fn write_u8_slice() {
         let mut xs = [0u8; 10];
         let mut slice: &mut [u8] = &mut xs;
-        assert!(0xAAAAAAAAu32.serial(&mut slice).is_ok(), "Writing u32 should succeed.");
-        assert_eq!(slice.len(), 6, "The new slice should be of length 6 (= 10 - 4)");
-        assert!(0xBBBBBBBBu32.serial(&mut slice).is_ok(), "Writing the second u32 should succeed.");
-        assert_eq!(slice.len(), 2, "The new slice should be of length 2 (= 10 - 4 - 4)");
-        assert!(0xCCCCu16.serial(&mut slice).is_ok(), "Writing the final u16 should succeed.");
-        assert_eq!(slice.len(), 0, "The new slice should be of length 0 (= 10 - 4 - 4 - 2)");
-        assert!(0u8.serial(&mut slice).is_err(), "Writing past the end should fail.");
+        assert!(
+            0xAAAAAAAAu32.serial(&mut slice).is_ok(),
+            "Writing u32 should succeed."
+        );
+        assert_eq!(
+            slice.len(),
+            6,
+            "The new slice should be of length 6 (= 10 - 4)"
+        );
+        assert!(
+            0xBBBBBBBBu32.serial(&mut slice).is_ok(),
+            "Writing the second u32 should succeed."
+        );
+        assert_eq!(
+            slice.len(),
+            2,
+            "The new slice should be of length 2 (= 10 - 4 - 4)"
+        );
+        assert!(
+            0xCCCCu16.serial(&mut slice).is_ok(),
+            "Writing the final u16 should succeed."
+        );
+        assert_eq!(
+            slice.len(),
+            0,
+            "The new slice should be of length 0 (= 10 - 4 - 4 - 2)"
+        );
+        assert!(
+            0u8.serial(&mut slice).is_err(),
+            "Writing past the end should fail."
+        );
         assert_eq!(
             xs,
             [0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, 0xBB, 0xBB, 0xCC, 0xCC],

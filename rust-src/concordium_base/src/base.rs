@@ -41,11 +41,15 @@ use thiserror::Error;
 pub struct AccountAddressEq(pub(crate) AccountAddress);
 
 impl From<AccountAddressEq> for AccountAddress {
-    fn from(aae: AccountAddressEq) -> Self { aae.0 }
+    fn from(aae: AccountAddressEq) -> Self {
+        aae.0
+    }
 }
 
 impl From<AccountAddress> for AccountAddressEq {
-    fn from(address: AccountAddress) -> Self { Self(address) }
+    fn from(address: AccountAddress) -> Self {
+        Self(address)
+    }
 }
 
 impl PartialEq for AccountAddressEq {
@@ -58,7 +62,9 @@ impl PartialEq for AccountAddressEq {
 
 impl PartialOrd for AccountAddressEq {
     #[inline]
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(other)) }
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Ord for AccountAddressEq {
@@ -70,21 +76,27 @@ impl Ord for AccountAddressEq {
 }
 
 impl Hash for AccountAddressEq {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) { self.0 .0[0..29].hash(state) }
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0 .0[0..29].hash(state)
+    }
 }
 
 // NB: We cannot implement `Borrow` since the equality instance for
 // AccountAddressEq is, deliberately, different, from the one for account
 // addresses.
 impl AsRef<AccountAddressEq> for AccountAddress {
-    fn as_ref(&self) -> &AccountAddressEq { unsafe { std::mem::transmute(self) } }
+    fn as_ref(&self) -> &AccountAddressEq {
+        unsafe { std::mem::transmute(self) }
+    }
 }
 
 // NB: We cannot implement `Borrow` since the equality instance for
 // AccountAddressEq is, deliberately, different, from the one for account
 // addresses.
 impl AsRef<AccountAddress> for AccountAddressEq {
-    fn as_ref(&self) -> &AccountAddress { &self.0 }
+    fn as_ref(&self) -> &AccountAddress {
+        &self.0
+    }
 }
 
 /// Duration of a slot in milliseconds.
@@ -213,7 +225,7 @@ impl TryFrom<String> for UrlText {
 #[repr(u8)]
 pub enum OpenStatus {
     /// New delegators may join the pool.
-    OpenForAll   = 0,
+    OpenForAll = 0,
     /// New delegators may not join, but existing delegators are kept.
     ClosedForNew = 1,
     /// No delegators are allowed.
@@ -221,7 +233,9 @@ pub enum OpenStatus {
 }
 
 impl Serial for OpenStatus {
-    fn serial<B: Buffer>(&self, out: &mut B) { (*self as u8).serial(out) }
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        (*self as u8).serial(out)
+    }
 }
 
 impl Deserial for OpenStatus {
@@ -252,7 +266,9 @@ pub enum DelegationTarget {
 }
 
 impl From<BakerId> for DelegationTarget {
-    fn from(baker_id: BakerId) -> Self { Self::Baker { baker_id } }
+    fn from(baker_id: BakerId) -> Self {
+        Self::Baker { baker_id }
+    }
 }
 
 impl Serial for DelegationTarget {
@@ -288,9 +304,9 @@ impl Deserial for DelegationTarget {
 #[serde(rename_all = "camelCase")]
 pub struct BakerPoolInfo {
     /// Whether the pool allows delegators.
-    pub open_status:      OpenStatus,
+    pub open_status: OpenStatus,
     /// The URL that links to the metadata about the pool.
-    pub metadata_url:     UrlText,
+    pub metadata_url: UrlText,
     /// The commission rates charged by the pool owner.
     pub commission_rates: CommissionRates,
 }
@@ -342,7 +358,9 @@ impl Nonce {
     }
 
     /// Increase the nonce to the next nonce.
-    pub fn next_mut(&mut self) { self.nonce += 1; }
+    pub fn next_mut(&mut self) {
+        self.nonce += 1;
+    }
 }
 
 #[repr(transparent)]
@@ -366,11 +384,15 @@ impl UpdateSequenceNumber {
     }
 
     /// Increase the sequence number.
-    pub fn next_mut(&mut self) { self.number += 1; }
+    pub fn next_mut(&mut self) {
+        self.number += 1;
+    }
 }
 
 impl Default for UpdateSequenceNumber {
-    fn default() -> Self { Self { number: 1 } }
+    fn default() -> Self {
+        Self { number: 1 }
+    }
 }
 
 #[repr(transparent)]
@@ -718,15 +740,15 @@ impl From<&BakerElectionSignKey> for BakerElectionVerifyKey {
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 pub struct BakerKeyPairs {
     #[serde(rename = "signatureSignKey")]
-    pub signature_sign:     BakerSignatureSignKey,
+    pub signature_sign: BakerSignatureSignKey,
     #[serde(rename = "signatureVerifyKey")]
-    pub signature_verify:   BakerSignatureVerifyKey,
+    pub signature_verify: BakerSignatureVerifyKey,
     #[serde(rename = "electionPrivateKey")]
-    pub election_sign:      BakerElectionSignKey,
+    pub election_sign: BakerElectionSignKey,
     #[serde(rename = "electionVerifyKey")]
-    pub election_verify:    BakerElectionVerifyKey,
+    pub election_verify: BakerElectionVerifyKey,
     #[serde(rename = "aggregationSignKey")]
-    pub aggregation_sign:   BakerAggregationSignKey,
+    pub aggregation_sign: BakerAggregationSignKey,
     #[serde(rename = "aggregationVerifyKey")]
     pub aggregation_verify: BakerAggregationVerifyKey,
 }
@@ -762,7 +784,7 @@ pub struct BakerCredentials {
     #[serde(alias = "validatorId")]
     pub baker_id: BakerId,
     #[serde(flatten)]
-    pub keys:     BakerKeyPairs,
+    pub keys: BakerKeyPairs,
 }
 
 impl BakerCredentials {
@@ -791,11 +813,15 @@ pub struct CredentialRegistrationID(crate::id::constants::ArCurve);
 impl FromStr for CredentialRegistrationID {
     type Err = anyhow::Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> { base16_decode_string(s) }
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        base16_decode_string(s)
+    }
 }
 
 impl CredentialRegistrationID {
-    pub fn new(g: crate::id::constants::ArCurve) -> Self { Self(g) }
+    pub fn new(g: crate::id::constants::ArCurve) -> Self {
+        Self(g)
+    }
 
     /// Construct the cred id from the exponent derived from the PRF key, in
     /// the context of chain cryptographic parameters `crypto_params`.
@@ -896,7 +922,9 @@ impl UpdateKeyPair {
     }
 
     /// Sign the message with the keypair.
-    pub fn sign(&self, msg: &[u8]) -> Signature { self.inner.sign(msg).into() }
+    pub fn sign(&self, msg: &[u8]) -> Signature {
+        self.inner.sign(msg).into()
+    }
 }
 
 impl From<&UpdateKeyPair> for UpdatePublicKey {
@@ -917,7 +945,9 @@ pub struct UpdateKeysThreshold {
 
 impl From<UpdateKeysThreshold> for u16 {
     #[inline]
-    fn from(u: UpdateKeysThreshold) -> Self { u.threshold.get() }
+    fn from(u: UpdateKeysThreshold) -> Self {
+        u.threshold.get()
+    }
 }
 
 impl TryFrom<u16> for UpdateKeysThreshold {
@@ -953,7 +983,9 @@ pub struct UpdateKeysIndex {
 }
 
 impl std::fmt::Display for UpdateKeysIndex {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.index.fmt(f) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.index.fmt(f)
+    }
 }
 
 #[repr(transparent)]
@@ -987,7 +1019,9 @@ impl ElectionDifficulty {
 }
 
 impl From<ElectionDifficulty> for rust_decimal::Decimal {
-    fn from(ed: ElectionDifficulty) -> Self { ed.parts_per_hundred_thousands.into() }
+    fn from(ed: ElectionDifficulty) -> Self {
+        ed.parts_per_hundred_thousands.into()
+    }
 }
 
 #[repr(transparent)]
@@ -1011,15 +1045,21 @@ impl PartsPerHundredThousands {
 
     /// Construct a new fraction, but does not check that the resulting fraction
     /// is valid.
-    pub fn new_unchecked(parts: u32) -> Self { Self { parts } }
+    pub fn new_unchecked(parts: u32) -> Self {
+        Self { parts }
+    }
 }
 
 impl From<PartsPerHundredThousands> for rust_decimal::Decimal {
-    fn from(pp: PartsPerHundredThousands) -> Self { rust_decimal::Decimal::new(pp.parts.into(), 5) }
+    fn from(pp: PartsPerHundredThousands) -> Self {
+        rust_decimal::Decimal::new(pp.parts.into(), 5)
+    }
 }
 
 impl Serial for PartsPerHundredThousands {
-    fn serial<B: Buffer>(&self, out: &mut B) { self.parts.serial(out) }
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        self.parts.serial(out)
+    }
 }
 
 impl Deserial for PartsPerHundredThousands {
@@ -1045,10 +1085,10 @@ pub struct CommissionRates {
     pub finalization: AmountFraction,
     /// Fraction of baking rewards charged by the pool owner.
     #[serde(rename = "bakingCommission")]
-    pub baking:       AmountFraction,
+    pub baking: AmountFraction,
     /// Fraction of transaction rewards charged by the pool owner.
     #[serde(rename = "transactionCommission")]
-    pub transaction:  AmountFraction,
+    pub transaction: AmountFraction,
 }
 
 #[derive(Serialize, SerdeSerialize, SerdeDeserialize, Debug, Clone)]
@@ -1059,10 +1099,10 @@ pub struct CommissionRanges {
     pub finalization: InclusiveRange<AmountFraction>,
     /// The range of allowed baker commissions.
     #[serde(rename = "bakingCommissionRange")]
-    pub baking:       InclusiveRange<AmountFraction>,
+    pub baking: InclusiveRange<AmountFraction>,
     /// The range of allowed transaction commissions.
     #[serde(rename = "transactionCommissionRange")]
-    pub transaction:  InclusiveRange<AmountFraction>,
+    pub transaction: InclusiveRange<AmountFraction>,
 }
 
 #[derive(Debug, Copy, Clone, SerdeSerialize, SerdeDeserialize)]
@@ -1088,7 +1128,9 @@ impl<T: Deserial + Ord> Deserial for InclusiveRange<T> {
 }
 
 impl<T: Ord> InclusiveRange<T> {
-    pub fn contains(&self, x: &T) -> bool { &self.min <= x && x <= &self.max }
+    pub fn contains(&self, x: &T) -> bool {
+        &self.min <= x && x <= &self.max
+    }
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Serial, Debug, Clone, Copy)]
@@ -1097,7 +1139,7 @@ impl<T: Ord> InclusiveRange<T> {
 /// factor of 1 means that a baker does not gain anything from delegation.
 pub struct LeverageFactor {
     #[serde(deserialize_with = "crate::internal::deserialize_non_default::deserialize")]
-    pub numerator:   u64,
+    pub numerator: u64,
     #[serde(deserialize_with = "crate::internal::deserialize_non_default::deserialize")]
     pub denominator: u64,
 }
@@ -1106,7 +1148,7 @@ impl LeverageFactor {
     /// Construct an integral leverage factor that is assumed to be at least 1.
     pub fn new_integral(factor: u64) -> Self {
         Self {
-            numerator:   factor,
+            numerator: factor,
             denominator: 1,
         }
     }
@@ -1133,7 +1175,7 @@ impl LeverageFactor {
 mod leverage_factor_json {
     #[derive(super::SerdeDeserialize)]
     pub struct LeverageFactorRaw {
-        pub numerator:   u64,
+        pub numerator: u64,
         pub denominator: u64,
     }
 
@@ -1162,9 +1204,9 @@ impl Deserial for LeverageFactor {
 /// Mint distribution that applies to protocol versions 1-3.
 pub struct MintDistributionV0 {
     /// The increase in CCD amount per slot.
-    pub mint_per_slot:       MintRate,
+    pub mint_per_slot: MintRate,
     /// Fraction of newly minted CCD allocated to baker rewards.
-    pub baking_reward:       AmountFraction,
+    pub baking_reward: AmountFraction,
     /// Fraction of newly minted CCD allocated to finalization rewards.
     pub finalization_reward: AmountFraction,
 }
@@ -1174,7 +1216,7 @@ pub struct MintDistributionV0 {
 /// Mint distribution parameters that apply to protocol version 4 and up.
 pub struct MintDistributionV1 {
     /// Fraction of newly minted CCD allocated to baker rewards.
-    pub baking_reward:       AmountFraction,
+    pub baking_reward: AmountFraction,
     /// Fraction of newly minted CCD allocated to finalization rewards.
     pub finalization_reward: AmountFraction,
 }
@@ -1430,7 +1472,8 @@ impl<'de> SerdeDeserialize<'de> for PartsPerHundredThousands {
 impl SerdeSerialize for MintRate {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer, {
+        S: serde::Serializer,
+    {
         let x = rust_decimal::Decimal::try_new(self.mantissa.into(), self.exponent.into())
             .map_err(serde::ser::Error::custom)?;
         SerdeSerialize::serialize(&x, serializer)
@@ -1468,7 +1511,8 @@ impl TryFrom<rust_decimal::Decimal> for MintRate {
 impl<'de> SerdeDeserialize<'de> for MintRate {
     fn deserialize<D>(des: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>, {
+        D: serde::Deserializer<'de>,
+    {
         let f: rust_decimal::Decimal = SerdeDeserialize::deserialize(des)?;
         MintRate::try_from(f).map_err(serde::de::Error::custom)
     }

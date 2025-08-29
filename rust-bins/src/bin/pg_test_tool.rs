@@ -37,14 +37,14 @@ struct SingleKeyTestDec {
         long = "pg-priv",
         help = "File with privacy guardian's private and public keys."
     )]
-    pg_priv:     Option<PathBuf>,
+    pg_priv: Option<PathBuf>,
     /// The global cryptographic parameters of the blockchain.
     #[structopt(
         short = "g",
         long = "global",
         help = "File with cryptographic parameters."
     )]
-    global:      Option<PathBuf>,
+    global: Option<PathBuf>,
 }
 
 /// Options for creating a test to check the functionality of a single PG key.
@@ -56,17 +56,17 @@ struct SingleKeyTestEnc {
         long = "pg-pub",
         help = "File with the privacy guardian public key."
     )]
-    pg_pub:             Option<PathBuf>,
+    pg_pub: Option<PathBuf>,
     /// The global cryptographic parameters of the blockchain.
     #[structopt(
         short = "g",
         long = "global",
         help = "File with cryptographic parameters."
     )]
-    global:             Option<PathBuf>,
+    global: Option<PathBuf>,
     /// The output test record.
     #[structopt(short = "o", long = "out", help = "File to output the test record to.")]
-    out:                Option<PathBuf>,
+    out: Option<PathBuf>,
     /// Set if the user wants to encrypt a custom message.
     #[structopt(
         long = "use-custom-message",
@@ -78,7 +78,7 @@ struct SingleKeyTestEnc {
         long = "message",
         help = "Pure ASCII string, excluding the null character (\x00), 31 character limit."
     )]
-    custom_message:     Option<String>,
+    custom_message: Option<String>,
 }
 
 /// Enumerates the functionality of this tool.
@@ -116,10 +116,10 @@ pub struct SingleKeyTestRecord<C: Curve> {
     pub pg_identity: ArIdentity,
     /// hash of the encrypted message
     #[serde(rename = "msgHash")]
-    pub msg_hash:    String,
+    pub msg_hash: String,
     /// encrypted message
     #[serde(rename = "msgEnc")]
-    pub msg_enc:     [Cipher<C>; 8],
+    pub msg_enc: [Cipher<C>; 8],
 }
 
 fn main() -> anyhow::Result<()> {
@@ -347,11 +347,14 @@ fn handle_generate_test_enc(test_enc: SingleKeyTestEnc) -> anyhow::Result<()> {
     .0;
 
     // Generate and save the output
-    let test_record = Versioned::new(VERSION_0, SingleKeyTestRecord {
-        pg_identity: pg_pub.ar_identity,
-        msg_hash:    encode(h),
-        msg_enc:     enc,
-    });
+    let test_record = Versioned::new(
+        VERSION_0,
+        SingleKeyTestRecord {
+            pg_identity: pg_pub.ar_identity,
+            msg_hash: encode(h),
+            msg_enc: enc,
+        },
+    );
 
     let out_file = test_enc.out.unwrap_or_else(|| {
         PathBuf::from(

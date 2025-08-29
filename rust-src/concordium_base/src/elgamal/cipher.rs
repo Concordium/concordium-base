@@ -19,14 +19,18 @@ pub struct Randomness<C: Curve> {
 }
 
 impl<C: Curve> AsRef<C::Scalar> for Randomness<C> {
-    fn as_ref(&self) -> &C::Scalar { &self.randomness }
+    fn as_ref(&self) -> &C::Scalar {
+        &self.randomness
+    }
 }
 
 /// This trait allows automatic conversion of `&Randomness<C>` to `&C::Scalar`.
 impl<C: Curve> Deref for Randomness<C> {
     type Target = C::Scalar;
 
-    fn deref(&self) -> &C::Scalar { &self.randomness }
+    fn deref(&self) -> &C::Scalar {
+        &self.randomness
+    }
 }
 
 impl<C: Curve> Randomness<C> {
@@ -45,7 +49,8 @@ impl<C: Curve> Randomness<C> {
     /// Generate a non-zero randomness. Used in encryption.
     pub fn generate<T>(csprng: &mut T) -> Self
     where
-        T: Rng, {
+        T: Rng,
+    {
         Randomness::new(C::generate_non_zero_scalar(csprng))
     }
 }
@@ -65,7 +70,8 @@ impl<C: Curve> Cipher<C> {
     /// Generate a random cipher.
     pub fn generate<T>(csprng: &mut T) -> Self
     where
-        T: Rng, {
+        T: Rng,
+    {
         Cipher(C::generate(csprng), C::generate(csprng))
     }
 
@@ -87,7 +93,9 @@ impl<C: Curve> Cipher<C> {
     }
 
     /// Same as `scale`, but provided for convenience.
-    pub fn scale_u64(&self, e: u64) -> Self { self.scale(&C::scalar_from_u64(e)) }
+    pub fn scale_u64(&self, e: u64) -> Self {
+        self.scale(&C::scalar_from_u64(e))
+    }
 }
 
 /// Perform a "linear combination in the exponent", i.e., multiply each of the

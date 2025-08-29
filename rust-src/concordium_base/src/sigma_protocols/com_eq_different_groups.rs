@@ -14,7 +14,7 @@ use rand::*;
 
 #[derive(Debug)]
 pub struct ComEqDiffGroupsSecret<C1: Curve, C2: Curve<Scalar = C1::Scalar>> {
-    pub value:      Value<C2>,
+    pub value: Value<C2>,
     pub rand_cmm_1: Randomness<C1>,
     pub rand_cmm_2: Randomness<C2>,
 }
@@ -31,8 +31,8 @@ pub struct ComEqDiffGroups<C1: Curve, C2: Curve> {
     pub commitment_2: Commitment<C2>,
     /// A pair of commitment keys (for the first and second
     /// commitment, respectively)
-    pub cmm_key_1:    CommitmentKey<C1>,
-    pub cmm_key_2:    CommitmentKey<C2>,
+    pub cmm_key_1: CommitmentKey<C1>,
+    pub cmm_key_2: CommitmentKey<C2>,
 }
 
 #[allow(non_snake_case)]
@@ -153,7 +153,7 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
             commitment_2: v,
         };
         let secret = ComEqDiffGroupsSecret {
-            value:      a_1,
+            value: a_1,
             rand_cmm_1: a_2,
             rand_cmm_2: r,
         };

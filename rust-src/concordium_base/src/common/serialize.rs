@@ -68,7 +68,9 @@ impl Deserial for bool {
 }
 
 impl Deserial for u8 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<u8> { Ok(source.read_u8()?) }
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<u8> {
+        Ok(source.read_u8()?)
+    }
 }
 
 impl Deserial for i128 {
@@ -96,7 +98,9 @@ impl Deserial for i16 {
 }
 
 impl Deserial for i8 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<i8> { Ok(source.read_i8()?) }
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<i8> {
+        Ok(source.read_i8()?)
+    }
 }
 
 impl Deserial for std::num::NonZeroU8 {
@@ -263,7 +267,9 @@ pub fn deserial_bytes<R: ReadBytesExt>(reader: &mut R, l: usize) -> ParseResult<
 
 impl<T> Deserial for PhantomData<T> {
     #[inline]
-    fn deserial<R: ReadBytesExt>(_source: &mut R) -> ParseResult<Self> { Ok(Default::default()) }
+    fn deserial<R: ReadBytesExt>(_source: &mut R) -> ParseResult<Self> {
+        Ok(Default::default())
+    }
 }
 
 impl<T: Deserial> Deserial for Box<T> {
@@ -280,34 +286,50 @@ impl<T: Deserial> Deserial for Box<T> {
 pub trait Buffer: Sized + WriteBytesExt {
     type Result;
     fn start() -> Self;
-    fn start_hint(_l: usize) -> Self { Self::start() }
+    fn start_hint(_l: usize) -> Self {
+        Self::start()
+    }
     fn result(self) -> Self::Result;
 }
 
 impl Buffer for Vec<u8> {
     type Result = Vec<u8>;
 
-    fn start() -> Vec<u8> { Vec::new() }
+    fn start() -> Vec<u8> {
+        Vec::new()
+    }
 
-    fn start_hint(l: usize) -> Vec<u8> { Vec::with_capacity(l) }
+    fn start_hint(l: usize) -> Vec<u8> {
+        Vec::with_capacity(l)
+    }
 
-    fn result(self) -> Self::Result { self }
+    fn result(self) -> Self::Result {
+        self
+    }
 }
 
 impl Buffer for sha2::Sha256 {
     type Result = [u8; 32];
 
-    fn start() -> Self { sha2::Sha256::new() }
+    fn start() -> Self {
+        sha2::Sha256::new()
+    }
 
-    fn result(self) -> Self::Result { self.finalize().into() }
+    fn result(self) -> Self::Result {
+        self.finalize().into()
+    }
 }
 
 impl Buffer for sha2::Sha512 {
     type Result = [u8; 64];
 
-    fn start() -> Self { sha2::Sha512::new() }
+    fn start() -> Self {
+        sha2::Sha512::new()
+    }
 
-    fn result(self) -> Self::Result { self.finalize().into() }
+    fn result(self) -> Self::Result {
+        self.finalize().into()
+    }
 }
 
 /// Trait implemented by types which can be encoded into byte arrays.
@@ -634,7 +656,9 @@ impl<T> Serial for PhantomData<T> {
 
 impl<T: Serial> Serial for Box<T> {
     #[inline]
-    fn serial<B: Buffer>(&self, out: &mut B) { self.as_ref().serial(out) }
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        self.as_ref().serial(out)
+    }
 }
 
 impl Serial for [u8] {
@@ -656,7 +680,9 @@ pub trait Get<A> {
 
 impl<R: ReadBytesExt, A: Deserial> Get<A> for R {
     #[inline]
-    fn get(&mut self) -> ParseResult<A> { A::deserial(self) }
+    fn get(&mut self) -> ParseResult<A> {
+        A::deserial(self)
+    }
 }
 
 /// Dual to `Get`, and the analogue of `Serial`. It allows writing
@@ -668,7 +694,9 @@ pub trait Put<A> {
 
 impl<R: Buffer, A: Serial> Put<A> for R {
     #[inline]
-    fn put(&mut self, v: &A) { v.serial(self) }
+    fn put(&mut self, v: &A) {
+        v.serial(self)
+    }
 }
 
 /// A convenient way to refer to both [Serial] and [Deserial] together.
@@ -802,7 +830,9 @@ impl Deserial for ExchangeRate {
 }
 
 impl Serial for Duration {
-    fn serial<W: Buffer + WriteBytesExt>(&self, target: &mut W) { self.millis().serial(target); }
+    fn serial<W: Buffer + WriteBytesExt>(&self, target: &mut W) {
+        self.millis().serial(target);
+    }
 }
 
 impl Deserial for Duration {
@@ -840,7 +870,9 @@ impl<T: Deserial + Eq + Hash, S: BuildHasher + Default> Deserial for HashSet<T, 
 }
 
 impl<T: Serial> Serial for &T {
-    fn serial<W: Buffer + WriteBytesExt>(&self, target: &mut W) { (*self).serial(target) }
+    fn serial<W: Buffer + WriteBytesExt>(&self, target: &mut W) {
+        (*self).serial(target)
+    }
 }
 
 // Helpers for json serialization
@@ -914,7 +946,9 @@ pub(crate) fn base16_decode_array<'de, D: Deserializer<'de>, const N: usize>(
 
 /// Analogous to [base16_encode], but encodes into a string rather than a serde
 /// Serializer.
-pub fn base16_encode_string<S: Serial>(x: &S) -> String { encode(to_bytes(x)) }
+pub fn base16_encode_string<S: Serial>(x: &S) -> String {
+    encode(to_bytes(x))
+}
 
 /// Dual to [base16_encode_string].
 pub fn base16_decode_string<S: Deserial>(x: &str) -> ParseResult<S> {

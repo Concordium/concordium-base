@@ -2,7 +2,9 @@ use sha2::*;
 use std::slice;
 
 #[no_mangle]
-extern "C" fn sha256_new() -> *mut Sha256 { Box::into_raw(Box::new(Sha256::new())) }
+extern "C" fn sha256_new() -> *mut Sha256 {
+    Box::into_raw(Box::new(Sha256::new()))
+}
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]

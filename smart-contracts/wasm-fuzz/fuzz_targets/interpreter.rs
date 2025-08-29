@@ -20,23 +20,21 @@ use concordium_wasm::{
 /// to 10 mln here in order to allow the interpreter to potentially explore more
 /// execution paths. This should roughly correspond to a maximum execution time
 /// of 10 seconds.
-const ENERGY: InterpreterEnergy = InterpreterEnergy {
-    energy: 10_000_000,
-};
+const ENERGY: InterpreterEnergy = InterpreterEnergy { energy: 10_000_000 };
 /// A configuration object to set what information should be printed while
 /// fuzzing.
 const CONFIG: PrintConfig = PrintConfig {
     /// Report when a module was successfully compiled and finished executing
     /// without errors.
-    print_success:                    false,
+    print_success: false,
     /// Report when a module compilation or execution resulted in an error.
-    print_failure:                    false,
+    print_failure: false,
     /// Always print out a module in .wat format before it is passed to the
     /// interpreter.
     print_module_before_interpreting: false,
     /// Print out a module in .wat format, but only if it resulted in a
     /// compilation or runtime error.
-    print_failing_module:             false,
+    print_failing_module: false,
 };
 
 // Creates a random, but type-correct Wasm module, along with a random
@@ -67,15 +65,19 @@ fuzz_target!(|input: RandomizedInterpreterInput<InterpreterConfig>| {
     if CONFIG.print_module_before_interpreting {
         print_module(&bytes);
     }
-    let maybe_module =
-        validate_module(&v0::ConcordiumAllowedImports, &parse_skeleton(&bytes).unwrap());
+    let maybe_module = validate_module(
+        &v0::ConcordiumAllowedImports,
+        &parse_skeleton(&bytes).unwrap(),
+    );
     match maybe_module {
         Ok(mut module) => {
             module.inject_metering().unwrap();
             let init_names: Vec<Name> = utils::get_inits(&module).into_iter().cloned().collect();
             let receive_names: Vec<Name> =
                 utils::get_receives(&module).into_iter().cloned().collect();
-            let artifact = module.compile().expect("Compilation of validated module failed.");
+            let artifact = module
+                .compile()
+                .expect("Compilation of validated module failed.");
             // Ensuring that artifact can be serialized and deserialized
             let mut out_buf = Vec::new();
             artifact.output(&mut out_buf).unwrap();
@@ -88,7 +90,11 @@ fuzz_target!(|input: RandomizedInterpreterInput<InterpreterConfig>| {
                     parameter: concordium_contracts_common::Parameter(parameter.as_slice()),
                     energy: ENERGY,
                 };
-                process(v0::invoke_init(&artifact, init_ctx.clone(), inv, true), &bytes, CONFIG);
+                process(
+                    v0::invoke_init(&artifact, init_ctx.clone(), inv, true),
+                    &bytes,
+                    CONFIG,
+                );
             }
             for receive_name in receive_names {
                 let inv = v0::ReceiveInvocation {

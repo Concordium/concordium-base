@@ -12,11 +12,11 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct InterruptedState<Imports, R, Host> {
     /// The [`Host`] that was used for execution that was interrupted.
-    pub(crate) host:     Host,
+    pub(crate) host: Host,
     /// The artifact that is running.
     pub(crate) artifact: Arc<Artifact<Imports, R>>,
     /// The runtime configuration at the time the interrupt was triggered.
-    pub(crate) config:   RunConfig,
+    pub(crate) config: RunConfig,
 }
 
 impl<Imports: TryFromImport, H: Host<Imports>, R: RunnableCode> InterruptedState<Imports, R, H> {

@@ -27,11 +27,15 @@ pub struct EncryptedAmountAggIndex {
 }
 
 impl From<u64> for EncryptedAmountAggIndex {
-    fn from(index: u64) -> Self { EncryptedAmountAggIndex { index } }
+    fn from(index: u64) -> Self {
+        EncryptedAmountAggIndex { index }
+    }
 }
 
 impl From<u64> for EncryptedAmountIndex {
-    fn from(index: u64) -> Self { EncryptedAmountIndex { index } }
+    fn from(index: u64) -> Self {
+        EncryptedAmountIndex { index }
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Serialize, SerdeBase16Serialize, Debug)]
@@ -44,11 +48,15 @@ pub struct EncryptedAmount<C: Curve> {
 }
 
 impl<C: Curve> AsRef<[Cipher<C>; 2]> for EncryptedAmount<C> {
-    fn as_ref(&self) -> &[Cipher<C>; 2] { &self.encryptions }
+    fn as_ref(&self) -> &[Cipher<C>; 2] {
+        &self.encryptions
+    }
 }
 
 impl<C: Curve> AsRef<[Cipher<C>]> for EncryptedAmount<C> {
-    fn as_ref(&self) -> &[Cipher<C>] { self.encryptions.as_ref() }
+    fn as_ref(&self) -> &[Cipher<C>] {
+        self.encryptions.as_ref()
+    }
 }
 
 /// Randomness used when producing an encrypted amount.
@@ -64,7 +72,7 @@ pub struct IndexedEncryptedAmount<C: Curve> {
     /// The actual encrypted amount.
     pub encrypted_chunks: EncryptedAmount<C>,
     /// Index of the amount on the account.
-    pub index:            EncryptedAmountIndex,
+    pub index: EncryptedAmountIndex,
 }
 
 /// Size of the chunk for encrypted amounts.
@@ -78,14 +86,14 @@ pub struct EncryptedAmountTransferData<C: Curve> {
     /// Encryption of the remaining amount.
     pub remaining_amount: EncryptedAmount<C>,
     /// Amount that will be sent.
-    pub transfer_amount:  EncryptedAmount<C>,
+    pub transfer_amount: EncryptedAmount<C>,
     /// The index such that the encrypted amount used in the transfer represents
     /// the aggregate of all encrypted amounts with indices < `index` existing
     /// on the account at the time. New encrypted amounts can only add new
     /// indices.
-    pub index:            EncryptedAmountAggIndex,
+    pub index: EncryptedAmountAggIndex,
     /// A collection of all the proofs.
-    pub proof:            EncryptedAmountTransferProof<C>,
+    pub proof: EncryptedAmountTransferProof<C>,
 }
 
 /// Data that will go onto a secret to public amount transfer.
@@ -96,14 +104,14 @@ pub struct SecToPubAmountTransferData<C: Curve> {
     /// Encryption of the remaining amount.
     pub remaining_amount: EncryptedAmount<C>,
     /// Amount that will be sent.
-    pub transfer_amount:  Amount,
+    pub transfer_amount: Amount,
     /// The index such that the encrypted amount used in the transfer represents
     /// the aggregate of all encrypted amounts with indices < `index` existing
     /// on the account at the time. New encrypted amounts can only add new
     /// indices.
-    pub index:            EncryptedAmountAggIndex,
+    pub index: EncryptedAmountAggIndex,
     /// A collection of all the proofs.
-    pub proof:            SecToPubAmountTransferProof<C>,
+    pub proof: SecToPubAmountTransferProof<C>,
 }
 
 /// An aggregated encrypted amount with a decrypted plaintext, collecting
@@ -116,11 +124,11 @@ pub struct AggregatedDecryptedAmount<C: Curve> {
     /// The aggregated encrypted amount.
     pub agg_encrypted_amount: EncryptedAmount<C>,
     /// The plaintext corresponding to the aggregated encrypted amount.
-    pub agg_amount:           Amount,
+    pub agg_amount: Amount,
     /// Index such that the `agg_amount` is the sum of all encrypted amounts
     /// on an account with indices strictly below `agg_index`.
     #[serde(default)]
-    pub agg_index:            EncryptedAmountAggIndex,
+    pub agg_index: EncryptedAmountAggIndex,
 }
 
 // # Proof datatypes

@@ -66,7 +66,9 @@ impl<C: RunnableCode> Output for C {
 }
 
 impl Output for InstantiatedGlobals {
-    fn output(&self, out: &mut impl Write) -> OutResult<()> { self.inits.output(out) }
+    fn output(&self, out: &mut impl Write) -> OutResult<()> {
+        self.inits.output(out)
+    }
 }
 
 impl Output for ArtifactVersion {

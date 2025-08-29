@@ -80,7 +80,7 @@ pub trait SigmaProtocol: Sized {
 /// Generic structure to contain a single sigma proof.
 pub struct SigmaProof<R: Serialize> {
     pub challenge: Challenge,
-    pub response:  R,
+    pub response: R,
 }
 
 #[derive(Serialize)]
@@ -93,7 +93,7 @@ pub struct AndResponse<R1: Serialize, R2: Serialize> {
 /// The marker type C is for convenience in use with the
 /// SigmaProtocolProver/Verifier traits below.
 pub struct AndAdapter<P1, P2> {
-    pub first:  P1,
+    pub first: P1,
     pub second: P2,
 }
 
@@ -178,7 +178,7 @@ impl<P1: SigmaProtocol, P2: SigmaProtocol> AndAdapter<P1, P2> {
         additional_prover: P3,
     ) -> AndAdapter<AndAdapter<P1, P2>, P3> {
         AndAdapter {
-            first:  self,
+            first: self,
             second: additional_prover,
         }
     }

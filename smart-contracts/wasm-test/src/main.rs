@@ -15,8 +15,12 @@ use wast::{parser, AssertExpression, Expression, Span, Wast, WastExecute};
 #[structopt(bin_name = "wasm-test")]
 struct TestCommand {
     #[structopt(name = "dir", long = "dir", help = "Directory with .wast files")]
-    dir:     PathBuf,
-    #[structopt(name = "out", long = "out", help = "Directory where to output .wasm modules")]
+    dir: PathBuf,
+    #[structopt(
+        name = "out",
+        long = "out",
+        help = "Directory where to output .wasm modules"
+    )]
     out_dir: Option<PathBuf>,
 }
 
@@ -36,7 +40,9 @@ impl std::fmt::Display for HostCallError {
 impl Host<ArtifactNamedImport> for TrapHost {
     type Interrupt = NoInterrupt;
 
-    fn tick_initial_memory(&mut self, _num_pages: u32) -> RunResult<()> { Ok(()) }
+    fn tick_initial_memory(&mut self, _num_pages: u32) -> RunResult<()> {
+        Ok(())
+    }
 
     fn call(
         &mut self,
@@ -44,14 +50,16 @@ impl Host<ArtifactNamedImport> for TrapHost {
         _memory: &mut [u8],
         _stack: &mut RuntimeStack,
     ) -> RunResult<Option<NoInterrupt>> {
-        bail!(HostCallError {
-            name: f.clone(),
-        })
+        bail!(HostCallError { name: f.clone() })
     }
 
-    fn tick_energy(&mut self, _energy: u64) -> RunResult<()> { Ok(()) }
+    fn tick_energy(&mut self, _energy: u64) -> RunResult<()> {
+        Ok(())
+    }
 
-    fn track_call(&mut self) -> RunResult<()> { Ok(()) }
+    fn track_call(&mut self) -> RunResult<()> {
+        Ok(())
+    }
 
     fn track_return(&mut self) {}
 }
@@ -64,7 +72,9 @@ struct MeteringHost {
 impl Host<ArtifactNamedImport> for MeteringHost {
     type Interrupt = NoInterrupt;
 
-    fn tick_initial_memory(&mut self, _num_pages: u32) -> RunResult<()> { Ok(()) }
+    fn tick_initial_memory(&mut self, _num_pages: u32) -> RunResult<()> {
+        Ok(())
+    }
 
     fn call(
         &mut self,
@@ -75,14 +85,14 @@ impl Host<ArtifactNamedImport> for MeteringHost {
         if f.matches("concordium_metering", "account_memory") {
             // do nothing
         } else {
-            bail!(HostCallError {
-                name: f.clone(),
-            })
+            bail!(HostCallError { name: f.clone() })
         }
         Ok(None)
     }
 
-    fn tick_energy(&mut self, _energy: u64) -> RunResult<()> { Ok(()) }
+    fn tick_energy(&mut self, _energy: u64) -> RunResult<()> {
+        Ok(())
+    }
 
     fn track_call(&mut self) -> RunResult<()> {
         self.call_depth += 1;
@@ -90,7 +100,9 @@ impl Host<ArtifactNamedImport> for MeteringHost {
         Ok(())
     }
 
-    fn track_return(&mut self) { self.call_depth -= 1; }
+    fn track_return(&mut self) {
+        self.call_depth -= 1;
+    }
 }
 
 fn validate(source: &[u8]) -> anyhow::Result<Module> {
@@ -107,7 +119,9 @@ fn validate(source: &[u8]) -> anyhow::Result<Module> {
             true
         }
 
-        fn validate_export_function(&self, _item_name: &Name, _ty: &FunctionType) -> bool { true }
+        fn validate_export_function(&self, _item_name: &Name, _ty: &FunctionType) -> bool {
+            true
+        }
     }
 
     let skel = concordium_wasm::parse::parse_skeleton(source)?;
@@ -124,7 +138,13 @@ macro_rules! fail_test {
         // The +1 in line is because the line indexing as returned by linecol_in is
         // 0-based, but usually in editors it is 1-based
         bail!(ansi_term::Color::Red
-            .paint(format!("{}: line: {}, column: {}, message: {}", $name, line + 1, col, $message))
+            .paint(format!(
+                "{}: line: {}, column: {}, message: {}",
+                $name,
+                line + 1,
+                col,
+                $message
+            ))
             .to_string())
     }};
     ($b:expr => $span:expr, $name:expr, $input:expr, $message:expr) => {
@@ -181,14 +201,8 @@ fn invoke_update(
     args: &[Value],
 ) -> anyhow::Result<Option<Value>> {
     match artifact.run(&mut TrapHost, name, args)? {
-        ExecutionOutcome::Success {
-            result,
-            ..
-        } => Ok(result),
-        ExecutionOutcome::Interrupted {
-            reason,
-            ..
-        } => match reason {}, // impossible case
+        ExecutionOutcome::Success { result, .. } => Ok(result),
+        ExecutionOutcome::Interrupted { reason, .. } => match reason {}, // impossible case
     }
 }
 
@@ -197,22 +211,10 @@ fn invoke_update_metering(
     name: &str,
     args: &[Value],
 ) -> anyhow::Result<Option<Value>> {
-    let run = artifact.run(
-        &mut MeteringHost {
-            call_depth: 0,
-        },
-        name,
-        args,
-    )?;
+    let run = artifact.run(&mut MeteringHost { call_depth: 0 }, name, args)?;
     match run {
-        ExecutionOutcome::Success {
-            result,
-            ..
-        } => Ok(result),
-        ExecutionOutcome::Interrupted {
-            reason,
-            ..
-        } => match reason {},
+        ExecutionOutcome::Success { result, .. } => Ok(result),
+        ExecutionOutcome::Interrupted { reason, .. } => match reason {},
     }
 }
 
@@ -246,7 +248,10 @@ fn main() -> anyhow::Result<()> {
 
     let print_omitted_msg = |span: Span, input: &str, msg: &str| {
         let (line, col) = span.linecol_in(input);
-        eprintln!("{}", warning_style.paint(format!("{}:{}:{} (Omitted)", line + 1, col, msg)));
+        eprintln!(
+            "{}",
+            warning_style.paint(format!("{}:{}:{} (Omitted)", line + 1, col, msg))
+        );
     };
 
     let mut out_counter = 0;
@@ -312,16 +317,14 @@ fn main() -> anyhow::Result<()> {
                                                         "{}",
                                                         e
                                                     ),
-                                                    ParseError::UnsupportedValueType {
-                                                        byte,
-                                                    } => ensure!(
-                                                        *byte == 0x7D || *byte == 0x7C,
-                                                        "{}",
-                                                        e
-                                                    ),
-                                                    ParseError::UnsupportedImportType {
-                                                        tag,
-                                                    } => {
+                                                    ParseError::UnsupportedValueType { byte } => {
+                                                        ensure!(
+                                                            *byte == 0x7D || *byte == 0x7C,
+                                                            "{}",
+                                                            e
+                                                        )
+                                                    }
+                                                    ParseError::UnsupportedImportType { tag } => {
                                                         ensure!(
                                                             *tag == 0x01
                                                                 || *tag == 0x02
@@ -340,9 +343,7 @@ fn main() -> anyhow::Result<()> {
                                                 e.downcast_ref::<ValidationError>()
                                             {
                                                 match e {
-                                                    ValidationError::TooManyLocals {
-                                                        ..
-                                                    } => {}
+                                                    ValidationError::TooManyLocals { .. } => {}
                                                 }
                                             } else {
                                                 bail!("Module {:?} not valid due to {}.", m.id, e)
@@ -355,9 +356,7 @@ fn main() -> anyhow::Result<()> {
                                         }
                                     }
                                 }
-                                wast::WastDirective::QuoteModule {
-                                    ..
-                                } => {
+                                wast::WastDirective::QuoteModule { .. } => {
                                     // ignore
                                 }
                                 wast::WastDirective::AssertMalformed {
@@ -407,9 +406,7 @@ fn main() -> anyhow::Result<()> {
                                         message
                                     )
                                 }
-                                wast::WastDirective::Register {
-                                    ..
-                                } => {
+                                wast::WastDirective::Register { .. } => {
                                     // we don't support linking, so registering
                                     // is not useful.
                                 }
@@ -468,9 +465,7 @@ fn main() -> anyhow::Result<()> {
                                             // which we
                                             // do not supported
                                         }
-                                        wast::WastExecute::Get {
-                                            ..
-                                        } => {
+                                        wast::WastExecute::Get { .. } => {
                                             // unsupported
                                         }
                                     }
@@ -591,9 +586,7 @@ fn main() -> anyhow::Result<()> {
                                         print_omitted_msg(span, &input, message);
                                     }
                                 }
-                                wast::WastDirective::AssertUnlinkable {
-                                    ..
-                                } => {
+                                wast::WastDirective::AssertUnlinkable { .. } => {
                                     // skip these since we do not support
                                     // dependencies.
                                 }

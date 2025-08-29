@@ -23,7 +23,9 @@ pub struct Name {
 }
 
 impl AsRef<str> for Name {
-    fn as_ref(&self) -> &str { &self.name }
+    fn as_ref(&self) -> &str {
+        &self.name
+    }
 }
 
 impl<'a> From<&'a str> for Name {
@@ -35,7 +37,9 @@ impl<'a> From<&'a str> for Name {
 }
 
 impl std::borrow::Borrow<str> for Name {
-    fn borrow(&self) -> &str { &self.name }
+    fn borrow(&self) -> &str {
+        &self.name
+    }
 }
 
 #[derive(Debug)]
@@ -43,18 +47,16 @@ impl std::borrow::Borrow<str> for Name {
 pub enum ImportDescription {
     /// Import a function with the given type. The other import types, Table,
     /// Memory, Global, are not supported by Concordium.
-    Func {
-        type_idx: TypeIndex,
-    },
+    Func { type_idx: TypeIndex },
 }
 
 #[derive(Debug)]
 /// Import of an item from another module.
 pub struct Import {
     /// The name of the module the item is imported from.
-    pub mod_name:    Name,
+    pub mod_name: Name,
     /// The name of the item that is to be imported.
-    pub item_name:   Name,
+    pub item_name: Name,
     /// And the description of the item.
     pub description: ImportDescription,
 }
@@ -63,9 +65,7 @@ impl Import {
     /// Return whether the import is a function.
     pub fn is_func(&self) -> bool {
         match self.description {
-            ImportDescription::Func {
-                ..
-            } => true,
+            ImportDescription::Func { .. } => true,
         }
     }
 }
@@ -87,7 +87,9 @@ pub struct FunctionSection {
 }
 
 impl FunctionSection {
-    pub fn get(&self, idx: FuncIndex) -> Option<TypeIndex> { self.types.get(idx as usize).copied() }
+    pub fn get(&self, idx: FuncIndex) -> Option<TypeIndex> {
+        self.types.get(idx as usize).copied()
+    }
 }
 
 #[derive(Debug, Default)]
@@ -109,9 +111,7 @@ pub struct TableSection {
 /// the external tooling.
 pub enum ExportDescription {
     /// An exported function with the given type.
-    Func {
-        index: FuncIndex,
-    },
+    Func { index: FuncIndex },
     /// An exported table. Since only table with index 0 is currently supported
     /// there is no explicit index.
     Table,
@@ -119,16 +119,14 @@ pub enum ExportDescription {
     /// there is no explicit index.
     Memory,
     /// An exported global.
-    Global {
-        index: GlobalIndex,
-    },
+    Global { index: GlobalIndex },
 }
 
 #[derive(Debug)]
 /// An exported item.
 pub struct Export {
     /// Name of the exported item.
-    pub name:        Name,
+    pub name: Name,
     /// And its type.
     pub description: ExportDescription,
 }
@@ -154,7 +152,7 @@ pub struct Element {
     /// The offset to start the initialization.
     pub offset: i32,
     /// Functions to define in the table, starting at the offset.
-    pub inits:  Vec<FuncIndex>,
+    pub inits: Vec<FuncIndex>,
 }
 
 #[derive(Debug, Default)]
@@ -207,7 +205,7 @@ impl GlobalInit {
 /// A single Global declaration, with initial value.
 pub struct Global {
     /// The type of the value with the initial value.
-    pub init:    GlobalInit,
+    pub init: GlobalInit,
     pub mutable: bool,
 }
 
@@ -220,7 +218,9 @@ pub struct GlobalSection {
 }
 
 impl GlobalSection {
-    pub fn get(&self, idx: GlobalIndex) -> Option<&Global> { self.globals.get(idx as usize) }
+    pub fn get(&self, idx: GlobalIndex) -> Option<&Global> {
+        self.globals.get(idx as usize)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -229,7 +229,7 @@ pub struct Local {
     /// The number of variables of this type.
     pub multiplicity: u32,
     /// The type of the local.
-    pub ty:           ValueType,
+    pub ty: ValueType,
 }
 
 #[derive(Debug)]
@@ -238,17 +238,17 @@ pub struct Code {
     /// Type of the function, this is added here to avoid more error cases.
     /// in processing (e.g., after validation we know that the number of code
     /// and function sections match).
-    pub ty:         Rc<FunctionType>,
+    pub ty: Rc<FunctionType>,
     /// Type index carried over from the source. This should match the ty type
     /// above.
-    pub ty_idx:     TypeIndex,
+    pub ty_idx: TypeIndex,
     /// The number of locals of a function. NB: This includes parameters and
     /// locals declared inside the function.
     pub num_locals: u32,
     /// Declaration of the locals. This does not include parameters.
-    pub locals:     Vec<Local>,
+    pub locals: Vec<Local>,
     /// And a sequence of instructions.
-    pub expr:       Expression,
+    pub expr: Expression,
 }
 
 #[derive(Debug, Default)]
@@ -266,7 +266,7 @@ pub struct Data {
     /// Where to start initializing.
     pub offset: i32,
     /// The bytes to initialize with.
-    pub init:   Vec<u8>,
+    pub init: Vec<u8>,
 }
 
 #[derive(Debug, Default)]
@@ -293,7 +293,7 @@ pub struct MemorySection {
 /// A processed custom section. By specification all custom sections have a
 /// name, followed by uninterpreted bytes.
 pub struct CustomSection<'a> {
-    pub name:     Name,
+    pub name: Name,
     pub contents: &'a [u8],
 }
 
@@ -309,24 +309,26 @@ pub struct TypeSection {
 }
 
 impl TypeSection {
-    pub fn get(&self, idx: TypeIndex) -> Option<&Rc<FunctionType>> { self.types.get(idx as usize) }
+    pub fn get(&self, idx: TypeIndex) -> Option<&Rc<FunctionType>> {
+        self.types.get(idx as usize)
+    }
 }
 
 #[derive(Debug)]
 /// A parsed Wasm module. This no longer has custom sections since they are not
 /// needed for further processing.
 pub struct Module {
-    pub ty:      TypeSection,
-    pub import:  ImportSection,
-    pub func:    FunctionSection,
-    pub table:   TableSection,
-    pub memory:  MemorySection,
-    pub global:  GlobalSection,
-    pub export:  ExportSection,
-    pub start:   StartSection,
+    pub ty: TypeSection,
+    pub import: ImportSection,
+    pub func: FunctionSection,
+    pub table: TableSection,
+    pub memory: MemorySection,
+    pub global: GlobalSection,
+    pub export: ExportSection,
+    pub start: StartSection,
     pub element: ElementSection,
-    pub code:    CodeSection,
-    pub data:    DataSection,
+    pub code: CodeSection,
+    pub data: DataSection,
 }
 
 pub type StackSize = u64;
@@ -423,7 +425,7 @@ pub struct MemArg {
     pub offset: u32,
     /// Alignment. This is ignored by the Wasm semantics, but may be used as a
     /// hint. We will simply ignore it.
-    pub align:  u32,
+    pub align: u32,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -437,7 +439,7 @@ pub struct Limits {
 /// not support multiple return values, and thus we don't either.
 pub struct FunctionType {
     pub parameters: Vec<ValueType>,
-    pub result:     Option<ValueType>,
+    pub result: Option<ValueType>,
 }
 
 impl FunctionType {
@@ -445,7 +447,7 @@ impl FunctionType {
     pub fn empty() -> Self {
         Self {
             parameters: Vec::new(),
-            result:     None,
+            result: None,
         }
     }
 }
@@ -476,7 +478,7 @@ pub enum OpCode {
     Br(LabelIndex),
     BrIf(LabelIndex),
     BrTable {
-        labels:  Vec<LabelIndex>,
+        labels: Vec<LabelIndex>,
         default: LabelIndex,
     },
     Return,

@@ -16,7 +16,7 @@ pub struct SecretKey<C: Curve> {
     /// Generator of the group, not secret but convenient to have here.
     pub generator: C,
     /// Secret key.
-    pub scalar:    C::Scalar,
+    pub scalar: C::Scalar,
 }
 
 // THIS IS COMMENTED FOR NOW FOR COMPATIBILITY WITH BLS CURVE IMPLEMENTATION
@@ -35,11 +35,11 @@ pub type BabyStepGiantStepTable = HashMap<Vec<u8>, u64>;
 /// The table for the baby step giant step algorithm, with some auxiliary data.
 pub struct BabyStepGiantStep<C: Curve> {
     /// Precomputed table of powers.
-    table:         BabyStepGiantStepTable,
+    table: BabyStepGiantStepTable,
     /// Point base^{-m}
     inverse_point: C,
     /// Size of the table.
-    m:             u64,
+    m: u64,
 }
 
 impl<C: Curve> Serial for BabyStepGiantStep<C> {
@@ -151,7 +151,7 @@ impl<C: Curve> SecretKey<C> {
     pub fn generate<T: Rng>(generator: &C, csprng: &mut T) -> Self {
         SecretKey {
             generator: *generator,
-            scalar:    C::generate_scalar(csprng),
+            scalar: C::generate_scalar(csprng),
         }
     }
 
@@ -160,7 +160,7 @@ impl<C: Curve> SecretKey<C> {
         let x = C::generate_non_zero_scalar(csprng);
         SecretKey {
             generator: C::one_point().mul_by_scalar(&x),
-            scalar:    C::generate_scalar(csprng),
+            scalar: C::generate_scalar(csprng),
         }
     }
 }
