@@ -13,7 +13,9 @@ pub use concordium_contracts_common::{
     self, ContractName, ExceedsParameterSize, ModuleReference, OwnedContractName, OwnedParameter,
     OwnedReceiveName, ReceiveName,
 };
-use concordium_contracts_common::{AccountAddress, Address, Amount, ContractAddress, U8WasmVersionConvertError};
+use concordium_contracts_common::{
+    AccountAddress, Address, Amount, ContractAddress, U8WasmVersionConvertError,
+};
 use derive_more::*;
 use sha2::Digest;
 use std::convert::{TryFrom, TryInto};
@@ -189,7 +191,7 @@ impl ContractTraceElement {
 /// transaction will generate one or more of these events, together with
 /// possibly some transfers.
 pub struct InstanceUpdatedEvent {
-    #[serde(default =  "wasm_version_fallback")]
+    #[serde(default = "wasm_version_fallback")]
     pub contract_version: WasmVersionInt,
     /// Address of the affected instance.
     pub address:          ContractAddress,
@@ -260,7 +262,19 @@ impl ContractEvent {
 }
 
 /// Represents the wasm version (smart contract version) as a u8
-#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, PartialEq, Eq, Copy, PartialOrd, Ord, Hash, derive_more::Display,)]
+#[derive(
+    SerdeSerialize,
+    SerdeDeserialize,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Copy,
+    PartialOrd,
+    Ord,
+    Hash,
+    derive_more::Display,
+)]
 #[serde(transparent)]
 #[repr(transparent)]
 #[display(fmt = "V{_0}")]
@@ -277,12 +291,11 @@ impl From<WasmVersion> for WasmVersionInt {
 /// Try convert from WasmVersionInt to WasmVersion
 impl TryFrom<WasmVersionInt> for WasmVersion {
     type Error = U8WasmVersionConvertError;
+
     fn try_from(value: WasmVersionInt) -> Result<Self, Self::Error> {
         WasmVersion::try_from(value.0)
     }
 }
 
 /// fallback version for the WasmVersionInt
-pub fn wasm_version_fallback() -> WasmVersionInt {
-    WasmVersionInt(0)
-}
+pub fn wasm_version_fallback() -> WasmVersionInt { WasmVersionInt(0) }
