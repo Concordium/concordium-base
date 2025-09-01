@@ -41,7 +41,7 @@ genSha256Hash = do
 genTokenMetadataUrlSimple :: Gen TokenMetadataUrl
 genTokenMetadataUrlSimple = do
     url <- genText
-    checksumSha256 <- Just <$> genSha256Hash
+    checksumSha256 <- oneof [pure Nothing, Just <$> genSha256Hash]
     return TokenMetadataUrl{tmUrl = url, tmChecksumSha256 = checksumSha256, tmAdditional = Map.empty}
 
 genTokenMetadataUrlAdditional :: Gen TokenMetadataUrl
@@ -63,9 +63,9 @@ genTokenMetadataUrlAdditional = do
 
 genTokenInitializationParameters :: Gen TokenInitializationParameters
 genTokenInitializationParameters = do
-    tipName <- genText
-    tipMetadata <- genTokenMetadataUrlSimple
-    tipGovernanceAccount <- genCborTokenHolder
+    tipName <- oneof [pure Nothing, Just <$> genText]
+    tipMetadata <- oneof [pure Nothing, Just <$> genTokenMetadataUrlSimple]
+    tipGovernanceAccount <- oneof [pure Nothing, Just <$> genCborTokenHolder]
     tipAllowList <- arbitrary
     tipDenyList <- arbitrary
     tipInitialSupply <- oneof [pure Nothing, Just <$> genTokenAmount]
@@ -120,9 +120,9 @@ genTokenTransaction =
 
 genTokenModuleStateSimple :: Gen TokenModuleState
 genTokenModuleStateSimple = do
-    tmsName <- genText
-    tmsMetadata <- genTokenMetadataUrlSimple
-    tmsGovernanceAccount <- genCborTokenHolder
+    tmsName <- oneof [pure Nothing, Just <$> genText]
+    tmsMetadata <- oneof [pure Nothing, Just <$> genTokenMetadataUrlSimple]
+    tmsGovernanceAccount <- oneof [pure Nothing, Just <$> genCborTokenHolder]
     tmsPaused <- arbitrary
     tmsAllowList <- arbitrary
     tmsDenyList <- arbitrary
@@ -224,24 +224,43 @@ exampleCborTokenHolder =
         -- of the text is that of a valid address.
         Left str -> error str
 
--- | A test value for 'TokenInitializationParameters'.
-tip1 :: TokenInitializationParameters
-tip1 =
+-- | A test value for 'TokenInitializationParameters' with all optional value set.
+tokenInitializationParametersAllValues :: TokenInitializationParameters
+tokenInitializationParametersAllValues =
     TokenInitializationParameters
-        { tipName = "ABC token",
+        { tipName = Just "ABC token",
           tipMetadata =
-            TokenMetadataUrl
-                { tmUrl = "https://abc.token/meta",
-                  -- tmChecksumSha256 = Just (SHA256.Hash (FBS.fromByteString "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")),
-                  tmChecksumSha256 = Nothing,
-                  tmAdditional = Map.empty
-                },
-          tipGovernanceAccount = exampleCborTokenHolder,
-          tipAllowList = False,
+            Just
+                TokenMetadataUrl
+                    { tmUrl = "https://abc.token/meta",
+                      tmChecksumSha256 = Just (SHA256.Hash (FBS.fromByteString "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")),
+                      tmAdditional =
+                        Map.fromList
+                            [ ("key1", CBOR.TString "extravalue1"),
+                              ("key2", CBOR.TString "extravalue2")
+                            ]
+                    },
+          tipGovernanceAccount = Just exampleCborTokenHolder,
+          tipAllowList = Just False,
           tipInitialSupply = Just (TokenAmount{taValue = 10000, taDecimals = 5}),
-          tipDenyList = False,
-          tipMintable = False,
-          tipBurnable = False
+          tipDenyList = Just True,
+          tipMintable = Just False,
+          tipBurnable = Just True
+        }
+
+-- | A test value for 'TokenInitializationParameters' where optional value are not set.
+tokenInitializationParametersMinimal :: TokenInitializationParameters
+tokenInitializationParametersMinimal =
+    TokenInitializationParameters
+        { tipName = Nothing,
+          tipMetadata =
+            Nothing,
+          tipGovernanceAccount = Nothing,
+          tipAllowList = Nothing,
+          tipInitialSupply = Nothing,
+          tipDenyList = Nothing,
+          tipMintable = Nothing,
+          tipBurnable = Nothing
         }
 
 -- | Basic tests for CBOR encoding/decoding of 'TokenInitializationParameters'.
@@ -250,19 +269,10 @@ testEncodedInitializationParametersCBOR = describe "TokenInitializationParameter
     it "Decode success" $
         assertEqual
             "Decoded CBOR"
-            (Right ("", tip1))
+            (Right ("", tokenInitializationParametersAllValues))
             ( deserialiseFromBytes
                 decodeTokenInitializationParameters
-                "\168dnameiABC tokenhburnable\244hdenyList\244hmetadata\161curlvhttps://abc.token/metahmintable\244iallowList\244minitialSupply\196\130$\EM'\DLEqgovernanceAccount\217\157s\162\SOH\217\157q\161\SOH\EM\ETX\151\ETXX \ACK\DLEI\220\DC1]\176\b`\RS\196\224\241\145c\ETB\193\204'\141l\237\t\212t\217\148\197N\172\172\161"
-            )
-    it "Missing \"name\"" $
-        assertEqual
-            "Decoded CBOR"
-            (Left (DeserialiseFailure 69 "Missing \"name\""))
-            ( deserialiseFromBytes
-                decodeTokenInitializationParameters
-                "\xA3\x68metadata\xA1\x63url\x76https://abc.token/meta\x69\
-                \allowList\xF4\x6DinitialSupply\xC4\x82\x24\x19\x27\x10"
+                (B8.fromStrict $ BS16.decodeLenient "a8646e616d656941424320746f6b656e686275726e61626c65f56864656e794c697374f5686d65746164617461a46375726c7668747470733a2f2f6162632e746f6b656e2f6d657461646b6579316b657874726176616c756531646b6579326b657874726176616c7565326e636865636b73756d53686132353658203132333435363738393061626364656631323334353637383930616263646566686d696e7461626c65f469616c6c6f774c697374f46d696e697469616c537570706c79c4822419271071676f7665726e616e63654163636f756e74d99d73a201d99d71a101190397035820061049dc115db008601ec4e0f1916317c1cc278d6ced09d474d994c54eacaca1")
             )
     it "Duplicate \"name\" key" $
         assertEqual
@@ -275,24 +285,31 @@ testEncodedInitializationParametersCBOR = describe "TokenInitializationParameter
                 \allowList\xF4\x6DinitialSupply\xC4\x82\x24\x19\x27\x10\
                 \\x64name\x65token"
             )
-    it "Encode and decode (no defaults)" $ withMaxSuccess 10000 $ forAll genTokenInitializationParameters $ \tip ->
+    it "Encode and decode" $ withMaxSuccess 10000 $ forAll genTokenInitializationParameters $ \tip ->
         Right ("", tip)
             === deserialiseFromBytes
                 decodeTokenInitializationParameters
-                (toLazyByteString $ encodeTokenInitializationParametersNoDefaults tip)
-    it "Encode and decode (with defaults)" $ withMaxSuccess 10000 $ forAll genTokenInitializationParameters $ \tip ->
-        Right ("", tip)
-            === deserialiseFromBytes
-                decodeTokenInitializationParameters
-                (toLazyByteString $ encodeTokenInitializationParametersWithDefaults tip)
-
--- | A test value for 'TokenInitializationParameters'.
-tip2 :: TokenInitializationParameters
-tip2 =
-    tip1
-        { -- Use a token amount that is not modified by "normalization". Normalization may be removed entirely, but for now, work around it like this
-          tipInitialSupply = Just (TokenAmount{taValue = 12345, taDecimals = 5})
-        }
+                (toLazyByteString $ encodeTokenInitializationParameters tip)
+    -- Test that TokenInitializationParameters CBOR encoding does not change
+    describe "Pin TokenInitializationParameters CBOR encoding" $ do
+        it "Maximal: All values specified" $
+            assertEqual
+                "Encoding"
+                "a8646e616d656941424320746f6b656e686275726e61626c65f56864656e794c697374f5686d65746164617461a46375726c7668747470733a2f2f6162632e746f6b656e2f6d657461646b6579316b657874726176616c756531646b6579326b657874726176616c7565326e636865636b73756d53686132353658203132333435363738393061626364656631323334353637383930616263646566686d696e7461626c65f469616c6c6f774c697374f46d696e697469616c537570706c79c4822419271071676f7665726e616e63654163636f756e74d99d73a201d99d71a101190397035820061049dc115db008601ec4e0f1916317c1cc278d6ced09d474d994c54eacaca1"
+                ( BS16.encode $
+                    toStrictByteString $
+                        encodeTokenInitializationParameters
+                            tokenInitializationParametersAllValues
+                )
+        it "Minimal: Optional values not set" $
+            assertEqual
+                "Encoding"
+                "a0"
+                ( BS16.encode $
+                    toStrictByteString $
+                        encodeTokenInitializationParameters
+                            tokenInitializationParametersMinimal
+                )
 
 -- | Encoded 'TokenInitializationParameters' that can be successfully CBOR decoded
 encTip1 :: EncodedTokenInitializationParameters
@@ -301,7 +318,7 @@ encTip1 =
         TokenParameter $
             BSS.toShort $
                 CBOR.toStrictByteString $
-                    encodeTokenInitializationParametersWithDefaults tip2
+                    encodeTokenInitializationParameters tokenInitializationParametersAllValues
 
 -- | Encoded 'TokenInitializationParameters' that cannot be successfully CBOR decoded
 invalidEncTip1 :: EncodedTokenInitializationParameters
@@ -512,9 +529,9 @@ testTokenModuleStateSimpleJSON = describe "TokenModuleState JSON serialization w
                 }
     let object =
             TokenModuleState
-                { tmsMetadata = tokenMetadataURL,
-                  tmsName = "bla bla",
-                  tmsGovernanceAccount = exampleCborTokenHolder,
+                { tmsMetadata = Just tokenMetadataURL,
+                  tmsName = Just "bla bla",
+                  tmsGovernanceAccount = Just exampleCborTokenHolder,
                   tmsPaused = Just False,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
@@ -559,9 +576,9 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
                 }
     let object =
             TokenModuleState
-                { tmsMetadata = tokenMetadataURL,
-                  tmsName = "bla bla",
-                  tmsGovernanceAccount = exampleCborTokenHolder,
+                { tmsMetadata = Just tokenMetadataURL,
+                  tmsName = Just "bla bla",
+                  tmsGovernanceAccount = Just exampleCborTokenHolder,
                   tmsPaused = Just False,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
@@ -596,6 +613,64 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
                 assertBool "Does not contain field _additional" $ AE.member "_additional" o
             _ -> assertFailure "Does not encode to JSON object"
 
+-- | Basic tests for CBOR encoding/decoding of 'TokenModuleState'.
+testTokenModuleStateCBOR :: Spec
+testTokenModuleStateCBOR = describe "TokenModuleState CBOR serialization" $ do
+    it "Encode and decode TokenModuleState (simple)" $ withMaxSuccess 1000 $ forAll genTokenModuleStateSimple $ \tt ->
+        Right ("", tt)
+            === deserialiseFromBytes
+                decodeTokenModuleState
+                (toLazyByteString $ encodeTokenModuleState tt)
+    it "Encode and decode TokenModuleState (with additional)" $ withMaxSuccess 1000 $ forAll genTokenModuleStateWithAdditional $ \tt ->
+        Right ("", tt)
+            === deserialiseFromBytes
+                decodeTokenModuleState
+                (toLazyByteString $ encodeTokenModuleState tt)
+    -- Test that TokenModuleState CBOR encoding does not change
+    describe "Pin TokenModuleState CBOR encoding" $ do
+        it "Maximal: All values specified" $
+            assertEqual
+                "Encoding"
+                "aa646b6579316b657874726176616c756531646b6579326b657874726176616c756532646e616d656954657374206e616d6566706175736564f5686275726e61626c65f46864656e794c697374f4686d65746164617461a16375726c677465737475726c686d696e7461626c65f569616c6c6f774c697374f571676f7665726e616e63654163636f756e74d99d73a201d99d71a101190397035820061049dc115db008601ec4e0f1916317c1cc278d6ced09d474d994c54eacaca1"
+                ( BS16.encode $
+                    toStrictByteString $
+                        encodeTokenModuleState
+                            TokenModuleState
+                                { tmsName = Just "Test name",
+                                  tmsMetadata = Just TokenMetadataUrl{tmUrl = "testurl", tmChecksumSha256 = Nothing, tmAdditional = Map.empty},
+                                  tmsGovernanceAccount = Just exampleCborTokenHolder,
+                                  tmsPaused = Just True,
+                                  tmsAllowList = Just True,
+                                  tmsDenyList = Just False,
+                                  tmsMintable = Just True,
+                                  tmsBurnable = Just False,
+                                  tmsAdditional =
+                                    Map.fromList
+                                        [ ("key1", CBOR.TString "extravalue1"),
+                                          ("key2", CBOR.TString "extravalue2")
+                                        ]
+                                }
+                )
+        it "Minimal: Optional values not set" $
+            assertEqual
+                "Encoding"
+                "a3646e616d656954657374206e616d65686d65746164617461a16375726c677465737475726c71676f7665726e616e63654163636f756e74d99d73a201d99d71a101190397035820061049dc115db008601ec4e0f1916317c1cc278d6ced09d474d994c54eacaca1"
+                ( BS16.encode $
+                    toStrictByteString $
+                        encodeTokenModuleState
+                            TokenModuleState
+                                { tmsName = Just "Test name",
+                                  tmsMetadata = Just TokenMetadataUrl{tmUrl = "testurl", tmChecksumSha256 = Nothing, tmAdditional = Map.empty},
+                                  tmsGovernanceAccount = Just exampleCborTokenHolder,
+                                  tmsPaused = Nothing,
+                                  tmsAllowList = Nothing,
+                                  tmsDenyList = Nothing,
+                                  tmsMintable = Nothing,
+                                  tmsBurnable = Nothing,
+                                  tmsAdditional = Map.empty
+                                }
+                )
+
 testTokenStateSimpleJSON :: Spec
 testTokenStateSimpleJSON = describe "TokenState JSON serialization without additional state" $ do
     let tokenMetadataURL =
@@ -606,9 +681,9 @@ testTokenStateSimpleJSON = describe "TokenState JSON serialization without addit
                 }
     let tokenModuleState =
             TokenModuleState
-                { tmsMetadata = tokenMetadataURL,
-                  tmsName = "bla bla",
-                  tmsGovernanceAccount = exampleCborTokenHolder,
+                { tmsMetadata = Just tokenMetadataURL,
+                  tmsName = Just "bla bla",
+                  tmsGovernanceAccount = Just exampleCborTokenHolder,
                   tmsPaused = Just False,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
@@ -659,9 +734,9 @@ testTokenStateJSON = describe "TokenState JSON serialization with additional sta
                 }
     let tokenModuleState =
             TokenModuleState
-                { tmsMetadata = tokenMetadataURL,
-                  tmsName = "bla bla",
-                  tmsGovernanceAccount = exampleCborTokenHolder,
+                { tmsMetadata = Just tokenMetadataURL,
+                  tmsName = Just "bla bla",
+                  tmsGovernanceAccount = Just exampleCborTokenHolder,
                   tmsPaused = Just False,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
@@ -701,6 +776,54 @@ testTokenStateJSON = describe "TokenState JSON serialization with additional sta
                 assertBool "Does not contain field decimals" $ AE.member "decimals" o
                 assertBool "Does not contain field moduleState" $ AE.member "moduleState" o
             _ -> assertFailure "Does not encode to JSON object"
+
+-- | Basic tests for CBOR encoding/decoding of 'TokenModuleAccountState'.
+testTokenModuleAccountStateCBOR :: Spec
+testTokenModuleAccountStateCBOR = describe "TokenModuleAccountState CBOR serialization" $ do
+    it "Encode and decode TokenModuleAccountState (simple)" $ withMaxSuccess 1000 $ forAll genTokenModuleAccountState $ \tt ->
+        (Right ("", tt))
+            === ( deserialiseFromBytes
+                    decodeTokenModuleAccountState
+                    (toLazyByteString $ encodeTokenModuleAccountState tt)
+                )
+    it "Encode and decode TokenModuleAccountState (with additional)" $ withMaxSuccess 1000 $ forAll genTokenModuleAccountStateWithAdditional $ \tt ->
+        (Right ("", tt))
+            === ( deserialiseFromBytes
+                    decodeTokenModuleAccountState
+                    (toLazyByteString $ encodeTokenModuleAccountState tt)
+                )
+    -- Test that TokenModuleAccountState CBOR encoding does not change
+    describe "Pin TokenModuleAccountState CBOR encoding" $ do
+        it "Maximal: All values specified" $
+            assertEqual
+                "Encoding"
+                "a4646b6579316b657874726176616c756531646b6579326b657874726176616c7565326864656e794c697374f469616c6c6f774c697374f5"
+                ( BS16.encode $
+                    toStrictByteString $
+                        encodeTokenModuleAccountState
+                            TokenModuleAccountState
+                                { tmasAllowList = Just True,
+                                  tmasDenyList = Just False,
+                                  tmasAdditional =
+                                    Map.fromList
+                                        [ ("key1", CBOR.TString "extravalue1"),
+                                          ("key2", CBOR.TString "extravalue2")
+                                        ]
+                                }
+                )
+        it "Minimal: Optional values not set" $
+            assertEqual
+                "Encoding"
+                "a0"
+                ( BS16.encode $
+                    toStrictByteString $
+                        encodeTokenModuleAccountState
+                            TokenModuleAccountState
+                                { tmasAllowList = Nothing,
+                                  tmasDenyList = Nothing,
+                                  tmasAdditional = Map.empty
+                                }
+                )
 
 testTokenMetadataUrlJSON :: Spec
 testTokenMetadataUrlJSON = describe "TokenMetadataUrl JSON serialization" $ do
@@ -789,8 +912,10 @@ tests = parallel $ describe "CBOR" $ do
     testTokenMetadataUrlCBOR
     testTokenModuleStateSimpleJSON
     testTokenModuleStateJSON
+    testTokenModuleStateCBOR
     testTokenStateSimpleJSON
     testTokenStateJSON
+    testTokenModuleAccountStateCBOR
     it "JSON (de-)serialization roundtrip for TokenState (simple)" $ withMaxSuccess 1000 $ forAll genTokenStateSimple $ \tt ->
         assertEqual
             "JSON (de-)serialization roundtrip failed for TokenState (simple)"
@@ -864,28 +989,6 @@ tests = parallel $ describe "CBOR" $ do
             === deserialiseFromBytes
                 decodeTokenOperation
                 (toLazyByteString $ encodeTokenOperation tt)
-    it "Encode and decode TokenModuleState (simple)" $ withMaxSuccess 1000 $ forAll genTokenModuleStateSimple $ \tt ->
-        Right ("", tt)
-            === deserialiseFromBytes
-                decodeTokenModuleState
-                (toLazyByteString $ encodeTokenModuleState tt)
-    it "Encode and decode TokenModuleState (with additional)" $ withMaxSuccess 1000 $ forAll genTokenModuleStateWithAdditional $ \tt ->
-        Right ("", tt)
-            === deserialiseFromBytes
-                decodeTokenModuleState
-                (toLazyByteString $ encodeTokenModuleState tt)
-    it "Encode and decode TokenModuleAccountState (simple)" $ withMaxSuccess 1000 $ forAll genTokenModuleAccountState $ \tt ->
-        (Right ("", tt))
-            === ( deserialiseFromBytes
-                    decodeTokenModuleAccountState
-                    (toLazyByteString $ encodeTokenModuleAccountState tt)
-                )
-    it "Encode and decode TokenModuleAccountState (with additional)" $ withMaxSuccess 1000 $ forAll genTokenModuleAccountStateWithAdditional $ \tt ->
-        (Right ("", tt))
-            === ( deserialiseFromBytes
-                    decodeTokenModuleAccountState
-                    (toLazyByteString $ encodeTokenModuleAccountState tt)
-                )
     it "Encode and decode TokenEvent" $ withMaxSuccess 1000 $ forAll genTokenEvent $ \tt ->
         Right tt === decodeTokenEvent (encodeTokenEvent tt)
     it "Encode and decode TokenRejectReason" $ withMaxSuccess 1000 $ forAll genTokenRejectReason $ \tt ->
