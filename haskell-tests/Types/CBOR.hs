@@ -617,7 +617,7 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
                   tmsMintable = Nothing,
                   tmsBurnable = Nothing,
                   tmsAdditional = Map.empty
-                }                
+                }
 
     it "Serialize/Deserialize roundtrip success" $
         assertEqual
@@ -644,20 +644,19 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
                     minimalObject
                 )
 
-
 testTokenModuleAccountStateJSON :: Spec
 testTokenModuleAccountStateJSON = describe "TokenModuleAccountState JSON serialization with additional state" $ do
     let object =
             TokenModuleAccountState
-                { tmasAllowList = Just True
-                , tmasDenyList = Just False
-                , tmasAdditional = Map.fromList [("otherField" :: Text.Text, CBOR.TBool True)]
+                { tmasAllowList = Just True,
+                  tmasDenyList = Just False,
+                  tmasAdditional = Map.fromList [("otherField" :: Text.Text, CBOR.TBool True)]
                 }
     let minimalObject =
             TokenModuleAccountState
-                { tmasAllowList = Nothing
-                , tmasDenyList = Nothing
-                , tmasAdditional = Map.empty
+                { tmasAllowList = Nothing,
+                  tmasDenyList = Nothing,
+                  tmasAdditional = Map.empty
                 }
 
     it "Serialize/Deserialize roundtrip success" $
