@@ -1570,35 +1570,37 @@ data TokenModuleState = TokenModuleState
 
 instance AE.ToJSON TokenModuleState where
     toJSON TokenModuleState{..} =
-        AE.object
-            ( [ "name" AE..= tmsName,
-                "metadata" AE..= tmsMetadata,
-                "governanceAccount" AE..= tmsGovernanceAccount,
-                "paused" AE..= tmsPaused,
-                "allowList" AE..= tmsAllowList,
-                "denyList" AE..= tmsDenyList,
-                "mintable" AE..= tmsMintable,
-                "burnable" AE..= tmsBurnable
-              ]
-                ++ [ "_additional"
-                        AE..= AE.object
-                            [ AE.Key.fromText k AE..= cborTermToHex v
-                            | (k, v) <- Map.toList tmsAdditional
-                            ]
-                   | not (null tmsAdditional)
-                   ]
-            )
+        AE.object . catMaybes $
+            [ ("name" AE..=) <$> tmsName,
+              ("metadata" AE..=) <$> tmsMetadata,
+              ("governanceAccount" AE..=) <$> tmsGovernanceAccount,
+              ("paused" AE..=) <$> tmsPaused,
+              ("allowList" AE..=) <$> tmsAllowList,
+              ("denyList" AE..=) <$> tmsDenyList,
+              ("mintable" AE..=) <$> tmsMintable,
+              ("burnable" AE..=) <$> tmsBurnable,
+              ("_additional" AE..=) <$> additional
+            ]
+      where
+        additional
+            | null tmsAdditional = Nothing
+            | otherwise =
+                Just $
+                    AE.object
+                        [ AE.Key.fromText k AE..= cborTermToHex v
+                        | (k, v) <- Map.toList tmsAdditional
+                        ]
 
 instance AE.FromJSON TokenModuleState where
     parseJSON = AE.withObject "TokenModuleState" $ \v -> do
-        tmsName <- v AE..: "name"
-        tmsMetadata <- v AE..: "metadata"
-        tmsGovernanceAccount <- v AE..: "governanceAccount"
-        tmsPaused <- v AE..: "paused"
-        tmsAllowList <- v AE..: "allowList"
-        tmsDenyList <- v AE..: "denyList"
-        tmsMintable <- v AE..: "mintable"
-        tmsBurnable <- v AE..: "burnable"
+        tmsName <- v AE..:? "name"
+        tmsMetadata <- v AE..:? "metadata"
+        tmsGovernanceAccount <- v AE..:? "governanceAccount"
+        tmsPaused <- v AE..:? "paused"
+        tmsAllowList <- v AE..:? "allowList"
+        tmsDenyList <- v AE..:? "denyList"
+        tmsMintable <- v AE..:? "mintable"
+        tmsBurnable <- v AE..:? "burnable"
         -- Decode each hex string into a CBOR.Term
         tmsAdditional <-
             (v AE..:? "_additional" .!= Map.empty)

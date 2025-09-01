@@ -264,8 +264,8 @@ tokenInitializationParametersMinimal =
         }
 
 -- | Basic tests for CBOR encoding/decoding of 'TokenInitializationParameters'.
-testEncodedInitializationParametersCBOR :: Spec
-testEncodedInitializationParametersCBOR = describe "TokenInitializationParameters CBOR serialization" $ do
+testInitializationParametersCBOR :: Spec
+testInitializationParametersCBOR = describe "TokenInitializationParameters CBOR serialization" $ do
     it "Decode success" $
         assertEqual
             "Decoded CBOR"
@@ -349,6 +349,26 @@ testEncodedInitializationParametersJSON = describe "TokenInitializationParameter
                 AE.encode
                     invalidEncTip1
             )
+
+testInitializationParametersJSON :: Spec
+testInitializationParametersJSON = describe "TokenInitializationParameters JSON serialization" $ do
+    it "JSON Encode and decode TokenInitializationParameters" $ withMaxSuccess 1000 $ forAll genTokenInitializationParameters $ \tip ->
+        Just tip === AE.decode (AE.encode tip)
+    describe "Pin TokenInitializationParameters JSON encoding" $ do
+        it "Maximal: All values specified" $
+            assertEqual
+                "Encoding"
+                "{\"allowList\":false,\"burnable\":true,\"denyList\":true,\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"},\"initialSupply\":{\"decimals\":5,\"value\":\"10000\"},\"metadata\":{\"_additional\":{\"key1\":\"6b657874726176616c756531\",\"key2\":\"6b657874726176616c756532\"},\"checksumSha256\":\"3132333435363738393061626364656631323334353637383930616263646566\",\"url\":\"https://abc.token/meta\"},\"mintable\":false,\"name\":\"ABC token\"}"
+                ( AE.encode
+                    tokenInitializationParametersAllValues
+                )
+        it "Minimal: Optional values not set" $
+            assertEqual
+                "Encoding"
+                "{}"
+                ( AE.encode $
+                    tokenInitializationParametersMinimal
+                )
 
 -- | A test value for 'TokenUpdateTransaction'.
 tops1 :: TokenUpdateTransaction
@@ -466,8 +486,8 @@ testEncodedTokenOperationsJSON = describe "EncodedTokenOperations JSON serializa
                     invalidEncTops1
             )
 
-testEncodedTokenOperationsCBOR :: Spec
-testEncodedTokenOperationsCBOR = describe "EncodedTokenOperations CBOR serialization" $ do
+testTokenOperationsCBOR :: Spec
+testTokenOperationsCBOR = describe "EncodedTokenOperations CBOR serialization" $ do
     it "Serialize/Deserialize roundtrip" $
         assertEqual
             "Deserialized"
@@ -586,6 +606,18 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
                   tmsBurnable = Just False,
                   tmsAdditional = Map.fromList [("otherField" :: Text.Text, CBOR.TBool True)]
                 }
+    let minimalObject =
+            TokenModuleState
+                { tmsMetadata = Nothing,
+                  tmsName = Nothing,
+                  tmsGovernanceAccount = Nothing,
+                  tmsPaused = Nothing,
+                  tmsAllowList = Nothing,
+                  tmsDenyList = Nothing,
+                  tmsMintable = Nothing,
+                  tmsBurnable = Nothing,
+                  tmsAdditional = Map.empty
+                }                
 
     it "Serialize/Deserialize roundtrip success" $
         assertEqual
@@ -596,22 +628,21 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
                     object
             )
 
-    it "Compare JSON object" $ do
-        let jsonString = "{\"_additional\":{\"otherField\":\"f5\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"}, \"paused\":false}"
-            expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
-            actualValue = Just (AE.toJSON object)
-        assertEqual "Comparing JSON object failed" expectedValue actualValue
-    it "Serializes to expected JSON object" $
-        case AE.toJSON object of
-            AE.Object o -> do
-                assertBool "Does not contain field metadata" $ AE.member "metadata" o
-                assertBool "Does not contain field name" $ AE.member "name" o
-                assertBool "Does not contain field allowList" $ AE.member "allowList" o
-                assertBool "Does not contain field denyList" $ AE.member "denyList" o
-                assertBool "Does not contain field mintable" $ AE.member "mintable" o
-                assertBool "Does not contain field burnable" $ AE.member "burnable" o
-                assertBool "Does not contain field _additional" $ AE.member "_additional" o
-            _ -> assertFailure "Does not encode to JSON object"
+    describe "Pin TokenModuleState JSON encoding" $ do
+        it "Maximal: All values set" $ do
+            assertEqual
+                "Encoding"
+                "{\"_additional\":{\"otherField\":\"f5\"},\"allowList\":true,\"burnable\":false,\"denyList\":true,\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"},\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"mintable\":true,\"name\":\"bla bla\",\"paused\":false}"
+                ( AE.encode
+                    object
+                )
+        it "Minimal: Optional values not set" $ do
+            assertEqual
+                "Encoding"
+                "{}"
+                ( AE.encode
+                    minimalObject
+                )
 
 -- | Basic tests for CBOR encoding/decoding of 'TokenModuleState'.
 testTokenModuleStateCBOR :: Spec
@@ -709,20 +740,11 @@ testTokenStateSimpleJSON = describe "TokenState JSON serialization without addit
                     object
             )
 
-    it "Compare JSON object" $ do
+    it "Pin TokenModuleAccountState JSON encoding" $ do
         let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"moduleState\":{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"}, \"paused\":false}}"
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
-        assertEqual "Comparing JSON object failed" expectedValue actualValue
-
-    it "Serializes to expected JSON object" $
-        case AE.toJSON object of
-            AE.Object o -> do
-                assertBool "Does not contain field tokenModuleRef" $ AE.member "tokenModuleRef" o
-                assertBool "Does not contain field totalSupply" $ AE.member "totalSupply" o
-                assertBool "Does not contain field decimals" $ AE.member "decimals" o
-                assertBool "Does not contain field moduleState" $ AE.member "moduleState" o
-            _ -> assertFailure "Does not encode to JSON object"
+        assertEqual "JSON Value" expectedValue actualValue
 
 testTokenStateJSON :: Spec
 testTokenStateJSON = describe "TokenState JSON serialization with additional state" $ do
@@ -762,20 +784,11 @@ testTokenStateJSON = describe "TokenState JSON serialization with additional sta
                     object
             )
 
-    it "Compare JSON object" $ do
+    it "Pin TokenState JSON encoding" $ do
         let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"moduleState\":{\"_additional\":{\"otherField1\":\"63616263\",\"otherField2\":\"03\",\"otherField3\":\"f5\",\"otherField4\":\"f6\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"}, \"paused\":false}}"
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
-        assertEqual "Comparing JSON object failed" expectedValue actualValue
-
-    it "Serializes to expected JSON object" $
-        case AE.toJSON object of
-            AE.Object o -> do
-                assertBool "Does not contain field tokenModuleRef" $ AE.member "tokenModuleRef" o
-                assertBool "Does not contain field totalSupply" $ AE.member "totalSupply" o
-                assertBool "Does not contain field decimals" $ AE.member "decimals" o
-                assertBool "Does not contain field moduleState" $ AE.member "moduleState" o
-            _ -> assertFailure "Does not encode to JSON object"
+        assertEqual "JSON Value" expectedValue actualValue
 
 -- | Basic tests for CBOR encoding/decoding of 'TokenModuleAccountState'.
 testTokenModuleAccountStateCBOR :: Spec
@@ -903,10 +916,11 @@ testTokenMetadataUrlCBOR = describe "TokenMetadataUrl CBOR serialization" $ do
 
 tests :: Spec
 tests = parallel $ describe "CBOR" $ do
-    testEncodedInitializationParametersCBOR
+    testInitializationParametersCBOR
     testEncodedInitializationParametersJSON
+    testInitializationParametersJSON
     testEncodedTokenOperationsJSON
-    testEncodedTokenOperationsCBOR
+    testTokenOperationsCBOR
     testEncodedTokenEvents
     testTokenMetadataUrlJSON
     testTokenMetadataUrlCBOR
@@ -919,32 +933,32 @@ tests = parallel $ describe "CBOR" $ do
     it "JSON (de-)serialization roundtrip for TokenState (simple)" $ withMaxSuccess 1000 $ forAll genTokenStateSimple $ \tt ->
         assertEqual
             "JSON (de-)serialization roundtrip failed for TokenState (simple)"
-            (Just tt)
-            ( AE.decode $
+            (Right tt)
+            ( AE.eitherDecode $
                 AE.encode
                     tt
             )
     it "JSON (de-)serialization roundtrip for TokenState (complex)" $ withMaxSuccess 1000 $ forAll genTokenStateWithAdditional $ \tt ->
         assertEqual
             "JSON (de-)serialization roundtrip failed for TokenState (complex)"
-            (Just tt)
-            ( AE.decode $
+            (Right tt)
+            ( AE.eitherDecode $
                 AE.encode
                     tt
             )
     it "JSON (de-)serialization roundtrip for TokenModuleState (simple)" $ withMaxSuccess 1000 $ forAll genTokenModuleStateSimple $ \tt ->
         assertEqual
             "JSON (de-)serialization roundtrip failed for TokenModuleState (simple)"
-            (Just tt)
-            ( AE.decode $
+            (Right tt)
+            ( AE.eitherDecode $
                 AE.encode
                     tt
             )
     it "JSON (de-)serialization roundtrip for TokenModuleState (complex)" $ withMaxSuccess 1000 $ forAll genTokenModuleStateWithAdditional $ \tt ->
         assertEqual
             "JSON (de-)serialization roundtrip failed for TokenModuleState (complex)"
-            (Just tt)
-            ( AE.decode $
+            (Right tt)
+            ( AE.eitherDecode $
                 AE.encode
                     tt
             )
