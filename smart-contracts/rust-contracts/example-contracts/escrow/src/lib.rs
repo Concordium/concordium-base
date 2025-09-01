@@ -41,16 +41,16 @@ enum Message {
 #[derive(Serialize, SchemaType)]
 struct InitParams {
     required_deposit: Amount,
-    arbiter_fee:      Amount,
-    buyer:            AccountAddress,
-    seller:           AccountAddress,
-    arbiter:          AccountAddress,
+    arbiter_fee: Amount,
+    buyer: AccountAddress,
+    seller: AccountAddress,
+    arbiter: AccountAddress,
 }
 
 #[contract_state(contract = "escrow")]
 #[derive(Serialize, SchemaType)]
 struct State {
-    mode:        Mode,
+    mode: Mode,
     init_params: InitParams,
 }
 
@@ -63,7 +63,9 @@ enum InitError {
 }
 
 impl From<ParseError> for InitError {
-    fn from(_: ParseError) -> Self { InitError::ParseParams }
+    fn from(_: ParseError) -> Self {
+        InitError::ParseParams
+    }
 }
 
 // Contract implementation
@@ -72,7 +74,10 @@ impl From<ParseError> for InitError {
 #[inline(always)]
 fn contract_init(ctx: &impl HasInitContext<()>) -> Result<State, InitError> {
     let init_params: InitParams = ctx.parameter_cursor().get()?;
-    ensure!(init_params.buyer != init_params.seller, InitError::SameBuyerSeller);
+    ensure!(
+        init_params.buyer != init_params.seller,
+        InitError::SameBuyerSeller
+    );
     let state = State {
         mode: Mode::AwaitingDeposit,
         init_params,
@@ -100,7 +105,9 @@ enum ReceiveError {
 }
 
 impl From<ParseError> for ReceiveError {
-    fn from(_: ParseError) -> Self { ReceiveError::ParseParams }
+    fn from(_: ParseError) -> Self {
+        ReceiveError::ParseParams
+    }
 }
 
 #[receive(contract = "escrow", name = "receive", payable)]
@@ -131,8 +138,10 @@ fn contract_receive<A: HasActions>(
                 ReceiveError::AcceptDeliveryNotByBuyer
             );
             state.mode = Mode::Done;
-            let release_payment_to_seller =
-                A::simple_transfer(&state.init_params.seller, state.init_params.required_deposit);
+            let release_payment_to_seller = A::simple_transfer(
+                &state.init_params.seller,
+                state.init_params.required_deposit,
+            );
             let pay_arbiter =
                 A::simple_transfer(&state.init_params.arbiter, state.init_params.arbiter_fee);
             Ok(try_send_both(release_payment_to_seller, pay_arbiter))
@@ -159,8 +168,10 @@ fn contract_receive<A: HasActions>(
 
         (Mode::AwaitingArbitration, Message::Arbitrate(Arbitration::ReleaseFundsToSeller)) => {
             state.mode = Mode::Done;
-            let release_payment_to_seller =
-                A::simple_transfer(&state.init_params.seller, state.init_params.required_deposit);
+            let release_payment_to_seller = A::simple_transfer(
+                &state.init_params.seller,
+                state.init_params.required_deposit,
+            );
             let pay_arbiter =
                 A::simple_transfer(&state.init_params.arbiter, state.init_params.arbiter_fee);
             Ok(try_send_both(release_payment_to_seller, pay_arbiter))

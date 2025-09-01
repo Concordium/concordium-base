@@ -78,10 +78,10 @@ impl SerdeSerialize for Amount {
 impl<'de> SerdeDeserialize<'de> for Amount {
     fn deserialize<D: serde::de::Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
         let s = String::deserialize(des)?;
-        let micro_ccd = s.parse::<u64>().map_err(|e| serde::de::Error::custom(format!("{}", e)))?;
-        Ok(Amount {
-            micro_ccd,
-        })
+        let micro_ccd = s
+            .parse::<u64>()
+            .map_err(|e| serde::de::Error::custom(format!("{}", e)))?;
+        Ok(Amount { micro_ccd })
     }
 }
 
@@ -157,7 +157,9 @@ impl str::FromStr for Amount {
                 2 => {
                     // we are reading a normal number until we hit the dot.
                     if let Some(d) = c.to_digit(10) {
-                        micro_ccd = micro_ccd.checked_mul(10).ok_or(AmountParseError::Overflow)?;
+                        micro_ccd = micro_ccd
+                            .checked_mul(10)
+                            .ok_or(AmountParseError::Overflow)?;
                         micro_ccd = micro_ccd
                             .checked_add(u64::from(d))
                             .ok_or(AmountParseError::Overflow)?;
@@ -173,7 +175,9 @@ impl str::FromStr for Amount {
                         return Err(AmountParseError::AtMostSixDecimals);
                     }
                     if let Some(d) = c.to_digit(10) {
-                        micro_ccd = micro_ccd.checked_mul(10).ok_or(AmountParseError::Overflow)?;
+                        micro_ccd = micro_ccd
+                            .checked_mul(10)
+                            .ok_or(AmountParseError::Overflow)?;
                         micro_ccd = micro_ccd
                             .checked_add(u64::from(d))
                             .ok_or(AmountParseError::Overflow)?;
@@ -189,11 +193,11 @@ impl str::FromStr for Amount {
             return Err(AmountParseError::ExpectedMore);
         }
         for _ in 0..6 - after_dot {
-            micro_ccd = micro_ccd.checked_mul(10).ok_or(AmountParseError::Overflow)?;
+            micro_ccd = micro_ccd
+                .checked_mul(10)
+                .ok_or(AmountParseError::Overflow)?;
         }
-        Ok(Amount {
-            micro_ccd,
-        })
+        Ok(Amount { micro_ccd })
     }
 }
 
@@ -201,14 +205,14 @@ impl Amount {
     /// Create amount from a number of microCCD
     #[inline(always)]
     pub const fn from_micro_ccd(micro_ccd: u64) -> Amount {
-        Amount {
-            micro_ccd,
-        }
+        Amount { micro_ccd }
     }
 
     /// Get the amount in microCCD
     #[inline(always)]
-    pub const fn micro_ccd(&self) -> u64 { self.micro_ccd }
+    pub const fn micro_ccd(&self) -> u64 {
+        self.micro_ccd
+    }
 
     /// Create amount from a number of CCD
     #[inline(always)]
@@ -221,9 +225,7 @@ impl Amount {
     /// Create zero amount
     #[inline(always)]
     pub const fn zero() -> Amount {
-        Amount {
-            micro_ccd: 0,
-        }
+        Amount { micro_ccd: 0 }
     }
 
     /// Add a number of micro CCD to an amount
@@ -238,14 +240,18 @@ impl Amount {
     /// occurred.
     #[inline(always)]
     pub fn checked_add(self, other: Amount) -> Option<Amount> {
-        self.micro_ccd.checked_add(other.micro_ccd).map(Amount::from_micro_ccd)
+        self.micro_ccd
+            .checked_add(other.micro_ccd)
+            .map(Amount::from_micro_ccd)
     }
 
     /// Checked subtraction. Subtracts another amount and returns None if
     /// underflow occurred.
     #[inline(always)]
     pub fn checked_sub(self, other: Amount) -> Option<Amount> {
-        self.micro_ccd.checked_sub(other.micro_ccd).map(Amount::from_micro_ccd)
+        self.micro_ccd
+            .checked_sub(other.micro_ccd)
+            .map(Amount::from_micro_ccd)
     }
 
     /// Add a number of CCD to an amount
@@ -346,22 +352,30 @@ impl iter::Sum for Amount {
 
 impl ops::AddAssign for Amount {
     #[inline(always)]
-    fn add_assign(&mut self, other: Amount) { *self = *self + other; }
+    fn add_assign(&mut self, other: Amount) {
+        *self = *self + other;
+    }
 }
 
 impl ops::SubAssign for Amount {
     #[inline(always)]
-    fn sub_assign(&mut self, other: Amount) { *self = *self - other; }
+    fn sub_assign(&mut self, other: Amount) {
+        *self = *self - other;
+    }
 }
 
 impl ops::MulAssign<u64> for Amount {
     #[inline(always)]
-    fn mul_assign(&mut self, other: u64) { *self = *self * other; }
+    fn mul_assign(&mut self, other: u64) {
+        *self = *self * other;
+    }
 }
 
 impl ops::RemAssign<u64> for Amount {
     #[inline(always)]
-    fn rem_assign(&mut self, other: u64) { *self = *self % other; }
+    fn rem_assign(&mut self, other: u64) {
+        *self = *self % other;
+    }
 }
 
 /// The current public balances of an account.
@@ -369,7 +383,7 @@ impl ops::RemAssign<u64> for Amount {
 pub struct AccountBalance {
     /// The total balance of the account. Note that part of this balance might
     /// be staked and/or locked in scheduled transfers.
-    pub total:  Amount,
+    pub total: Amount,
     /// The current staked amount of the account. This amount is used for
     /// staking.
     pub staked: Amount,
@@ -396,7 +410,9 @@ impl AccountBalance {
     /// The current available balance of the account. This is the amount
     /// an account currently has available for transferring and is not
     /// staked or locked in releases by scheduled transfers.
-    pub fn available(&self) -> Amount { self.total - cmp::max(self.locked, self.staked) }
+    pub fn available(&self) -> Amount {
+        self.total - cmp::max(self.locked, self.staked)
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -444,7 +460,7 @@ pub type SignatureThreshold = NonZeroThresholdU8<SignatureKind>;
 /// example.
 pub struct NonZeroThresholdU8<Kind> {
     pub(crate) threshold: u8,
-    pub(crate) kind:      PhantomData<Kind>,
+    pub(crate) kind: PhantomData<Kind>,
 }
 
 #[derive(Debug)]
@@ -465,14 +481,18 @@ pub struct ZeroSignatureThreshold;
 pub struct PublicKeyEd25519(pub [u8; 32]);
 
 impl From<PublicKeyEd25519> for String {
-    fn from(pk: PublicKeyEd25519) -> String { pk.to_string() }
+    fn from(pk: PublicKeyEd25519) -> String {
+        pk.to_string()
+    }
 }
 
 #[cfg(feature = "derive-serde")]
 impl TryFrom<String> for PublicKeyEd25519 {
     type Error = ParseError;
 
-    fn try_from(s: String) -> Result<Self, ParseError> { Self::from_str(s.as_str()) }
+    fn try_from(s: String) -> Result<Self, ParseError> {
+        Self::from_str(s.as_str())
+    }
 }
 
 impl fmt::Display for PublicKeyEd25519 {
@@ -543,14 +563,18 @@ impl FromStr for PublicKeyEcdsaSecp256k1 {
 pub struct SignatureEd25519(pub [u8; 64]);
 
 impl From<SignatureEd25519> for String {
-    fn from(sig: SignatureEd25519) -> String { sig.to_string() }
+    fn from(sig: SignatureEd25519) -> String {
+        sig.to_string()
+    }
 }
 
 #[cfg(feature = "derive-serde")]
 impl TryFrom<String> for SignatureEd25519 {
     type Error = ParseError;
 
-    fn try_from(s: String) -> Result<Self, ParseError> { Self::from_str(s.as_str()) }
+    fn try_from(s: String) -> Result<Self, ParseError> {
+        Self::from_str(s.as_str())
+    }
 }
 
 impl fmt::Display for SignatureEd25519 {
@@ -591,14 +615,18 @@ impl FromStr for SignatureEd25519 {
 pub struct SignatureEcdsaSecp256k1(pub [u8; 64]);
 
 impl From<SignatureEcdsaSecp256k1> for String {
-    fn from(sig: SignatureEcdsaSecp256k1) -> String { sig.to_string() }
+    fn from(sig: SignatureEcdsaSecp256k1) -> String {
+        sig.to_string()
+    }
 }
 
 #[cfg(feature = "derive-serde")]
 impl TryFrom<String> for SignatureEcdsaSecp256k1 {
     type Error = ParseError;
 
-    fn try_from(s: String) -> Result<Self, ParseError> { Self::from_str(s.as_str()) }
+    fn try_from(s: String) -> Result<Self, ParseError> {
+        Self::from_str(s.as_str())
+    }
 }
 
 impl fmt::Display for SignatureEcdsaSecp256k1 {
@@ -654,7 +682,7 @@ pub enum PublicKey {
 #[derive(crate::Serialize, Debug, SchemaType, PartialEq, Eq)]
 pub struct CredentialPublicKeys {
     #[concordium(size_length = 1)]
-    pub keys:      BTreeMap<KeyIndex, PublicKey>,
+    pub keys: BTreeMap<KeyIndex, PublicKey>,
     pub threshold: SignatureThreshold,
 }
 
@@ -662,7 +690,7 @@ pub struct CredentialPublicKeys {
 /// Public keys of an account, together with the thresholds.
 pub struct AccountPublicKeys {
     #[concordium(size_length = 1)]
-    pub keys:      BTreeMap<CredentialIndex, CredentialPublicKeys>,
+    pub keys: BTreeMap<CredentialIndex, CredentialPublicKeys>,
     pub threshold: AccountThreshold,
 }
 
@@ -715,9 +743,7 @@ pub struct Timestamp {
 
 impl From<u64> for Timestamp {
     fn from(millis: u64) -> Self {
-        Self {
-            millis,
-        }
+        Self { millis }
     }
 }
 
@@ -735,25 +761,29 @@ impl quickcheck::Arbitrary for Timestamp {
 impl Timestamp {
     /// Construct a timestamp corresponding to the current date and time.
     #[cfg(feature = "derive-serde")]
-    pub fn now() -> Self { (chrono::Utc::now().timestamp_millis() as u64).into() }
+    pub fn now() -> Self {
+        (chrono::Utc::now().timestamp_millis() as u64).into()
+    }
 
     /// Construct timestamp from milliseconds since unix epoch.
     #[inline(always)]
     pub const fn from_timestamp_millis(millis: u64) -> Self {
-        Self {
-            millis,
-        }
+        Self { millis }
     }
 
     /// Milliseconds since the UNIX epoch.
     #[inline(always)]
-    pub const fn timestamp_millis(&self) -> u64 { self.millis }
+    pub const fn timestamp_millis(&self) -> u64 {
+        self.millis
+    }
 
     /// Add duration to the timestamp. Returns `None` if the resulting timestamp
     /// is not representable, i.e., too far in the future.
     #[inline(always)]
     pub fn checked_add(self, duration: Duration) -> Option<Self> {
-        self.millis.checked_add(duration.milliseconds).map(Self::from_timestamp_millis)
+        self.millis
+            .checked_add(duration.milliseconds)
+            .map(Self::from_timestamp_millis)
     }
 
     /// Subtract duration from the timestamp. Returns `None` instead of
@@ -761,7 +791,9 @@ impl Timestamp {
     /// epoch.
     #[inline(always)]
     pub fn checked_sub(self, duration: Duration) -> Option<Self> {
-        self.millis.checked_sub(duration.milliseconds).map(Self::from_timestamp_millis)
+        self.millis
+            .checked_sub(duration.milliseconds)
+            .map(Self::from_timestamp_millis)
     }
 
     /// Compute the duration between the self and another timestamp.
@@ -781,7 +813,9 @@ impl Timestamp {
     /// is in the future compared to self.
     #[inline(always)]
     pub fn duration_since(self, before: Timestamp) -> Option<Duration> {
-        self.millis.checked_sub(before.millis).map(Duration::from_millis)
+        self.millis
+            .checked_sub(before.millis)
+            .map(Duration::from_millis)
     }
 }
 
@@ -817,9 +851,7 @@ impl TryFrom<chrono::DateTime<chrono::Utc>> for Timestamp {
 
     fn try_from(value: chrono::DateTime<chrono::Utc>) -> Result<Self, Self::Error> {
         let millis = value.timestamp_millis().try_into()?;
-        Ok(Self {
-            millis,
-        })
+        Ok(Self { millis })
     }
 }
 
@@ -916,57 +948,77 @@ impl Duration {
     /// Construct duration from milliseconds.
     #[inline(always)]
     pub const fn from_millis(milliseconds: u64) -> Self {
-        Self {
-            milliseconds,
-        }
+        Self { milliseconds }
     }
 
     /// Construct duration from seconds.
     #[inline(always)]
-    pub const fn from_seconds(seconds: u64) -> Self { Self::from_millis(seconds * 1000) }
+    pub const fn from_seconds(seconds: u64) -> Self {
+        Self::from_millis(seconds * 1000)
+    }
 
     /// Construct duration from minutes.
     #[inline(always)]
-    pub const fn from_minutes(minutes: u64) -> Self { Self::from_millis(minutes * 1000 * 60) }
+    pub const fn from_minutes(minutes: u64) -> Self {
+        Self::from_millis(minutes * 1000 * 60)
+    }
 
     /// Construct duration from hours.
     #[inline(always)]
-    pub const fn from_hours(hours: u64) -> Self { Self::from_millis(hours * 1000 * 60 * 60) }
+    pub const fn from_hours(hours: u64) -> Self {
+        Self::from_millis(hours * 1000 * 60 * 60)
+    }
 
     /// Construct duration from days.
     #[inline(always)]
-    pub const fn from_days(days: u64) -> Self { Self::from_millis(days * 1000 * 60 * 60 * 24) }
+    pub const fn from_days(days: u64) -> Self {
+        Self::from_millis(days * 1000 * 60 * 60 * 24)
+    }
 
     /// Get number of milliseconds in the duration.
     #[inline(always)]
-    pub fn millis(&self) -> u64 { self.milliseconds }
+    pub fn millis(&self) -> u64 {
+        self.milliseconds
+    }
 
     /// Get number of seconds in the duration.
     #[inline(always)]
-    pub fn seconds(&self) -> u64 { self.milliseconds / 1000 }
+    pub fn seconds(&self) -> u64 {
+        self.milliseconds / 1000
+    }
 
     /// Get number of minutes in the duration.
     #[inline(always)]
-    pub fn minutes(&self) -> u64 { self.milliseconds / (1000 * 60) }
+    pub fn minutes(&self) -> u64 {
+        self.milliseconds / (1000 * 60)
+    }
 
     /// Get number of hours in the duration.
     #[inline(always)]
-    pub fn hours(&self) -> u64 { self.milliseconds / (1000 * 60 * 60) }
+    pub fn hours(&self) -> u64 {
+        self.milliseconds / (1000 * 60 * 60)
+    }
 
     /// Get number of days in the duration.
     #[inline(always)]
-    pub fn days(&self) -> u64 { self.milliseconds / (1000 * 60 * 60 * 24) }
+    pub fn days(&self) -> u64 {
+        self.milliseconds / (1000 * 60 * 60 * 24)
+    }
 
     /// Add duration. Returns `None` instead of overflowing.
     #[inline(always)]
     pub fn checked_add(self, other: Duration) -> Option<Self> {
-        self.milliseconds.checked_add(other.milliseconds).map(Self::from_millis)
+        self.milliseconds
+            .checked_add(other.milliseconds)
+            .map(Self::from_millis)
     }
 
     /// Subtract duration. Returns `None` instead of overflowing.
     #[inline(always)]
     pub fn checked_sub(self, other: Duration) -> Option<Self> {
-        self.milliseconds.checked_sub(other.milliseconds).map(Self::from_millis)
+        self.milliseconds
+            .checked_sub(other.milliseconds)
+            .map(Self::from_millis)
     }
 }
 
@@ -1016,7 +1068,9 @@ impl str::FromStr for Duration {
         use ParseDurationError::*;
         let mut duration = 0;
         for measure in s.split_whitespace() {
-            let split_index = measure.find(|c: char| !c.is_ascii_digit()).ok_or(MissingUnit)?;
+            let split_index = measure
+                .find(|c: char| !c.is_ascii_digit())
+                .ok_or(MissingUnit)?;
             let (n, unit) = measure.split_at(split_index);
 
             let n: u64 = n.parse().map_err(|_| FailedParsingNumber)?;
@@ -1041,7 +1095,11 @@ impl fmt::Display for Duration {
         let minutes = Duration::from_millis(self.millis() % (1000 * 60 * 60)).minutes();
         let seconds = Duration::from_millis(self.millis() % (1000 * 60)).seconds();
         let milliseconds = Duration::from_millis(self.millis() % 1000).millis();
-        write!(formatter, "{}d {}h {}m {}s {}ms", days, hours, minutes, seconds, milliseconds)
+        write!(
+            formatter,
+            "{}d {}h {}m {}s {}ms",
+            days, hours, minutes, seconds, milliseconds
+        )
     }
 }
 
@@ -1085,15 +1143,21 @@ impl quickcheck::Arbitrary for AccountAddress {
 }
 
 impl convert::AsRef<[u8; 32]> for AccountAddress {
-    fn as_ref(&self) -> &[u8; 32] { &self.0 }
+    fn as_ref(&self) -> &[u8; 32] {
+        &self.0
+    }
 }
 
 impl convert::AsRef<[u8]> for AccountAddress {
-    fn as_ref(&self) -> &[u8] { &self.0 }
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
 }
 
 impl convert::AsMut<[u8; 32]> for AccountAddress {
-    fn as_mut(&mut self) -> &mut [u8; 32] { &mut self.0 }
+    fn as_mut(&mut self) -> &mut [u8; 32] {
+        &mut self.0
+    }
 }
 
 impl AccountAddress {
@@ -1146,17 +1210,14 @@ impl AccountAddress {
 #[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 pub struct ContractAddress {
-    pub index:    ContractIndex,
+    pub index: ContractIndex,
     pub subindex: ContractSubIndex,
 }
 
 impl ContractAddress {
     /// Construct a new contract address from index and subindex.
     pub const fn new(index: ContractIndex, subindex: ContractSubIndex) -> Self {
-        Self {
-            index,
-            subindex,
-        }
+        Self { index, subindex }
     }
 }
 
@@ -1164,7 +1225,7 @@ impl ContractAddress {
 impl quickcheck::Arbitrary for ContractAddress {
     fn arbitrary(g: &mut Gen) -> ContractAddress {
         ContractAddress {
-            index:    quickcheck::Arbitrary::arbitrary(g),
+            index: quickcheck::Arbitrary::arbitrary(g),
             subindex: quickcheck::Arbitrary::arbitrary(g),
         }
     }
@@ -1174,7 +1235,7 @@ impl quickcheck::Arbitrary for ContractAddress {
         let subindex = self.subindex;
         let iter = index.shrink().flat_map(move |i| {
             subindex.shrink().map(move |si| ContractAddress {
-                index:    i,
+                index: i,
                 subindex: si,
             })
         });
@@ -1221,11 +1282,15 @@ impl quickcheck::Arbitrary for Address {
 }
 
 impl From<AccountAddress> for Address {
-    fn from(address: AccountAddress) -> Address { Address::Account(address) }
+    fn from(address: AccountAddress) -> Address {
+        Address::Account(address)
+    }
 }
 
 impl From<ContractAddress> for Address {
-    fn from(address: ContractAddress) -> Address { Address::Contract(address) }
+    fn from(address: ContractAddress) -> Address {
+        Address::Contract(address)
+    }
 }
 
 // This trait is implemented manually to produce fewer bytes in the generated
@@ -1260,7 +1325,9 @@ impl Hash for Address {
 // This trait is implemented manually to produce fewer bytes in the generated
 // WASM.
 impl PartialOrd for Address {
-    fn partial_cmp(&self, other: &Address) -> Option<Ordering> { Some(self.cmp(other)) }
+    fn partial_cmp(&self, other: &Address) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 // This trait is implemented manually to produce fewer bytes in the generated
@@ -1282,15 +1349,21 @@ pub struct ContractName<'a>(&'a str);
 
 impl<'a> fmt::Display for ContractName<'a> {
     #[inline(always)]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.fmt(f) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
 }
 
 impl<'a> PartialEq<str> for ContractName<'a> {
-    fn eq(&self, other: &str) -> bool { self.0 == other }
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
 }
 
 impl<'a> PartialEq<&'a str> for ContractName<'a> {
-    fn eq(&self, other: &&'a str) -> bool { self.0 == *other }
+    fn eq(&self, other: &&'a str) -> bool {
+        self.0 == *other
+    }
 }
 
 impl<'a> ContractName<'a> {
@@ -1307,19 +1380,27 @@ impl<'a> ContractName<'a> {
     /// the behaviour of any methods on this type is unspecified, and may
     /// include panics.
     #[inline(always)]
-    pub const fn new_unchecked(name: &'a str) -> Self { ContractName(name) }
+    pub const fn new_unchecked(name: &'a str) -> Self {
+        ContractName(name)
+    }
 
     /// Get contract name used on chain: "init_<contract_name>".
     #[inline(always)]
-    pub const fn get_chain_name(self) -> &'a str { self.0 }
+    pub const fn get_chain_name(self) -> &'a str {
+        self.0
+    }
 
     /// Convert a [`ContractName`] to its owned counterpart. This is an
     /// expensive operation that requires memory allocation.
-    pub fn to_owned(&self) -> OwnedContractName { OwnedContractName(self.0.to_owned()) }
+    pub fn to_owned(&self) -> OwnedContractName {
+        OwnedContractName(self.0.to_owned())
+    }
 
     /// Extract the contract name by removing the "init_" prefix.
     #[inline(always)]
-    pub fn contract_name(self) -> &'a str { self.get_chain_name().strip_prefix("init_").unwrap() }
+    pub fn contract_name(self) -> &'a str {
+        self.get_chain_name().strip_prefix("init_").unwrap()
+    }
 
     /// Check whether the given string is a valid contract initialization
     /// function name. This is the case if and only if
@@ -1339,7 +1420,10 @@ impl<'a> ContractName<'a> {
         if name.contains('.') {
             return Err(NewContractNameError::ContainsDot);
         }
-        if !name.chars().all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation()) {
+        if !name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation())
+        {
             return Err(NewContractNameError::InvalidCharacters);
         }
         Ok(())
@@ -1347,7 +1431,9 @@ impl<'a> ContractName<'a> {
 }
 
 impl<'a> From<ContractName<'a>> for &'a str {
-    fn from(n: ContractName<'a>) -> Self { n.0 }
+    fn from(n: ContractName<'a>) -> Self {
+        n.0
+    }
 }
 
 /// A contract name (owned version). Expected format: "init_<contract_name>".
@@ -1361,15 +1447,21 @@ pub struct OwnedContractName(String);
 
 impl fmt::Display for OwnedContractName {
     #[inline(always)]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.fmt(f) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
 }
 
 impl PartialEq<str> for OwnedContractName {
-    fn eq(&self, other: &str) -> bool { self.0 == other }
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
 }
 
 impl<'a> PartialEq<&'a str> for OwnedContractName {
-    fn eq(&self, other: &&'a str) -> bool { self.0 == *other }
+    fn eq(&self, other: &&'a str) -> bool {
+        self.0 == *other
+    }
 }
 
 impl OwnedContractName {
@@ -1384,15 +1476,21 @@ impl OwnedContractName {
     /// Create a new OwnedContractName without checking the format. Expected
     /// format: "init_<contract_name>".
     #[inline(always)]
-    pub const fn new_unchecked(name: String) -> Self { OwnedContractName(name) }
+    pub const fn new_unchecked(name: String) -> Self {
+        OwnedContractName(name)
+    }
 
     /// Convert to [`ContractName`] by reference.
     #[inline(always)]
-    pub fn as_contract_name(&self) -> ContractName { ContractName(self.0.as_str()) }
+    pub fn as_contract_name(&self) -> ContractName {
+        ContractName(self.0.as_str())
+    }
 }
 
 impl From<OwnedContractName> for String {
-    fn from(n: OwnedContractName) -> Self { n.0 }
+    fn from(n: OwnedContractName) -> Self {
+        n.0
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1409,7 +1507,11 @@ impl fmt::Display for NewContractNameError {
         match self {
             MissingInitPrefix => write!(f, "Contract names have the format 'init_<contract_name>'"),
             TooLong => {
-                write!(f, "Contract names have a max length of {}", constants::MAX_FUNC_NAME_SIZE)
+                write!(
+                    f,
+                    "Contract names have a max length of {}",
+                    constants::MAX_FUNC_NAME_SIZE
+                )
             }
             ContainsDot => write!(f, "Contract names cannot contain a '.'"),
             InvalidCharacters => write!(
@@ -1426,7 +1528,9 @@ impl std::error::Error for NewContractNameError {}
 impl convert::TryFrom<String> for OwnedContractName {
     type Error = NewContractNameError;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> { OwnedContractName::new(value) }
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        OwnedContractName::new(value)
+    }
 }
 
 /// A receive name. Expected format: "<contract_name>.<func_name>".
@@ -1436,15 +1540,21 @@ pub struct ReceiveName<'a>(&'a str);
 
 impl<'a> fmt::Display for ReceiveName<'a> {
     #[inline(always)]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.fmt(f) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
 }
 
 impl<'a> PartialEq<str> for ReceiveName<'a> {
-    fn eq(&self, other: &str) -> bool { self.0 == other }
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
 }
 
 impl<'a> PartialEq<&'a str> for ReceiveName<'a> {
-    fn eq(&self, other: &&'a str) -> bool { self.0 == *other }
+    fn eq(&self, other: &&'a str) -> bool {
+        self.0 == *other
+    }
 }
 
 impl<'a> ReceiveName<'a> {
@@ -1458,20 +1568,30 @@ impl<'a> ReceiveName<'a> {
     /// Create a new ReceiveName without checking the format. Expected format:
     /// "<contract_name>.<func_name>".
     #[inline(always)]
-    pub const fn new_unchecked(name: &'a str) -> Self { ReceiveName(name) }
+    pub const fn new_unchecked(name: &'a str) -> Self {
+        ReceiveName(name)
+    }
 
     /// Get receive name used on chain: "<contract_name>.<func_name>".
-    pub const fn get_chain_name(self) -> &'a str { self.0 }
+    pub const fn get_chain_name(self) -> &'a str {
+        self.0
+    }
 
     /// Convert a [`ReceiveName`] to its owned counterpart. This is an expensive
     /// operation that requires memory allocation.
-    pub fn to_owned(self) -> OwnedReceiveName { OwnedReceiveName(self.0.to_string()) }
+    pub fn to_owned(self) -> OwnedReceiveName {
+        OwnedReceiveName(self.0.to_string())
+    }
 
     /// Extract the contract name by splitting at the first dot.
-    pub fn contract_name(self) -> &'a str { self.get_name_parts().0 }
+    pub fn contract_name(self) -> &'a str {
+        self.get_name_parts().0
+    }
 
     /// Extract the entrypoint name by splitting at the first dot.
-    pub fn entrypoint_name(self) -> EntrypointName<'a> { EntrypointName(self.get_name_parts().1) }
+    pub fn entrypoint_name(self) -> EntrypointName<'a> {
+        EntrypointName(self.get_name_parts().1)
+    }
 
     /// Extract (contract_name, func_name) by splitting at the first dot.
     fn get_name_parts(self) -> (&'a str, &'a str) {
@@ -1495,7 +1615,10 @@ impl<'a> ReceiveName<'a> {
         if name.len() > constants::MAX_FUNC_NAME_SIZE {
             return Err(NewReceiveNameError::TooLong);
         }
-        if !name.chars().all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation()) {
+        if !name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation())
+        {
             return Err(NewReceiveNameError::InvalidCharacters);
         }
         Ok(())
@@ -1512,30 +1635,40 @@ impl<'a> ReceiveName<'a> {
 pub struct OwnedReceiveName(String);
 
 impl PartialEq<str> for OwnedReceiveName {
-    fn eq(&self, other: &str) -> bool { self.0 == other }
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
 }
 
 impl<'a> PartialEq<&'a str> for OwnedReceiveName {
-    fn eq(&self, other: &&'a str) -> bool { self.0 == *other }
+    fn eq(&self, other: &&'a str) -> bool {
+        self.0 == *other
+    }
 }
 
 impl fmt::Display for OwnedReceiveName {
     #[inline(always)]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.fmt(f) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
 }
 
 impl convert::TryFrom<String> for OwnedReceiveName {
     type Error = NewReceiveNameError;
 
     #[inline(always)]
-    fn try_from(value: String) -> Result<Self, Self::Error> { OwnedReceiveName::new(value) }
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        OwnedReceiveName::new(value)
+    }
 }
 
 impl str::FromStr for OwnedReceiveName {
     type Err = NewReceiveNameError;
 
     #[inline(always)]
-    fn from_str(s: &str) -> Result<Self, Self::Err> { OwnedReceiveName::new(s.to_string()) }
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        OwnedReceiveName::new(s.to_string())
+    }
 }
 
 impl OwnedReceiveName {
@@ -1569,12 +1702,16 @@ impl OwnedReceiveName {
     /// Create a new OwnedReceiveName without checking the format. Expected
     /// format: "<contract_name>.<func_name>".
     #[inline(always)]
-    pub const fn new_unchecked(name: String) -> Self { OwnedReceiveName(name) }
+    pub const fn new_unchecked(name: String) -> Self {
+        OwnedReceiveName(name)
+    }
 
     /// Convert to [`ReceiveName`]. See [`ReceiveName`] for additional methods
     /// available on the type.
     #[inline(always)]
-    pub fn as_receive_name(&self) -> ReceiveName { ReceiveName(self.0.as_str()) }
+    pub fn as_receive_name(&self) -> ReceiveName {
+        ReceiveName(self.0.as_str())
+    }
 }
 
 /// An entrypoint name (borrowed version). Expected format:
@@ -1588,7 +1725,9 @@ pub struct EntrypointName<'a>(pub(crate) &'a str);
 
 impl<'a> EntrypointName<'a> {
     /// Size of the name in bytes.
-    pub fn size(&self) -> u32 { self.0.as_bytes().len() as u32 }
+    pub fn size(&self) -> u32 {
+        self.0.as_bytes().len() as u32
+    }
 
     /// Create a new name and check the format. See [is_valid_entrypoint_name]
     /// for the expected format.
@@ -1599,33 +1738,47 @@ impl<'a> EntrypointName<'a> {
 
     /// Convert a [`EntrypointName`] to its owned counterpart. This is an
     /// expensive operation that requires memory allocation.
-    pub fn to_owned(&self) -> OwnedEntrypointName { OwnedEntrypointName(self.0.to_owned()) }
+    pub fn to_owned(&self) -> OwnedEntrypointName {
+        OwnedEntrypointName(self.0.to_owned())
+    }
 
     /// Create a new name. **This does not check the format and is therefore
     /// unsafe.** It is provided for convenience since sometimes it is
     /// statically clear that the format is satisfied.
     #[inline(always)]
-    pub const fn new_unchecked(name: &'a str) -> Self { Self(name) }
+    pub const fn new_unchecked(name: &'a str) -> Self {
+        Self(name)
+    }
 }
 
 impl<'a> fmt::Display for EntrypointName<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(self.0) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.0)
+    }
 }
 
 impl<'a> From<EntrypointName<'a>> for &'a str {
-    fn from(en: EntrypointName<'a>) -> Self { en.0 }
+    fn from(en: EntrypointName<'a>) -> Self {
+        en.0
+    }
 }
 
 impl<'a> From<EntrypointName<'a>> for OwnedEntrypointName {
-    fn from(epn: EntrypointName<'a>) -> Self { Self(String::from(epn.0)) }
+    fn from(epn: EntrypointName<'a>) -> Self {
+        Self(String::from(epn.0))
+    }
 }
 
 impl<'a> PartialEq<str> for EntrypointName<'a> {
-    fn eq(&self, other: &str) -> bool { self.0 == other }
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
 }
 
 impl<'a> PartialEq<&'a str> for EntrypointName<'a> {
-    fn eq(&self, other: &&'a str) -> bool { self.0 == *other }
+    fn eq(&self, other: &&'a str) -> bool {
+        self.0 == *other
+    }
 }
 
 /// An entrypoint name (owned version). Expected format:
@@ -1638,25 +1791,35 @@ impl<'a> PartialEq<&'a str> for EntrypointName<'a> {
 pub struct OwnedEntrypointName(pub(crate) String);
 
 impl fmt::Display for OwnedEntrypointName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.as_entrypoint_name().fmt(f) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.as_entrypoint_name().fmt(f)
+    }
 }
 
 impl From<OwnedEntrypointName> for String {
-    fn from(oen: OwnedEntrypointName) -> Self { oen.0 }
+    fn from(oen: OwnedEntrypointName) -> Self {
+        oen.0
+    }
 }
 
 impl convert::TryFrom<String> for OwnedEntrypointName {
     type Error = NewReceiveNameError;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> { OwnedEntrypointName::new(value) }
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        OwnedEntrypointName::new(value)
+    }
 }
 
 impl PartialEq<str> for OwnedEntrypointName {
-    fn eq(&self, other: &str) -> bool { self.0 == other }
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
 }
 
 impl<'a> PartialEq<&'a str> for OwnedEntrypointName {
-    fn eq(&self, other: &&'a str) -> bool { self.0 == *other }
+    fn eq(&self, other: &&'a str) -> bool {
+        self.0 == *other
+    }
 }
 
 impl OwnedEntrypointName {
@@ -1671,11 +1834,15 @@ impl OwnedEntrypointName {
     /// unsafe.** It is provided for convenience since sometimes it is
     /// statically clear that the format is satisfied.
     #[inline(always)]
-    pub const fn new_unchecked(name: String) -> Self { Self(name) }
+    pub const fn new_unchecked(name: String) -> Self {
+        Self(name)
+    }
 
     /// Convert to an [`EntrypointName`] by reference.
     #[inline(always)]
-    pub fn as_entrypoint_name(&self) -> EntrypointName { EntrypointName(self.0.as_str()) }
+    pub fn as_entrypoint_name(&self) -> EntrypointName {
+        EntrypointName(self.0.as_str())
+    }
 }
 
 /// Parameter to the init function or entrypoint.
@@ -1698,7 +1865,9 @@ impl<'a> fmt::Debug for Parameter<'a> {
 
 impl<'a> AsRef<[u8]> for Parameter<'a> {
     #[inline(always)]
-    fn as_ref(&self) -> &[u8] { self.0 }
+    fn as_ref(&self) -> &[u8] {
+        self.0
+    }
 }
 
 impl<'a> convert::TryFrom<&'a [u8]> for Parameter<'a> {
@@ -1718,7 +1887,9 @@ impl<'a> convert::TryFrom<&'a [u8]> for Parameter<'a> {
 }
 
 impl<'a> From<Parameter<'a>> for &'a [u8] {
-    fn from(p: Parameter<'a>) -> Self { p.0 }
+    fn from(p: Parameter<'a>) -> Self {
+        p.0
+    }
 }
 
 /// Display the entire parameter in hex.
@@ -1736,11 +1907,15 @@ impl<'a> Parameter<'a> {
     /// fits the size limit. The caller is assumed to ensure this via
     /// external means.
     #[inline]
-    pub const fn new_unchecked(bytes: &'a [u8]) -> Self { Self(bytes) }
+    pub const fn new_unchecked(bytes: &'a [u8]) -> Self {
+        Self(bytes)
+    }
 
     /// Construct an empty parameter.
     #[inline]
-    pub const fn empty() -> Self { Self(&[]) }
+    pub const fn empty() -> Self {
+        Self(&[])
+    }
 }
 
 /// Parameter to the init function or entrypoint. Owned version.
@@ -1774,12 +1949,14 @@ impl fmt::Debug for OwnedParameter {
 )]
 pub struct ExceedsParameterSize {
     pub actual: usize,
-    pub max:    usize,
+    pub max: usize,
 }
 
 impl AsRef<[u8]> for OwnedParameter {
     #[inline(always)]
-    fn as_ref(&self) -> &[u8] { self.0.as_ref() }
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
 }
 
 impl convert::TryFrom<Vec<u8>> for OwnedParameter {
@@ -1799,7 +1976,9 @@ impl convert::TryFrom<Vec<u8>> for OwnedParameter {
 }
 
 impl From<OwnedParameter> for Vec<u8> {
-    fn from(op: OwnedParameter) -> Self { op.0 }
+    fn from(op: OwnedParameter) -> Self {
+        op.0
+    }
 }
 
 /// Display the entire parameter in hex.
@@ -1814,7 +1993,9 @@ impl fmt::Display for OwnedParameter {
 
 impl OwnedParameter {
     /// Get [`Self`] as the borrowed variant [`Parameter`].
-    pub fn as_parameter(&self) -> Parameter { Parameter(self.0.as_ref()) }
+    pub fn as_parameter(&self) -> Parameter {
+        Parameter(self.0.as_ref())
+    }
 
     /// Construct an [`Self`]` by serializing the input using its
     /// `Serial` instance.
@@ -1826,7 +2007,7 @@ impl OwnedParameter {
         if bytes.len() > constants::MAX_PARAMETER_LEN {
             return Err(ExceedsParameterSize {
                 actual: bytes.len(),
-                max:    constants::MAX_PARAMETER_LEN,
+                max: constants::MAX_PARAMETER_LEN,
             });
         }
         Ok(Self(bytes))
@@ -1836,11 +2017,15 @@ impl OwnedParameter {
     /// fits the size limit. The caller is assumed to ensure this via
     /// external means.
     #[inline]
-    pub const fn new_unchecked(bytes: Vec<u8>) -> Self { Self(bytes) }
+    pub const fn new_unchecked(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
 
     /// Construct an empty parameter.
     #[inline]
-    pub const fn empty() -> Self { Self(Vec::new()) }
+    pub const fn empty() -> Self {
+        Self(Vec::new())
+    }
 }
 
 /// Check whether the given string is a valid contract entrypoint name.
@@ -1853,7 +2038,10 @@ pub fn is_valid_entrypoint_name(name: &str) -> Result<(), NewReceiveNameError> {
     if name.as_bytes().len() >= constants::MAX_FUNC_NAME_SIZE {
         return Err(NewReceiveNameError::TooLong);
     }
-    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation()) {
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation())
+    {
         return Err(NewReceiveNameError::InvalidCharacters);
     }
     Ok(())
@@ -1874,7 +2062,11 @@ impl fmt::Display for NewReceiveNameError {
                 f.write_str("Receive names have the format '<contract_name>.<func_name>'.")
             }
             TooLong => {
-                write!(f, "Receive names have a max length of {}", constants::MAX_FUNC_NAME_SIZE)
+                write!(
+                    f,
+                    "Receive names have a max length of {}",
+                    constants::MAX_FUNC_NAME_SIZE
+                )
             }
             InvalidCharacters => write!(
                 f,
@@ -1899,7 +2091,7 @@ pub type SlotTime = Timestamp;
 )]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ExchangeRate {
-    numerator:   u64,
+    numerator: u64,
     denominator: u64,
 }
 
@@ -1930,17 +2122,21 @@ impl ExchangeRate {
     }
 
     /// Get the numerator. This is never 0.
-    pub const fn numerator(&self) -> u64 { self.numerator }
+    pub const fn numerator(&self) -> u64 {
+        self.numerator
+    }
 
     /// Get the denominator. This is never 0.
-    pub const fn denominator(&self) -> u64 { self.denominator }
+    pub const fn denominator(&self) -> u64 {
+        self.denominator
+    }
 }
 
 /// The euro/NRG and microCCD/euro exchange rates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ExchangeRates {
     /// Euro per NRG exchange rate.
-    pub euro_per_energy:    ExchangeRate,
+    pub euro_per_energy: ExchangeRate,
     /// Micro CCD per Euro exchange rate.
     pub micro_ccd_per_euro: ExchangeRate,
 }
@@ -1991,9 +2187,10 @@ impl quickcheck::Arbitrary for ChainMetadata {
     }
 
     fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
-        Box::new(quickcheck::Arbitrary::shrink(&self.slot_time).map(|slot_time| ChainMetadata {
-            slot_time,
-        }))
+        Box::new(
+            quickcheck::Arbitrary::shrink(&self.slot_time)
+                .map(|slot_time| ChainMetadata { slot_time }),
+        )
     }
 }
 
@@ -2001,14 +2198,14 @@ impl quickcheck::Arbitrary for ChainMetadata {
 #[derive(Debug)]
 pub struct Cursor<T> {
     pub offset: usize,
-    pub data:   T,
+    pub data: T,
 }
 
 /// Adapter to chain together two readers.
 #[derive(Debug)]
 pub struct Chain<T, U> {
-    pub(crate) first:      T,
-    pub(crate) second:     U,
+    pub(crate) first: T,
+    pub(crate) second: U,
     pub(crate) done_first: bool,
 }
 
@@ -2058,7 +2255,9 @@ impl quickcheck::Arbitrary for AttributeTag {
     // supports more attributes and it is reasonable to generate all values
     // supported by the protocol to ensure that the tested code is robust with
     // respect to future additions.
-    fn arbitrary(g: &mut Gen) -> AttributeTag { AttributeTag(quickcheck::Arbitrary::arbitrary(g)) }
+    fn arbitrary(g: &mut Gen) -> AttributeTag {
+        AttributeTag(quickcheck::Arbitrary::arbitrary(g))
+    }
 
     fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
         Box::new(quickcheck::Arbitrary::shrink(&self.0).map(AttributeTag))
@@ -2080,9 +2279,7 @@ impl arbitrary::Arbitrary<'_> for AttributeValue {
         let mut inner: [u8; 32] = [0u8; 32];
         inner[0] = size;
         u.fill_buffer(&mut inner[1..=usize::from(size)])?;
-        Ok(AttributeValue {
-            inner,
-        })
+        Ok(AttributeValue { inner })
     }
 }
 
@@ -2096,30 +2293,32 @@ impl AttributeValue {
         let mut inner = [0u8; 32];
         inner[1..=data.len()].copy_from_slice(data);
         inner[0] = data.len() as u8;
-        Ok(Self {
-            inner,
-        })
+        Ok(Self { inner })
     }
 
     #[doc(hidden)]
     /// Create a new [`Self`] from a byte array. The first byte *must* tell
     /// the length of the attribute in the array.
     pub unsafe fn new_unchecked(inner: [u8; 32]) -> Self {
-        Self {
-            inner,
-        }
+        Self { inner }
     }
 
     /// Get the length of the attribute value.
-    pub fn len(&self) -> usize { self.inner[0].into() }
+    pub fn len(&self) -> usize {
+        self.inner[0].into()
+    }
 
     /// Whether the attribute value has zero length.
-    pub fn is_empty(&self) -> bool { self.len() == 0 }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 #[cfg(feature = "concordium-quickcheck")]
 fn gen_sized_vec<A: quickcheck::Arbitrary>(g: &mut Gen, size: usize) -> Vec<A> {
-    (0..size).map(|_| quickcheck::Arbitrary::arbitrary(g)).collect()
+    (0..size)
+        .map(|_| quickcheck::Arbitrary::arbitrary(g))
+        .collect()
 }
 
 #[cfg(feature = "concordium-quickcheck")]
@@ -2130,9 +2329,7 @@ impl quickcheck::Arbitrary for AttributeValue {
         let random_data = gen_sized_vec(g, size as usize);
         inner[1..=size as usize].copy_from_slice(&random_data);
         inner[0] = size;
-        AttributeValue {
-            inner,
-        }
+        AttributeValue { inner }
     }
 
     fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
@@ -2143,21 +2340,23 @@ impl quickcheck::Arbitrary for AttributeValue {
             let mut inner = [0u8; 32];
             inner[1..=v.len()].copy_from_slice(&v);
             inner[0] = v.len() as u8;
-            AttributeValue {
-                inner,
-            }
+            AttributeValue { inner }
         }))
     }
 }
 
 impl AsRef<[u8]> for AttributeValue {
-    fn as_ref(&self) -> &[u8] { &self.inner[1..=usize::from(self.inner[0])] }
+    fn as_ref(&self) -> &[u8] {
+        &self.inner[1..=usize::from(self.inner[0])]
+    }
 }
 
 impl convert::TryFrom<&[u8]> for AttributeValue {
     type Error = NewAttributeValueError;
 
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> { Self::new(value) }
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
 }
 
 /// Apply the given macro to each of the elements in the list
@@ -2182,11 +2381,15 @@ macro_rules! repeat_macro {
 macro_rules! from_bytearray_to_attribute_value {
     ($n:expr) => {
         impl From<[u8; $n]> for AttributeValue {
-            fn from(data: [u8; $n]) -> Self { AttributeValue::new(&data[..]).unwrap() }
+            fn from(data: [u8; $n]) -> Self {
+                AttributeValue::new(&data[..]).unwrap()
+            }
         }
 
         impl From<&[u8; $n]> for AttributeValue {
-            fn from(data: &[u8; $n]) -> Self { AttributeValue::new(&data[..]).unwrap() }
+            fn from(data: &[u8; $n]) -> Self {
+                AttributeValue::new(&data[..]).unwrap()
+            }
         }
     };
 }
@@ -2284,11 +2487,11 @@ pub struct Policy<Attributes> {
     /// they have created with accounts that users created on the chain.
     /// as a timestamp (which has millisecond granularity) in order to make it
     /// easier to compare with, e.g., `slot_time`.
-    pub created_at:        Timestamp,
+    pub created_at: Timestamp,
     /// Beginning of the month where the identity is __no longer valid__.
-    pub valid_to:          Timestamp,
+    pub valid_to: Timestamp,
     /// List of attributes, in ascending order of the tag.
-    pub items:             Attributes,
+    pub items: Attributes,
 }
 
 /// Generate a vector of random key-value pairs with no duplication
@@ -2366,9 +2569,9 @@ impl quickcheck::Arbitrary for OwnedPolicy {
                     valid_to.shrink().flat_map(move |vt| {
                         items.shrink().map(move |it| OwnedPolicy {
                             identity_provider: ip,
-                            created_at:        ca,
-                            valid_to:          vt,
-                            items:             it,
+                            created_at: ca,
+                            valid_to: vt,
+                            items: it,
                         })
                     })
                 })
@@ -2384,7 +2587,8 @@ impl quickcheck::Arbitrary for OwnedPolicy {
 impl<'de> SerdeDeserialize<'de> for OwnedPolicy {
     fn deserialize<D>(deserializer: D) -> Result<OwnedPolicy, D::Error>
     where
-        D: serde::Deserializer<'de>, {
+        D: serde::Deserializer<'de>,
+    {
         deserializer.deserialize_map(policy_json::OwnedPolicyVisitor)
     }
 }
@@ -2413,8 +2617,9 @@ mod policy_json {
                     return Err(serde::de::Error::custom("Incorrect YYYYMM format."));
                 }
                 let (s_year, s_month) = s.split_at(4);
-                let year =
-                    s_year.parse::<u16>().map_err(|_| serde::de::Error::custom("Invalid year."))?;
+                let year = s_year
+                    .parse::<u16>()
+                    .map_err(|_| serde::de::Error::custom("Invalid year."))?;
                 let month = s_month
                     .parse::<u8>()
                     .map_err(|_| serde::de::Error::custom("Invalid month."))?;
@@ -2576,7 +2781,9 @@ pub struct ParseError {}
 pub type ParseResult<A> = Result<A, ParseError>;
 
 impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str("Parsing failed") }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Parsing failed")
+    }
 }
 
 #[cfg(feature = "std")]
@@ -2611,11 +2818,15 @@ impl fmt::Display for WasmVersion {
 
 /// V0 is the default version of smart contracts.
 impl Default for WasmVersion {
-    fn default() -> Self { Self::V0 }
+    fn default() -> Self {
+        Self::V0
+    }
 }
 
 impl convert::From<WasmVersion> for u8 {
-    fn from(x: WasmVersion) -> Self { x as u8 }
+    fn from(x: WasmVersion) -> Self {
+        x as u8
+    }
 }
 
 #[cfg(feature = "derive-serde")]
@@ -2660,9 +2871,7 @@ mod serde_impl {
             match value {
                 0 => Ok(Self::V0),
                 1 => Ok(Self::V1),
-                unexpected_version => Err(U8WasmVersionConvertError {
-                    unexpected_version,
-                }),
+                unexpected_version => Err(U8WasmVersionConvertError { unexpected_version }),
             }
         }
     }
@@ -2692,13 +2901,15 @@ mod serde_impl {
             }
             let mantissa = decimal.mantissa();
             let scale = decimal.scale();
-            let denominator: u64 =
-                10u64.checked_pow(scale).ok_or(ExchangeRateConversionError::Unrepresentable)?;
-            let numerator: u64 =
-                mantissa.try_into().map_err(|_| ExchangeRateConversionError::Unrepresentable)?;
+            let denominator: u64 = 10u64
+                .checked_pow(scale)
+                .ok_or(ExchangeRateConversionError::Unrepresentable)?;
+            let numerator: u64 = mantissa
+                .try_into()
+                .map_err(|_| ExchangeRateConversionError::Unrepresentable)?;
             let g = num_integer::gcd(numerator, denominator);
             Ok(ExchangeRate {
-                numerator:   numerator / g,
+                numerator: numerator / g,
                 denominator: denominator / g,
             })
         }
@@ -2709,10 +2920,7 @@ mod serde_impl {
     pub enum ExchangeRateJSON {
         String(String),
         Num(f64),
-        Object {
-            numerator:   u64,
-            denominator: u64,
-        },
+        Object { numerator: u64, denominator: u64 },
     }
 
     impl convert::TryFrom<ExchangeRateJSON> for ExchangeRate {
@@ -2728,7 +2936,7 @@ mod serde_impl {
                 } => {
                     let g = num_integer::gcd(numerator, denominator);
                     Ok(ExchangeRate {
-                        numerator:   numerator / g,
+                        numerator: numerator / g,
                         denominator: denominator / g,
                     })
                 }
@@ -2784,7 +2992,11 @@ mod serde_impl {
 
     impl fmt::Display for AccountAddress {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{}", bs58::encode(&self.0).with_check_version(1).into_string())
+            write!(
+                f,
+                "{}",
+                bs58::encode(&self.0).with_check_version(1).into_string()
+            )
         }
     }
 
@@ -2822,7 +3034,8 @@ mod serde_impl {
 
                 fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
                 where
-                    E: serde::de::Error, {
+                    E: serde::de::Error,
+                {
                     let r = hex::decode(v).map_err(serde::de::Error::custom)?;
                     Ok(r)
                 }
@@ -2860,8 +3073,9 @@ mod serde_impl {
                 return Err(ContractAddressParseError::MissingEndBracket);
             }
             let trimmed = &s[1..s.len() - 1];
-            let (index, sub_index) =
-                trimmed.split_once(',').ok_or(ContractAddressParseError::NoComma)?;
+            let (index, sub_index) = trimmed
+                .split_once(',')
+                .ok_or(ContractAddressParseError::NoComma)?;
             let index =
                 u64::from_str(index).map_err(ContractAddressParseError::ParseIndexIntError)?;
             let sub_index = u64::from_str(sub_index)
@@ -2937,7 +3151,8 @@ mod serde_impl {
         }
 
         fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-            v.parse::<AccountAddress>().map_err(|_| de::Error::custom("Wrong Base58 version."))
+            v.parse::<AccountAddress>()
+                .map_err(|_| de::Error::custom("Wrong Base58 version."))
         }
     }
 
@@ -2955,8 +3170,10 @@ mod serde_impl {
             for _ in 0..1000 {
                 rng.fill(&mut address_bytes);
                 let address = AccountAddress(address_bytes);
-                let parsed: AccountAddress =
-                    address.to_string().parse().expect("Failed to parse address string.");
+                let parsed: AccountAddress = address
+                    .to_string()
+                    .parse()
+                    .expect("Failed to parse address string.");
                 assert_eq!(
                     parsed, address,
                     "Parsed account address differs from the expected address."
@@ -2972,7 +3189,11 @@ mod serde_impl {
                 let micro_ccd = Amount::from_micro_ccd(rng.gen::<u64>());
                 let s = micro_ccd.to_string();
                 let parsed = s.parse::<Amount>();
-                assert_eq!(Ok(micro_ccd), parsed, "Parsed amount differs from expected amount.");
+                assert_eq!(
+                    Ok(micro_ccd),
+                    parsed,
+                    "Parsed amount differs from expected amount."
+                );
             }
 
             assert_eq!(
@@ -3030,7 +3251,7 @@ mod serde_impl {
         #[test]
         fn test_exchange_rate_json() {
             let data = ExchangeRate {
-                numerator:   1,
+                numerator: 1,
                 denominator: 100,
             };
             assert_eq!(
@@ -3044,12 +3265,16 @@ mod serde_impl {
                 "Exchange rate: case 2"
             );
             let data2 = ExchangeRate {
-                numerator:   10,
+                numerator: 10,
                 denominator: 1,
             };
-            assert_eq!(data2, serde_json::from_str("10").unwrap(), "Exchange rate: case 3");
+            assert_eq!(
+                data2,
+                serde_json::from_str("10").unwrap(),
+                "Exchange rate: case 3"
+            );
             let data3 = ExchangeRate {
-                numerator:   17,
+                numerator: 17,
                 denominator: 39,
             };
             assert_eq!(
@@ -3135,9 +3360,7 @@ mod test {
         let mut sig_map = BTreeMap::new();
         sig_map.insert(0u8, signature);
 
-        let credential_signature = CredentialSignatures {
-            sigs: sig_map,
-        };
+        let credential_signature = CredentialSignatures { sigs: sig_map };
 
         // Serialize to JSON
         let serialized = serde_json::to_value(&credential_signature).unwrap();
@@ -3162,9 +3385,7 @@ mod test {
         let mut sig_map = BTreeMap::new();
         sig_map.insert(0u8, signature);
 
-        let credential_signature = CredentialSignatures {
-            sigs: sig_map,
-        };
+        let credential_signature = CredentialSignatures { sigs: sig_map };
 
         let mut sig_map_outer = BTreeMap::new();
         sig_map_outer.insert(0u8, credential_signature);
@@ -3415,7 +3636,10 @@ mod test {
     #[test]
     fn test_getters_for_owned_receive_name() {
         let receive_name = OwnedReceiveName::new("contract.receive".to_string()).unwrap();
-        assert_eq!(receive_name.as_receive_name().get_chain_name(), "contract.receive");
+        assert_eq!(
+            receive_name.as_receive_name().get_chain_name(),
+            "contract.receive"
+        );
         assert_eq!(receive_name.as_receive_name().contract_name(), "contract");
         assert_eq!(
             receive_name.as_receive_name().entrypoint_name(),

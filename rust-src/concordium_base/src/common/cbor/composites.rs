@@ -10,11 +10,17 @@ const DECIMAL_FRACTION_TAG: u64 = 4;
 pub struct DecimalFraction(i64, i64);
 
 impl DecimalFraction {
-    pub fn new(exponent: i64, mantissa: i64) -> Self { Self(exponent, mantissa) }
+    pub fn new(exponent: i64, mantissa: i64) -> Self {
+        Self(exponent, mantissa)
+    }
 
-    pub fn exponent(self) -> i64 { self.0 }
+    pub fn exponent(self) -> i64 {
+        self.0
+    }
 
-    pub fn mantissa(self) -> i64 { self.1 }
+    pub fn mantissa(self) -> i64 {
+        self.1
+    }
 }
 
 /// Unsigned decimal fraction consisting of exponent `e` and non-negative mantissa `m`, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-decimal-fractions-and-bigfl>.
@@ -24,11 +30,17 @@ impl DecimalFraction {
 pub struct UnsignedDecimalFraction(i64, u64);
 
 impl UnsignedDecimalFraction {
-    pub fn new(exponent: i64, mantissa: u64) -> Self { Self(exponent, mantissa) }
+    pub fn new(exponent: i64, mantissa: u64) -> Self {
+        Self(exponent, mantissa)
+    }
 
-    pub fn exponent(self) -> i64 { self.0 }
+    pub fn exponent(self) -> i64 {
+        self.0
+    }
 
-    pub fn mantissa(self) -> u64 { self.1 }
+    pub fn mantissa(self) -> u64 {
+        self.1
+    }
 }
 
 #[cfg(test)]
@@ -82,5 +94,14 @@ mod test {
         assert_eq!(hex::encode(&cbor), "c482221bffffffffffffffff");
         let value_decoded: UnsignedDecimalFraction = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
+    }
+
+    /// Tests decoding tag 2 bignums into decimal fraction
+    #[test]
+    fn test_unsigned_decimal_fraction_bignum() {
+        let cbor = hex::decode("c48203C24105").unwrap();
+        let value_decoded: UnsignedDecimalFraction = cbor_decode(&cbor).unwrap();
+        let expected_value = UnsignedDecimalFraction::new(3, 5);
+        assert_eq!(value_decoded, expected_value);
     }
 }

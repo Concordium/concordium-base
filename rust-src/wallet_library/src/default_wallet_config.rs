@@ -6,13 +6,19 @@ use concordium_base::id::{
 use std::{collections::BTreeMap, marker::PhantomData};
 
 /// Check whether a string is ISO 8601 compliant on the form YYYYMMDD
-pub fn is_iso8601(date: &str) -> bool { chrono::NaiveDate::parse_from_str(date, "%Y%m%d").is_ok() }
+pub fn is_iso8601(date: &str) -> bool {
+    chrono::NaiveDate::parse_from_str(date, "%Y%m%d").is_ok()
+}
 
 /// Check whether a string is ISO 3166-1 Alpha-2 compliant
-pub fn is_iso3166_alpha_2(code: &str) -> bool { rust_iso3166::from_alpha2(code).is_some() }
+pub fn is_iso3166_alpha_2(code: &str) -> bool {
+    rust_iso3166::from_alpha2(code).is_some()
+}
 
 /// Check whether a string is ISO 3166-2 compliant
-pub fn is_iso3166_2(code: &str) -> bool { rust_iso3166::iso3166_2::from_code(code).is_some() }
+pub fn is_iso3166_2(code: &str) -> bool {
+    rust_iso3166::iso3166_2::from_code(code).is_some()
+}
 
 /// The attribute check for identity statement used by the Concordium wallet
 /// Checks that countryOfResidence and nationality tags are ISO 3166-1 Alpha-2
@@ -76,11 +82,11 @@ pub const ALLOWED_IDENTITY_SET_TAGS: [AttributeTag; 5] = [
 pub fn default_wallet_config() -> WalletConfig<'static, constants::ArCurve, AttributeKind> {
     WalletConfig {
         identity_rules: Some(WalletConfigRules::<_, AttributeTag, _> {
-            range_tags:      ALLOWED_IDENTITY_RANGE_TAGS.into(),
-            set_tags:        ALLOWED_IDENTITY_SET_TAGS.into(),
+            range_tags: ALLOWED_IDENTITY_RANGE_TAGS.into(),
+            set_tags: ALLOWED_IDENTITY_SET_TAGS.into(),
             attribute_check: Box::new(default_attribute_rules),
-            _marker:         PhantomData,
+            _marker: PhantomData,
         }),
-        web3_rules:     BTreeMap::new(),
+        web3_rules: BTreeMap::new(),
     }
 }

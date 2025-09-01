@@ -73,9 +73,13 @@ impl CostConfiguration for CostConfigurationV0 {
         cost_v0::get_cost(instr, labels, module)
     }
 
-    fn invoke_after(&self, num_locals: u32) -> Energy { cost_v0::invoke_after(num_locals) }
+    fn invoke_after(&self, num_locals: u32) -> Energy {
+        cost_v0::invoke_after(num_locals)
+    }
 
-    fn branch(&self, label_arity: usize) -> Energy { cost_v0::branch(label_arity) }
+    fn branch(&self, label_arity: usize) -> Energy {
+        cost_v0::branch(label_arity)
+    }
 }
 
 pub(crate) mod cost_v0 {
@@ -89,14 +93,20 @@ pub(crate) mod cost_v0 {
     pub const JUMP: Energy = 8;
 
     /// Read n elements from the stack.
-    pub const fn read_stack(n: u32) -> Energy { n as Energy }
+    pub const fn read_stack(n: u32) -> Energy {
+        n as Energy
+    }
 
     /// Write n elements to the stack.
-    pub const fn write_stack(n: u32) -> Energy { n as Energy }
+    pub const fn write_stack(n: u32) -> Energy {
+        n as Energy
+    }
 
     /// Copy n elements from one place in the stack to another.
     /// Used by jumps and function returns.
-    pub const fn copy_stack(n: usize) -> Energy { n as Energy }
+    pub const fn copy_stack(n: usize) -> Energy {
+        n as Energy
+    }
 
     /// Cost of a boolean test.
     pub const TEST: Energy = 2;
@@ -169,7 +179,9 @@ pub(crate) mod cost_v0 {
 
     /// Cost of a branch with table (switch statement). This involves bounds
     /// checking on the array of labels, and then a normal branch.
-    pub const fn br_table(label_arity: usize) -> Energy { BOUNDS + branch(label_arity) }
+    pub const fn br_table(label_arity: usize) -> Energy {
+        BOUNDS + branch(label_arity)
+    }
 
     /// Cost for invoking a function __before__ the entering the function.
     /// This excludes the cost incurred by the number of locals the function
@@ -189,7 +201,9 @@ pub(crate) mod cost_v0 {
 
     /// Cost of a dynamic type check. The argument is the number of types
     /// i.e., parameters + results that need to be checked.
-    pub const fn type_check(len: usize) -> Energy { len as Energy }
+    pub const fn type_check(len: usize) -> Energy {
+        len as Energy
+    }
 
     pub(crate) fn get_cost(
         instr: &OpCode,
@@ -203,27 +217,20 @@ pub(crate) mod cost_v0 {
             Unreachable => 0,
             Block(_) => 0,
             Loop(_) => 0,
-            If {
-                ..
-            } => IF_STATEMENT,
+            If { .. } => IF_STATEMENT,
             Br(idx) => branch(lookup_label(labels, *idx)?),
             BrIf(_) => BR_IF,
-            BrTable {
-                default,
-                ..
-            } => br_table(lookup_label(labels, *default)?),
+            BrTable { default, .. } => br_table(lookup_label(labels, *default)?),
             Return => {
                 // Return has the same cost as Br to the outermost branch.
                 let return_ty = labels
                     .first()
                     .ok_or_else(|| anyhow!("Invariant violation, labels should not be empty."))?;
-                branch(
-                    if *return_ty == BlockType::EmptyType {
-                        0
-                    } else {
-                        1
-                    },
-                )
+                branch(if *return_ty == BlockType::EmptyType {
+                    0
+                } else {
+                    1
+                })
             }
             TickEnergy(_) => 0,
             Call(idx) => {
@@ -360,7 +367,9 @@ pub(crate) mod cost_v0 {
     /// Cost of an unconditional jump with the given label arity.
     /// The label arity for us is either 0 or 1, since we do not support
     /// multiple return values.
-    pub(crate) const fn branch(label_arity: usize) -> Energy { JUMP + copy_stack(label_arity) }
+    pub(crate) const fn branch(label_arity: usize) -> Energy {
+        JUMP + copy_stack(label_arity)
+    }
 }
 
 /// Cost configuration for the initial version of the execution engine used
@@ -378,9 +387,13 @@ impl CostConfiguration for CostConfigurationV1 {
         cost_v1::get_cost(instr, labels, module)
     }
 
-    fn invoke_after(&self, num_locals: u32) -> Energy { cost_v1::invoke_after(num_locals) }
+    fn invoke_after(&self, num_locals: u32) -> Energy {
+        cost_v1::invoke_after(num_locals)
+    }
 
-    fn branch(&self, _label_arity: usize) -> Energy { cost_v1::JUMP }
+    fn branch(&self, _label_arity: usize) -> Energy {
+        cost_v1::JUMP
+    }
 }
 
 /// Helpers related to cost assignment for [`CostConfigurationV1`].
@@ -395,14 +408,20 @@ pub(crate) mod cost_v1 {
     pub const JUMP: Energy = 2;
 
     /// Read a value from either a local, dynamic, or constant space.
-    pub const fn read_source(n: u32) -> Energy { n as Energy }
+    pub const fn read_source(n: u32) -> Energy {
+        n as Energy
+    }
 
     /// Write n elements to some location.
-    pub const fn write_result(n: u32) -> Energy { n as Energy }
+    pub const fn write_result(n: u32) -> Energy {
+        n as Energy
+    }
 
     /// Copy n elements from one place in the stack to another.
     /// Used by jumps and function returns.
-    pub const fn copy_stack(n: usize) -> Energy { n as Energy }
+    pub const fn copy_stack(n: usize) -> Energy {
+        n as Energy
+    }
 
     /// Cost of a boolean test.
     pub const TEST: Energy = 2;
@@ -475,7 +494,9 @@ pub(crate) mod cost_v1 {
 
     /// Cost of a branch with table (switch statement). This involves bounds
     /// checking on the array of labels, and then a normal branch.
-    pub const fn br_table(_label_arity: usize) -> Energy { BOUNDS + 3 + JUMP }
+    pub const fn br_table(_label_arity: usize) -> Energy {
+        BOUNDS + 3 + JUMP
+    }
 
     /// Cost for invoking a function __before__ the entering the function.
     /// This excludes the cost incurred by the number of locals the function
@@ -495,7 +516,9 @@ pub(crate) mod cost_v1 {
 
     /// Cost of a dynamic type check. The argument is the number of types
     /// i.e., parameters + results that need to be checked.
-    pub const fn type_check(len: usize) -> Energy { (len / 10) as Energy }
+    pub const fn type_check(len: usize) -> Energy {
+        (len / 10) as Energy
+    }
 
     pub(crate) fn get_cost(
         instr: &OpCode,
@@ -509,15 +532,10 @@ pub(crate) mod cost_v1 {
             Unreachable => 0,
             Block(_) => 0,
             Loop(_) => 0,
-            If {
-                ..
-            } => IF_STATEMENT,
+            If { .. } => IF_STATEMENT,
             Br(_idx) => JUMP,
             BrIf(_) => BR_IF,
-            BrTable {
-                default,
-                ..
-            } => br_table(lookup_label(labels, *default)?),
+            BrTable { default, .. } => br_table(lookup_label(labels, *default)?),
             Return => JUMP,
             TickEnergy(_) => 0,
             Call(idx) => {
@@ -645,22 +663,24 @@ pub(crate) mod cost_v1 {
     /// be charged after invocation). The number of locals is only
     /// the number of declared locals, not including function
     /// parameters.
-    pub(crate) const fn invoke_after(num_locals: u32) -> Energy { (num_locals / 16) as Energy }
+    pub(crate) const fn invoke_after(num_locals: u32) -> Energy {
+        (num_locals / 16) as Energy
+    }
 }
 
 ///Metadata needed for transformation.
 struct InstrSeqTransformer<'a, CostConfig, C> {
-    config:               &'a CostConfig,
+    config: &'a CostConfig,
     /// Reference to the original module to get the right context.
-    module:               &'a C,
+    module: &'a C,
     /// Current label stack (in the form of the labels' arities).
     /// The last item in the vector is the innermost block label.
-    labels:               Vec<BlockType>,
+    labels: Vec<BlockType>,
     /// The transformed sequence with accounting instructions inserded.
-    new_seq:              InstrSeq,
+    new_seq: InstrSeq,
     /// Accumulator for energy to be charged for the pending (and currently to
     /// be added) instructions.
-    energy:               Energy,
+    energy: Energy,
     /// Pending instructions that are going to be inserted after the energy
     /// charging instruction. This is a temporary cache.
     pending_instructions: InstrSeq,
@@ -682,7 +702,9 @@ impl<'b, CostConfig: CostConfiguration, C: HasTransformationContext>
         Ok(())
     }
 
-    fn add_energy(&mut self, e: Energy) { self.energy += e; }
+    fn add_energy(&mut self, e: Energy) {
+        self.energy += e;
+    }
 
     /// Account for all of the pending energy and drain the pending OpCodes to
     /// the new output sequence.
@@ -709,10 +731,14 @@ impl<'b, CostConfig: CostConfiguration, C: HasTransformationContext>
     }
 
     /// Add the OpCode to the pending sequence.
-    fn add_to_pending(&mut self, instr: &OpCode) { self.pending_instructions.push(instr.clone()); }
+    fn add_to_pending(&mut self, instr: &OpCode) {
+        self.pending_instructions.push(instr.clone());
+    }
 
     /// Add the OpCode to the output sequence.
-    fn add_to_new(&mut self, instr: &OpCode) { self.new_seq.push(instr.clone()); }
+    fn add_to_new(&mut self, instr: &OpCode) {
+        self.new_seq.push(instr.clone());
+    }
 
     /// Injects accounting instructions into a sequence of instructions,
     /// returning the energy to charge for the first instructions that will
@@ -750,9 +776,7 @@ impl<'b, CostConfig: CostConfiguration, C: HasTransformationContext>
                     self.labels.push(BlockType::EmptyType);
                     self.add_to_new(instr);
                 }
-                If {
-                    ty,
-                } => {
+                If { ty } => {
                     // Since there are two branches we need to charge for all the instructions
                     // before we enter either of them, and start afresh.
                     self.account_energy_push_pending()?;
@@ -880,9 +904,7 @@ impl<'b, CostConfig: CostConfiguration, C: HasTransformationContext>
                         ),
                     }
                 }
-                BrTable {
-                    ..
-                } => self.add_instr_account_energy(instr)?,
+                BrTable { .. } => self.add_instr_account_energy(instr)?,
                 // We need to change which function we call since we've inserted NUM_ADDED_FUNCTIONS
                 // functions at the beginning of the module, for cost accounting.
                 Call(idx) => {
@@ -922,22 +944,15 @@ impl HasTransformationContext for Module {
     fn get_type_len(&self, idx: TypeIndex) -> TransformationResult<(usize, usize)> {
         self.ty
             .get(idx)
-            .map(|ty| {
-                (
-                    ty.parameters.len(),
-                    if ty.result.is_some() {
-                        1
-                    } else {
-                        0
-                    },
-                )
-            })
+            .map(|ty| (ty.parameters.len(), if ty.result.is_some() { 1 } else { 0 }))
             .ok_or_else(|| anyhow!("Type with index {} not found.", idx))
     }
 
     fn get_func_type_len(&self, idx: FuncIndex) -> TransformationResult<(usize, usize)> {
-        let ty_idx =
-            self.func.get(idx).ok_or_else(|| anyhow!("Function with index {} not found.", idx))?;
+        let ty_idx = self
+            .func
+            .get(idx)
+            .ok_or_else(|| anyhow!("Function with index {} not found.", idx))?;
         self.get_type_len(ty_idx)
     }
 }
@@ -982,25 +997,16 @@ pub(crate) fn inject_accounting<CostConfig: CostConfiguration, C: HasTransformat
 
 /// A context derived from a Wasm module.
 struct ModuleContext<'a> {
-    types:    &'a [Rc<FunctionType>],
+    types: &'a [Rc<FunctionType>],
     imported: &'a [Import],
-    funcs:    &'a [TypeIndex],
+    funcs: &'a [TypeIndex],
 }
 
 impl<'a> HasTransformationContext for ModuleContext<'a> {
     fn get_type_len(&self, idx: TypeIndex) -> TransformationResult<(usize, usize)> {
         self.types
             .get(idx as usize)
-            .map(|ty| {
-                (
-                    ty.parameters.len(),
-                    if ty.result.is_some() {
-                        1
-                    } else {
-                        0
-                    },
-                )
-            })
+            .map(|ty| (ty.parameters.len(), if ty.result.is_some() { 1 } else { 0 }))
             .ok_or_else(|| anyhow!("Type with index {} not found.", idx))
     }
 
@@ -1009,9 +1015,7 @@ impl<'a> HasTransformationContext for ModuleContext<'a> {
             .imported
             .get(idx as usize)
             .map(|i| match i.description {
-                ImportDescription::Func {
-                    type_idx,
-                } => type_idx,
+                ImportDescription::Func { type_idx } => type_idx,
             })
             .or_else(|| self.funcs.get(idx as usize - self.imported.len()).copied())
             .ok_or_else(|| anyhow!("Function with index {} not found.", idx))?;
@@ -1029,8 +1033,8 @@ impl Module {
             }
         }
         let ctx = ModuleContext {
-            types:    &self.ty.types,
-            funcs:    &self.func.types,
+            types: &self.ty.types,
+            funcs: &self.func.types,
             imported: &self.import.imports,
         };
         for code in self.code.impls.iter_mut() {
@@ -1045,7 +1049,7 @@ impl Module {
         // account memory alloc
         new_types.push(Rc::new(FunctionType {
             parameters: vec![ValueType::I32],
-            result:     Some(ValueType::I32),
+            result: Some(ValueType::I32),
         }));
         self.ty.types = new_types;
 
@@ -1053,10 +1057,10 @@ impl Module {
         let mut new_imports =
             Vec::with_capacity(NUM_ADDED_FUNCTIONS as usize + self.import.imports.len());
         new_imports.push(Import {
-            mod_name:    Name {
+            mod_name: Name {
                 name: "concordium_metering".to_owned(),
             },
-            item_name:   Name {
+            item_name: Name {
                 name: "account_memory".to_owned(),
             },
             description: ImportDescription::Func {
@@ -1066,10 +1070,7 @@ impl Module {
         new_imports.append(&mut self.import.imports);
         self.import.imports = new_imports;
         for export in self.export.exports.iter_mut() {
-            if let ExportDescription::Func {
-                ref mut index,
-            } = export.description
-            {
+            if let ExportDescription::Func { ref mut index } = export.description {
                 *index += NUM_ADDED_FUNCTIONS;
             }
         }

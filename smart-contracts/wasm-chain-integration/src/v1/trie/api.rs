@@ -47,7 +47,9 @@ pub enum PersistentState {
 }
 
 impl From<CachedRef<Hashed<Node>>> for PersistentState {
-    fn from(root: CachedRef<Hashed<Node>>) -> Self { Self::Root(root) }
+    fn from(root: CachedRef<Hashed<Node>>) -> Self {
+        Self::Root(root)
+    }
 }
 
 /// Load the persistent state. This only loads the root of the tree. In order to
@@ -60,9 +62,7 @@ impl Loadable for PersistentState {
         match source.read_u8()? {
             0 => Ok(Self::Empty),
             1 => Ok(Self::Root(CachedRef::load(loader, source)?)),
-            tag => Err(LoadError::IncorrectTag {
-                tag,
-            }),
+            tag => Err(LoadError::IncorrectTag { tag }),
         }
     }
 }
@@ -153,9 +153,7 @@ impl PersistentState {
             0 => Ok(Self::Empty),
             1 => {
                 let node = Hashed::<Node>::deserialize(source)?;
-                Ok(PersistentState::Root(CachedRef::Memory {
-                    value: node,
-                }))
+                Ok(PersistentState::Root(CachedRef::Memory { value: node }))
             }
             tag => anyhow::bail!("Invalid persistent tree tag: {}", tag),
         }
@@ -216,12 +214,11 @@ impl PersistentState {
     /// The resulting state lies entirely in memory and so can be used with any
     /// [`Loader`].
     pub fn from_iterator<'a, I: IntoIterator<Item = (&'a [u8], Vec<u8>)>>(iter: I) -> Self {
-        let mut loader = Loader {
-            inner: Vec::new(),
-        };
+        let mut loader = Loader { inner: Vec::new() };
         let mut trie = MutableTrie::empty();
         for (k, v) in iter {
-            trie.insert(&mut loader, k, v).expect("Tree is fresh, so insert cannot fail.");
+            trie.insert(&mut loader, k, v)
+                .expect("Tree is fresh, so insert cannot fail.");
         }
         match trie.freeze(&mut loader, &mut EmptyCollector) {
             Some(root) => Self::Root(root),
@@ -241,15 +238,15 @@ impl PersistentState {
     /// an error this function returns early with the given error.
     pub async fn try_from_stream<E, S>(mut s: S) -> Result<Self, E>
     where
-        S: futures::stream::Stream<Item = Result<(Vec<u8>, Vec<u8>), E>> + Unpin, {
+        S: futures::stream::Stream<Item = Result<(Vec<u8>, Vec<u8>), E>> + Unpin,
+    {
         use futures::StreamExt;
-        let mut loader = Loader {
-            inner: Vec::new(),
-        };
+        let mut loader = Loader { inner: Vec::new() };
         let mut trie = MutableTrie::empty();
         while let Some(item) = s.next().await {
             let (k, v) = item?;
-            trie.insert(&mut loader, &k, v).expect("Tree is fresh, so insert cannot fail.");
+            trie.insert(&mut loader, &k, v)
+                .expect("Tree is fresh, so insert cannot fail.");
         }
         Ok(match trie.freeze(&mut loader, &mut EmptyCollector) {
             Some(root) => Self::Root(root),
@@ -267,7 +264,8 @@ impl PersistentState {
     /// [`try_from_stream`](Self::try_from_stream) when it is applicable.
     pub async fn from_stream<S>(s: S) -> Self
     where
-        S: futures::stream::Stream<Item = (Vec<u8>, Vec<u8>)> + Unpin, {
+        S: futures::stream::Stream<Item = (Vec<u8>, Vec<u8>)> + Unpin,
+    {
         use futures::StreamExt;
         enum Empty {}
         match Self::try_from_stream::<Empty, _>(s.map(Result::Ok)).await {
@@ -279,7 +277,7 @@ impl PersistentState {
     /// Generate a fresh mutable state from the persistent state.
     pub fn thaw(&self) -> MutableState {
         MutableState {
-            inner:      None,
+            inner: None,
             persistent: self.clone(),
         }
     }
@@ -293,7 +291,9 @@ impl PersistentState {
             PersistentState::Empty => {
                 // hash of the node starts with either a 0 or 1 byte. This makes it distinct,
                 // but is otherwise an arbitrary choice.
-                super::Hash::from(<[u8; 32]>::from(sha2::Sha256::digest(b"empty contract state")))
+                super::Hash::from(<[u8; 32]>::from(sha2::Sha256::digest(
+                    b"empty contract state",
+                )))
             }
             PersistentState::Root(root) => root.hash(loader),
         }
@@ -322,9 +322,9 @@ impl PersistentState {
 /// Iterator over all (key, value) pairs stored in the persistent state.
 /// Values are returned in increasing order of keys.
 pub struct PersistentStateIterator<'a, L> {
-    state:    MutableTrie,
+    state: MutableTrie,
     iterator: Option<low_level::Iterator>,
-    loader:   &'a mut L,
+    loader: &'a mut L,
 }
 
 impl<'a, L: BackingStoreLoad> Iterator for PersistentStateIterator<'a, L> {
@@ -336,7 +336,8 @@ impl<'a, L: BackingStoreLoad> Iterator for PersistentStateIterator<'a, L> {
             Ok(v) => {
                 let entry = v?;
                 let key = iterator.get_key();
-                self.state.with_entry(entry, self.loader, |value| (key.to_vec(), value.to_vec()))
+                self.state
+                    .with_entry(entry, self.loader, |value| (key.to_vec(), value.to_vec()))
             }
             Err(empty) => match empty {},
         }
@@ -373,7 +374,7 @@ pub struct MutableStateInner {
     /// representation of generations is and the [`MutableTrie`] is quite
     /// different, and more efficient than the representation of the
     /// [`PersistentState`].
-    root:  u32,
+    root: u32,
     /// The mutable trie itself. The root is an index in the array of generation
     /// roots.
     /// The idea is that the mutex is acquired at the start of execution of the
@@ -391,7 +392,9 @@ impl MutableStateInner {
     #[inline(always)]
     /// Get exclusive access to the state trie. The state trie must be dropped
     /// to release the lock.
-    pub fn lock(&self) -> StateTrie { self.state.lock().expect("Another thread panicked.") }
+    pub fn lock(&self) -> StateTrie {
+        self.state.lock().expect("Another thread panicked.")
+    }
 }
 
 /// A lock guard derived from [`MutableStateInner`]. Only one can exist at the
@@ -403,7 +406,7 @@ pub type StateTrie<'a> = MutexGuard<'a, MutableTrie>;
 /// execution.
 #[derive(Debug, Clone)]
 pub struct MutableState {
-    inner:      Option<MutableStateInner>,
+    inner: Option<MutableStateInner>,
     /// The original state this mutable state is derived from, or after
     /// freezing, the new persistent state.
     persistent: PersistentState,
@@ -414,7 +417,7 @@ impl MutableState {
     /// executing in.
     pub fn initial_state() -> Self {
         Self {
-            inner:      None,
+            inner: None,
             persistent: PersistentState::Empty,
         }
     }
@@ -432,21 +435,17 @@ impl MutableState {
             match &self.persistent {
                 PersistentState::Empty => {
                     let state = Arc::new(Mutex::new(MutableTrie::empty()));
-                    self.inner = Some(MutableStateInner {
-                        root,
-                        state,
-                    });
+                    self.inner = Some(MutableStateInner { root, state });
                 }
                 PersistentState::Root(root_node) => {
                     let state = Arc::new(Mutex::new(root_node.make_mutable(0, loader)));
-                    self.inner = Some(MutableStateInner {
-                        root,
-                        state,
-                    });
+                    self.inner = Some(MutableStateInner { root, state });
                 }
             }
         }
-        self.inner.as_mut().expect("This cannot fail since we just set self.inner to Some.")
+        self.inner
+            .as_mut()
+            .expect("This cannot fail since we just set self.inner to Some.")
     }
 
     /// Get a fresh mutable state generation. Modifications on this generation
@@ -462,8 +461,8 @@ impl MutableState {
             // and start a new one.
             trie.new_generation();
             Self {
-                inner:      Some(MutableStateInner {
-                    root:  inner.root + 1,
+                inner: Some(MutableStateInner {
+                    root: inner.root + 1,
                     state: inner.state.clone(),
                 }),
                 persistent: self.persistent.clone(),
@@ -473,17 +472,11 @@ impl MutableState {
             match &self.persistent {
                 PersistentState::Empty => {
                     let state = Arc::new(Mutex::new(MutableTrie::empty()));
-                    self.inner = Some(MutableStateInner {
-                        root,
-                        state,
-                    });
+                    self.inner = Some(MutableStateInner { root, state });
                 }
                 PersistentState::Root(root_node) => {
                     let state = Arc::new(Mutex::new(root_node.make_mutable(0, loader)));
-                    self.inner = Some(MutableStateInner {
-                        root,
-                        state,
-                    });
+                    self.inner = Some(MutableStateInner { root, state });
                 }
             }
             self.clone()

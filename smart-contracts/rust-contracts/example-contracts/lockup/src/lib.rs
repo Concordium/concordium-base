@@ -71,15 +71,18 @@ fn contract_init(ctx: &impl HasInitContext<()>, amount: Amount) -> InitResult<St
     ensure!(!init_params.account_holders.is_empty()); // No account holders given, but we need at least one.
 
     // Catch overflow when computing the amount to vest using checked summation
-    let total_to_vest: Amount =
-        init_params.vesting_schedule.iter().map(|(_, how_much)| *how_much).sum();
+    let total_to_vest: Amount = init_params
+        .vesting_schedule
+        .iter()
+        .map(|(_, how_much)| *how_much)
+        .sum();
     ensure_eq!(total_to_vest, amount); // Amount given does not match what is required by the vesting schedule.
 
     let state = State {
-        account_holders:              init_params.account_holders,
+        account_holders: init_params.account_holders,
         future_vesting_veto_accounts: init_params.future_vesting_veto_accounts,
-        available_balance:            Amount::zero(),
-        remaining_vesting_schedule:   init_params.vesting_schedule,
+        available_balance: Amount::zero(),
+        remaining_vesting_schedule: init_params.vesting_schedule,
     };
     Ok(state)
 }
@@ -103,7 +106,10 @@ fn contract_receive<A: HasActions>(
 
     match msg {
         Message::WithdrawFunds(withdrawal_amount) => {
-            ensure!(state.account_holders.iter().any(|&account_holder| sender == account_holder)); // Only account holders can make a withdrawal.
+            ensure!(state
+                .account_holders
+                .iter()
+                .any(|&account_holder| sender == account_holder)); // Only account holders can make a withdrawal.
             ensure!(state.available_balance >= withdrawal_amount); // Not enough available funds to make withdrawal.
 
             // We have checked that the available balance is high enough, so underflow
@@ -121,8 +127,11 @@ fn contract_receive<A: HasActions>(
             // Should not overflow since the sum is positive but less than
             // or equal to the checked sum of the initial vesting schedule
             // computed at init time
-            let cancelled_vesting_amount: Amount =
-                state.remaining_vesting_schedule.iter().map(|(_, how_much)| *how_much).sum();
+            let cancelled_vesting_amount: Amount = state
+                .remaining_vesting_schedule
+                .iter()
+                .map(|(_, how_much)| *how_much)
+                .sum();
             state.remaining_vesting_schedule = vec![];
 
             // Return unvested funds to the contract owner
@@ -133,8 +142,10 @@ fn contract_receive<A: HasActions>(
 
 // Updates the available balance with any funds which have now vested
 fn make_vested_funds_available(time_now: Timestamp, state: &mut State) {
-    let (newly_vested, not_vested_yet): (Vec<VestingEvent>, Vec<VestingEvent>) =
-        state.remaining_vesting_schedule.iter().partition(|(when, _how_much)| when < &time_now);
+    let (newly_vested, not_vested_yet): (Vec<VestingEvent>, Vec<VestingEvent>) = state
+        .remaining_vesting_schedule
+        .iter()
+        .partition(|(when, _how_much)| when < &time_now);
     let newly_vested_amount: Amount = newly_vested.iter().map(|(_, how_much)| *how_much).sum();
 
     state.remaining_vesting_schedule = not_vested_yet;

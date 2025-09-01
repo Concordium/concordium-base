@@ -34,11 +34,10 @@ static CONTRACT_BYTES_HOST_FUNCTIONS: &[u8] = include_bytes!("./code/v1/host-fun
 /// Construct the initial state for the benchmark from given key-value pairs.
 fn mk_state<A: AsRef<[u8]>, B: Copy>(inputs: &[(A, B)]) -> (MutableState, Loader<Vec<u8>>)
 where
-    Vec<u8>: From<B>, {
+    Vec<u8>: From<B>,
+{
     let mut node = MutableTrie::empty();
-    let mut loader = Loader {
-        inner: Vec::new(),
-    };
+    let mut loader = Loader { inner: Vec::new() };
     for (k, v) in inputs {
         node.insert(&mut loader, k.as_ref(), trie::Value::from(*v))
             .expect("No locks, so cannot fail.");
@@ -72,12 +71,14 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             ValidationConfig::V1,
             &ConcordiumAllowedImports {
                 support_upgrade: true,
-                enable_debug:    false,
+                enable_debug: false,
             },
             &skeleton,
         )
         .unwrap();
-        module.inject_metering(CostConfigurationV1).expect("Metering injection should succeed.");
+        module
+            .inject_metering(CostConfigurationV1)
+            .expect("Metering injection should succeed.");
         module
     };
 
@@ -86,13 +87,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let owner = concordium_contracts_common::AccountAddress([0u8; 32]);
 
     let receive_ctx: ReceiveContext<&[u8]> = ReceiveContext {
-        common:     v0::ReceiveContext {
+        common: v0::ReceiveContext {
             metadata: ChainMetadata {
                 slot_time: Timestamp::from_timestamp_millis(0),
             },
             invoker: owner,
             self_address: ContractAddress {
-                index:    0,
+                index: 0,
                 subindex: 0,
             },
             self_balance: Amount::from_ccd(1000),
@@ -124,51 +125,53 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         };
         let receive_ctx = &receive_ctx;
         let args = &args[..];
-        group.bench_function(format!("{} n = {}", name, n), move |b: &mut criterion::Bencher| {
-            b.iter_batched(
-                mk_data,
-                |(mut mutable_state, _, parameters)| {
-                    let mut backing_store = Loader {
-                        inner: Vec::new(),
-                    };
-                    let inner = mutable_state.get_inner(&mut backing_store);
-                    let state = InstanceState::new(backing_store, inner);
-                    let mut host = ReceiveHost::<_, Vec<u8>, _, _> {
-                        energy: start_energy,
-                        stateless: StateLessReceiveHost {
-                            activation_frames: MAX_ACTIVATION_FRAMES,
-                            logs: v0::Logs::new(),
-                            receive_ctx,
-                            return_value: Vec::new(),
-                            parameters,
-                            params: ReceiveParams::new_p5(),
-                        },
-                        state,
-                        trace: (),
-                    };
-                    let r = artifact
-                        .run(&mut host, name, args)
-                        .expect_err("Execution should fail due to out of energy.");
-                    // Should fail due to out of energy.
-                    assert!(
-                        r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>().is_some(),
-                        "Execution did not fail due to out of energy: {}.",
-                        r
-                    );
-                    let params = std::mem::take(&mut host.stateless.parameters);
-                    // it is not ideal to drop the host here since it might contain iterators and
-                    // entries which do take a bit of time to drop.
-                    drop(host);
-                    // return the state so that its drop is not counted in the benchmark.
-                    (mutable_state, params)
-                },
-                if n <= 10 {
-                    BatchSize::SmallInput
-                } else {
-                    BatchSize::LargeInput
-                },
-            )
-        });
+        group.bench_function(
+            format!("{} n = {}", name, n),
+            move |b: &mut criterion::Bencher| {
+                b.iter_batched(
+                    mk_data,
+                    |(mut mutable_state, _, parameters)| {
+                        let mut backing_store = Loader { inner: Vec::new() };
+                        let inner = mutable_state.get_inner(&mut backing_store);
+                        let state = InstanceState::new(backing_store, inner);
+                        let mut host = ReceiveHost::<_, Vec<u8>, _, _> {
+                            energy: start_energy,
+                            stateless: StateLessReceiveHost {
+                                activation_frames: MAX_ACTIVATION_FRAMES,
+                                logs: v0::Logs::new(),
+                                receive_ctx,
+                                return_value: Vec::new(),
+                                parameters,
+                                params: ReceiveParams::new_p5(),
+                            },
+                            state,
+                            trace: (),
+                        };
+                        let r = artifact
+                            .run(&mut host, name, args)
+                            .expect_err("Execution should fail due to out of energy.");
+                        // Should fail due to out of energy.
+                        assert!(
+                            r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>()
+                                .is_some(),
+                            "Execution did not fail due to out of energy: {}.",
+                            r
+                        );
+                        let params = std::mem::take(&mut host.stateless.parameters);
+                        // it is not ideal to drop the host here since it might contain iterators and
+                        // entries which do take a bit of time to drop.
+                        drop(host);
+                        // return the state so that its drop is not counted in the benchmark.
+                        (mutable_state, params)
+                    },
+                    if n <= 10 {
+                        BatchSize::SmallInput
+                    } else {
+                        BatchSize::LargeInput
+                    },
+                )
+            },
+        );
     };
 
     for n in [0, 2, 10, 20, 40, 50, 100, 1000] {
@@ -378,9 +381,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             b.iter_batched(
                 mk_data,
                 |(mut mutable_state, _, parameters)| {
-                    let mut backing_store = Loader {
-                        inner: Vec::new(),
-                    };
+                    let mut backing_store = Loader { inner: Vec::new() };
                     let inner = mutable_state.get_inner(&mut backing_store);
                     let state = InstanceState::new(backing_store, inner);
                     let mut host = ReceiveHost::<_, Vec<u8>, _, _> {
@@ -401,7 +402,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         .expect_err("Execution should fail due to out of energy.");
                     // Should fail due to out of energy.
                     assert!(
-                        r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>().is_some(),
+                        r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>()
+                            .is_some(),
                         "Execution did not fail due to out of energy: {}.",
                         r
                     );

@@ -66,7 +66,9 @@ impl Output for i64 {
 }
 
 impl Output for ValueType {
-    fn output(&self, out: &mut impl Write) -> OutResult<()> { u8::from(*self).output(out) }
+    fn output(&self, out: &mut impl Write) -> OutResult<()> {
+        u8::from(*self).output(out)
+    }
 }
 
 impl Output for FunctionType {
@@ -101,7 +103,9 @@ impl<'a, A: Output> Output for &'a [A] {
 /// This implementation records the length of the vector as a u32 and then
 /// writes the elements in order.
 impl<A: Output> Output for Vec<A> {
-    fn output(&self, out: &mut impl Write) -> OutResult<()> { self.as_slice().output(out) }
+    fn output(&self, out: &mut impl Write) -> OutResult<()> {
+        self.as_slice().output(out)
+    }
 }
 
 impl Output for BlockType {
@@ -132,7 +136,9 @@ impl<A: Output> Output for Option<A> {
 
 /// Names are output as byte arrays.
 impl Output for Name {
-    fn output(&self, out: &mut impl Write) -> OutResult<()> { self.name.as_bytes().output(out) }
+    fn output(&self, out: &mut impl Write) -> OutResult<()> {
+        self.name.as_bytes().output(out)
+    }
 }
 
 /// Write out the skeleton. All the custom sections are written at the end.

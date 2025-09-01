@@ -17,7 +17,7 @@ use thiserror::Error;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, SerdeBase16Serialize)]
 pub struct Ed25519DlogProof {
     challenge: Scalar,
-    response:  Scalar,
+    response: Scalar,
 }
 
 impl Serial for Ed25519DlogProof {

@@ -24,19 +24,24 @@ pub struct Password {
 }
 
 impl From<String> for Password {
-    fn from(password: String) -> Self { Password { password } }
+    fn from(password: String) -> Self {
+        Password { password }
+    }
 }
 
 impl FromStr for Password {
     type Err = <String as FromStr>::Err;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> { Ok(Password { password: s.into() }) }
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Password { password: s.into() })
+    }
 }
 
 // Helpers for JSON serialization in base64 standard format.
 fn as_base64<A: AsRef<[u8]>, S>(key: &A, serializer: S) -> Result<S::Ok, S::Error>
 where
-    S: Serializer, {
+    S: Serializer,
+{
     serializer.serialize_str(&base64::engine::general_purpose::STANDARD.encode(key.as_ref()))
 }
 
@@ -72,19 +77,19 @@ pub enum KeyDerivationMethod {
 // A better modelling would be for this to be an enumeration.
 pub struct EncryptionMetadata {
     #[serde(rename = "encryptionMethod")]
-    encryption_method:     EncryptionMethod,
+    encryption_method: EncryptionMethod,
     #[serde(rename = "keyDerivationMethod")]
     key_derivation_method: KeyDerivationMethod,
     #[serde(rename = "iterations")]
     /// Number of iterations for the key derivation function.
-    iterations:            u32,
+    iterations: u32,
     #[serde(
         rename = "salt",
         serialize_with = "as_base64",
         deserialize_with = "from_base64"
     )]
     /// Salt used for the key derivation process.
-    salt:                  Vec<u8>,
+    salt: Vec<u8>,
     #[serde(
         rename = "initializationVector",
         serialize_with = "as_base64",
@@ -107,7 +112,7 @@ pub struct CipherText {
 /// Ciphertext together with metadata describing the encryption method.
 pub struct EncryptedData {
     #[serde(rename = "metadata")]
-    metadata:    EncryptionMetadata,
+    metadata: EncryptionMetadata,
     #[serde(rename = "cipherText")]
     cipher_text: CipherText,
 }

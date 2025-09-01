@@ -65,7 +65,9 @@ pub enum LoadWriteError {
 /// write errors out. So this implementation is the more useful one as opposed
 /// to the implementation which maps io errors through the [`LoadError`].
 impl From<std::io::Error> for LoadWriteError {
-    fn from(err: std::io::Error) -> Self { Self::Write(err.into()) }
+    fn from(err: std::io::Error) -> Self {
+        Self::Write(err.into())
+    }
 }
 
 /// Result of loading or storing data from or to persistent storage.
@@ -105,14 +107,18 @@ impl TraversalCounter for EmptyCounter {
     type Err = NoError;
 
     #[inline(always)]
-    fn count_key_traverse_part(&mut self, _num: u64) -> Result<(), Self::Err> { Ok(()) }
+    fn count_key_traverse_part(&mut self, _num: u64) -> Result<(), Self::Err> {
+        Ok(())
+    }
 }
 
 impl<V> AllocCounter<V> for EmptyCounter {
     type Err = NoError;
 
     #[inline(always)]
-    fn allocate(&mut self, _data: &V) -> Result<(), Self::Err> { Ok(()) }
+    fn allocate(&mut self, _data: &V) -> Result<(), Self::Err> {
+        Ok(())
+    }
 }
 
 /// A type that can be used to collect auxiliary information while a mutable
@@ -160,7 +166,9 @@ pub struct SizeCollector {
 }
 
 impl SizeCollector {
-    pub fn collect(self) -> u64 { self.num_bytes }
+    pub fn collect(self) -> u64 {
+        self.num_bytes
+    }
 }
 
 impl<V: AsRef<[u8]>> Collector<V> for SizeCollector {
@@ -240,9 +248,7 @@ pub struct Loader<S> {
 impl<S> Loader<S> {
     /// Construct a new loader from the given data.
     pub fn new(file: S) -> Self {
-        Self {
-            inner: file,
-        }
+        Self { inner: file }
     }
 }
 
@@ -352,10 +358,7 @@ impl<V: Loadable> Loadable for Hashed<V> {
     ) -> LoadResult<Self> {
         let hash = Hash::read(source)?;
         let data = V::load(loader, source)?;
-        Ok(Hashed {
-            hash,
-            data,
-        })
+        Ok(Hashed { hash, data })
     }
 }
 
@@ -368,16 +371,16 @@ pub struct Hash {
 
 impl AsRef<[u8]> for Hash {
     #[inline(always)]
-    fn as_ref(&self) -> &[u8] { self.hash.as_ref() }
+    fn as_ref(&self) -> &[u8] {
+        self.hash.as_ref()
+    }
 }
 
 impl Hash {
     #[inline(always)]
     /// A hash value that consists of 32 `0` bytes.
     pub fn zero() -> Self {
-        Self {
-            hash: [0u8; 32],
-        }
+        Self { hash: [0u8; 32] }
     }
 
     /// Read a hash value from the provided source, failing if not enough data
@@ -385,9 +388,7 @@ impl Hash {
     pub fn read(source: &mut impl Read) -> LoadResult<Self> {
         let mut hash = [0u8; 32];
         source.read_exact(&mut hash)?;
-        Ok(Self {
-            hash,
-        })
+        Ok(Self { hash })
     }
 }
 
@@ -418,12 +419,16 @@ impl<Ctx> ToSHA256<Ctx> for u64 {
 
 impl<Ctx> ToSHA256<Ctx> for Vec<u8> {
     #[inline(always)]
-    fn hash(&self, ctx: &mut Ctx) -> Hash { self[..].hash(ctx) }
+    fn hash(&self, ctx: &mut Ctx) -> Hash {
+        self[..].hash(ctx)
+    }
 }
 
 impl<Ctx> ToSHA256<Ctx> for Box<[u8]> {
     #[inline(always)]
-    fn hash(&self, ctx: &mut Ctx) -> Hash { self[..].hash(ctx) }
+    fn hash(&self, ctx: &mut Ctx) -> Hash {
+        self[..].hash(ctx)
+    }
 }
 
 impl<Ctx> ToSHA256<Ctx> for [u8] {
@@ -458,16 +463,15 @@ pub struct Hashed<V> {
 impl<V> Hashed<V> {
     #[inline(always)]
     pub fn new(hash: Hash, data: V) -> Self {
-        Self {
-            hash,
-            data,
-        }
+        Self { hash, data }
     }
 }
 
 impl<V, Ctx> ToSHA256<Ctx> for Hashed<V> {
     #[inline(always)]
-    fn hash(&self, _ctx: &mut Ctx) -> Hash { self.hash }
+    fn hash(&self, _ctx: &mut Ctx) -> Hash {
+        self.hash
+    }
 }
 
 #[repr(transparent)]
@@ -481,18 +485,24 @@ impl<A> Index<EntryId> for [A] {
     type Output = A;
 
     #[inline(always)]
-    fn index(&self, index: EntryId) -> &Self::Output { self.index(index.id) }
+    fn index(&self, index: EntryId) -> &Self::Output {
+        self.index(index.id)
+    }
 }
 
 impl<A> Index<EntryId> for Vec<A> {
     type Output = A;
 
     #[inline(always)]
-    fn index(&self, index: EntryId) -> &Self::Output { self.index(index.id) }
+    fn index(&self, index: EntryId) -> &Self::Output {
+        self.index(index.id)
+    }
 }
 
 impl<A> IndexMut<EntryId> for Vec<A> {
-    fn index_mut(&mut self, index: EntryId) -> &mut Self::Output { self.index_mut(index.id) }
+    fn index_mut(&mut self, index: EntryId) -> &mut Self::Output {
+        self.index_mut(index.id)
+    }
 }
 
 #[derive(Debug, Error, Eq, PartialEq)]

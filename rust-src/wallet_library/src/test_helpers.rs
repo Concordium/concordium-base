@@ -12,7 +12,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-fn base_path() -> PathBuf { Path::new(env!("CARGO_MANIFEST_DIR")).join("resources") }
+fn base_path() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("resources")
+}
 
 pub fn read_ip_info() -> IpInfo<constants::IpPairing> {
     let base_path = base_path();

@@ -115,9 +115,11 @@ unsafe extern "C" fn call_receive_v0(
         return std::ptr::null_mut();
     };
     let res = std::panic::catch_unwind(|| {
-        let receive_ctx =
-            deserial_receive_context(slice_from_c_bytes!(receive_ctx_bytes, receive_ctx_bytes_len))
-                .expect("Precondition violation: Should be given a valid receive context.");
+        let receive_ctx = deserial_receive_context(slice_from_c_bytes!(
+            receive_ctx_bytes,
+            receive_ctx_bytes_len
+        ))
+        .expect("Precondition violation: Should be given a valid receive context.");
         let receive_name = slice_from_c_bytes!(receive_name, receive_name_len);
         let state = slice_from_c_bytes!(state_bytes, state_bytes_len);
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len);
@@ -230,7 +232,9 @@ unsafe extern "C" fn validate_and_process_v0(
             std::mem::forget(out_buf);
 
             let mut artifact_bytes = Vec::new();
-            artifact.output(&mut artifact_bytes).expect("Artifact serialization does not fail.");
+            artifact
+                .output(&mut artifact_bytes)
+                .expect("Artifact serialization does not fail.");
             artifact_bytes.shrink_to_fit();
             *output_artifact_len = artifact_bytes.len() as size_t;
             *output_artifact_bytes = artifact_bytes.as_mut_ptr();

@@ -17,17 +17,19 @@ use rand::*;
 pub struct SecretKey<C: Pairing> {
     /// Generator of the first pairing group. Not secret, but needed for various
     /// operations.
-    pub g:       C::G1,
+    pub g: C::G1,
     /// Generator of the second pairing group. Not secret, but needed for
     /// various operations.
     pub g_tilda: C::G2,
     #[size_length = 4]
-    pub ys:      Vec<C::ScalarField>,
-    pub x:       C::ScalarField,
+    pub ys: Vec<C::ScalarField>,
+    pub x: C::ScalarField,
 }
 
 impl<C: Pairing> PartialEq for SecretKey<C> {
-    fn eq(&self, other: &Self) -> bool { self.ys == other.ys && self.x == other.x }
+    fn eq(&self, other: &Self) -> bool {
+        self.ys == other.ys && self.x == other.x
+    }
 }
 
 impl<C: Pairing> Eq for SecretKey<C> {}
@@ -37,7 +39,8 @@ impl<C: Pairing> SecretKey<C> {
     /// be those defined by the library.
     pub fn generate<T>(n: usize, csprng: &mut T) -> SecretKey<C>
     where
-        T: Rng, {
+        T: Rng,
+    {
         let mut ys: Vec<C::ScalarField> = Vec::with_capacity(n);
         for _i in 0..n {
             ys.push(C::generate_scalar(csprng));
@@ -57,7 +60,8 @@ impl<C: Pairing> SecretKey<C> {
         csprng: &mut T,
     ) -> Result<Signature<C>, SignatureError>
     where
-        T: Rng, {
+        T: Rng,
+    {
         let ys = &self.ys;
         let ms = &message.0;
         if ms.len() > ys.len() {
@@ -87,7 +91,8 @@ impl<C: Pairing> SecretKey<C> {
         csprng: &mut T,
     ) -> Signature<C>
     where
-        T: Rng, {
+        T: Rng,
+    {
         let sk = self.g.mul_by_scalar(&self.x);
         let r = C::generate_non_zero_scalar(csprng);
         let a = self.g.mul_by_scalar(&r);

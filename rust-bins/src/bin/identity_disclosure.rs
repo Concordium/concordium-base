@@ -17,16 +17,16 @@ struct DecryptLinkingKey {
         long = "id-record",
         help = "File with the JSON encoded identity record."
     )]
-    id_record:      PathBuf,
+    id_record: PathBuf,
     #[structopt(
         long = "pg-private",
         help = "File with privacy guardians's private and public keys. As plaintext or encrypted."
     )]
-    pg_private:     PathBuf,
+    pg_private: PathBuf,
     #[structopt(long = "global-context", help = "File with global context.")]
     global_context: PathBuf,
     #[structopt(long = "out", help = "File to output the decrypted share to.")]
-    out:            PathBuf,
+    out: PathBuf,
 }
 
 #[derive(StructOpt)]
@@ -42,7 +42,7 @@ struct Decrypt {
     )]
     pg_private: PathBuf,
     #[structopt(long = "out", help = "File to output the decrypted share to.")]
-    out:        PathBuf,
+    out: PathBuf,
 }
 
 #[derive(StructOpt)]
@@ -56,9 +56,9 @@ struct CombineLinkingKey {
         long = "shares",
         help = "Files with the JSON encoded decrypted linking key shares."
     )]
-    shares:    Vec<PathBuf>,
+    shares: Vec<PathBuf>,
     #[structopt(long = "out", help = "File to output the combined linking key to.")]
-    out:       PathBuf,
+    out: PathBuf,
 }
 
 #[derive(StructOpt)]
@@ -72,30 +72,30 @@ struct Combine {
         long = "shares",
         help = "Files with the JSON encoded decrypted identifier shares."
     )]
-    shares:     Vec<PathBuf>,
+    shares: Vec<PathBuf>,
     #[structopt(long = "out", help = "File to output the public holder identifier to.")]
-    out:        PathBuf,
+    out: PathBuf,
 }
 
 #[derive(StructOpt)]
 struct ComputeCredIds {
     #[structopt(long = "id-record", help = "The identity record.")]
-    id_record:      PathBuf,
+    id_record: PathBuf,
     #[structopt(long = "key", help = "File containing the decrypted linking key.")]
-    key:            PathBuf,
+    key: PathBuf,
     #[structopt(long = "global-context", help = "File with global context.")]
     global_context: PathBuf,
     #[structopt(
         long = "out",
         help = "File to output the account credential identifiers to"
     )]
-    out:            PathBuf,
+    out: PathBuf,
     #[structopt(
         long = "no-secret",
         help = "Do __not__ output the account decryption key together with the account credential \
                 identifiers."
     )]
-    no_secret:      bool,
+    no_secret: bool,
 }
 
 #[derive(StructOpt)]
@@ -283,7 +283,7 @@ fn handle_decrypt_id(dcr: Decrypt) -> Result<(), String> {
         .ar_secret_key
         .decrypt(&single_pg_data.enc_id_cred_pub_share);
     let share = ChainArDecryptedData {
-        ar_identity:       pg.public_ar_info.ar_identity,
+        ar_identity: pg.public_ar_info.ar_identity,
         id_cred_pub_share: m,
     };
     match write_json_to_file(&dcr.out, &share) {
@@ -328,7 +328,7 @@ fn handle_decrypt_key(dcr: DecryptLinkingKey) -> Result<(), String> {
         CHUNK_SIZE,
     );
     let share = IpArDecryptedData {
-        ar_identity:   pg.public_ar_info.ar_identity,
+        ar_identity: pg.public_ar_info.ar_identity,
         prf_key_share: m,
     };
     match write_json_to_file(&dcr.out, &share) {

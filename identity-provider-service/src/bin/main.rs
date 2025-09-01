@@ -113,7 +113,7 @@ struct IdentityObjectRequest {
     #[serde(rename = "idObjectRequest")]
     id_object_request: Versioned<PreIdentityObject<IpPairing, ArCurve>>,
     #[serde(rename = "redirectURI")]
-    redirect_uri:      String,
+    redirect_uri: String,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
@@ -123,7 +123,7 @@ struct IdentityObjectRequestV1 {
     #[serde(rename = "idObjectRequest")]
     id_object_request: Versioned<PreIdentityObjectV1<IpPairing, ArCurve>>,
     #[serde(rename = "redirectURI")]
-    redirect_uri:      String,
+    redirect_uri: String,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
@@ -145,7 +145,7 @@ struct IdentityTokenContainer {
     /// The status of the submission.
     status: IdentityStatus,
     /// The response, if available, otherwise Null.
-    token:  serde_json::Value,
+    token: serde_json::Value,
     /// Details of the response in the form of a free-form text.
     detail: String,
 }
@@ -171,7 +171,7 @@ struct ServerConfig {
 #[derive(Clone)]
 struct DB {
     /// Root directory where all the data is stored.
-    root:        std::path::PathBuf,
+    root: std::path::PathBuf,
     /// Root of the backup directory where we store "deleted" files.
     backup_root: std::path::PathBuf,
     /// And a hashmap of pending entries. Pending entries are also stored in the
@@ -179,7 +179,7 @@ struct DB {
     /// often. We put it behind a mutex to sync all accesses, to the hashmap
     /// as well as to the filesystem, which is implicit. In a real database
     /// this would be done differently.
-    pending:     Arc<Mutex<HashMap<String, PendingEntry>>>,
+    pending: Arc<Mutex<HashMap<String, PendingEntry>>>,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Clone)]
@@ -191,7 +191,7 @@ enum PendingStatus {
     /// by the submission status.
     Submitted {
         submission_id: String,
-        status:        SubmissionStatus,
+        status: SubmissionStatus,
     },
     /// The transaction could not be submitted due to, most likely, network
     /// issues. It should be retried.
@@ -209,7 +209,7 @@ struct InitialAccountReponse {
 #[derive(SerdeSerialize, SerdeDeserialize, Clone)]
 struct PendingEntry {
     pub status: PendingStatus,
-    pub value:  serde_json::Value,
+    pub value: serde_json::Value,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Clone)]
@@ -384,10 +384,13 @@ impl DB {
         {
             // FIXME: We should be careful to not overwrite here.
             let file = std::fs::File::create(self.root.join("revocation").join(key))?;
-            serde_json::to_writer(file, &Versioned {
-                version: VERSION_0,
-                value:   record,
-            })?;
+            serde_json::to_writer(
+                file,
+                &Versioned {
+                    version: VERSION_0,
+                    value: record,
+                },
+            )?;
         } // close the file
           // and now drop the lock as well.
         Ok(())
@@ -527,7 +530,9 @@ impl DB {
         }
     }
 
-    pub fn is_pending(&self, key: &str) -> bool { self.pending.lock().unwrap().get(key).is_some() }
+    pub fn is_pending(&self, key: &str) -> bool {
+        self.pending.lock().unwrap().get(key).is_some()
+    }
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Clone)]
@@ -557,7 +562,7 @@ struct SubmissionStatusResponse {
 #[derive(SerdeDeserialize)]
 struct GetParameters {
     #[serde(rename = "state")]
-    state:        String,
+    state: String,
     #[serde(rename = "redirect_uri")]
     redirect_uri: String,
 }
@@ -675,7 +680,7 @@ async fn get_identity_token(
         let identity_token_container = IdentityTokenContainer {
             status: IdentityStatus::Pending,
             detail: "Pending initial account creation.".to_string(),
-            token:  serde_json::Value::Null,
+            token: serde_json::Value::Null,
         };
         Ok(warp::reply::json(&identity_token_container))
     } else {
@@ -685,7 +690,7 @@ async fn get_identity_token(
 
                 let identity_token_container = IdentityTokenContainer {
                     status: IdentityStatus::Done,
-                    token:  identity_object,
+                    token: identity_object,
                     detail: "".to_string(),
                 };
                 Ok(warp::reply::json(&identity_token_container))
@@ -695,7 +700,7 @@ async fn get_identity_token(
                 let error_identity_token_container = IdentityTokenContainer {
                     status: IdentityStatus::Error,
                     detail: "Identity object does not exist".to_string(),
-                    token:  serde_json::Value::Null,
+                    token: serde_json::Value::Null,
                 };
                 Ok(warp::reply::json(&error_identity_token_container))
             }
@@ -715,7 +720,7 @@ async fn get_identity_token_v1(
 
             let identity_token_container = IdentityTokenContainer {
                 status: IdentityStatus::Done,
-                token:  identity_object,
+                token: identity_object,
                 detail: "".to_string(),
             };
             Ok(warp::reply::json(&identity_token_container))
@@ -725,7 +730,7 @@ async fn get_identity_token_v1(
             let error_identity_token_container = IdentityTokenContainer {
                 status: IdentityStatus::Error,
                 detail: "Identity object does not exist".to_string(),
-                token:  serde_json::Value::Null,
+                token: serde_json::Value::Null,
             };
             Ok(warp::reply::json(&error_identity_token_container))
         }
@@ -1041,7 +1046,7 @@ async fn submit_account_creation(
                     Ok(v) => {
                         let initial_status = PendingStatus::Submitted {
                             submission_id: v.submission_id,
-                            status:        SubmissionStatus::Received,
+                            status: SubmissionStatus::Received,
                         };
                         Ok(initial_status)
                     }
@@ -1114,7 +1119,7 @@ impl warp::reject::Reject for IdRecoveryRejection {}
 /// Response in case of an error. This is going to be encoded as a JSON body
 /// with fields 'code' and 'message'.
 struct ErrorResponse {
-    code:    u16,
+    code: u16,
     message: &'static str,
 }
 
@@ -1279,11 +1284,11 @@ async fn create_signed_identity_object(
     let now = YearMonth::now();
 
     let alist = ExampleAttributeList {
-        valid_to:     expiry,
-        created_at:   now,
-        alist:        attribute_list,
+        valid_to: expiry,
+        created_at: now,
+        alist: attribute_list,
         max_accounts: 200,
-        _phantom:     Default::default(),
+        _phantom: Default::default(),
     };
 
     let signature = match sign_identity_object(
@@ -1335,10 +1340,10 @@ async fn create_signed_identity_object(
         &server_config.ip_data.ip_cdi_secret_key,
     );
 
-    let versioned_credential =
-        Versioned::new(VERSION_0, AccountCredential::<IpPairing, _, _>::Initial {
-            icdi: initial_cdi,
-        });
+    let versioned_credential = Versioned::new(
+        VERSION_0,
+        AccountCredential::<IpPairing, _, _>::Initial { icdi: initial_cdi },
+    );
 
     let submission = AccountCredentialMessage {
         message_expiry,
@@ -1471,11 +1476,11 @@ async fn create_signed_identity_object_v1(
     let now = YearMonth::now();
 
     let alist = ExampleAttributeList {
-        valid_to:     expiry,
-        created_at:   now,
-        alist:        attribute_list,
+        valid_to: expiry,
+        created_at: now,
+        alist: attribute_list,
         max_accounts: 200,
-        _phantom:     Default::default(),
+        _phantom: Default::default(),
     };
 
     let signature = match sign_identity_object_v1(
@@ -1544,8 +1549,8 @@ fn validate_worker(
     }
     let request = &input.id_object_request.value;
     let context = IpContext {
-        ip_info:        &server_config.ip_data.public_ip_info,
-        ars_infos:      &server_config.ars.anonymity_revokers,
+        ip_info: &server_config.ip_data.public_ip_info,
+        ars_infos: &server_config.ars.anonymity_revokers,
         global_context: &server_config.global,
     };
     match ip_validate_request(request, context) {
@@ -1573,8 +1578,8 @@ fn validate_worker_v1(
     }
     let request = &input.id_object_request.value;
     let context = IpContext {
-        ip_info:        &server_config.ip_data.public_ip_info,
-        ars_infos:      &server_config.ars.anonymity_revokers,
+        ip_info: &server_config.ip_data.public_ip_info,
+        ars_infos: &server_config.ars.anonymity_revokers,
         global_context: &server_config.global,
     };
     match ip_validate_request_v1(request, context) {
@@ -1893,10 +1898,10 @@ fn save_revocation_record<A: Attribute<id::constants::BaseField>>(
     alist: &AttributeList<id::constants::BaseField, A>,
 ) -> anyhow::Result<()> {
     let ar_record = AnonymityRevocationRecord {
-        id_cred_pub:  pre_identity_object.pub_info_for_ip.id_cred_pub,
-        ar_data:      pre_identity_object.ip_ar_data.clone(),
+        id_cred_pub: pre_identity_object.pub_info_for_ip.id_cred_pub,
+        ar_data: pre_identity_object.ip_ar_data.clone(),
         max_accounts: alist.max_accounts,
-        threshold:    pre_identity_object.choice_ar_parameters.threshold,
+        threshold: pre_identity_object.choice_ar_parameters.threshold,
     };
     let id_cred_pub_hash = Sha256::digest(to_bytes(&ar_record.id_cred_pub));
     let base_16_encoded_id_cred_pub_hash =
@@ -1913,10 +1918,10 @@ fn save_revocation_record_v1<A: Attribute<id::constants::BaseField>>(
     alist: &AttributeList<id::constants::BaseField, A>,
 ) -> anyhow::Result<()> {
     let ar_record = AnonymityRevocationRecord {
-        id_cred_pub:  pre_identity_object.id_cred_pub,
-        ar_data:      pre_identity_object.ip_ar_data.clone(),
+        id_cred_pub: pre_identity_object.id_cred_pub,
+        ar_data: pre_identity_object.ip_ar_data.clone(),
         max_accounts: alist.max_accounts,
-        threshold:    pre_identity_object.choice_ar_parameters.threshold,
+        threshold: pre_identity_object.choice_ar_parameters.threshold,
     };
     let id_cred_pub_hash = Sha256::digest(to_bytes(&ar_record.id_cred_pub));
     let base_16_encoded_id_cred_pub_hash =
@@ -1981,14 +1986,14 @@ async fn retrieve_failed_identity_token(delay_until: i64) -> Result<impl Reply, 
         let identity_token_container = IdentityTokenContainer {
             status: IdentityStatus::Pending,
             detail: "Pending resolution.".to_string(),
-            token:  serde_json::Value::Null,
+            token: serde_json::Value::Null,
         };
         Ok(warp::reply::json(&identity_token_container))
     } else {
         let error_identity_token_container = IdentityTokenContainer {
             status: IdentityStatus::Error,
             detail: "Identity object has failed".to_string(),
-            token:  serde_json::Value::Null,
+            token: serde_json::Value::Null,
         };
         info!("Failed Identity object returned.");
         Ok(warp::reply::json(&error_identity_token_container))

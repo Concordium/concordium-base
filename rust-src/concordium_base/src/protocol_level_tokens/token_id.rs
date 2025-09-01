@@ -27,13 +27,17 @@ pub enum TokenIdFromStringError {
 }
 
 impl AsRef<str> for TokenId {
-    fn as_ref(&self) -> &str { self.value.as_str() }
+    fn as_ref(&self) -> &str {
+        self.value.as_str()
+    }
 }
 
 impl std::str::FromStr for TokenId {
     type Err = TokenIdFromStringError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> { s.to_owned().try_into() }
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.to_owned().try_into()
+    }
 }
 
 impl TryFrom<String> for TokenId {
@@ -60,7 +64,9 @@ impl TryFrom<String> for TokenId {
 }
 
 impl From<TokenId> for String {
-    fn from(token_id: TokenId) -> Self { token_id.value }
+    fn from(token_id: TokenId) -> Self {
+        token_id.value
+    }
 }
 
 impl common::Serial for TokenId {
@@ -107,9 +113,10 @@ mod tests {
     fn invalid_token_ids_due_to_length() {
         // Empty string
         let err = TokenId::from_str("").unwrap_err();
-        matches!(err, TokenIdFromStringError::InvalidLength {
-            actual_size: 0,
-        });
+        matches!(
+            err,
+            TokenIdFromStringError::InvalidLength { actual_size: 0 }
+        );
 
         // Over 128 bytes
         let too_long = "a".repeat(TOKEN_ID_MAX_BYTE_LEN + 1);

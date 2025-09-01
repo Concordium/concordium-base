@@ -14,7 +14,7 @@ use itertools::izip;
 
 pub struct ComMultSecret<T: Curve> {
     pub values: [Value<T>; 2],
-    pub rands:  [Randomness<T>; 3],
+    pub rands: [Randomness<T>; 3],
 }
 
 /// The ComMult sigma proof instance.
@@ -23,7 +23,7 @@ pub struct ComMultSecret<T: Curve> {
 /// * `cmm_key` - The commitment key with which all the commitments are
 ///   generated.
 pub struct ComMult<C: Curve> {
-    pub cmms:    [Commitment<C>; 3],
+    pub cmms: [Commitment<C>; 3],
     pub cmm_key: CommitmentKey<C>,
 }
 
@@ -32,7 +32,7 @@ pub struct Response<C: Curve> {
     /// The response, expanded using the same notation as in the specification.
     ss: [C::Scalar; 2],
     ts: [C::Scalar; 2],
-    t:  C::Scalar,
+    t: C::Scalar,
 }
 
 #[allow(non_snake_case)]
@@ -159,7 +159,7 @@ impl<C: Curve> SigmaProtocol for ComMult<C> {
 
         let secret = ComMultSecret {
             values: [a_1, a_2],
-            rands:  [r_1, r_2, r_3],
+            rands: [r_1, r_2, r_3],
         };
 
         let com_mult = ComMult {

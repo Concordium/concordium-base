@@ -17,26 +17,28 @@ pub use super::utils::Generators;
 #[allow(non_snake_case)]
 pub struct RangeProof<C: Curve> {
     /// Commitments to the bits `a_i` of the value, and `a_i - 1`
-    A:        C,
+    A: C,
     /// Commitment to the blinding factors in `s_L` and `s_R`
-    S:        C,
+    S: C,
     /// Commitment to the `t_1` coefficient of polynomial `t(x)`
-    T_1:      C,
+    T_1: C,
     /// Commitment to the `t_2` coefficient of polynomial `t(x)`
-    T_2:      C,
+    T_2: C,
     /// Evaluation of `t(x)` at the challenge point `x`
-    tx:       C::Scalar,
+    tx: C::Scalar,
     /// Blinding factor for the commitment to tx
     tx_tilde: C::Scalar,
     /// Blinding factor for the commitment to the inner-product arguments
-    e_tilde:  C::Scalar,
+    e_tilde: C::Scalar,
     /// Inner product proof
     ip_proof: InnerProductProof<C>,
 }
 
 /// Determine whether the `i`-th bit (counting from least significant) is set in
 /// the given u64 value.
-fn ith_bit_bool(v: u64, i: u8) -> bool { v & (1 << i) != 0 }
+fn ith_bit_bool(v: u64, i: u8) -> bool {
+    v & (1 << i) != 0
+}
 
 /// This function computes the n-bit binary representation `a_L` of input value
 /// `v` The vector `a_R` is the bit-wise negation of `a_L`

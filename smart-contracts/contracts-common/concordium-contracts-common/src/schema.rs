@@ -92,8 +92,8 @@ pub enum VersionedModuleSchema {
 /// The [`Default`] instance produces an empty schema.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ContractV0 {
-    pub state:   Option<Type>,
-    pub init:    Option<Type>,
+    pub state: Option<Type>,
+    pub init: Option<Type>,
     pub receive: BTreeMap<String, Type>,
 }
 
@@ -101,7 +101,7 @@ pub struct ContractV0 {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 /// The [`Default`] instance produces an empty schema.
 pub struct ContractV1 {
-    pub init:    Option<FunctionV1>,
+    pub init: Option<FunctionV1>,
     pub receive: BTreeMap<String, FunctionV1>,
 }
 
@@ -109,7 +109,7 @@ pub struct ContractV1 {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 /// The [`Default`] instance produces an empty schema.
 pub struct ContractV2 {
-    pub init:    Option<FunctionV2>,
+    pub init: Option<FunctionV2>,
     pub receive: BTreeMap<String, FunctionV2>,
 }
 
@@ -118,14 +118,16 @@ pub struct ContractV2 {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 /// The [`Default`] instance produces an empty schema.
 pub struct ContractV3 {
-    pub init:    Option<FunctionV2>,
+    pub init: Option<FunctionV2>,
     pub receive: BTreeMap<String, FunctionV2>,
-    pub event:   Option<Type>,
+    pub event: Option<Type>,
 }
 
 impl ContractV3 {
     /// Extract the event schema if it exists.
-    pub fn event(&self) -> Option<&Type> { self.event.as_ref() }
+    pub fn event(&self) -> Option<&Type> {
+        self.event.as_ref()
+    }
 }
 
 /// Describes the schema of an init or a receive function for V1 contracts with
@@ -134,10 +136,7 @@ impl ContractV3 {
 pub enum FunctionV1 {
     Parameter(Type),
     ReturnValue(Type),
-    Both {
-        parameter:    Type,
-        return_value: Type,
-    },
+    Both { parameter: Type, return_value: Type },
 }
 
 impl FunctionV1 {
@@ -146,10 +145,7 @@ impl FunctionV1 {
         match self {
             FunctionV1::Parameter(ty) => Some(ty),
             FunctionV1::ReturnValue(_) => None,
-            FunctionV1::Both {
-                parameter,
-                ..
-            } => Some(parameter),
+            FunctionV1::Both { parameter, .. } => Some(parameter),
         }
     }
 
@@ -158,10 +154,7 @@ impl FunctionV1 {
         match self {
             FunctionV1::Parameter(_) => None,
             FunctionV1::ReturnValue(rv) => Some(rv),
-            FunctionV1::Both {
-                return_value,
-                ..
-            } => Some(return_value),
+            FunctionV1::Both { return_value, .. } => Some(return_value),
         }
     }
 }
@@ -172,20 +165,26 @@ impl FunctionV1 {
 #[cfg_attr(test, derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionV2 {
-    pub parameter:    Option<Type>,
+    pub parameter: Option<Type>,
     pub return_value: Option<Type>,
-    pub error:        Option<Type>,
+    pub error: Option<Type>,
 }
 
 impl FunctionV2 {
     /// Extract the parameter schema if it exists.
-    pub fn parameter(&self) -> Option<&Type> { self.parameter.as_ref() }
+    pub fn parameter(&self) -> Option<&Type> {
+        self.parameter.as_ref()
+    }
 
     /// Extract the return value schema if it exists.
-    pub fn return_value(&self) -> Option<&Type> { self.return_value.as_ref() }
+    pub fn return_value(&self) -> Option<&Type> {
+        self.return_value.as_ref()
+    }
 
     /// Extract the error schema if it exists.
-    pub fn error(&self) -> Option<&Type> { self.error.as_ref() }
+    pub fn error(&self) -> Option<&Type> {
+        self.error.as_ref()
+    }
 }
 
 /// Schema for the fields of a struct or some enum variant.
@@ -312,133 +311,212 @@ impl Type {
 }
 
 impl SchemaType for () {
-    fn get_type() -> Type { Type::Unit }
+    fn get_type() -> Type {
+        Type::Unit
+    }
 }
 impl SchemaType for bool {
-    fn get_type() -> Type { Type::Bool }
+    fn get_type() -> Type {
+        Type::Bool
+    }
 }
 impl SchemaType for u8 {
-    fn get_type() -> Type { Type::U8 }
+    fn get_type() -> Type {
+        Type::U8
+    }
 }
 impl SchemaType for u16 {
-    fn get_type() -> Type { Type::U16 }
+    fn get_type() -> Type {
+        Type::U16
+    }
 }
 impl SchemaType for u32 {
-    fn get_type() -> Type { Type::U32 }
+    fn get_type() -> Type {
+        Type::U32
+    }
 }
 impl SchemaType for u64 {
-    fn get_type() -> Type { Type::U64 }
+    fn get_type() -> Type {
+        Type::U64
+    }
 }
 impl SchemaType for u128 {
-    fn get_type() -> Type { Type::U128 }
+    fn get_type() -> Type {
+        Type::U128
+    }
 }
 impl SchemaType for i8 {
-    fn get_type() -> Type { Type::I8 }
+    fn get_type() -> Type {
+        Type::I8
+    }
 }
 impl SchemaType for i16 {
-    fn get_type() -> Type { Type::I16 }
+    fn get_type() -> Type {
+        Type::I16
+    }
 }
 impl SchemaType for i32 {
-    fn get_type() -> Type { Type::I32 }
+    fn get_type() -> Type {
+        Type::I32
+    }
 }
 impl SchemaType for i64 {
-    fn get_type() -> Type { Type::I64 }
+    fn get_type() -> Type {
+        Type::I64
+    }
 }
 impl SchemaType for i128 {
-    fn get_type() -> Type { Type::I128 }
+    fn get_type() -> Type {
+        Type::I128
+    }
 }
 impl SchemaType for Amount {
-    fn get_type() -> Type { Type::Amount }
+    fn get_type() -> Type {
+        Type::Amount
+    }
 }
 impl SchemaType for ModuleReference {
-    fn get_type() -> Type { Type::ByteArray(32) }
+    fn get_type() -> Type {
+        Type::ByteArray(32)
+    }
 }
 impl SchemaType for AccountAddress {
-    fn get_type() -> Type { Type::AccountAddress }
+    fn get_type() -> Type {
+        Type::AccountAddress
+    }
 }
 impl SchemaType for ContractAddress {
-    fn get_type() -> Type { Type::ContractAddress }
+    fn get_type() -> Type {
+        Type::ContractAddress
+    }
 }
 impl SchemaType for Address {
     fn get_type() -> Type {
         Type::Enum(Vec::from([
-            (String::from("Account"), Fields::Unnamed(Vec::from([Type::AccountAddress]))),
-            (String::from("Contract"), Fields::Unnamed(Vec::from([Type::ContractAddress]))),
+            (
+                String::from("Account"),
+                Fields::Unnamed(Vec::from([Type::AccountAddress])),
+            ),
+            (
+                String::from("Contract"),
+                Fields::Unnamed(Vec::from([Type::ContractAddress])),
+            ),
         ]))
     }
 }
 impl SchemaType for Timestamp {
-    fn get_type() -> Type { Type::Timestamp }
+    fn get_type() -> Type {
+        Type::Timestamp
+    }
 }
 impl SchemaType for Duration {
-    fn get_type() -> Type { Type::Duration }
+    fn get_type() -> Type {
+        Type::Duration
+    }
 }
 impl<T: SchemaType> SchemaType for Option<T> {
     fn get_type() -> Type {
         Type::Enum(Vec::from([
             (String::from("None"), Fields::None),
-            (String::from("Some"), Fields::Unnamed(Vec::from([T::get_type()]))),
+            (
+                String::from("Some"),
+                Fields::Unnamed(Vec::from([T::get_type()])),
+            ),
         ]))
     }
 }
 impl<L: SchemaType, R: SchemaType> SchemaType for (L, R) {
-    fn get_type() -> Type { Type::Pair(Box::new(L::get_type()), Box::new(R::get_type())) }
+    fn get_type() -> Type {
+        Type::Pair(Box::new(L::get_type()), Box::new(R::get_type()))
+    }
 }
 impl<T: SchemaType> SchemaType for Vec<T> {
-    fn get_type() -> Type { Type::List(SizeLength::U32, Box::new(T::get_type())) }
+    fn get_type() -> Type {
+        Type::List(SizeLength::U32, Box::new(T::get_type()))
+    }
 }
 impl<T: SchemaType> SchemaType for BTreeSet<T> {
-    fn get_type() -> Type { Type::Set(SizeLength::U32, Box::new(T::get_type())) }
+    fn get_type() -> Type {
+        Type::Set(SizeLength::U32, Box::new(T::get_type()))
+    }
 }
 impl<K: SchemaType, V: SchemaType> SchemaType for BTreeMap<K, V> {
     fn get_type() -> Type {
-        Type::Map(SizeLength::U32, Box::new(K::get_type()), Box::new(V::get_type()))
+        Type::Map(
+            SizeLength::U32,
+            Box::new(K::get_type()),
+            Box::new(V::get_type()),
+        )
     }
 }
 impl<T: SchemaType> SchemaType for HashSet<T> {
-    fn get_type() -> Type { Type::Set(SizeLength::U32, Box::new(T::get_type())) }
+    fn get_type() -> Type {
+        Type::Set(SizeLength::U32, Box::new(T::get_type()))
+    }
 }
 impl<K: SchemaType, V: SchemaType> SchemaType for HashMap<K, V> {
     fn get_type() -> Type {
-        Type::Map(SizeLength::U32, Box::new(K::get_type()), Box::new(V::get_type()))
+        Type::Map(
+            SizeLength::U32,
+            Box::new(K::get_type()),
+            Box::new(V::get_type()),
+        )
     }
 }
 impl SchemaType for [u8] {
-    fn get_type() -> Type { Type::ByteList(SizeLength::U32) }
+    fn get_type() -> Type {
+        Type::ByteList(SizeLength::U32)
+    }
 }
 
 impl SchemaType for String {
-    fn get_type() -> Type { Type::String(SizeLength::U32) }
+    fn get_type() -> Type {
+        Type::String(SizeLength::U32)
+    }
 }
 
 impl SchemaType for &str {
-    fn get_type() -> Type { String::get_type() }
+    fn get_type() -> Type {
+        String::get_type()
+    }
 }
 
 impl SchemaType for OwnedContractName {
-    fn get_type() -> Type { Type::ContractName(SizeLength::U16) }
+    fn get_type() -> Type {
+        Type::ContractName(SizeLength::U16)
+    }
 }
 
 impl SchemaType for OwnedReceiveName {
-    fn get_type() -> Type { Type::ReceiveName(SizeLength::U16) }
+    fn get_type() -> Type {
+        Type::ReceiveName(SizeLength::U16)
+    }
 }
 
 impl SchemaType for OwnedEntrypointName {
-    fn get_type() -> Type { Type::String(SizeLength::U16) }
+    fn get_type() -> Type {
+        Type::String(SizeLength::U16)
+    }
 }
 
 impl SchemaType for OwnedParameter {
-    fn get_type() -> Type { Type::ByteList(SizeLength::U16) }
+    fn get_type() -> Type {
+        Type::ByteList(SizeLength::U16)
+    }
 }
 
 impl<A: SchemaType, const N: usize> SchemaType for [A; N] {
-    fn get_type() -> Type { Type::Array(N.try_into().unwrap(), Box::new(A::get_type())) }
+    fn get_type() -> Type {
+        Type::Array(N.try_into().unwrap(), Box::new(A::get_type()))
+    }
 }
 
 impl<Kind> SchemaType for NonZeroThresholdU8<Kind> {
     // This is not entirely ideal since it won't check if the threshold is 0, but
     // at present we do not have a type that is better suited.
-    fn get_type() -> Type { u8::get_type() }
+    fn get_type() -> Type {
+        u8::get_type()
+    }
 }
 
 impl Serial for Fields {
@@ -530,9 +608,7 @@ impl Deserial for ModuleV0 {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let len: u32 = source.get()?;
         let contracts = deserial_map_no_length_no_order_check(source, len as usize)?;
-        Ok(ModuleV0 {
-            contracts,
-        })
+        Ok(ModuleV0 { contracts })
     }
 }
 
@@ -540,9 +616,7 @@ impl Deserial for ModuleV1 {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let len: u32 = source.get()?;
         let contracts = deserial_map_no_length_no_order_check(source, len as usize)?;
-        Ok(ModuleV1 {
-            contracts,
-        })
+        Ok(ModuleV1 { contracts })
     }
 }
 
@@ -550,9 +624,7 @@ impl Deserial for ModuleV2 {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let len: u32 = source.get()?;
         let contracts = deserial_map_no_length_no_order_check(source, len as usize)?;
-        Ok(ModuleV2 {
-            contracts,
-        })
+        Ok(ModuleV2 { contracts })
     }
 }
 
@@ -560,9 +632,7 @@ impl Deserial for ModuleV3 {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let len: u32 = source.get()?;
         let contracts = deserial_map_no_length_no_order_check(source, len as usize)?;
-        Ok(ModuleV3 {
-            contracts,
-        })
+        Ok(ModuleV3 { contracts })
     }
 }
 
@@ -649,10 +719,7 @@ impl Deserial for ContractV1 {
         let init = source.get()?;
         let len: u32 = source.get()?;
         let receive = deserial_map_no_length_no_order_check(source, len as usize)?;
-        Ok(ContractV1 {
-            init,
-            receive,
-        })
+        Ok(ContractV1 { init, receive })
     }
 }
 
@@ -661,10 +728,7 @@ impl Deserial for ContractV2 {
         let init = source.get()?;
         let len: u32 = source.get()?;
         let receive = deserial_map_no_length_no_order_check(source, len as usize)?;
-        Ok(ContractV2 {
-            init,
-            receive,
-        })
+        Ok(ContractV2 { init, receive })
     }
 }
 
@@ -712,7 +776,7 @@ impl Deserial for FunctionV1 {
             0 => Ok(FunctionV1::Parameter(source.get()?)),
             1 => Ok(FunctionV1::ReturnValue(source.get()?)),
             2 => Ok(FunctionV1::Both {
-                parameter:    source.get()?,
+                parameter: source.get()?,
                 return_value: source.get()?,
             }),
             _ => Err(ParseError::default()),
@@ -761,9 +825,9 @@ impl Deserial for FunctionV2 {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let idx = source.read_u8()?;
         let mut r = FunctionV2 {
-            parameter:    None,
+            parameter: None,
             return_value: None,
-            error:        None,
+            error: None,
         };
         if idx > 7 {
             return Err(ParseError::default());
@@ -990,7 +1054,9 @@ impl Deserial for Type {
 }
 
 impl From<TryFromIntError> for ParseError {
-    fn from(_: TryFromIntError) -> Self { ParseError::default() }
+    fn from(_: TryFromIntError) -> Self {
+        ParseError::default()
+    }
 }
 
 /// Try to convert the `len` to the provided size and serialize it.
@@ -1070,7 +1136,9 @@ mod impls {
     }
 
     impl From<ParseError> for VersionedSchemaError {
-        fn from(_: ParseError) -> Self { VersionedSchemaError::ParseError }
+        fn from(_: ParseError) -> Self {
+            VersionedSchemaError::ParseError
+        }
     }
 
     /// Unpacks a versioned contract schema from a versioned module schema
@@ -1233,9 +1301,9 @@ mod impls {
                 VersionedContractSchema::V0(_) => Err(VersionedSchemaError::EventNotSupported)?,
                 VersionedContractSchema::V1(_) => Err(VersionedSchemaError::EventNotSupported)?,
                 VersionedContractSchema::V2(_) => Err(VersionedSchemaError::EventNotSupported)?,
-                VersionedContractSchema::V3(contract_schema) => {
-                    contract_schema.event.ok_or(VersionedSchemaError::NoEventInContract)
-                }
+                VersionedContractSchema::V3(contract_schema) => contract_schema
+                    .event
+                    .ok_or(VersionedSchemaError::NoEventInContract),
             }
         }
 
@@ -1356,7 +1424,9 @@ mod impls {
 
         #[test]
         fn test_getting_init_param_schema() {
-            let extracted_type = module_schema().get_init_param_schema("TestContract").unwrap();
+            let extracted_type = module_schema()
+                .get_init_param_schema("TestContract")
+                .unwrap();
             assert_eq!(extracted_type, Type::U8)
         }
 
@@ -1367,11 +1437,14 @@ mod impls {
                 ("Bar".to_string(), Fields::None),
             ]);
             let module_schema = VersionedModuleSchema::V3(ModuleV3 {
-                contracts: BTreeMap::from([("TestContract".into(), ContractV3 {
-                    init:    None,
-                    receive: BTreeMap::new(),
-                    event:   Some(events.clone()),
-                })]),
+                contracts: BTreeMap::from([(
+                    "TestContract".into(),
+                    ContractV3 {
+                        init: None,
+                        receive: BTreeMap::new(),
+                        event: Some(events.clone()),
+                    },
+                )]),
             });
             let extracted_type = module_schema.get_event_schema("TestContract").unwrap();
             assert_eq!(extracted_type, events)
@@ -1387,7 +1460,9 @@ mod impls {
 
         #[test]
         fn test_getting_init_error_schema() {
-            let extracted_type = module_schema().get_init_error_schema("TestContract").unwrap();
+            let extracted_type = module_schema()
+                .get_init_error_schema("TestContract")
+                .unwrap();
             assert_eq!(extracted_type, Type::U16)
         }
 
@@ -1435,14 +1510,16 @@ mod tests {
     }
 
     /// Serialize and then deserialize the input.
-    fn serial_deserial<T: Serialize>(t: &T) -> ParseResult<T> { from_bytes::<T>(&to_bytes(t)) }
+    fn serial_deserial<T: Serialize>(t: &T) -> ParseResult<T> {
+        from_bytes::<T>(&to_bytes(t))
+    }
 
     #[test]
     fn test_function_v1_serial_deserial_is_id() {
         let f1 = FunctionV1::Parameter(Type::String(SizeLength::U32));
         let f2 = FunctionV1::ReturnValue(Type::U128);
         let f3 = FunctionV1::Both {
-            parameter:    Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
+            parameter: Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
             return_value: Type::ILeb128(3),
         };
 
@@ -1454,9 +1531,9 @@ mod tests {
     #[test]
     fn test_function_v2_serial_deserial_is_id() {
         let f1 = FunctionV2 {
-            parameter:    Some(Type::String(SizeLength::U32)),
+            parameter: Some(Type::String(SizeLength::U32)),
             return_value: Some(Type::String(SizeLength::U32)),
-            error:        Some(Type::String(SizeLength::U32)),
+            error: Some(Type::String(SizeLength::U32)),
         };
 
         assert_eq!(serial_deserial(&f1), Ok(f1));
@@ -1465,14 +1542,17 @@ mod tests {
     #[test]
     fn test_module_v0_serial_deserial_is_id() {
         let m = ModuleV0 {
-            contracts: BTreeMap::from([("a".into(), ContractV0 {
-                init:    Some(Type::U8),
-                receive: BTreeMap::from([
-                    ("b".into(), Type::String(SizeLength::U32)),
-                    ("c".into(), Type::Bool),
-                ]),
-                state:   Some(Type::String(SizeLength::U64)),
-            })]),
+            contracts: BTreeMap::from([(
+                "a".into(),
+                ContractV0 {
+                    init: Some(Type::U8),
+                    receive: BTreeMap::from([
+                        ("b".into(), Type::String(SizeLength::U32)),
+                        ("c".into(), Type::Bool),
+                    ]),
+                    state: Some(Type::String(SizeLength::U64)),
+                },
+            )]),
         };
 
         assert_eq!(serial_deserial(&m), Ok(m));
@@ -1481,16 +1561,25 @@ mod tests {
     #[test]
     fn test_module_v1_serial_deserial_is_id() {
         let m = ModuleV1 {
-            contracts: BTreeMap::from([("a".into(), ContractV1 {
-                init:    Some(FunctionV1::Parameter(Type::U8)),
-                receive: BTreeMap::from([
-                    ("b".into(), FunctionV1::ReturnValue(Type::String(SizeLength::U32))),
-                    ("c".into(), FunctionV1::Both {
-                        parameter:    Type::U8,
-                        return_value: Type::Bool,
-                    }),
-                ]),
-            })]),
+            contracts: BTreeMap::from([(
+                "a".into(),
+                ContractV1 {
+                    init: Some(FunctionV1::Parameter(Type::U8)),
+                    receive: BTreeMap::from([
+                        (
+                            "b".into(),
+                            FunctionV1::ReturnValue(Type::String(SizeLength::U32)),
+                        ),
+                        (
+                            "c".into(),
+                            FunctionV1::Both {
+                                parameter: Type::U8,
+                                return_value: Type::Bool,
+                            },
+                        ),
+                    ]),
+                },
+            )]),
         };
 
         assert_eq!(serial_deserial(&m), Ok(m));
@@ -1499,25 +1588,34 @@ mod tests {
     #[test]
     fn test_module_v2_serial_deserial_is_id() {
         let m = ModuleV2 {
-            contracts: BTreeMap::from([("a".into(), ContractV2 {
-                init:    Some(FunctionV2 {
-                    parameter:    Some(Type::String(SizeLength::U32)),
-                    return_value: Some(Type::String(SizeLength::U32)),
-                    error:        Some(Type::String(SizeLength::U32)),
-                }),
-                receive: BTreeMap::from([
-                    ("b".into(), FunctionV2 {
-                        parameter:    Some(Type::String(SizeLength::U32)),
+            contracts: BTreeMap::from([(
+                "a".into(),
+                ContractV2 {
+                    init: Some(FunctionV2 {
+                        parameter: Some(Type::String(SizeLength::U32)),
                         return_value: Some(Type::String(SizeLength::U32)),
-                        error:        Some(Type::String(SizeLength::U32)),
+                        error: Some(Type::String(SizeLength::U32)),
                     }),
-                    ("c".into(), FunctionV2 {
-                        parameter:    Some(Type::String(SizeLength::U32)),
-                        return_value: Some(Type::String(SizeLength::U32)),
-                        error:        Some(Type::String(SizeLength::U32)),
-                    }),
-                ]),
-            })]),
+                    receive: BTreeMap::from([
+                        (
+                            "b".into(),
+                            FunctionV2 {
+                                parameter: Some(Type::String(SizeLength::U32)),
+                                return_value: Some(Type::String(SizeLength::U32)),
+                                error: Some(Type::String(SizeLength::U32)),
+                            },
+                        ),
+                        (
+                            "c".into(),
+                            FunctionV2 {
+                                parameter: Some(Type::String(SizeLength::U32)),
+                                return_value: Some(Type::String(SizeLength::U32)),
+                                error: Some(Type::String(SizeLength::U32)),
+                            },
+                        ),
+                    ]),
+                },
+            )]),
         };
 
         assert_eq!(serial_deserial(&m), Ok(m));

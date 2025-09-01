@@ -1521,7 +1521,7 @@ decodeTokenRejectReasonDetails "operationNotPermitted" =
 decodeTokenRejectReasonDetails unknownType =
     fail $ "token-reject-reason: unsupported reject reason: " ++ show unknownType
 
---  | Decode a 'TokenRejectReason' from an 'EncodedTokenRejectReason'.
+-- | Decode a 'TokenRejectReason' from an 'EncodedTokenRejectReason'.
 decodeTokenRejectReason :: EncodedTokenRejectReason -> Either String TokenRejectReason
 decodeTokenRejectReason EncodedTokenRejectReason{..} = case etrrDetails of
     Nothing ->
