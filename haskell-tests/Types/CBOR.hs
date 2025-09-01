@@ -332,8 +332,8 @@ testEncodedInitializationParametersJSON = describe "TokenInitializationParameter
     it "Serialize/Deserialize roundtrip success JSON" $
         assertEqual
             "Deserialized"
-            (Just encTip1)
-            ( AE.decode $
+            (Right encTip1)
+            ( AE.eitherDecode $
                 AE.encode
                     encTip1
             )
@@ -344,8 +344,8 @@ testEncodedInitializationParametersJSON = describe "TokenInitializationParameter
     it "Serialize/Deserialize roundtrip where CBOR is not a valid TokenInitializationParameters" $
         assertEqual
             "Deserialized"
-            (Just invalidEncTip1)
-            ( AE.decode $
+            (Right invalidEncTip1)
+            ( AE.eitherDecode $
                 AE.encode
                     invalidEncTip1
             )
@@ -353,7 +353,7 @@ testEncodedInitializationParametersJSON = describe "TokenInitializationParameter
 testInitializationParametersJSON :: Spec
 testInitializationParametersJSON = describe "TokenInitializationParameters JSON serialization" $ do
     it "JSON Encode and decode TokenInitializationParameters" $ withMaxSuccess 1000 $ forAll genTokenInitializationParameters $ \tip ->
-        Just tip === AE.decode (AE.encode tip)
+        Right tip === AE.eitherDecode (AE.encode tip)
     describe "Pin TokenInitializationParameters JSON encoding" $ do
         it "Maximal: All values specified" $
             assertEqual
@@ -563,8 +563,8 @@ testTokenModuleStateSimpleJSON = describe "TokenModuleState JSON serialization w
     it "Serialize/Deserialize roundtrip success" $
         assertEqual
             "Deserialized"
-            (Just object)
-            ( AE.decode $
+            (Right object)
+            ( AE.eitherDecode $
                 AE.encode
                     object
             )
@@ -622,8 +622,8 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
     it "Serialize/Deserialize roundtrip success" $
         assertEqual
             "Deserialized"
-            (Just object)
-            ( AE.decode $
+            (Right object)
+            ( AE.eitherDecode $
                 AE.encode
                     object
             )
@@ -633,6 +633,47 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
             assertEqual
                 "Encoding"
                 "{\"_additional\":{\"otherField\":\"f5\"},\"allowList\":true,\"burnable\":false,\"denyList\":true,\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"},\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"mintable\":true,\"name\":\"bla bla\",\"paused\":false}"
+                ( AE.encode
+                    object
+                )
+        it "Minimal: Optional values not set" $ do
+            assertEqual
+                "Encoding"
+                "{}"
+                ( AE.encode
+                    minimalObject
+                )
+
+
+testTokenModuleAccountStateJSON :: Spec
+testTokenModuleAccountStateJSON = describe "TokenModuleAccountState JSON serialization with additional state" $ do
+    let object =
+            TokenModuleAccountState
+                { tmasAllowList = Just True
+                , tmasDenyList = Just False
+                , tmasAdditional = Map.fromList [("otherField" :: Text.Text, CBOR.TBool True)]
+                }
+    let minimalObject =
+            TokenModuleAccountState
+                { tmasAllowList = Nothing
+                , tmasDenyList = Nothing
+                , tmasAdditional = Map.empty
+                }
+
+    it "Serialize/Deserialize roundtrip success" $
+        assertEqual
+            "Deserialized"
+            (Right object)
+            ( AE.eitherDecode $
+                AE.encode
+                    object
+            )
+
+    describe "Pin TokenModuleAccountState JSON encoding" $ do
+        it "Maximal: All values set" $ do
+            assertEqual
+                "Encoding"
+                "{\"_additional\":{\"otherField\":\"f5\"},\"allowList\":true,\"denyList\":false}"
                 ( AE.encode
                     object
                 )
@@ -928,6 +969,7 @@ tests = parallel $ describe "CBOR" $ do
     testTokenModuleStateJSON
     testTokenModuleStateCBOR
     testTokenStateSimpleJSON
+    testTokenModuleAccountStateJSON
     testTokenStateJSON
     testTokenModuleAccountStateCBOR
     it "JSON (de-)serialization roundtrip for TokenState (simple)" $ withMaxSuccess 1000 $ forAll genTokenStateSimple $ \tt ->
@@ -984,10 +1026,10 @@ tests = parallel $ describe "CBOR" $ do
                 decodeTokenMetadataUrl
                 (toLazyByteString $ encodeTokenMetadataUrl tmu)
     it "JSON Encode and decode TokenMetadataUrl (with simple)" $ withMaxSuccess 1000 $ forAll genTokenMetadataUrlSimple $ \tmu ->
-        Just tmu === AE.decode (AE.encode tmu)
+        Right tmu === AE.eitherDecode (AE.encode tmu)
     it "JSON Encode and decode TokenMetadataUrl (with additional)" $ withMaxSuccess 1000 $ forAll genTokenMetadataUrlAdditional $ \tmu ->
-        Just tmu === AE.decode (AE.encode tmu)
-    it "JSON Encode and decode CborTokenHolder" $ withMaxSuccess 1000 $ forAll genTokenHolder $ \th -> Just th == AE.decode (AE.encode th)
+        Right tmu === AE.eitherDecode (AE.encode tmu)
+    it "JSON Encode and decode CborTokenHolder" $ withMaxSuccess 1000 $ forAll genTokenHolder $ \th -> Right th == AE.eitherDecode (AE.encode th)
     it "CBOR Encode and decode CborTokenHolder" $ withMaxSuccess 1000 $ forAll genCborTokenHolder $ \th ->
         Right ("", th)
             === deserialiseFromBytes

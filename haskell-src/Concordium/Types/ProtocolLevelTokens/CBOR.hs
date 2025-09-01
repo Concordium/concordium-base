@@ -1718,7 +1718,7 @@ instance AE.ToJSON TokenModuleAccountState where
         AE.object . catMaybes $
             [ ("allowList" AE..=) <$> tmasAllowList,
               ("denyList" AE..=) <$> tmasDenyList,
-              ("additional" AE..=) <$> additional
+              ("_additional" AE..=) <$> additional
             ]
       where
         additional
@@ -1734,7 +1734,7 @@ instance AE.FromJSON TokenModuleAccountState where
     parseJSON = AE.withObject "TokenModuleAccountState" $ \v -> do
         tmasAllowList <- v AE..:? "allowList"
         tmasDenyList <- v AE..:? "denyList"
-        additional <- v AE..:? "additional" AE..!= Map.empty
+        additional <- v AE..:? "_additional" AE..!= Map.empty
         tmasAdditional <-
             Map.traverseWithKey
                 ( \k hexVal -> case hexToCborTerm hexVal of
