@@ -290,8 +290,8 @@ encodeAccountAddress :: AccountAddress -> Encoding
 encodeAccountAddress (AccountAddress (FBS.FixedByteString ba)) =
     encodeByteArray (SBA.fromByteArray ba)
 
--- | An entity that can receive and hold protocol-level tokens. Currently, this
--- can only be a Concordium account address. The type is used in the transaction
+-- | Concordium account address in the context of receiving and holding protocol-level tokens. 
+-- The type is used in the transaction
 -- payload, in reject reasons, and in the `TokenModuleEvent`.
 data CborTokenHolder = CborHolderAccount
     { -- | The account address.
