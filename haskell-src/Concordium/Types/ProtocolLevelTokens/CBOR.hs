@@ -600,45 +600,14 @@ data TokenInitializationParameters = TokenInitializationParameters
       -- | Whether the token is mintable.
       tipMintable :: !(Maybe Bool),
       -- | Whether the token is burnable.
-      tipBurnable :: !(Maybe Bool)
+      tipBurnable :: !(Maybe Bool),
+      -- | Any additional state data. Keys in this map SHOULD NOT overlap those
+      --  used for the other (standardised) fields in this structure as that will
+      --  break the invertability of the CBOR encoding.
+      tipAdditional :: !(Map.Map Text CBOR.Term)      
     }
     deriving (Eq, Show)
 
--- | Builder for 'TokenInitializationParameters'
-data TokenInitializationParametersBuilder = TokenInitializationParametersBuilder
-    { _tipbName :: Maybe Text,
-      _tipbMetadata :: Maybe TokenMetadataUrl,
-      _tipbGovernanceAccount :: Maybe CborTokenHolder,
-      _tipbAllowList :: Maybe Bool,
-      _tipbDenyList :: Maybe Bool,
-      _tipbInitialSupply :: Maybe TokenAmount,
-      _tipbMintable :: Maybe Bool,
-      _tipbBurnable :: Maybe Bool
-    }
-
-makeLenses ''TokenInitializationParametersBuilder
-
--- | A 'TokenInitializationParametersBuilder' with no fields initialized.
-emptyTokenInitializationParametersBuilder :: TokenInitializationParametersBuilder
-emptyTokenInitializationParametersBuilder =
-    TokenInitializationParametersBuilder Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
-
--- | Construct a 'TokenInitializationParameters' from a 'TokenInitializationParametersBuilder'.
---  This results in @Left err@ (where @err@ describes the failure reason) when a required parameter
---  is missing. Missing optional parameters are populated with the appropriate default values.
-buildTokenInitializationParameters ::
-    TokenInitializationParametersBuilder -> TokenInitializationParameters
-buildTokenInitializationParameters TokenInitializationParametersBuilder{..} =
-    TokenInitializationParameters
-        { tipName = _tipbName,
-          tipMetadata = _tipbMetadata,
-          tipGovernanceAccount = _tipbGovernanceAccount,
-          tipAllowList = _tipbAllowList,
-          tipDenyList = _tipbDenyList,
-          tipInitialSupply = _tipbInitialSupply,
-          tipMintable = _tipbMintable,
-          tipBurnable = _tipbBurnable
-        }
 
 instance AE.ToJSON TokenInitializationParameters where
     toJSON TokenInitializationParameters{..} = do
@@ -651,40 +620,78 @@ instance AE.ToJSON TokenInitializationParameters where
               ("initialSupply" AE..=) <$> tipInitialSupply,
               ("mintable" AE..=) <$> tipMintable,
               ("burnable" AE..=) <$> tipBurnable
+              ("_additional" AE..=) <$> additional
             ]
+      where
+        additional
+            | null tipAdditional = Nothing
+            | otherwise =
+                Just $
+                    AE.object
+                        [ AE.Key.fromText k AE..= cborTermToHex v
+                        | (k, v) <- Map.toList tipAdditional
+                        ]
 
 instance AE.FromJSON TokenInitializationParameters where
     parseJSON = AE.withObject "TokenInitializationParameters" $ \o -> do
-        _tipbName <- o AE..:? "name"
-        _tipbMetadata <- o AE..:? "metadata"
-        _tipbGovernanceAccount <- o AE..:? "governanceAccount"
-        _tipbAllowList <- o AE..:? "allowList"
-        _tipbDenyList <- o AE..:? "denyList"
-        _tipbInitialSupply <- o AE..:? "initialSupply"
-        _tipbMintable <- o AE..:? "mintable"
-        _tipbBurnable <- o AE..:? "burnable"
-        pure $ buildTokenInitializationParameters TokenInitializationParametersBuilder{..}
+        tipName <- o AE..:? "name"
+        tipMetadata <- o AE..:? "metadata"
+        tipGovernanceAccount <- o AE..:? "governanceAccount"
+        tipAllowList <- o AE..:? "allowList"
+        tipDenyList <- o AE..:? "denyList"
+        tipInitialSupply <- o AE..:? "initialSupply"
+        tipMintable <- o AE..:? "mintable"
+        tipBurnable <- o AE..:? "burnable"
+        tipAdditional <-
+            (v AE..:? "_additional" .!= Map.empty)
+                >>= Map.traverseWithKey
+                    ( \k hexTxt ->
+                        case hexToCborTerm hexTxt of
+                            Left err ->
+                                fail $ "Failed to decode CBOR for key " ++ show k ++ ": " ++ err
+                            Right term -> return term
+                    )        
+        pure  TokenInitializationParameters{..}
 
 -- | Decode a CBOR-encoded 'TokenInitializationParameters'.
 --  This decoder enforces CBOR-validity (in particular, no duplicate map keys), disallows
 --  extraneous keys, and applies defaults specified by the CDDL schema.  It does not require
 --  deterministic encoding.
 decodeTokenInitializationParameters :: Decoder s TokenInitializationParameters
-decodeTokenInitializationParameters =
-    decodeMap
-        valDecoder
-        (Right . buildTokenInitializationParameters)
-        emptyTokenInitializationParametersBuilder
+decodeTokenInitializationParameters = decodeMap decodeVal build Map.empty
   where
-    valDecoder k@"name" = Just $ mapValueDecoder k decodeString tipbName
-    valDecoder k@"metadata" = Just $ mapValueDecoder k decodeTokenMetadataUrl tipbMetadata
-    valDecoder k@"governanceAccount" = Just $ mapValueDecoder k decodeCborTokenHolder tipbGovernanceAccount
-    valDecoder k@"allowList" = Just $ mapValueDecoder k decodeBool tipbAllowList
-    valDecoder k@"denyList" = Just $ mapValueDecoder k decodeBool tipbDenyList
-    valDecoder k@"initialSupply" = Just $ mapValueDecoder k decodeTokenAmount tipbInitialSupply
-    valDecoder k@"mintable" = Just $ mapValueDecoder k decodeBool tipbMintable
-    valDecoder k@"burnable" = Just $ mapValueDecoder k decodeBool tipbBurnable
-    valDecoder _ = Nothing
+    decodeVal key = Just $ mapValueDecoder key CBOR.decodeTerm (at key)
+    build :: Map.Map Text CBOR.Term -> Either String TokenInitializationParameters
+    build m0 = do
+        (tipName, m1) <- getMaybeAndClear "name" convertText m0
+        (tipMetadata, m2) <- getMaybeAndClear "metadata" convertTokenMetadataUrl m1
+        (tipGovernanceAccount, m3) <- getMaybeAndClear "governanceAccount" convertCborTokenHolder m2
+        (tipAllowList, m4) <- getMaybeAndClear "allowList" convertBool m3
+        (tipDenyList, m5) <- getMaybeAndClear "denyList" convertBool m4
+        (tipInitialSupply, m6) <- getMaybeAndClear "initialSupply" convertTokenAmount m5    
+        (tipMintable, m7) <- getMaybeAndClear "mintable" convertBool m6
+        (tipBurnable, tipAdditional) <- getMaybeAndClear "burnable" convertBool m7
+        return TokenInitializationParameters{..}
+    getMaybeAndClear key convert m = do
+        let (maybeTerm, m') = m & at key <<.~ Nothing
+        maybeVal <- forM maybeTerm $ \term -> convert term `orFail` ("Invalid " ++ show key)
+        return (maybeVal, m')
+    convertText (CBOR.TString t) = Just t
+    convertText (CBOR.TStringI t) = Just (LazyText.toStrict t)
+    convertText _ = Nothing
+
+    convertBool (CBOR.TBool b) = Just b
+    convertBool _ = Nothing
+
+    -- Convert CBOR to TokenMetadataUrl
+    convertTokenMetadataUrl :: CBOR.Term -> Maybe TokenMetadataUrl
+    convertTokenMetadataUrl = either (const Nothing) Just . decodeTokenMetadataUrlHelper
+
+    convertCborTokenHolder :: CBOR.Term -> Maybe CborTokenHolder
+    convertCborTokenHolder = either (const Nothing) Just . decodeCborTokenHolderHelper
+
+    convertTokenAmount :: CBOR.Term -> Maybe TokenAmount
+    convertTokenAmount = either (const Nothing) Just . decodeTokenAmount
 
 -- | Parse a 'TokenInitializationParameters' from a 'LBS.ByteString'. The entire bytestring must
 --  be consumed in the parsing.
@@ -701,7 +708,7 @@ tokenInitializationParametersFromBytes lbs =
 encodeTokenInitializationParameters :: TokenInitializationParameters -> Encoding
 encodeTokenInitializationParameters TokenInitializationParameters{..} =
     encodeMapDeterministic $
-        Map.empty
+        additionalMap
             & k "name" .~ (encodeString <$> tipName)
             & k "metadata" .~ (encodeTokenMetadataUrl <$> tipMetadata)
             & k "governanceAccount" .~ (encodeCborTokenHolder <$> tipGovernanceAccount)
@@ -711,6 +718,11 @@ encodeTokenInitializationParameters TokenInitializationParameters{..} =
             & k "mintable" .~ (encodeBool <$> tipMintable)
             & k "burnable" .~ (encodeBool <$> tipBurnable)
   where
+    additionalMap =
+        Map.fromList
+            [ (makeMapKeyEncoding (encodeString key), CBOR.encodeTerm val)
+            | (key, val) <- Map.toList tipAdditional
+            ]    
     k = at . makeMapKeyEncoding . encodeString
 
 -- | CBOR-encode a 'TokenInitializationParameters' to a (strict) 'BS.ByteString'.
