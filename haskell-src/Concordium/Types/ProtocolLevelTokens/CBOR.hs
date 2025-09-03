@@ -663,7 +663,7 @@ instance AE.FromJSON TokenInitializationParameters where
         _tipbInitialSupply <- o AE..:? "initialSupply"
         _tipbMintable <- o AE..:? "mintable"
         _tipbBurnable <- o AE..:? "burnable"
-        pure $ buildTokenInitializationParameters TokenInitializationParametersBuilder{..}
+        return $ buildTokenInitializationParameters TokenInitializationParametersBuilder{..}
 
 -- | Decode a CBOR-encoded 'TokenInitializationParameters'.
 --  This decoder enforces CBOR-validity (in particular, no duplicate map keys), disallows
