@@ -1032,7 +1032,7 @@ tests = parallel $ describe "CBOR" $ do
     it "CBOR Encode and decode CborHolderAccount" $ withMaxSuccess 1000 $ forAll genCborHolderAccount $ \th ->
         Right ("", th)
             === deserialiseFromBytes
-                decodeCborTokenHolder
+                decodeCborHolderAccount
                 (toLazyByteString $ encodeCborTokenHolder th)
     it "Encode and decode TokenUpdateTransaction" $ withMaxSuccess 1000 $ forAll genTokenTransaction $ \tt ->
         Right ("", tt)
