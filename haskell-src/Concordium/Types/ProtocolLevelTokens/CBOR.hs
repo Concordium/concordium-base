@@ -290,10 +290,10 @@ encodeAccountAddress :: AccountAddress -> Encoding
 encodeAccountAddress (AccountAddress (FBS.FixedByteString ba)) =
     encodeByteArray (SBA.fromByteArray ba)
 
--- | Concordium account address in the context of receiving and holding protocol-level tokens. 
+-- | Concordium account address in the context of receiving and holding protocol-level tokens.
 -- The type is used in the transaction
 -- payload, in reject reasons, and in the `TokenModuleEvent`.
-data CborTokenHolder = CborHolderAccount
+data CborHolderAccount = CborHolderAccount
     { -- | The account address.
       chaAccount :: !AccountAddress,
       -- | Although the account can only be a Concordium address, this specifies whether the
@@ -302,7 +302,7 @@ data CborTokenHolder = CborHolderAccount
     }
     deriving (Eq, Show)
 
-instance AE.ToJSON CborTokenHolder where
+instance AE.ToJSON CborHolderAccount where
     toJSON CborHolderAccount{..} = do
         AE.object $
             [ -- Tag with type of receiver
@@ -311,19 +311,19 @@ instance AE.ToJSON CborTokenHolder where
             ]
                 ++ ["coinInfo" AE..= coinInfo | coinInfo <- toList chaCoinInfo]
 
-instance AE.FromJSON CborTokenHolder where
-    parseJSON = AE.withObject "CborTokenHolder" $ \o -> do
+instance AE.FromJSON CborHolderAccount where
+    parseJSON = AE.withObject "CborHolderAccount" $ \o -> do
         type_string <- o AE..: "type"
         case (type_string :: String) of
             "account" -> do
                 chaAccount <- o AE..: "address"
                 chaCoinInfo <- o AE..:? "coinInfo"
                 return CborHolderAccount{..}
-            _ -> fail ("Unknown CborTokenHolder type " ++ type_string)
+            _ -> fail ("Unknown CborHolderAccount type " ++ type_string)
 
 -- | Create a 'HolderAccount' from an 'AccountAddress'. The address type will be present in the
 --  CBOR encoding.
-accountTokenHolder :: AccountAddress -> CborTokenHolder
+accountTokenHolder :: AccountAddress -> CborHolderAccount
 accountTokenHolder addr =
     CborHolderAccount
         { chaAccount = addr,
@@ -332,7 +332,7 @@ accountTokenHolder addr =
 
 -- | Create a 'HolderAccount' from an 'AccountAddress'. The address type will not be present in
 --  the CBOR encoding.
-accountTokenHolderShort :: AccountAddress -> CborTokenHolder
+accountTokenHolderShort :: AccountAddress -> CborHolderAccount
 accountTokenHolderShort addr =
     CborHolderAccount
         { chaAccount = addr,
@@ -353,9 +353,9 @@ makeLenses ''HolderAccountBuilder
 emptyHolderAccountBuilder :: HolderAccountBuilder
 emptyHolderAccountBuilder = HolderAccountBuilder Nothing Nothing
 
--- | Helper function for decoding a 'CborTokenHolder' from a 'CBOR.Term'.
-decodeCborTokenHolderHelper :: CBOR.Term -> Either String CborTokenHolder
-decodeCborTokenHolderHelper = \case
+-- | Helper function for decoding a 'CborHolderAccount' from a 'CBOR.Term'.
+decodeCborHolderAccountHelper :: CBOR.Term -> Either String CborHolderAccount
+decodeCborHolderAccountHelper = \case
     CBOR.TTagged tag term
         | tag == 40307 -> do
             keyValues <- case term of
@@ -369,7 +369,7 @@ decodeCborTokenHolderHelper = \case
         | otherwise -> Left $ "token-holder: Expected cryptocurrency address (tag 40307), but found tag " ++ show tag
     other -> Left $ "token-holder: Unexpected term constructor for token holder: " ++ show other
   where
-    build :: Map.Map Int CBOR.Term -> Either String CborTokenHolder
+    build :: Map.Map Int CBOR.Term -> Either String CborHolderAccount
     build m0 = do
         (chaAccount, m1) <- getAndClear 3 convertAddress m0
         (chaCoinInfo, m2) <- getMaybeAndClear 1 convertCoinInfo m1
@@ -396,12 +396,12 @@ decodeCborTokenHolderHelper = \case
             Right coinInfo -> Just coinInfo
 
 -- | Decode a CBOR-encoded 'TokenHolder'.
-decodeCborTokenHolder :: Decoder s CborTokenHolder
-decodeCborTokenHolder = do
+decodeCborHolderAccount :: Decoder s CborHolderAccount
+decodeCborHolderAccount = do
     term <- CBOR.decodeTerm
-    either fail return $ decodeCborTokenHolderHelper term
+    either fail return $ decodeCborHolderAccountHelper term
 
-encodeCborTokenHolder :: CborTokenHolder -> Encoding
+encodeCborTokenHolder :: CborHolderAccount -> Encoding
 encodeCborTokenHolder CborHolderAccount{..} =
     encodeTag 40307
         <> encodeMapDeterministic
@@ -590,7 +590,7 @@ data TokenInitializationParameters = TokenInitializationParameters
       -- | A URL pointing to the token metadata.
       tipMetadata :: !(Maybe TokenMetadataUrl),
       -- | The governance account of this token.
-      tipGovernanceAccount :: !(Maybe CborTokenHolder),
+      tipGovernanceAccount :: !(Maybe CborHolderAccount),
       -- | Whether the token supports an allow list.
       tipAllowList :: !(Maybe Bool),
       -- | Whether the token supports a deny list.
@@ -608,7 +608,7 @@ data TokenInitializationParameters = TokenInitializationParameters
 data TokenInitializationParametersBuilder = TokenInitializationParametersBuilder
     { _tipbName :: Maybe Text,
       _tipbMetadata :: Maybe TokenMetadataUrl,
-      _tipbGovernanceAccount :: Maybe CborTokenHolder,
+      _tipbGovernanceAccount :: Maybe CborHolderAccount,
       _tipbAllowList :: Maybe Bool,
       _tipbDenyList :: Maybe Bool,
       _tipbInitialSupply :: Maybe TokenAmount,
@@ -678,7 +678,7 @@ decodeTokenInitializationParameters =
   where
     valDecoder k@"name" = Just $ mapValueDecoder k decodeString tipbName
     valDecoder k@"metadata" = Just $ mapValueDecoder k decodeTokenMetadataUrl tipbMetadata
-    valDecoder k@"governanceAccount" = Just $ mapValueDecoder k decodeCborTokenHolder tipbGovernanceAccount
+    valDecoder k@"governanceAccount" = Just $ mapValueDecoder k decodeCborHolderAccount tipbGovernanceAccount
     valDecoder k@"allowList" = Just $ mapValueDecoder k decodeBool tipbAllowList
     valDecoder k@"denyList" = Just $ mapValueDecoder k decodeBool tipbDenyList
     valDecoder k@"initialSupply" = Just $ mapValueDecoder k decodeTokenAmount tipbInitialSupply
@@ -791,7 +791,7 @@ data TokenTransferBody = TokenTransferBody
     { -- | The amount to transfer.
       ttAmount :: !TokenAmount,
       -- | The recipient account address.
-      ttRecipient :: !CborTokenHolder,
+      ttRecipient :: !CborHolderAccount,
       -- | An optional memo associated with the transfer.
       ttMemo :: !(Maybe TaggableMemo)
     }
@@ -815,7 +815,7 @@ instance AE.FromJSON TokenTransferBody where
 -- | Builder
 data TokenTransferBuilder = TokenTransferBuilder
     { _ttbAmount :: Maybe TokenAmount,
-      _ttbRecipient :: Maybe CborTokenHolder,
+      _ttbRecipient :: Maybe CborHolderAccount,
       _ttbMemo :: Maybe TaggableMemo
     }
 
@@ -841,7 +841,7 @@ decodeTokenTransfer =
     decodeMap valDecoder buildTokenTransfer emptyTokenTransferBuilder
   where
     valDecoder k@"amount" = Just $ mapValueDecoder k decodeTokenAmount ttbAmount
-    valDecoder k@"recipient" = Just $ mapValueDecoder k decodeCborTokenHolder ttbRecipient
+    valDecoder k@"recipient" = Just $ mapValueDecoder k decodeCborHolderAccount ttbRecipient
     valDecoder k@"memo" = Just $ mapValueDecoder k decodeTaggableMemo ttbMemo
     valDecoder _ = Nothing
 
@@ -867,13 +867,13 @@ data TokenOperation
     | -- | Burn a specified token amount from the token governance account.
       TokenBurn {toBurnAmount :: !TokenAmount}
     | -- | Add the specified account to the allow list.
-      TokenAddAllowList {toTarget :: !CborTokenHolder}
+      TokenAddAllowList {toTarget :: !CborHolderAccount}
     | -- | Remove the specified account from the allow list.
-      TokenRemoveAllowList {toTarget :: !CborTokenHolder}
+      TokenRemoveAllowList {toTarget :: !CborHolderAccount}
     | -- | Add the specified account to the deny list.
-      TokenAddDenyList {toTarget :: !CborTokenHolder}
+      TokenAddDenyList {toTarget :: !CborHolderAccount}
     | -- | Remove the specified account from the deny list.
-      TokenRemoveDenyList {toTarget :: !CborTokenHolder}
+      TokenRemoveDenyList {toTarget :: !CborHolderAccount}
     | -- | Pause transfer/mint/burn operations for the token.
       TokenPause
     | -- | Unpause transfer/mint/burn operations for the token.
@@ -983,7 +983,7 @@ decodeTokenOperation = do
                     "token-operation (" ++ Text.unpack opType ++ "): missing amount"
         decodeMap valDecoder build Nothing
     decodeListTarget opType = do
-        let valDecoder k@"target" = Just (mapValueDecoder k decodeCborTokenHolder id)
+        let valDecoder k@"target" = Just (mapValueDecoder k decodeCborHolderAccount id)
             valDecoder _ = Nothing
             build (Just v) = Right v
             build Nothing =
@@ -1077,13 +1077,13 @@ data EncodedTokenEvent = EncodedTokenEvent
 
 data TokenEvent
     = -- | An account was added to the allow list.
-      AddAllowListEvent !CborTokenHolder
+      AddAllowListEvent !CborHolderAccount
     | -- | An account was removed from the allow list.
-      RemoveAllowListEvent !CborTokenHolder
+      RemoveAllowListEvent !CborHolderAccount
     | -- | An account was added to the deny list.
-      AddDenyListEvent !CborTokenHolder
+      AddDenyListEvent !CborHolderAccount
     | -- | An account was removed from the deny list.
-      RemoveDenyListEvent !CborTokenHolder
+      RemoveDenyListEvent !CborHolderAccount
     | -- | The execution of balance-changing operations was paused.
       Pause
     | -- | The execution of balance-changing operations was unpaused.
@@ -1092,7 +1092,7 @@ data TokenEvent
 
 -- | CBOR-encode the details for the list update events in the form:
 --  > {"target": <TokenHolder>}
-encodeTargetDetails :: CborTokenHolder -> TokenEventDetails
+encodeTargetDetails :: CborHolderAccount -> TokenEventDetails
 encodeTargetDetails target =
     TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
         encodeMapLen 1
@@ -1140,7 +1140,7 @@ encodeTokenEvent = \case
 
 -- | Decoder for the event details of the list update events.
 --  This is the "token-list-update-details" type in the CDDL schema.
-decodeTokenEventTarget :: Decoder s CborTokenHolder
+decodeTokenEventTarget :: Decoder s CborHolderAccount
 decodeTokenEventTarget = do
     maybeMapLen <- decodeMapLenOrIndef
     forM_ maybeMapLen $ \mapLen ->
@@ -1152,7 +1152,7 @@ decodeTokenEventTarget = do
         fail $
             "token-event: expected \"target\" key, but saw "
                 ++ show label
-    target <- decodeCborTokenHolder
+    target <- decodeCborHolderAccount
     when (isNothing maybeMapLen) $ do
         isEnd <- decodeBreakOr
         unless isEnd $ fail "token-event: expected end of map"
@@ -1199,7 +1199,7 @@ data TokenRejectReason
         { -- | The index in the list of operations of the failing operation.
           trrOperationIndex :: !Word64,
           -- | The address that could not be resolved.
-          trrAddress :: !CborTokenHolder
+          trrAddress :: !CborHolderAccount
         }
     | -- | The balance of tokens on the sender account is insufficient to perform the operation.
       TokenBalanceInsufficient
@@ -1241,7 +1241,7 @@ data TokenRejectReason
           trrOperationIndex :: !Word64,
           -- | (Optionally) the address that does not have the necessary permissions to perform
           --  the operation.
-          trrAddressNotPermitted :: !(Maybe CborTokenHolder),
+          trrAddressNotPermitted :: !(Maybe CborHolderAccount),
           -- | The reason why the operation is not permitted.
           trrReason :: !(Maybe Text)
         }
@@ -1251,7 +1251,7 @@ data TokenRejectReason
 --  constructor.
 data AddressNotFoundBuilder = AddressNotFoundBuilder
     { _anfbTransactionIndex :: Maybe Word64,
-      _anfbRecipient :: Maybe CborTokenHolder
+      _anfbRecipient :: Maybe CborHolderAccount
     }
 
 makeLenses ''AddressNotFoundBuilder
@@ -1366,7 +1366,7 @@ buildMintWouldOverflow MintWouldOverflowBuilder{..} = do
 --  constructor.
 data OperationNotPermittedBuilder = OperationNotPermittedBuilder
     { _onpbTransactionIndex :: Maybe Word64,
-      _onpbAddressNotPermitted :: Maybe CborTokenHolder,
+      _onpbAddressNotPermitted :: Maybe CborHolderAccount,
       _onpbReason :: Maybe Text
     }
 
@@ -1467,7 +1467,7 @@ decodeTokenRejectReasonDetails "addressNotFound" =
         emptyAddressNotFoundBuilder
   where
     valDecoder k@"index" = Just $ mapValueDecoder k decodeWord64 anfbTransactionIndex
-    valDecoder k@"address" = Just $ mapValueDecoder k decodeCborTokenHolder anfbRecipient
+    valDecoder k@"address" = Just $ mapValueDecoder k decodeCborHolderAccount anfbRecipient
     valDecoder _ = Nothing
 decodeTokenRejectReasonDetails "tokenBalanceInsufficient" =
     decodeMap
@@ -1515,7 +1515,7 @@ decodeTokenRejectReasonDetails "operationNotPermitted" =
         emptyOperationNotPermittedBuilder
   where
     valDecoder k@"index" = Just $ mapValueDecoder k decodeWord64 onpbTransactionIndex
-    valDecoder k@"address" = Just $ mapValueDecoder k decodeCborTokenHolder onpbAddressNotPermitted
+    valDecoder k@"address" = Just $ mapValueDecoder k decodeCborHolderAccount onpbAddressNotPermitted
     valDecoder k@"reason" = Just $ mapValueDecoder k decodeString onpbReason
     valDecoder _ = Nothing
 decodeTokenRejectReasonDetails unknownType =
@@ -1550,7 +1550,7 @@ data TokenModuleState = TokenModuleState
       -- | A URL pointing to the token metadata.
       tmsMetadata :: !(Maybe TokenMetadataUrl),
       -- | The governance account address of the token.
-      tmsGovernanceAccount :: !(Maybe CborTokenHolder),
+      tmsGovernanceAccount :: !(Maybe CborHolderAccount),
       -- | Whether the token is paused.
       tmsPaused :: !(Maybe Bool),
       -- | Whether the token supports an allow list.
@@ -1672,8 +1672,8 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
     convertTokenMetadataUrl :: CBOR.Term -> Maybe TokenMetadataUrl
     convertTokenMetadataUrl = either (const Nothing) Just . decodeTokenMetadataUrlHelper
 
-    convertCborTokenHolder :: CBOR.Term -> Maybe CborTokenHolder
-    convertCborTokenHolder = either (const Nothing) Just . decodeCborTokenHolderHelper
+    convertCborTokenHolder :: CBOR.Term -> Maybe CborHolderAccount
+    convertCborTokenHolder = either (const Nothing) Just . decodeCborHolderAccountHelper
 
 -- | Parse a 'TokenModuleState' from a 'LBS.ByteString'. The entire bytestring must
 --  be consumed in the parsing.
