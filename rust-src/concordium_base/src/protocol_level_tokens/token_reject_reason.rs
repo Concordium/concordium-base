@@ -1,7 +1,7 @@
 use crate::{
     common::{cbor, cbor::CborSerializationResult},
     protocol_level_tokens::{
-        token_holder::CborAccountAddress, RawCbor, TokenAmount, TokenId,
+        token_holder::CborHolderAccount, RawCbor, TokenAmount, TokenId,
         TokenModuleCborTypeDiscriminator,
     },
 };
@@ -89,7 +89,7 @@ pub struct AddressNotFoundRejectReason {
     /// The index in the list of operations of the failing operation.
     pub index: usize,
     /// The address that could not be resolved.
-    pub address: CborAccountAddress,
+    pub address: CborHolderAccount,
 }
 
 /// The balance of tokens on the sender account is insufficient
@@ -176,7 +176,7 @@ pub struct OperationNotPermittedRejectReason {
     pub index: usize,
     /// (Optionally) the address that does not have the necessary permissions to
     /// perform the operation.
-    pub address: Option<CborAccountAddress>,
+    pub address: Option<CborHolderAccount>,
     /// The reason why the operation is not permitted.
     pub reason: Option<String>,
 }
@@ -209,7 +209,7 @@ mod test {
     use super::*;
     use crate::{
         common::cbor,
-        protocol_level_tokens::{token_holder, CborAccountAddress},
+        protocol_level_tokens::{token_holder, CborHolderAccount},
     };
     use std::str::FromStr;
 
@@ -217,7 +217,7 @@ mod test {
     fn test_address_not_found_reject_reason_cbor() {
         let variant = AddressNotFoundRejectReason {
             index: 3,
-            address: CborAccountAddress {
+            address: CborHolderAccount {
                 address: token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             },
@@ -305,7 +305,7 @@ mod test {
     fn test_operation_not_permitted_reject_reason_cbor() {
         let variant = OperationNotPermittedRejectReason {
             index: 0,
-            address: Some(CborAccountAddress {
+            address: Some(CborHolderAccount {
                 address: token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             }),

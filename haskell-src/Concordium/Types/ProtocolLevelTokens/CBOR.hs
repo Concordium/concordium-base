@@ -47,7 +47,7 @@ import qualified Data.FixedByteString as FBS
 decodeFromBytes :: (forall s. Decoder s a) -> String -> LBS.ByteString -> Either String a
 decodeFromBytes decoder name lbs =
     case CBOR.deserialiseFromBytes decoder lbs of
-        Left e -> Left (show e)
+        Left e -> Left ("error decoding " ++ name ++ ": " ++ show e)
         Right ("", res) -> return res
         Right (remaining, _) ->
             Left $
@@ -456,11 +456,7 @@ hexToCborTerm hexText = do
     bs <- Base16.decode (TextEncoding.encodeUtf8 hexText)
     decodeTerm bs
   where
-    decodeTerm bs =
-        case CBOR.deserialiseFromBytes CBOR.decodeTerm (LBS.fromStrict bs) of
-            Left err -> Left $ "Failed to decode CBOR term: " ++ show err
-            Right ("", term) -> Right term
-            Right (remaining, _) -> Left $ "Extra bytes after decoding CBOR term: " ++ show (LBS.length remaining)
+    decodeTerm bs = decodeFromBytes CBOR.decodeTerm "CBOR term" (LBS.fromStrict bs)
 
 -- | A token metadata URL and an optional checksum. The checksum is a SHA256 hash of the metadata at the location of the URL.
 data TokenMetadataUrl = TokenMetadataUrl
@@ -578,7 +574,7 @@ tokenMetadataUrlFromBytes =
 
 -- | CBOR-encode a 'TokenMetadataUrl to a (strict) 'BS.ByteString'.
 tokenMetadataUrlToBytes :: TokenMetadataUrl -> BS.ByteString
-tokenMetadataUrlToBytes = CBOR.toStrictByteString . encodeTokenMetadataUrl
+tokenMetadataUrlToBytes = encodeToBytes . encodeTokenMetadataUrl
 
 -- * Initialization parameters
 
@@ -689,13 +685,7 @@ decodeTokenInitializationParameters =
 -- | Parse a 'TokenInitializationParameters' from a 'LBS.ByteString'. The entire bytestring must
 --  be consumed in the parsing.
 tokenInitializationParametersFromBytes :: LBS.ByteString -> Either String TokenInitializationParameters
-tokenInitializationParametersFromBytes lbs =
-    case CBOR.deserialiseFromBytes decodeTokenInitializationParameters lbs of
-        Left e -> Left (show e)
-        Right ("", res) -> return res
-        Right (remaining, _) ->
-            Left $
-                show (LBS.length remaining) ++ " bytes remaining after parsing token initialization parameters"
+tokenInitializationParametersFromBytes = decodeFromBytes decodeTokenInitializationParameters "token initialization parameters"
 
 -- | Encode a 'TokenInitializationParameters' as CBOR.
 encodeTokenInitializationParameters :: TokenInitializationParameters -> Encoding
@@ -1047,14 +1037,7 @@ decodeTokenUpdateTransaction = TokenUpdateTransaction <$> decodeSequence decodeT
 -- | Parse a 'TokenTransaction' from a 'LBS.ByteString'. The entire bytestring
 --  must be consumed in the parsing.
 tokenUpdateTransactionFromBytes :: LBS.ByteString -> Either String TokenUpdateTransaction
-tokenUpdateTransactionFromBytes lbs =
-    case CBOR.deserialiseFromBytes decodeTokenUpdateTransaction lbs of
-        Left e -> Left (show e)
-        Right ("", res) -> return res
-        Right (remaining, _) ->
-            Left $
-                show (LBS.length remaining)
-                    ++ " bytes remaining after parsing token transaction"
+tokenUpdateTransactionFromBytes = decodeFromBytes decodeTokenUpdateTransaction "token transaction"
 
 -- | Encode a 'TokenTransaction' as CBOR.
 encodeTokenUpdateTransaction :: TokenUpdateTransaction -> Encoding
@@ -1062,7 +1045,7 @@ encodeTokenUpdateTransaction = encodeSequence encodeTokenOperation . tokenOperat
 
 -- | CBOR-encode a 'TokenTransaction' to a (strict) 'BS.ByteString'.
 tokenUpdateTransactionToBytes :: TokenUpdateTransaction -> BS.ByteString
-tokenUpdateTransactionToBytes = CBOR.toStrictByteString . encodeTokenUpdateTransaction
+tokenUpdateTransactionToBytes = encodeToBytes . encodeTokenUpdateTransaction
 
 -- * Token module events
 
@@ -1170,16 +1153,8 @@ decodeTokenEvent EncodedTokenEvent{..} = case tokenEventTypeBytes eteType of
     unknownType -> Left $ "token-event: unsupported event type: " ++ show unknownType
   where
     detailsLBS = LBS.fromStrict $ BSS.fromShort $ tokenEventDetailsBytes eteDetails
-    handleDeserializationResult = \case
-        Left e -> Left $ "token-event: failed to decode event details: " ++ show e
-        Right ("", target) -> Right target
-        Right (remaining, _) ->
-            Left $
-                "token-event: "
-                    ++ show (LBS.length remaining)
-                    ++ " bytes remaining after parsing event details"
-    decodeTarget = handleDeserializationResult $ CBOR.deserialiseFromBytes decodeTokenEventTarget detailsLBS
-    decodePauseUnpause = handleDeserializationResult $ CBOR.deserialiseFromBytes decodeEmptyMap detailsLBS
+    decodeTarget = decodeFromBytes decodeTokenEventTarget "event details" detailsLBS
+    decodePauseUnpause = decodeFromBytes decodeEmptyMap "event details" detailsLBS
 
 -- * Reject reasons
 
@@ -1530,13 +1505,7 @@ decodeTokenRejectReason EncodedTokenRejectReason{..} = case etrrDetails of
                 ++ show etrrType
     Just details -> do
         let detailsLBS = LBS.fromStrict $ BSS.fromShort details
-        case CBOR.deserialiseFromBytes (decodeTokenRejectReasonDetails etrrType) detailsLBS of
-            Left e -> Left (show e)
-            Right ("", res) -> return res
-            Right (remaining, _) ->
-                Left $
-                    show (LBS.length remaining)
-                        ++ " bytes remaining after parsing token reject reason details"
+        decodeFromBytes (decodeTokenRejectReasonDetails etrrType) "token reject reason details" detailsLBS
 
 -- * Token Module state
 
@@ -1639,7 +1608,7 @@ encodeTokenModuleState TokenModuleState{..} =
 -- | CBOR-encode a 'TokenModuleState' to a (strict) 'BS.ByteString'.
 --  This uses default values in the encoding.
 tokenModuleStateToBytes :: TokenModuleState -> BS.ByteString
-tokenModuleStateToBytes = CBOR.toStrictByteString . encodeTokenModuleState
+tokenModuleStateToBytes = encodeToBytes . encodeTokenModuleState
 
 -- | Decode a CBOR-encoded 'TokenModuleState'.
 decodeTokenModuleState :: Decoder s TokenModuleState
@@ -1678,13 +1647,7 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
 -- | Parse a 'TokenModuleState' from a 'LBS.ByteString'. The entire bytestring must
 --  be consumed in the parsing.
 tokenModuleStateFromBytes :: LBS.ByteString -> Either String TokenModuleState
-tokenModuleStateFromBytes lbs =
-    case CBOR.deserialiseFromBytes decodeTokenModuleState lbs of
-        Left e -> Left (show e)
-        Right ("", res) -> return res
-        Right (remaining, _) ->
-            Left $
-                show (LBS.length remaining) ++ " bytes remaining after parsing token module state"
+tokenModuleStateFromBytes = decodeFromBytes decodeTokenModuleState "token module state"
 
 -- * Token account state
 
@@ -1762,7 +1725,7 @@ encodeTokenModuleAccountState TokenModuleAccountState{..} =
 
 -- | CBOR-encode a 'TokenModuleAccountState' to a (strict) 'BS.ByteString'.
 tokenModuleAccountStateToBytes :: TokenModuleAccountState -> BS.ByteString
-tokenModuleAccountStateToBytes = CBOR.toStrictByteString . encodeTokenModuleAccountState
+tokenModuleAccountStateToBytes = encodeToBytes . encodeTokenModuleAccountState
 
 -- | Decode a CBOR-encoded 'TokenModuleAccountState'.
 decodeTokenModuleAccountState :: Decoder s TokenModuleAccountState
@@ -1784,11 +1747,4 @@ decodeTokenModuleAccountState = decodeMap decodeVal build Map.empty
 -- | Parse a 'TokenModuleAccountState' from a 'LBS.ByteString'. The entire bytestring must
 --  be consumed in the parsing.
 tokenModuleAccountStateFromBytes :: LBS.ByteString -> Either String TokenModuleAccountState
-tokenModuleAccountStateFromBytes lbs =
-    case CBOR.deserialiseFromBytes decodeTokenModuleAccountState lbs of
-        Left e -> Left (show e)
-        Right ("", res) -> return res
-        Right (remaining, _) ->
-            Left $
-                show (LBS.length remaining)
-                    ++ " bytes remaining after parsing token module account state"
+tokenModuleAccountStateFromBytes = decodeFromBytes decodeTokenModuleAccountState "token module account state"
