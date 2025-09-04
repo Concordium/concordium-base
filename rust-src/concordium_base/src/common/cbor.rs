@@ -225,6 +225,28 @@ pub mod __private {
     pub use anyhow;
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Upward<A, R = ()> {
+    /// New unknown variant, the structure is not known to the current version
+    /// of this library. Consider updating the library if support is needed.
+    Unknown(R),
+    /// Known variant.
+    Known(A),
+}
+
+impl<A, R> Upward<A, R> {
+    pub fn known_or_else<E, F>(self, error: F) -> Result<A, E>
+    where
+        F: FnOnce(R) -> E, {
+        match self {
+            Upward::Unknown(residual) => Err(error(residual)),
+            Upward::Known(output) => Ok(output),
+        }
+    }
+}
+
+pub type CborUpward<A> = Upward<A, value::Value>;
+
 /// How to handle unknown keys in decoded CBOR maps.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Default)]
 pub enum UnknownMapKeys {
@@ -379,6 +401,14 @@ pub trait CborDeserialize {
     where
         Self: Sized;
 
+    fn deserialize_maybe_known<C: CborDecoder>(
+            decoder: C,
+        ) -> CborSerializationResult<CborUpward<Self>>
+        where
+            Self: Sized, {
+            Self::deserialize(decoder).map(Upward::Known)
+        }
+
     /// Produce value corresponding to `null` if possible for this type
     fn null() -> Option<Self>
     where
@@ -408,6 +438,23 @@ impl<T: CborDeserialize> CborDeserialize for Option<T> {
         Self: Sized,
     {
         Some(None)
+    }
+}
+
+impl<T: CborSerialize> CborSerialize for CborUpward<T> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+        match self {
+            Upward::Unknown(value) => value.serialize(encoder),
+            Upward::Known(value) => value.serialize(encoder),
+        }
+    }
+}
+
+impl<T: CborDeserialize> CborDeserialize for CborUpward<T> {
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
+    where
+        Self: Sized, {
+        T::deserialize_maybe_known(decoder)
     }
 }
 

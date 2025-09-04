@@ -14,7 +14,7 @@ use crate::{
     },
     common::{
         self,
-        cbor::{CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize},
+        cbor::{CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize, Upward},
         types::{Amount, KeyIndex, KeyPair, Timestamp, TransactionSignature, TransactionTime, *},
         Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
         Serial, Serialize,
@@ -2323,15 +2323,15 @@ pub mod construct {
                 .operations
                 .iter()
                 .map(|op| match op {
-                    TokenOperation::Transfer(_) => cost::PLT_TRANSFER,
-                    TokenOperation::Mint(_) => cost::PLT_MINT,
-                    TokenOperation::Burn(_) => cost::PLT_BURN,
-                    TokenOperation::AddAllowList(_)
-                    | TokenOperation::RemoveAllowList(_)
-                    | TokenOperation::AddDenyList(_)
-                    | TokenOperation::RemoveDenyList(_) => cost::PLT_LIST_UPDATE,
-                    TokenOperation::Pause(_) | TokenOperation::Unpause(_) => cost::PLT_PAUSE,
-                    TokenOperation::Unknown(_, _) => Default::default(),
+                    Upward::Known(TokenOperation::Transfer(_)) => cost::PLT_TRANSFER,
+                    Upward::Known(TokenOperation::Mint(_)) => cost::PLT_MINT,
+                    Upward::Known(TokenOperation::Burn(_)) => cost::PLT_BURN,
+                    Upward::Known(TokenOperation::AddAllowList(_))
+                    | Upward::Known(TokenOperation::RemoveAllowList(_))
+                    | Upward::Known(TokenOperation::AddDenyList(_))
+                    | Upward::Known(TokenOperation::RemoveDenyList(_)) => cost::PLT_LIST_UPDATE,
+                    Upward::Known(TokenOperation::Pause(_)) | Upward::Known(TokenOperation::Unpause(_)) => cost::PLT_PAUSE,
+                   Upward::Unknown(_) => Default::default(),
                 })
                 .sum()
     }

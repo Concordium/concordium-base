@@ -1,5 +1,5 @@
 use crate::{
-    common::cbor::{self, value, CborSerializationResult},
+    common::cbor::{self, value, CborSerializationResult, CborUpward},
     protocol_level_tokens::{CborHolderAccount, CoinInfo, RawCbor, TokenAmount, TokenId},
     transactions::Memo,
 };
@@ -135,11 +135,11 @@ impl TokenOperationsPayload {
 #[cbor(transparent)]
 pub struct TokenOperations {
     /// List of protocol level token operations
-    pub operations: Vec<TokenOperation>,
+    pub operations: Vec<CborUpward<TokenOperation>>,
 }
 
-impl FromIterator<TokenOperation> for TokenOperations {
-    fn from_iter<T: IntoIterator<Item = TokenOperation>>(iter: T) -> Self {
+impl FromIterator<CborUpward<TokenOperation>> for TokenOperations {
+    fn from_iter<T: IntoIterator<Item = CborUpward<TokenOperation>>>(iter: T) -> Self {
         Self {
             operations: iter.into_iter().collect(),
         }
@@ -147,7 +147,7 @@ impl FromIterator<TokenOperation> for TokenOperations {
 }
 
 impl TokenOperations {
-    pub fn new(operations: Vec<TokenOperation>) -> Self {
+    pub fn new(operations: Vec<CborUpward<TokenOperation>>) -> Self {
         Self { operations }
     }
 }
@@ -182,11 +182,7 @@ pub enum TokenOperation {
     Pause(TokenPauseDetails),
     /// Operation that unpauses execution of any balance changing operations for
     /// a protocol level token
-    Unpause(TokenPauseDetails),
-    /// Unknow operation. If new types of operations are added that are unknown
-    /// to this enum, they will be decoded to this variant.
-    #[cbor(other)]
-    Unknown(String, value::Value),
+    Unpause(TokenPauseDetails)
 }
 
 /// Details of an operation that changes a protocol level token supply.

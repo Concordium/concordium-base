@@ -1,5 +1,5 @@
 use crate::{
-    common::{cbor, cbor::CborSerializationResult},
+    common::{cbor, cbor::CborSerializationResult, cbor::CborUpward, cbor::Upward},
     protocol_level_tokens::{
         token_holder::CborHolderAccount, RawCbor, TokenAmount, TokenId,
         TokenModuleCborTypeDiscriminator,
@@ -24,29 +24,29 @@ pub struct TokenModuleRejectReason {
 
 impl TokenModuleRejectReason {
     /// Decode reject reason from CBOR
-    pub fn decode_reject_reason(&self) -> CborSerializationResult<TokenModuleRejectReasonType> {
+    pub fn decode_reject_reason(&self) -> CborSerializationResult<Upward<TokenModuleRejectReasonType>> {
         use TokenModuleRejectReasonType::*;
 
         Ok(match self.reason_type.as_ref() {
-            "addressNotFound" => AddressNotFound(cbor::cbor_decode(
+            "addressNotFound" => Upward::Known(AddressNotFound(cbor::cbor_decode(
                 self.details.as_ref().context("no CBOR details")?.as_ref(),
-            )?),
-            "tokenBalanceInsufficient" => TokenBalanceInsufficient(cbor::cbor_decode(
+            )?)),
+            "tokenBalanceInsufficient" => Upward::Known(TokenBalanceInsufficient(cbor::cbor_decode(
                 self.details.as_ref().context("no CBOR details")?.as_ref(),
-            )?),
-            "deserializationFailure" => DeserializationFailure(cbor::cbor_decode(
+            )?)),
+            "deserializationFailure" => Upward::Known(DeserializationFailure(cbor::cbor_decode(
                 self.details.as_ref().context("no CBOR details")?.as_ref(),
-            )?),
-            "unsupportedOperation" => UnsupportedOperation(cbor::cbor_decode(
+            )?)),
+            "unsupportedOperation" => Upward::Known(UnsupportedOperation(cbor::cbor_decode(
                 self.details.as_ref().context("no CBOR details")?.as_ref(),
-            )?),
-            "operationNotPermitted" => OperationNotPermitted(cbor::cbor_decode(
+            )?)),
+            "operationNotPermitted" => Upward::Known(OperationNotPermitted(cbor::cbor_decode(
                 self.details.as_ref().context("no CBOR details")?.as_ref(),
-            )?),
-            "mintWouldOverflow" => MintWouldOverflow(cbor::cbor_decode(
+            )?)),
+            "mintWouldOverflow" => Upward::Known(MintWouldOverflow(cbor::cbor_decode(
                 self.details.as_ref().context("no CBOR details")?.as_ref(),
-            )?),
-            _ => Unknown,
+            )?)),
+            _ => Upward::Unknown(()),
         })
     }
 }
