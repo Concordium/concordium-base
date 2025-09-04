@@ -1,5 +1,5 @@
 use super::{MetadataUrl, TokenAmount};
-use crate::{common::cbor::value, protocol_level_tokens::token_holder::CborHolderAccount};
+use crate::{common::cbor::value, protocol_level_tokens::token_holder::CborAccountAddress};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use std::collections::HashMap;
 
@@ -13,7 +13,7 @@ pub struct TokenModuleInitializationParameters {
     // /// A URL pointing to the token metadata
     pub metadata: Option<MetadataUrl>,
     /// The governance account of the token.
-    pub governance_account: Option<CborHolderAccount>,
+    pub governance_account: Option<CborAccountAddress>,
     /// Whether the token supports an allow list.
     pub allow_list: Option<bool>,
     /// Whether the token supports a deny list.
@@ -35,7 +35,7 @@ mod test {
     use super::*;
     use crate::{
         common::cbor,
-        protocol_level_tokens::{CborHolderAccount, CoinInfo},
+        protocol_level_tokens::{CborAccountAddress, CoinInfo},
     };
     use concordium_contracts_common::{hashes::Hash, AccountAddress};
 
@@ -51,7 +51,7 @@ mod test {
                 checksum_sha_256: Some(Hash::from(TEST_HASH)),
                 additional: Default::default(),
             }),
-            governance_account: Some(CborHolderAccount {
+            governance_account: Some(CborAccountAddress {
                 address: TEST_ADDRESS,
                 coin_info: Some(CoinInfo::CCD),
             }),

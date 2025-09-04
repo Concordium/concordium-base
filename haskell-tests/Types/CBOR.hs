@@ -65,7 +65,7 @@ genTokenInitializationParameters :: Gen TokenInitializationParameters
 genTokenInitializationParameters = do
     tipName <- oneof [pure Nothing, Just <$> genText]
     tipMetadata <- oneof [pure Nothing, Just <$> genTokenMetadataUrlSimple]
-    tipGovernanceAccount <- oneof [pure Nothing, Just <$> genCborHolderAccount]
+    tipGovernanceAccount <- oneof [pure Nothing, Just <$> genCborAccountAddress]
     tipAllowList <- arbitrary
     tipDenyList <- arbitrary
     tipInitialSupply <- oneof [pure Nothing, Just <$> genTokenAmount]
@@ -77,16 +77,16 @@ genTokenInitializationParameters = do
 genTokenTransfer :: Gen TokenTransferBody
 genTokenTransfer = do
     ttAmount <- genTokenAmount
-    ttRecipient <- genCborHolderAccount
+    ttRecipient <- genCborAccountAddress
     ttMemo <- oneof [pure Nothing, Just <$> genTaggableMemo]
     return TokenTransferBody{..}
 
--- | Generator for `CborHolderAccount`
-genCborHolderAccount :: Gen CborHolderAccount
-genCborHolderAccount =
+-- | Generator for `CborAccountAddress`
+genCborAccountAddress :: Gen CborAccountAddress
+genCborAccountAddress =
     oneof
-        [ CborHolderAccount <$> genAccountAddress <*> pure (Just CoinInfoConcordium),
-          CborHolderAccount <$> genAccountAddress <*> pure Nothing
+        [ CborAccountAddress <$> genAccountAddress <*> pure (Just CoinInfoConcordium),
+          CborAccountAddress <$> genAccountAddress <*> pure Nothing
         ]
 
 -- | Generator for `TaggableMemo`
@@ -104,10 +104,10 @@ genTokenOperation =
         [ TokenTransfer <$> genTokenTransfer,
           TokenMint <$> genTokenAmount,
           TokenBurn <$> genTokenAmount,
-          TokenAddAllowList <$> genCborHolderAccount,
-          TokenRemoveAllowList <$> genCborHolderAccount,
-          TokenAddDenyList <$> genCborHolderAccount,
-          TokenRemoveDenyList <$> genCborHolderAccount,
+          TokenAddAllowList <$> genCborAccountAddress,
+          TokenRemoveAllowList <$> genCborAccountAddress,
+          TokenAddDenyList <$> genCborAccountAddress,
+          TokenRemoveDenyList <$> genCborAccountAddress,
           pure TokenPause,
           pure TokenUnpause
         ]
@@ -122,7 +122,7 @@ genTokenModuleStateSimple :: Gen TokenModuleState
 genTokenModuleStateSimple = do
     tmsName <- oneof [pure Nothing, Just <$> genText]
     tmsMetadata <- oneof [pure Nothing, Just <$> genTokenMetadataUrlSimple]
-    tmsGovernanceAccount <- oneof [pure Nothing, Just <$> genCborHolderAccount]
+    tmsGovernanceAccount <- oneof [pure Nothing, Just <$> genCborAccountAddress]
     tmsPaused <- arbitrary
     tmsAllowList <- arbitrary
     tmsDenyList <- arbitrary
@@ -193,10 +193,10 @@ genTokenModuleAccountStateWithAdditional = do
 genTokenEvent :: Gen TokenEvent
 genTokenEvent =
     oneof
-        [ AddAllowListEvent <$> genCborHolderAccount,
-          RemoveAllowListEvent <$> genCborHolderAccount,
-          AddDenyListEvent <$> genCborHolderAccount,
-          RemoveDenyListEvent <$> genCborHolderAccount,
+        [ AddAllowListEvent <$> genCborAccountAddress,
+          RemoveAllowListEvent <$> genCborAccountAddress,
+          AddDenyListEvent <$> genCborAccountAddress,
+          RemoveDenyListEvent <$> genCborAccountAddress,
           pure Pause,
           pure Unpause
         ]
@@ -205,18 +205,18 @@ genTokenEvent =
 genTokenRejectReason :: Gen TokenRejectReason
 genTokenRejectReason =
     oneof
-        [ AddressNotFound <$> arbitrary <*> genCborHolderAccount,
+        [ AddressNotFound <$> arbitrary <*> genCborAccountAddress,
           TokenBalanceInsufficient <$> arbitrary <*> genTokenAmount <*> genTokenAmount,
           DeserializationFailure <$> liftArbitrary genText,
           UnsupportedOperation <$> arbitrary <*> genText <*> liftArbitrary genText,
           MintWouldOverflow <$> arbitrary <*> genTokenAmount <*> genTokenAmount <*> genTokenAmount,
-          OperationNotPermitted <$> arbitrary <*> liftArbitrary genCborHolderAccount <*> liftArbitrary genText
+          OperationNotPermitted <$> arbitrary <*> liftArbitrary genCborAccountAddress <*> liftArbitrary genText
         ]
 
 -- | An example value for governance account addresses.
-exampleCborHolderAccount :: CborHolderAccount
-exampleCborHolderAccount =
-    CborHolderAccount accountAddress (Just CoinInfoConcordium)
+exampleCborAccountAddress :: CborAccountAddress
+exampleCborAccountAddress =
+    CborAccountAddress accountAddress (Just CoinInfoConcordium)
   where
     accountAddress = case addressFromText "2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6" of
         Right addr -> addr
@@ -240,7 +240,7 @@ tokenInitializationParametersAllValues =
                               ("key2", CBOR.TString "extravalue2")
                             ]
                     },
-          tipGovernanceAccount = Just exampleCborHolderAccount,
+          tipGovernanceAccount = Just exampleCborAccountAddress,
           tipAllowList = Just False,
           tipInitialSupply = Just (TokenAmount{taValue = 10000, taDecimals = 5}),
           tipDenyList = Just True,
@@ -393,7 +393,7 @@ tops1 =
             ]
   where
     cborHolder =
-        CborHolderAccount
+        CborAccountAddress
             { chaAccount =
                 AccountAddress $
                     FBS.pack (replicate 32 1),
@@ -428,10 +428,10 @@ encTops1 =
                 CBOR.toStrictByteString $
                     encodeTokenUpdateTransaction tops1
 
--- | A dummy 'CborHolderAccount' value.
-dummyCborHolder :: CborHolderAccount
+-- | A dummy 'CborAccountAddress' value.
+dummyCborHolder :: CborAccountAddress
 dummyCborHolder =
-    CborHolderAccount
+    CborAccountAddress
         { chaAccount = AccountAddress $ FBS.pack (replicate 32 1),
           chaCoinInfo = Just CoinInfoConcordium
         }
@@ -551,7 +551,7 @@ testTokenModuleStateSimpleJSON = describe "TokenModuleState JSON serialization w
             TokenModuleState
                 { tmsMetadata = Just tokenMetadataURL,
                   tmsName = Just "bla bla",
-                  tmsGovernanceAccount = Just exampleCborHolderAccount,
+                  tmsGovernanceAccount = Just exampleCborAccountAddress,
                   tmsPaused = Just False,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
@@ -598,7 +598,7 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
             TokenModuleState
                 { tmsMetadata = Just tokenMetadataURL,
                   tmsName = Just "bla bla",
-                  tmsGovernanceAccount = Just exampleCborHolderAccount,
+                  tmsGovernanceAccount = Just exampleCborAccountAddress,
                   tmsPaused = Just False,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
@@ -709,7 +709,7 @@ testTokenModuleStateCBOR = describe "TokenModuleState CBOR serialization" $ do
                             TokenModuleState
                                 { tmsName = Just "Test name",
                                   tmsMetadata = Just TokenMetadataUrl{tmUrl = "testurl", tmChecksumSha256 = Nothing, tmAdditional = Map.empty},
-                                  tmsGovernanceAccount = Just exampleCborHolderAccount,
+                                  tmsGovernanceAccount = Just exampleCborAccountAddress,
                                   tmsPaused = Just True,
                                   tmsAllowList = Just True,
                                   tmsDenyList = Just False,
@@ -732,7 +732,7 @@ testTokenModuleStateCBOR = describe "TokenModuleState CBOR serialization" $ do
                             TokenModuleState
                                 { tmsName = Just "Test name",
                                   tmsMetadata = Just TokenMetadataUrl{tmUrl = "testurl", tmChecksumSha256 = Nothing, tmAdditional = Map.empty},
-                                  tmsGovernanceAccount = Just exampleCborHolderAccount,
+                                  tmsGovernanceAccount = Just exampleCborAccountAddress,
                                   tmsPaused = Nothing,
                                   tmsAllowList = Nothing,
                                   tmsDenyList = Nothing,
@@ -754,7 +754,7 @@ testTokenStateSimpleJSON = describe "TokenState JSON serialization without addit
             TokenModuleState
                 { tmsMetadata = Just tokenMetadataURL,
                   tmsName = Just "bla bla",
-                  tmsGovernanceAccount = Just exampleCborHolderAccount,
+                  tmsGovernanceAccount = Just exampleCborAccountAddress,
                   tmsPaused = Just False,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
@@ -798,7 +798,7 @@ testTokenStateJSON = describe "TokenState JSON serialization with additional sta
             TokenModuleState
                 { tmsMetadata = Just tokenMetadataURL,
                   tmsName = Just "bla bla",
-                  tmsGovernanceAccount = Just exampleCborHolderAccount,
+                  tmsGovernanceAccount = Just exampleCborAccountAddress,
                   tmsPaused = Just False,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
@@ -1028,12 +1028,12 @@ tests = parallel $ describe "CBOR" $ do
         Right tmu === AE.eitherDecode (AE.encode tmu)
     it "JSON Encode and decode TokenMetadataUrl (with additional)" $ withMaxSuccess 1000 $ forAll genTokenMetadataUrlAdditional $ \tmu ->
         Right tmu === AE.eitherDecode (AE.encode tmu)
-    it "JSON Encode and decode CborHolderAccount" $ withMaxSuccess 1000 $ forAll genTokenHolder $ \th -> Right th == AE.eitherDecode (AE.encode th)
-    it "CBOR Encode and decode CborHolderAccount" $ withMaxSuccess 1000 $ forAll genCborHolderAccount $ \th ->
+    it "JSON Encode and decode CborAccountAddress" $ withMaxSuccess 1000 $ forAll genTokenHolder $ \th -> Right th == AE.eitherDecode (AE.encode th)
+    it "CBOR Encode and decode CborAccountAddress" $ withMaxSuccess 1000 $ forAll genCborAccountAddress $ \th ->
         Right ("", th)
             === deserialiseFromBytes
-                decodeCborHolderAccount
-                (toLazyByteString $ encodeCborTokenHolder th)
+                decodeCborAccountAddress
+                (toLazyByteString $ encodeCborAccountAddress th)
     it "Encode and decode TokenUpdateTransaction" $ withMaxSuccess 1000 $ forAll genTokenTransaction $ \tt ->
         Right ("", tt)
             === deserialiseFromBytes
