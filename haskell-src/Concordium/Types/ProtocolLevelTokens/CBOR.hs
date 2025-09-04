@@ -47,7 +47,7 @@ import qualified Data.FixedByteString as FBS
 decodeFromBytes :: (forall s. Decoder s a) -> String -> LBS.ByteString -> Either String a
 decodeFromBytes decoder name lbs =
     case CBOR.deserialiseFromBytes decoder lbs of
-        Left e -> Left ("error decoding " ++ name ++ ": " ++ show e)
+        Left e -> Left (show e)
         Right ("", res) -> return res
         Right (remaining, _) ->
             Left $
