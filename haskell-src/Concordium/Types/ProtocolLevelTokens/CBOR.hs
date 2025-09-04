@@ -586,21 +586,21 @@ tokenMetadataUrlToBytes = CBOR.toStrictByteString . encodeTokenMetadataUrl
 --  to initialize the token.
 data TokenInitializationParameters = TokenInitializationParameters
     { -- | The name of the token.
-      tipName :: !Text,
+      tipName :: !(Maybe Text),
       -- | A URL pointing to the token metadata.
-      tipMetadata :: !TokenMetadataUrl,
+      tipMetadata :: !(Maybe TokenMetadataUrl),
       -- | The governance account of this token.
-      tipGovernanceAccount :: !CborTokenHolder,
+      tipGovernanceAccount :: !(Maybe CborTokenHolder),
       -- | Whether the token supports an allow list.
-      tipAllowList :: !Bool,
+      tipAllowList :: !(Maybe Bool),
       -- | Whether the token supports a deny list.
-      tipDenyList :: !Bool,
+      tipDenyList :: !(Maybe Bool),
       -- | The initial supply of the token. If not present, no tokens are minted initially.
       tipInitialSupply :: !(Maybe TokenAmount),
       -- | Whether the token is mintable.
-      tipMintable :: !Bool,
+      tipMintable :: !(Maybe Bool),
       -- | Whether the token is burnable.
-      tipBurnable :: !Bool
+      tipBurnable :: !(Maybe Bool)
     }
     deriving (Eq, Show)
 
@@ -627,30 +627,31 @@ emptyTokenInitializationParametersBuilder =
 --  This results in @Left err@ (where @err@ describes the failure reason) when a required parameter
 --  is missing. Missing optional parameters are populated with the appropriate default values.
 buildTokenInitializationParameters ::
-    TokenInitializationParametersBuilder -> Either String TokenInitializationParameters
-buildTokenInitializationParameters TokenInitializationParametersBuilder{..} = do
-    tipName <- _tipbName `orFail` "Missing \"name\""
-    tipMetadata <- _tipbMetadata `orFail` "Missing \"metadata\""
-    tipGovernanceAccount <- _tipbGovernanceAccount `orFail` "Missing \"governanceAccount\""
-    let tipAllowList = _tipbAllowList `orDefault` False
-    let tipDenyList = _tipbDenyList `orDefault` False
-    let tipInitialSupply = _tipbInitialSupply
-    let tipMintable = _tipbMintable `orDefault` False
-    let tipBurnable = _tipbBurnable `orDefault` False
-    return TokenInitializationParameters{..}
+    TokenInitializationParametersBuilder -> TokenInitializationParameters
+buildTokenInitializationParameters TokenInitializationParametersBuilder{..} =
+    TokenInitializationParameters
+        { tipName = _tipbName,
+          tipMetadata = _tipbMetadata,
+          tipGovernanceAccount = _tipbGovernanceAccount,
+          tipAllowList = _tipbAllowList,
+          tipDenyList = _tipbDenyList,
+          tipInitialSupply = _tipbInitialSupply,
+          tipMintable = _tipbMintable,
+          tipBurnable = _tipbBurnable
+        }
 
 instance AE.ToJSON TokenInitializationParameters where
     toJSON TokenInitializationParameters{..} = do
-        AE.object $
-            [ "name" AE..= tipName,
-              "metadata" AE..= tipMetadata,
-              "governanceAccount" AE..= tipGovernanceAccount,
-              "allowList" AE..= tipAllowList,
-              "denyList" AE..= tipDenyList,
-              "mintable" AE..= tipMintable,
-              "burnable" AE..= tipBurnable
+        AE.object . catMaybes $
+            [ ("name" AE..=) <$> tipName,
+              ("metadata" AE..=) <$> tipMetadata,
+              ("governanceAccount" AE..=) <$> tipGovernanceAccount,
+              ("allowList" AE..=) <$> tipAllowList,
+              ("denyList" AE..=) <$> tipDenyList,
+              ("initialSupply" AE..=) <$> tipInitialSupply,
+              ("mintable" AE..=) <$> tipMintable,
+              ("burnable" AE..=) <$> tipBurnable
             ]
-                ++ ["initialSupply" AE..= initSupply | initSupply <- toList tipInitialSupply]
 
 instance AE.FromJSON TokenInitializationParameters where
     parseJSON = AE.withObject "TokenInitializationParameters" $ \o -> do
@@ -662,9 +663,7 @@ instance AE.FromJSON TokenInitializationParameters where
         _tipbInitialSupply <- o AE..:? "initialSupply"
         _tipbMintable <- o AE..:? "mintable"
         _tipbBurnable <- o AE..:? "burnable"
-        case buildTokenInitializationParameters TokenInitializationParametersBuilder{..} of
-            Left e -> fail e
-            Right res -> return res
+        return $ buildTokenInitializationParameters TokenInitializationParametersBuilder{..}
 
 -- | Decode a CBOR-encoded 'TokenInitializationParameters'.
 --  This decoder enforces CBOR-validity (in particular, no duplicate map keys), disallows
@@ -674,7 +673,7 @@ decodeTokenInitializationParameters :: Decoder s TokenInitializationParameters
 decodeTokenInitializationParameters =
     decodeMap
         valDecoder
-        buildTokenInitializationParameters
+        (Right . buildTokenInitializationParameters)
         emptyTokenInitializationParametersBuilder
   where
     valDecoder k@"name" = Just $ mapValueDecoder k decodeString tipbName
@@ -699,45 +698,25 @@ tokenInitializationParametersFromBytes lbs =
                 show (LBS.length remaining) ++ " bytes remaining after parsing token initialization parameters"
 
 -- | Encode a 'TokenInitializationParameters' as CBOR.
-encodeTokenInitializationParametersNoDefaults :: TokenInitializationParameters -> Encoding
-encodeTokenInitializationParametersNoDefaults TokenInitializationParameters{..} =
+encodeTokenInitializationParameters :: TokenInitializationParameters -> Encoding
+encodeTokenInitializationParameters TokenInitializationParameters{..} =
     encodeMapDeterministic $
         Map.empty
-            & k "name" ?~ encodeString tipName
-            & k "metadata" ?~ encodeTokenMetadataUrl tipMetadata
-            & k "governanceAccount" ?~ encodeCborTokenHolder tipGovernanceAccount
-            & k "allowList" ?~ encodeBool tipAllowList
-            & k "denyList" ?~ encodeBool tipDenyList
+            & k "name" .~ (encodeString <$> tipName)
+            & k "metadata" .~ (encodeTokenMetadataUrl <$> tipMetadata)
+            & k "governanceAccount" .~ (encodeCborTokenHolder <$> tipGovernanceAccount)
+            & k "allowList" .~ (encodeBool <$> tipAllowList)
+            & k "denyList" .~ (encodeBool <$> tipDenyList)
             & k "initialSupply" .~ (encodeTokenAmount <$> tipInitialSupply)
-            & k "mintable" ?~ encodeBool tipMintable
-            & k "burnable" ?~ encodeBool tipBurnable
+            & k "mintable" .~ (encodeBool <$> tipMintable)
+            & k "burnable" .~ (encodeBool <$> tipBurnable)
   where
     k = at . makeMapKeyEncoding . encodeString
-
--- | Encode a 'TokenInitializationParameters' as CBOR. Keys that hold their default values will
---  be omitted from the encoding.
-encodeTokenInitializationParametersWithDefaults :: TokenInitializationParameters -> Encoding
-encodeTokenInitializationParametersWithDefaults TokenInitializationParameters{..} =
-    encodeMapDeterministic $
-        Map.empty
-            & k "name" ?~ encodeString tipName
-            & k "metadata" ?~ encodeTokenMetadataUrl tipMetadata
-            & k "governanceAccount" ?~ encodeCborTokenHolder tipGovernanceAccount
-            & setIfTrue "allowList" tipAllowList
-            & setIfTrue "denyList" tipDenyList
-            & k "initialSupply" .~ (encodeTokenAmount <$> tipInitialSupply)
-            & setIfTrue "mintable" tipMintable
-            & setIfTrue "burnable" tipBurnable
-  where
-    k = at . makeMapKeyEncoding . encodeString
-    setIfTrue _ False = id
-    setIfTrue key True = k key ?~ encodeBool True
 
 -- | CBOR-encode a 'TokenInitializationParameters' to a (strict) 'BS.ByteString'.
---  This uses default values in the encoding.
 tokenInitializationParametersToBytes :: TokenInitializationParameters -> BS.ByteString
 tokenInitializationParametersToBytes =
-    CBOR.toStrictByteString . encodeTokenInitializationParametersWithDefaults
+    CBOR.toStrictByteString . encodeTokenInitializationParameters
 
 -- | A 'TaggableMemo' represents a 'Memo' that may optionally be tagged as CBOR-encoded.
 --  Memos are often assumed to be CBOR-encoded, but the tag can be used to make this explicit.
@@ -1567,11 +1546,11 @@ decodeTokenRejectReason EncodedTokenRejectReason{..} = case etrrDetails of
 --  whether the token module supports it.
 data TokenModuleState = TokenModuleState
     { -- | The name of the token.
-      tmsName :: !Text,
+      tmsName :: !(Maybe Text),
       -- | A URL pointing to the token metadata.
-      tmsMetadata :: !TokenMetadataUrl,
+      tmsMetadata :: !(Maybe TokenMetadataUrl),
       -- | The governance account address of the token.
-      tmsGovernanceAccount :: !CborTokenHolder,
+      tmsGovernanceAccount :: !(Maybe CborTokenHolder),
       -- | Whether the token is paused.
       tmsPaused :: !(Maybe Bool),
       -- | Whether the token supports an allow list.
@@ -1591,35 +1570,37 @@ data TokenModuleState = TokenModuleState
 
 instance AE.ToJSON TokenModuleState where
     toJSON TokenModuleState{..} =
-        AE.object
-            ( [ "name" AE..= tmsName,
-                "metadata" AE..= tmsMetadata,
-                "governanceAccount" AE..= tmsGovernanceAccount,
-                "paused" AE..= tmsPaused,
-                "allowList" AE..= tmsAllowList,
-                "denyList" AE..= tmsDenyList,
-                "mintable" AE..= tmsMintable,
-                "burnable" AE..= tmsBurnable
-              ]
-                ++ [ "_additional"
-                        AE..= AE.object
-                            [ AE.Key.fromText k AE..= cborTermToHex v
-                            | (k, v) <- Map.toList tmsAdditional
-                            ]
-                   | not (null tmsAdditional)
-                   ]
-            )
+        AE.object . catMaybes $
+            [ ("name" AE..=) <$> tmsName,
+              ("metadata" AE..=) <$> tmsMetadata,
+              ("governanceAccount" AE..=) <$> tmsGovernanceAccount,
+              ("paused" AE..=) <$> tmsPaused,
+              ("allowList" AE..=) <$> tmsAllowList,
+              ("denyList" AE..=) <$> tmsDenyList,
+              ("mintable" AE..=) <$> tmsMintable,
+              ("burnable" AE..=) <$> tmsBurnable,
+              ("_additional" AE..=) <$> additional
+            ]
+      where
+        additional
+            | null tmsAdditional = Nothing
+            | otherwise =
+                Just $
+                    AE.object
+                        [ AE.Key.fromText k AE..= cborTermToHex v
+                        | (k, v) <- Map.toList tmsAdditional
+                        ]
 
 instance AE.FromJSON TokenModuleState where
     parseJSON = AE.withObject "TokenModuleState" $ \v -> do
-        tmsName <- v AE..: "name"
-        tmsMetadata <- v AE..: "metadata"
-        tmsGovernanceAccount <- v AE..: "governanceAccount"
-        tmsPaused <- v AE..: "paused"
-        tmsAllowList <- v AE..: "allowList"
-        tmsDenyList <- v AE..: "denyList"
-        tmsMintable <- v AE..: "mintable"
-        tmsBurnable <- v AE..: "burnable"
+        tmsName <- v AE..:? "name"
+        tmsMetadata <- v AE..:? "metadata"
+        tmsGovernanceAccount <- v AE..:? "governanceAccount"
+        tmsPaused <- v AE..:? "paused"
+        tmsAllowList <- v AE..:? "allowList"
+        tmsDenyList <- v AE..:? "denyList"
+        tmsMintable <- v AE..:? "mintable"
+        tmsBurnable <- v AE..:? "burnable"
         -- Decode each hex string into a CBOR.Term
         tmsAdditional <-
             (v AE..:? "_additional" .!= Map.empty)
@@ -1639,9 +1620,9 @@ encodeTokenModuleState :: TokenModuleState -> Encoding
 encodeTokenModuleState TokenModuleState{..} =
     encodeMapDeterministic $
         additionalMap
-            & k "name" ?~ encodeString tmsName
-            & k "metadata" ?~ encodeTokenMetadataUrl tmsMetadata
-            & k "governanceAccount" ?~ encodeCborTokenHolder tmsGovernanceAccount
+            & k "name" .~ (encodeString <$> tmsName)
+            & k "metadata" .~ (encodeTokenMetadataUrl <$> tmsMetadata)
+            & k "governanceAccount" .~ (encodeCborTokenHolder <$> tmsGovernanceAccount)
             & k "paused" .~ fmap encodeBool tmsPaused
             & k "allowList" .~ fmap encodeBool tmsAllowList
             & k "denyList" .~ fmap encodeBool tmsDenyList
@@ -1667,20 +1648,15 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
     decodeVal key = Just $ mapValueDecoder key CBOR.decodeTerm (at key)
     build :: Map.Map Text CBOR.Term -> Either String TokenModuleState
     build m0 = do
-        (tmsName, m1) <- getAndClear "name" convertText m0
-        (tmsMetadata, m2) <- getAndClear "metadata" convertTokenMetadataUrl m1
-        (tmsGovernanceAccount, m3) <- getAndClear "governanceAccount" convertCborTokenHolder m2
+        (tmsName, m1) <- getMaybeAndClear "name" convertText m0
+        (tmsMetadata, m2) <- getMaybeAndClear "metadata" convertTokenMetadataUrl m1
+        (tmsGovernanceAccount, m3) <- getMaybeAndClear "governanceAccount" convertCborTokenHolder m2
         (tmsPaused, m4) <- getMaybeAndClear "paused" convertBool m3
         (tmsAllowList, m5) <- getMaybeAndClear "allowList" convertBool m4
         (tmsDenyList, m6) <- getMaybeAndClear "denyList" convertBool m5
         (tmsMintable, m7) <- getMaybeAndClear "mintable" convertBool m6
         (tmsBurnable, tmsAdditional) <- getMaybeAndClear "burnable" convertBool m7
         return TokenModuleState{..}
-    getAndClear key convert m = do
-        let (maybeTerm, m') = m & at key <<.~ Nothing
-        term <- maybeTerm `orFail` ("Missing " ++ show key)
-        val <- convert term `orFail` ("Invalid " ++ show key)
-        return (val, m')
     getMaybeAndClear key convert m = do
         let (maybeTerm, m') = m & at key <<.~ Nothing
         maybeVal <- forM maybeTerm $ \term -> convert term `orFail` ("Invalid " ++ show key)
@@ -1742,7 +1718,7 @@ instance AE.ToJSON TokenModuleAccountState where
         AE.object . catMaybes $
             [ ("allowList" AE..=) <$> tmasAllowList,
               ("denyList" AE..=) <$> tmasDenyList,
-              ("additional" AE..=) <$> additional
+              ("_additional" AE..=) <$> additional
             ]
       where
         additional
@@ -1758,7 +1734,7 @@ instance AE.FromJSON TokenModuleAccountState where
     parseJSON = AE.withObject "TokenModuleAccountState" $ \v -> do
         tmasAllowList <- v AE..:? "allowList"
         tmasDenyList <- v AE..:? "denyList"
-        additional <- v AE..:? "additional" AE..!= Map.empty
+        additional <- v AE..:? "_additional" AE..!= Map.empty
         tmasAdditional <-
             Map.traverseWithKey
                 ( \k hexVal -> case hexToCborTerm hexVal of
