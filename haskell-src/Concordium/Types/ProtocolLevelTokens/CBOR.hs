@@ -611,19 +611,6 @@ data TokenInitializationParameters = TokenInitializationParameters
     }
     deriving (Eq, Show)
 
-makeLensesFor
-    [ ("tipName", "tipName'"),
-      ("tipMetadata", "tipMetadata'"),
-      ("tipGovernanceAccount", "tipGovernanceAccount'"),
-      ("tipAllowList", "tipAllowList'"),
-      ("tipDenyList", "tipDenyList'"),
-      ("tipInitialSupply", "tipInitialSupply'"),
-      ("tipMintable", "tipMintable'"),
-      ("tipBurnable", "tipBurnable'"),
-      ("tipAdditional", "tipAdditional'")
-    ]
-    ''TokenInitializationParameters
-
 -- | A 'TokenInitializationParameters' with no fields initialized.
 emptyTokenInitializationParameters :: TokenInitializationParameters
 emptyTokenInitializationParameters =
@@ -667,15 +654,33 @@ decodeTokenInitializationParameters =
         Right
         emptyTokenInitializationParameters
   where
-    valDecoder k@"name" = Just $ mapValueDecoder k decodeString tipName'
-    valDecoder k@"metadata" = Just $ mapValueDecoder k decodeTokenMetadataUrl tipMetadata'
-    valDecoder k@"governanceAccount" = Just $ mapValueDecoder k decodeCborAccountAddress tipGovernanceAccount'
-    valDecoder k@"allowList" = Just $ mapValueDecoder k decodeBool tipAllowList'
-    valDecoder k@"denyList" = Just $ mapValueDecoder k decodeBool tipDenyList'
-    valDecoder k@"initialSupply" = Just $ mapValueDecoder k decodeTokenAmount tipInitialSupply'
-    valDecoder k@"mintable" = Just $ mapValueDecoder k decodeBool tipMintable'
-    valDecoder k@"burnable" = Just $ mapValueDecoder k decodeBool tipBurnable'
-    valDecoder k = Just $ mapValueDecoder k CBOR.decodeTerm (tipAdditional' . (at k))
+    valDecoder "name" = Just $ \tip -> do
+        name <- decodeString
+        return tip{tipName = Just name}
+    valDecoder "metadata" = Just $ \tip -> do
+        metadata <- decodeTokenMetadataUrl
+        return tip{tipMetadata = Just metadata}
+    valDecoder "governanceAccount" = Just $ \tip -> do
+        governanceAccount <- decodeCborAccountAddress
+        return tip{tipGovernanceAccount = Just governanceAccount}
+    valDecoder "allowList" = Just $ \tip -> do
+        allowList <- decodeBool
+        return tip{tipAllowList = Just allowList}
+    valDecoder "denyList" = Just $ \tip -> do
+        denyList <- decodeBool
+        return tip{tipDenyList = Just denyList}
+    valDecoder "initialSupply" = Just $ \tip -> do
+        initialSupply <- decodeTokenAmount
+        return tip{tipInitialSupply = Just initialSupply}
+    valDecoder "mintable" = Just $ \tip -> do
+        mintable <- decodeBool
+        return tip{tipMintable = Just mintable}
+    valDecoder "burnable" = Just $ \tip -> do
+        burnable <- decodeBool
+        return tip{tipBurnable = Just burnable}
+    valDecoder key = Just $ \tip -> do
+        value <- CBOR.decodeTerm
+        return tip{tipAdditional = Map.insert key value (tipAdditional tip)}
 
 -- | Parse a 'TokenInitializationParameters' from a 'LBS.ByteString'. The entire bytestring must
 --  be consumed in the parsing.
@@ -686,17 +691,21 @@ tokenInitializationParametersFromBytes = decodeFromBytes decodeTokenInitializati
 encodeTokenInitializationParameters :: TokenInitializationParameters -> Encoding
 encodeTokenInitializationParameters TokenInitializationParameters{..} =
     encodeMapDeterministic $
-        (encodeAdditionalMapCbor tipAdditional)
-            & k "name" .~ (encodeString <$> tipName)
-            & k "metadata" .~ (encodeTokenMetadataUrl <$> tipMetadata)
-            & k "governanceAccount" .~ (encodeCborAccountAddress <$> tipGovernanceAccount)
-            & k "allowList" .~ (encodeBool <$> tipAllowList)
-            & k "denyList" .~ (encodeBool <$> tipDenyList)
-            & k "initialSupply" .~ (encodeTokenAmount <$> tipInitialSupply)
-            & k "mintable" .~ (encodeBool <$> tipMintable)
-            & k "burnable" .~ (encodeBool <$> tipBurnable)
+        encodeAdditionalMapCbor tipAdditional
+            <> ( Map.mapMaybe id $
+                    Map.fromList
+                        [ (makeKey "name", encodeString <$> tipName),
+                          (makeKey "metadata", encodeTokenMetadataUrl <$> tipMetadata),
+                          (makeKey "governanceAccount", encodeCborAccountAddress <$> tipGovernanceAccount),
+                          (makeKey "allowList", encodeBool <$> tipAllowList),
+                          (makeKey "denyList", encodeBool <$> tipDenyList),
+                          (makeKey "initialSupply", encodeTokenAmount <$> tipInitialSupply),
+                          (makeKey "mintable", encodeBool <$> tipMintable),
+                          (makeKey "burnable", encodeBool <$> tipBurnable)
+                        ]
+               )
   where
-    k = at . makeMapKeyEncoding . encodeString
+    makeKey = makeMapKeyEncoding . encodeString
 
 -- | CBOR-encode a 'TokenInitializationParameters' to a (strict) 'BS.ByteString'.
 tokenInitializationParametersToBytes :: TokenInitializationParameters -> BS.ByteString
