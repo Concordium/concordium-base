@@ -612,15 +612,15 @@ data TokenInitializationParameters = TokenInitializationParameters
     deriving (Eq, Show)
 
 makeLensesFor
-    [ ("tipName", "tipName'"),
-      ("tipMetadata", "tipMetadata'"),
-      ("tipGovernanceAccount", "tipGovernanceAccount'"),
-      ("tipAllowList", "tipAllowList'"),
-      ("tipDenyList", "tipDenyList'"),
-      ("tipInitialSupply", "tipInitialSupply'"),
-      ("tipMintable", "tipMintable'"),
-      ("tipBurnable", "tipBurnable'"),
-      ("tipAdditional", "tipAdditional'")
+    [ ("tipName", "tipNameLens"),
+      ("tipMetadata", "tipMetadataLens"),
+      ("tipGovernanceAccount", "tipGovernanceAccountLens"),
+      ("tipAllowList", "tipAllowListLens"),
+      ("tipDenyList", "tipDenyListLens"),
+      ("tipInitialSupply", "tipInitialSupplyLens"),
+      ("tipMintable", "tipMintableLens"),
+      ("tipBurnable", "tipBurnableLens"),
+      ("tipAdditional", "tipAdditionalLens")
     ]
     ''TokenInitializationParameters
 
@@ -667,15 +667,15 @@ decodeTokenInitializationParameters =
         Right
         emptyTokenInitializationParameters
   where
-    valDecoder k@"name" = Just $ mapValueDecoder k decodeString tipName'
-    valDecoder k@"metadata" = Just $ mapValueDecoder k decodeTokenMetadataUrl tipMetadata'
-    valDecoder k@"governanceAccount" = Just $ mapValueDecoder k decodeCborAccountAddress tipGovernanceAccount'
-    valDecoder k@"allowList" = Just $ mapValueDecoder k decodeBool tipAllowList'
-    valDecoder k@"denyList" = Just $ mapValueDecoder k decodeBool tipDenyList'
-    valDecoder k@"initialSupply" = Just $ mapValueDecoder k decodeTokenAmount tipInitialSupply'
-    valDecoder k@"mintable" = Just $ mapValueDecoder k decodeBool tipMintable'
-    valDecoder k@"burnable" = Just $ mapValueDecoder k decodeBool tipBurnable'
-    valDecoder k = Just $ mapValueDecoder k CBOR.decodeTerm (tipAdditional' . (at k))
+    valDecoder k@"name" = Just $ mapValueDecoder k decodeString tipNameLens
+    valDecoder k@"metadata" = Just $ mapValueDecoder k decodeTokenMetadataUrl tipMetadataLens
+    valDecoder k@"governanceAccount" = Just $ mapValueDecoder k decodeCborAccountAddress tipGovernanceAccountLens
+    valDecoder k@"allowList" = Just $ mapValueDecoder k decodeBool tipAllowListLens
+    valDecoder k@"denyList" = Just $ mapValueDecoder k decodeBool tipDenyListLens
+    valDecoder k@"initialSupply" = Just $ mapValueDecoder k decodeTokenAmount tipInitialSupplyLens
+    valDecoder k@"mintable" = Just $ mapValueDecoder k decodeBool tipMintableLens
+    valDecoder k@"burnable" = Just $ mapValueDecoder k decodeBool tipBurnableLens
+    valDecoder k = Just $ mapValueDecoder k CBOR.decodeTerm (tipAdditionalLens . (at k))
 
 -- | Parse a 'TokenInitializationParameters' from a 'LBS.ByteString'. The entire bytestring must
 --  be consumed in the parsing.
