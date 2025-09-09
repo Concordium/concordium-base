@@ -283,7 +283,7 @@ pub enum CborMemo {
 pub mod test {
     use super::*;
     use crate::{
-        common::cbor,
+        common::cbor::{self, value},
         protocol_level_tokens::{token_holder::test_fixtures::ADDRESS, CborHolderAccount},
     };
     use assert_matches::assert_matches;
