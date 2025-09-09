@@ -69,9 +69,7 @@ cborTermToHex term =
 hexToCborTerm :: Text -> Either String CBOR.Term
 hexToCborTerm hexText = do
     bs <- Base16.decode (TextEncoding.encodeUtf8 hexText)
-    decodeTerm bs
-  where
-    decodeTerm bs = decodeFromBytes CBOR.decodeTerm "CBOR term" (LBS.fromStrict bs)
+    decodeFromBytes CBOR.decodeTerm "CBOR term" (LBS.fromStrict bs)
 
 -- * Decoder helpers
 
@@ -1655,7 +1653,7 @@ instance AE.ToJSON TokenModuleAccountState where
         AE.object . catMaybes $
             [ ("allowList" AE..=) <$> tmasAllowList,
               ("denyList" AE..=) <$> tmasDenyList,
-              ("_additional" AE..=) <$> (encodeAdditionalMapJson tmasAdditional)
+              ("_additional" AE..=) <$> encodeAdditionalMapJson tmasAdditional
             ]
 
 instance AE.FromJSON TokenModuleAccountState where
@@ -1670,7 +1668,7 @@ instance AE.FromJSON TokenModuleAccountState where
 encodeTokenModuleAccountState :: TokenModuleAccountState -> Encoding
 encodeTokenModuleAccountState TokenModuleAccountState{..} =
     encodeMapDeterministic $
-        (encodeAdditionalMapCbor tmasAdditional)
+        encodeAdditionalMapCbor tmasAdditional
             & k "allowList" .~ fmap encodeBool tmasAllowList
             & k "denyList" .~ fmap encodeBool tmasDenyList
   where
