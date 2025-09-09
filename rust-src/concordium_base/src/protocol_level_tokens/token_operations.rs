@@ -1,5 +1,5 @@
 use crate::{
-    common::cbor::{self, value, CborSerializationResult, CborUpward},
+    common::cbor::{self, CborSerializationResult, CborUpward},
     protocol_level_tokens::{CborHolderAccount, CoinInfo, RawCbor, TokenAmount, TokenId},
     transactions::Memo,
 };
