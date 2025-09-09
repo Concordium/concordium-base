@@ -1668,7 +1668,7 @@ instance AE.FromJSON TokenModuleAccountState where
 encodeTokenModuleAccountState :: TokenModuleAccountState -> Encoding
 encodeTokenModuleAccountState TokenModuleAccountState{..} =
     encodeMapDeterministic $
-        (encodeAdditionalMapCbor tmasAdditional)
+        encodeAdditionalMapCbor tmasAdditional
             & k "allowList" .~ fmap encodeBool tmasAllowList
             & k "denyList" .~ fmap encodeBool tmasDenyList
   where
