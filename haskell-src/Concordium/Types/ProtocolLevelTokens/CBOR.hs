@@ -1653,7 +1653,7 @@ instance AE.ToJSON TokenModuleAccountState where
         AE.object . catMaybes $
             [ ("allowList" AE..=) <$> tmasAllowList,
               ("denyList" AE..=) <$> tmasDenyList,
-              ("_additional" AE..=) <$> (encodeAdditionalMapJson tmasAdditional)
+              ("_additional" AE..=) <$> encodeAdditionalMapJson tmasAdditional
             ]
 
 instance AE.FromJSON TokenModuleAccountState where
