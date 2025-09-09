@@ -182,7 +182,7 @@ pub enum TokenOperation {
     Pause(TokenPauseDetails),
     /// Operation that unpauses execution of any balance changing operations for
     /// a protocol level token
-    Unpause(TokenPauseDetails)
+    Unpause(TokenPauseDetails),
 }
 
 /// Details of an operation that changes a protocol level token supply.
@@ -308,14 +308,14 @@ pub mod test {
     #[test]
     fn test_token_operations_cbor() {
         let operations = TokenOperations {
-            operations: vec![TokenOperation::Transfer(TokenTransfer {
+            operations: vec![CborUpward::Known(TokenOperation::Transfer(TokenTransfer {
                 amount: TokenAmount::from_raw(12300, 3),
                 recipient: CborHolderAccount {
                     address: ADDRESS,
                     coin_info: None,
                 },
                 memo: None,
-            })],
+            }))],
         };
 
         let cbor = cbor::cbor_encode(&operations).unwrap();
@@ -454,9 +454,13 @@ pub mod test {
     #[test]
     fn test_token_operation_cbor_unknown_variant() {
         let cbor = hex::decode("a172736f6d65556e6b6e6f776e56617269616e74a266616d6f756e74c4822219300c69726563697069656e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20").unwrap();
-        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
-        assert_matches!(operation_decoded, TokenOperation::Unknown(key, value::Value::Map(_)) => {
-            assert_eq!(key, "someUnknownVariant");
-        });
+        let operation_decoded: CborUpward<TokenOperation> = cbor::cbor_decode(&cbor).unwrap();
+        assert_matches!(
+            operation_decoded,
+            CborUpward::Unknown(value::Value::Map(v)) if matches!(
+                v.as_slice(),
+                [(value::Value::Text(s), _), ..] if s == "someUnknownVariant"
+            )
+        );
     }
 }

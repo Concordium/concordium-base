@@ -1,5 +1,5 @@
 use crate::{
-    common::cbor::{self, CborSerializationResult},
+    common::cbor::{self, CborSerializationResult, CborUpward, Upward},
     transactions::Memo,
 };
 use concordium_base_derive::{CborDeserialize, CborSerialize};
@@ -46,17 +46,25 @@ pub struct TokenModuleEvent {
 
 impl TokenModuleEvent {
     /// Decode token module event from CBOR
-    pub fn decode_token_module_event(&self) -> CborSerializationResult<TokenModuleEventType> {
+    pub fn decode_token_module_event(
+        &self,
+    ) -> CborSerializationResult<CborUpward<TokenModuleEventType>> {
         use TokenModuleEventType::*;
 
         Ok(match self.event_type.as_ref() {
-            "addAllowList" => AddAllowList(cbor::cbor_decode(self.details.as_ref())?),
-            "removeAllowList" => RemoveAllowList(cbor::cbor_decode(self.details.as_ref())?),
-            "addDenyList" => AddDenyList(cbor::cbor_decode(self.details.as_ref())?),
-            "removeDenyList" => RemoveDenyList(cbor::cbor_decode(self.details.as_ref())?),
-            "pause" => Pause(cbor::cbor_decode(self.details.as_ref())?),
-            "unpause" => Unpause(cbor::cbor_decode(self.details.as_ref())?),
-            _ => Unknow,
+            "addAllowList" => {
+                Upward::Known(AddAllowList(cbor::cbor_decode(self.details.as_ref())?))
+            }
+            "removeAllowList" => {
+                Upward::Known(RemoveAllowList(cbor::cbor_decode(self.details.as_ref())?))
+            }
+            "addDenyList" => Upward::Known(AddDenyList(cbor::cbor_decode(self.details.as_ref())?)),
+            "removeDenyList" => {
+                Upward::Known(RemoveDenyList(cbor::cbor_decode(self.details.as_ref())?))
+            }
+            "pause" => Upward::Known(Pause(cbor::cbor_decode(self.details.as_ref())?)),
+            "unpause" => Upward::Known(Unpause(cbor::cbor_decode(self.details.as_ref())?)),
+            _ => Upward::Unknown(cbor::cbor_decode(self.details.as_ref())?),
         })
     }
 }
@@ -79,9 +87,6 @@ pub enum TokenModuleEventType {
     /// Execution of certain operations on a protocol level token was
     /// unpaused
     Unpause(TokenPauseEventDetails),
-    /// Unknow token module event type. If new events types are added that are
-    /// unknown to this enum, they will be decoded to this variant.
-    Unknow,
 }
 
 /// Details of an event updating the allow or deny list of a protocol level
@@ -243,7 +248,7 @@ mod test {
         let module_event_type = module_event.decode_token_module_event().unwrap();
         assert_eq!(
             module_event_type,
-            TokenModuleEventType::AddAllowList(variant)
+            Upward::Known(TokenModuleEventType::AddAllowList(variant))
         );
     }
 
@@ -265,7 +270,7 @@ mod test {
         let module_event_type = module_event.decode_token_module_event().unwrap();
         assert_eq!(
             module_event_type,
-            TokenModuleEventType::RemoveAllowList(variant)
+            Upward::Known(TokenModuleEventType::RemoveAllowList(variant))
         );
     }
 
@@ -287,7 +292,7 @@ mod test {
         let module_event_type = module_event.decode_token_module_event().unwrap();
         assert_eq!(
             module_event_type,
-            TokenModuleEventType::AddDenyList(variant)
+            Upward::Known(TokenModuleEventType::AddDenyList(variant))
         );
     }
 
@@ -309,7 +314,7 @@ mod test {
         let module_event_type = module_event.decode_token_module_event().unwrap();
         assert_eq!(
             module_event_type,
-            TokenModuleEventType::RemoveDenyList(variant)
+            Upward::Known(TokenModuleEventType::RemoveDenyList(variant))
         );
     }
 
@@ -324,7 +329,10 @@ mod test {
         };
 
         let module_event_type = module_event.decode_token_module_event().unwrap();
-        assert_eq!(module_event_type, TokenModuleEventType::Pause(variant));
+        assert_eq!(
+            module_event_type,
+            Upward::Known(TokenModuleEventType::Pause(variant))
+        );
     }
 
     #[test]
@@ -338,6 +346,9 @@ mod test {
         };
 
         let module_event_type = module_event.decode_token_module_event().unwrap();
-        assert_eq!(module_event_type, TokenModuleEventType::Unpause(variant));
+        assert_eq!(
+            module_event_type,
+            Upward::Known(TokenModuleEventType::Unpause(variant))
+        );
     }
 }

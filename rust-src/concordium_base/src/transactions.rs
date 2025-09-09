@@ -14,7 +14,10 @@ use crate::{
     },
     common::{
         self,
-        cbor::{CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize, Upward},
+        cbor::{
+            CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize,
+            Upward,
+        },
         types::{Amount, KeyIndex, KeyPair, Timestamp, TransactionSignature, TransactionTime, *},
         Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
         Serial, Serialize,
@@ -2330,8 +2333,9 @@ pub mod construct {
                     | Upward::Known(TokenOperation::RemoveAllowList(_))
                     | Upward::Known(TokenOperation::AddDenyList(_))
                     | Upward::Known(TokenOperation::RemoveDenyList(_)) => cost::PLT_LIST_UPDATE,
-                    Upward::Known(TokenOperation::Pause(_)) | Upward::Known(TokenOperation::Unpause(_)) => cost::PLT_PAUSE,
-                   Upward::Unknown(_) => Default::default(),
+                    Upward::Known(TokenOperation::Pause(_))
+                    | Upward::Known(TokenOperation::Unpause(_)) => cost::PLT_PAUSE,
+                    Upward::Unknown(_) => Default::default(),
                 })
                 .sum()
     }

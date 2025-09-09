@@ -24,16 +24,18 @@ pub struct TokenModuleRejectReason {
 
 impl TokenModuleRejectReason {
     /// Decode reject reason from CBOR
-    pub fn decode_reject_reason(&self) -> CborSerializationResult<Upward<TokenModuleRejectReasonType>> {
+    pub fn decode_reject_reason(
+        &self,
+    ) -> CborSerializationResult<CborUpward<TokenModuleRejectReasonType>> {
         use TokenModuleRejectReasonType::*;
 
         Ok(match self.reason_type.as_ref() {
             "addressNotFound" => Upward::Known(AddressNotFound(cbor::cbor_decode(
                 self.details.as_ref().context("no CBOR details")?.as_ref(),
             )?)),
-            "tokenBalanceInsufficient" => Upward::Known(TokenBalanceInsufficient(cbor::cbor_decode(
-                self.details.as_ref().context("no CBOR details")?.as_ref(),
-            )?)),
+            "tokenBalanceInsufficient" => Upward::Known(TokenBalanceInsufficient(
+                cbor::cbor_decode(self.details.as_ref().context("no CBOR details")?.as_ref())?,
+            )),
             "deserializationFailure" => Upward::Known(DeserializationFailure(cbor::cbor_decode(
                 self.details.as_ref().context("no CBOR details")?.as_ref(),
             )?)),
@@ -46,7 +48,9 @@ impl TokenModuleRejectReason {
             "mintWouldOverflow" => Upward::Known(MintWouldOverflow(cbor::cbor_decode(
                 self.details.as_ref().context("no CBOR details")?.as_ref(),
             )?)),
-            _ => Upward::Unknown(()),
+            _ => Upward::Unknown(cbor::cbor_decode(
+                self.details.as_ref().context("no CBOR details")?.as_ref(),
+            )?),
         })
     }
 }
@@ -68,9 +72,6 @@ pub enum TokenModuleRejectReasonType {
     /// Minting the requested amount would overflow the representable token
     /// amount.
     MintWouldOverflow(MintWouldOverflowRejectReason),
-    /// Unknown reject reason type. If new reject reasons are added that are
-    /// unknown to this enum, they will be decoded to this variant.
-    Unknown,
 }
 
 /// A token holder address was not valid.
@@ -233,7 +234,7 @@ mod test {
         let reject_reason_type = reject_reason.decode_reject_reason().unwrap();
         assert_eq!(
             reject_reason_type,
-            TokenModuleRejectReasonType::AddressNotFound(variant)
+            CborUpward::Known(TokenModuleRejectReasonType::AddressNotFound(variant))
         );
     }
 
@@ -255,7 +256,9 @@ mod test {
         let reject_reason_type = reject_reason.decode_reject_reason().unwrap();
         assert_eq!(
             reject_reason_type,
-            TokenModuleRejectReasonType::TokenBalanceInsufficient(variant)
+            CborUpward::Known(TokenModuleRejectReasonType::TokenBalanceInsufficient(
+                variant
+            ))
         );
     }
 
@@ -275,7 +278,7 @@ mod test {
         let reject_reason_type = reject_reason.decode_reject_reason().unwrap();
         assert_eq!(
             reject_reason_type,
-            TokenModuleRejectReasonType::DeserializationFailure(variant)
+            CborUpward::Known(TokenModuleRejectReasonType::DeserializationFailure(variant))
         );
     }
 
@@ -297,7 +300,7 @@ mod test {
         let reject_reason_type = reject_reason.decode_reject_reason().unwrap();
         assert_eq!(
             reject_reason_type,
-            TokenModuleRejectReasonType::UnsupportedOperation(variant)
+            CborUpward::Known(TokenModuleRejectReasonType::UnsupportedOperation(variant))
         );
     }
 
@@ -322,7 +325,7 @@ mod test {
         let reject_reason_type = reject_reason.decode_reject_reason().unwrap();
         assert_eq!(
             reject_reason_type,
-            TokenModuleRejectReasonType::OperationNotPermitted(variant)
+            CborUpward::Known(TokenModuleRejectReasonType::OperationNotPermitted(variant))
         );
     }
 
@@ -345,7 +348,7 @@ mod test {
         let reject_reason_type = reject_reason.decode_reject_reason().unwrap();
         assert_eq!(
             reject_reason_type,
-            TokenModuleRejectReasonType::MintWouldOverflow(variant)
+            CborUpward::Known(TokenModuleRejectReasonType::MintWouldOverflow(variant))
         );
     }
 }
