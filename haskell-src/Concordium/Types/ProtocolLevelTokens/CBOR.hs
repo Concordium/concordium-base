@@ -69,9 +69,7 @@ cborTermToHex term =
 hexToCborTerm :: Text -> Either String CBOR.Term
 hexToCborTerm hexText = do
     bs <- Base16.decode (TextEncoding.encodeUtf8 hexText)
-    decodeTerm bs
-  where
-    decodeTerm bs = decodeFromBytes CBOR.decodeTerm "CBOR term" (LBS.fromStrict bs)
+    decodeFromBytes CBOR.decodeTerm "CBOR term" (LBS.fromStrict bs)
 
 -- * Decoder helpers
 
