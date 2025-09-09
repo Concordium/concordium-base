@@ -47,19 +47,8 @@ genTokenMetadataUrlSimple = do
 genTokenMetadataUrlAdditional :: Gen TokenMetadataUrl
 genTokenMetadataUrlAdditional = do
     tmu <- genTokenMetadataUrlSimple
-    additional <- listOf1 genKV
+    additional <- listOf1 genAdditionalKV
     return tmu{tmAdditional = Map.fromList additional}
-  where
-    genKV = do
-        key <- genText
-        val <-
-            oneof
-                [ CBOR.TInt <$> arbitrary,
-                  CBOR.TString <$> genText,
-                  CBOR.TBool <$> arbitrary,
-                  pure CBOR.TNull
-                ]
-        return ("_" <> key, val)
 
 genTokenInitializationParameters :: Gen TokenInitializationParameters
 genTokenInitializationParameters = do
@@ -71,7 +60,20 @@ genTokenInitializationParameters = do
     tipInitialSupply <- oneof [pure Nothing, Just <$> genTokenAmount]
     tipMintable <- arbitrary
     tipBurnable <- arbitrary
+    tipAdditional <- Map.fromList <$> (listOf genAdditionalKV)
     return TokenInitializationParameters{..}
+
+genAdditionalKV :: Gen (Text.Text, CBOR.Term)
+genAdditionalKV = do
+    key <- genText
+    val <-
+        oneof
+            [ CBOR.TInt <$> arbitrary,
+              CBOR.TString <$> genText,
+              CBOR.TBool <$> arbitrary,
+              pure CBOR.TNull
+            ]
+    return ("_" <> key, val)
 
 -- | Generator for `TokenTransferBody`
 genTokenTransfer :: Gen TokenTransferBody
@@ -134,19 +136,8 @@ genTokenModuleStateSimple = do
 genTokenModuleStateWithAdditional :: Gen TokenModuleState
 genTokenModuleStateWithAdditional = do
     tms <- genTokenModuleStateSimple
-    additional <- listOf1 genKV
+    additional <- listOf1 genAdditionalKV
     return tms{tmsAdditional = Map.fromList additional}
-  where
-    genKV = do
-        key <- genText
-        val <-
-            oneof
-                [ CBOR.TInt <$> arbitrary,
-                  CBOR.TString <$> genText,
-                  CBOR.TBool <$> arbitrary,
-                  pure CBOR.TNull
-                ]
-        return ("_" <> key, val)
 
 genTokenStateSimple :: Gen TokenState
 genTokenStateSimple = do
@@ -176,19 +167,8 @@ genTokenModuleAccountState = do
 genTokenModuleAccountStateWithAdditional :: Gen TokenModuleAccountState
 genTokenModuleAccountStateWithAdditional = do
     tmas <- genTokenModuleAccountState
-    additional <- listOf1 genKV
+    additional <- listOf1 genAdditionalKV
     return tmas{tmasAdditional = Map.fromList additional}
-  where
-    genKV = do
-        key <- genText
-        val <-
-            oneof
-                [ CBOR.TInt <$> arbitrary,
-                  CBOR.TString <$> genText,
-                  CBOR.TBool <$> arbitrary,
-                  pure CBOR.TNull
-                ]
-        return ("_" <> key, val)
 
 genTokenEvent :: Gen TokenEvent
 genTokenEvent =
@@ -245,7 +225,12 @@ tokenInitializationParametersAllValues =
           tipInitialSupply = Just (TokenAmount{taValue = 10000, taDecimals = 5}),
           tipDenyList = Just True,
           tipMintable = Just False,
-          tipBurnable = Just True
+          tipBurnable = Just True,
+          tipAdditional =
+            Map.fromList
+                [ ("key1", CBOR.TString "extravalue1"),
+                  ("key2", CBOR.TString "extravalue2")
+                ]
         }
 
 -- | A test value for 'TokenInitializationParameters' where optional value are not set.
@@ -260,7 +245,8 @@ tokenInitializationParametersMinimal =
           tipInitialSupply = Nothing,
           tipDenyList = Nothing,
           tipMintable = Nothing,
-          tipBurnable = Nothing
+          tipBurnable = Nothing,
+          tipAdditional = Map.empty
         }
 
 -- | Basic tests for CBOR encoding/decoding of 'TokenInitializationParameters'.
@@ -272,7 +258,7 @@ testInitializationParametersCBOR = describe "TokenInitializationParameters CBOR 
             (Right ("", tokenInitializationParametersAllValues))
             ( deserialiseFromBytes
                 decodeTokenInitializationParameters
-                (B8.fromStrict $ BS16.decodeLenient "a8646e616d656941424320746f6b656e686275726e61626c65f56864656e794c697374f5686d65746164617461a46375726c7668747470733a2f2f6162632e746f6b656e2f6d657461646b6579316b657874726176616c756531646b6579326b657874726176616c7565326e636865636b73756d53686132353658203132333435363738393061626364656631323334353637383930616263646566686d696e7461626c65f469616c6c6f774c697374f46d696e697469616c537570706c79c4822419271071676f7665726e616e63654163636f756e74d99d73a201d99d71a101190397035820061049dc115db008601ec4e0f1916317c1cc278d6ced09d474d994c54eacaca1")
+                (B8.fromStrict $ BS16.decodeLenient "aa646b6579316b657874726176616c756531646b6579326b657874726176616c756532646e616d656941424320746f6b656e686275726e61626c65f56864656e794c697374f5686d65746164617461a46375726c7668747470733a2f2f6162632e746f6b656e2f6d657461646b6579316b657874726176616c756531646b6579326b657874726176616c7565326e636865636b73756d53686132353658203132333435363738393061626364656631323334353637383930616263646566686d696e7461626c65f469616c6c6f774c697374f46d696e697469616c537570706c79c4822419271071676f7665726e616e63654163636f756e74d99d73a201d99d71a101190397035820061049dc115db008601ec4e0f1916317c1cc278d6ced09d474d994c54eacaca1")
             )
     it "Duplicate \"name\" key" $
         assertEqual
@@ -295,7 +281,7 @@ testInitializationParametersCBOR = describe "TokenInitializationParameters CBOR 
         it "Maximal: All values specified" $
             assertEqual
                 "Encoding"
-                "a8646e616d656941424320746f6b656e686275726e61626c65f56864656e794c697374f5686d65746164617461a46375726c7668747470733a2f2f6162632e746f6b656e2f6d657461646b6579316b657874726176616c756531646b6579326b657874726176616c7565326e636865636b73756d53686132353658203132333435363738393061626364656631323334353637383930616263646566686d696e7461626c65f469616c6c6f774c697374f46d696e697469616c537570706c79c4822419271071676f7665726e616e63654163636f756e74d99d73a201d99d71a101190397035820061049dc115db008601ec4e0f1916317c1cc278d6ced09d474d994c54eacaca1"
+                "aa646b6579316b657874726176616c756531646b6579326b657874726176616c756532646e616d656941424320746f6b656e686275726e61626c65f56864656e794c697374f5686d65746164617461a46375726c7668747470733a2f2f6162632e746f6b656e2f6d657461646b6579316b657874726176616c756531646b6579326b657874726176616c7565326e636865636b73756d53686132353658203132333435363738393061626364656631323334353637383930616263646566686d696e7461626c65f469616c6c6f774c697374f46d696e697469616c537570706c79c4822419271071676f7665726e616e63654163636f756e74d99d73a201d99d71a101190397035820061049dc115db008601ec4e0f1916317c1cc278d6ced09d474d994c54eacaca1"
                 ( BS16.encode $
                     toStrictByteString $
                         encodeTokenInitializationParameters
@@ -358,7 +344,7 @@ testInitializationParametersJSON = describe "TokenInitializationParameters JSON 
         it "Maximal: All values specified" $
             assertEqual
                 "Encoding"
-                "{\"allowList\":false,\"burnable\":true,\"denyList\":true,\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"},\"initialSupply\":{\"decimals\":5,\"value\":\"10000\"},\"metadata\":{\"_additional\":{\"key1\":\"6b657874726176616c756531\",\"key2\":\"6b657874726176616c756532\"},\"checksumSha256\":\"3132333435363738393061626364656631323334353637383930616263646566\",\"url\":\"https://abc.token/meta\"},\"mintable\":false,\"name\":\"ABC token\"}"
+                "{\"_additional\":{\"key1\":\"6b657874726176616c756531\",\"key2\":\"6b657874726176616c756532\"},\"allowList\":false,\"burnable\":true,\"denyList\":true,\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"},\"initialSupply\":{\"decimals\":5,\"value\":\"10000\"},\"metadata\":{\"_additional\":{\"key1\":\"6b657874726176616c756531\",\"key2\":\"6b657874726176616c756532\"},\"checksumSha256\":\"3132333435363738393061626364656631323334353637383930616263646566\",\"url\":\"https://abc.token/meta\"},\"mintable\":false,\"name\":\"ABC token\"}"
                 ( AE.encode
                     tokenInitializationParametersAllValues
                 )
