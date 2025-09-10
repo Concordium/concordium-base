@@ -244,6 +244,7 @@ encodeAdditionalMapJson additional
     | null additional = Nothing
     | otherwise = Just $ AE.object $ map (\(k, v) -> AE.Key.fromText k AE..= cborTermToHex v) (Map.toList additional)
 
+-- | Encode additional entries of CBOR Terms into CBOR
 encodeAdditionalMapCbor :: (Map.Map Text CBOR.Term) -> (Map.Map MapKeyEncoding Encoding)
 encodeAdditionalMapCbor additional =
     Map.fromList
