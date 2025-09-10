@@ -940,6 +940,115 @@ testTokenMetadataUrlCBOR = describe "TokenMetadataUrl CBOR serialization" $ do
                 "\xA4\x63\x75\x72\x6C\x76\x68\x74\x74\x70\x73\x3A\x2F\x2F\x61\x62\x63\x2E\x74\x6F\x6B\x65\x6E\x2F\x6D\x65\x74\x61\x6E\x63\x68\x65\x63\x6B\x73\x75\x6D\x53\x68\x61\x32\x35\x36\x58\x20\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\x64\x6B\x65\x79\x31\x18\x2A\x64\x6B\x65\x79\x32\x6B\x65\x78\x74\x72\x61\x20\x76\x61\x6C\x75\x65"
             )
 
+-- | A set of test vectors for CBOR decoding that use non-canonical representations.
+testTransactionVectors :: Spec
+testTransactionVectors = do
+    let emptyTransaction = TokenUpdateTransaction Seq.empty
+    it "empty operations" $ checkOK emptyTransaction "80"
+    it "empty operations - indefinite length" $ checkOK emptyTransaction "9FFF"
+    let pauseTransaction = singletonTx TokenPause
+    it "pause" $ checkOK pauseTransaction "81A1657061757365A0"
+    it "pause - indefinite length" $ checkOK pauseTransaction "9FA1657061757365A0FF"
+    it "pause - indefinite map" $ checkOK pauseTransaction "81A1657061757365BFFF"
+    it "pause - [reject] indefinite tag string (1 segment)" $ checkReject "DeserialiseFailure 2 \"expected string\"" "81a17f657061757365ffa0"
+    it "pause - [reject] indefinite tag string (2 segments)" $ checkReject "DeserialiseFailure 2 \"expected string\"" "81A17F63706175627365FFA0"
+    it "pause - [reject] null body" $ checkReject "DeserialiseFailure 8 \"expected map len or indef\"" "81a1657061757365f6"
+    it "pause - [reject] non-empty body" $ checkReject "DeserialiseFailure 9 \"Unexpected non-empty map of length 1\"" "81a1657061757365a1657061757365a0"
+    let unpauseTransaction = singletonTx TokenUnpause
+    it "unpause" $ checkOK unpauseTransaction "81a167756e7061757365a0"
+    it "unpause - indefinite list and maps" $ checkOK unpauseTransaction "9fbf67756e7061757365bfffffff"
+    it "unpause - [reject] indefinite everything" $ checkReject "DeserialiseFailure 2 \"expected string\"" "9fa17f6175636e70616063757365ffbfffff"
+    let addAllowTransaction = singletonTx $ TokenAddAllowList $ accountTokenHolder testAccount
+    it "addAllowList" $ checkOK addAllowTransaction "81a16c616464416c6c6f774c697374a166746172676574d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "addAllowList - [reject] indefinite account address" $ checkReject "DeserialiseFailure 76 \"token-holder: Invalid 3\"" "81a16c616464416c6c6f774c697374a166746172676574d99d73a201d99d71a101190397035f41a24040581f6c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15ff"
+    it "addAllowList - oversize tag" $ checkOK addAllowTransaction "81a16c616464416c6c6f774c697374a166746172676574da00009d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "addAllowList - more oversize tags" $ checkOK addAllowTransaction "81a16c616464416c6c6f774c697374a166746172676574db0000000000009d73a201db0000000000009d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "addAllowList - oversize int" $ checkOK addAllowTransaction "81a16c616464416c6c6f774c697374a166746172676574d99d73a201d99d71a1011a00000397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "addAllowList - more oversize int" $ checkOK addAllowTransaction "81a16c616464416c6c6f774c697374a166746172676574d99d73a201d99d71a1011b0000000000000397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "addAllowList - oversize int key" $ checkOK addAllowTransaction "81a16c616464416c6c6f774c697374a166746172676574d99d73a21801d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "addAllowList - oversize int keys" $ checkOK addAllowTransaction "81a16c616464416c6c6f774c697374a166746172676574d99d73a21b0000000000000001d99d71a11a000000011903971900035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "addAllowList - reordered keys" $ checkOK addAllowTransaction "81a16c616464416c6c6f774c697374a166746172676574d99d73a2035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b1501d99d71a101190397"
+    it "addAllowList - [reject] big int for int" $ checkReject "DeserialiseFailure 78 \"token-holder: Invalid 1\"" "81a16c616464416c6c6f774c697374a166746172676574d99d73a201d99d71a101c2480000000000000397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "addAllowList - [reject] big int for int 2" $ checkReject "DeserialiseFailure 72 \"token-holder: Invalid 1\"" "81a16c616464416c6c6f774c697374a166746172676574d99d73a201d99d71a101c2420397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "addAllowList - [reject] half-precision float for int" $ checkReject "DeserialiseFailure 71 \"token-holder: Invalid 1\"" "81a16c616464416c6c6f774c697374a166746172676574d99d73a201d99d71a101f9632e035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "addAllowList - [reject] single-precision float for int" $ checkReject "DeserialiseFailure 73 \"token-holder: Invalid 1\"" "81a16c616464416c6c6f774c697374a166746172676574d99d73a201d99d71a101fa4465c000035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "addAllowList - [reject] double-precision float for int" $ checkReject "DeserialiseFailure 77 \"token-holder: Invalid 1\"" "81a16c616464416c6c6f774c697374a166746172676574d99d73a201d99d71a101fb408cb80000000000035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "addAllowList - [reject] half-precision float for int tags" $ checkReject "DeserialiseFailure 75 \"token-holder: Expected an integer key\"" "81a16c616464416c6c6f774c697374a166746172676574d99d73a201d99d71a1f93c00190397f942005820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "addAllowList - [reject] single-precision float for int tags" $ checkReject "DeserialiseFailure 83 \"token-holder: Expected an integer key\"" "81a16c616464416c6c6f774c697374a166746172676574d99d73a2fa3f800000d99d71a1fa3f800000190397fa404000005820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "addAllowList - [reject] double-precision float for int tags" $ checkReject "DeserialiseFailure 95 \"token-holder: Expected an integer key\"" "81a16c616464416c6c6f774c697374a166746172676574d99d73a2fb3ff0000000000000d99d71a1fb3ff0000000000000190397fb40080000000000005820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    let removeAllowTransaction = singletonTx $ TokenRemoveAllowList $ accountTokenHolderShort testAccount
+    it "removeAllowList" $ checkOK removeAllowTransaction "81a16f72656d6f7665416c6c6f774c697374a166746172676574d99d73a1035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "removeAllowList - indefinite lengths and oversized ints" $ checkOK removeAllowTransaction "9fbf6f72656d6f7665416c6c6f774c697374bf66746172676574da00009d73bf1b00000000000000035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15ffffffff"
+    let addDenyTransaction = singletonTx $ TokenAddDenyList $ accountTokenHolder testAccount
+    it "addDenyList" $ checkOK addDenyTransaction "81a16b61646444656e794c697374a166746172676574d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "addDenyList - [reject] coininfo includes network" $ checkReject "DeserialiseFailure 72 \"token-holder: Invalid 1\"" "81a16b61646444656e794c697374a166746172676574d99d73a201d99d71a2011903970200035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "addDenyList - [reject] coininfo with bad coin type" $ checkReject "DeserialiseFailure 69 \"token-holder: Invalid 1\"" "81a16b61646444656e794c697374a166746172676574d99d73a201d99d71a101183c035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    let removeDenyTransaction = singletonTx $ TokenRemoveDenyList $ accountTokenHolder testAccount
+    it "removeDenyList" $ checkOK removeDenyTransaction "81a16e72656d6f766544656e794c697374a166746172676574d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "removeDenyList - [reject] RemoveDenyList" $ checkReject "DeserialiseFailure 17 \"token-operation: unsupported operation type: \\\"RemoveDenyList\\\"\"" "81a16e52656d6f766544656e794c697374a166746172676574d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "removeDenyList - [reject] remove-deny-list" $ checkReject "DeserialiseFailure 19 \"token-operation: unsupported operation type: \\\"remove-deny-list\\\"\"" "81a17072656d6f76652d64656e792d6c697374a166746172676574d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "removeDenyList - [reject] Target" $ checkReject "DeserialiseFailure 25 \"Unexpected key \\\"Target\\\"\"" "81a16e72656d6f766544656e794c697374a166546172676574d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "removeDenyList - [reject] no target" $ checkReject "DeserialiseFailure 18 \"token-operation (removeDenyList): missing target\"" "81a16e72656d6f766544656e794c697374a0"
+    it "removeDenyList - [reject] unexpected 'list'" $ checkReject "DeserialiseFailure 23 \"Unexpected key \\\"list\\\"\"" "81a16e72656d6f766544656e794c697374a2646c6973740066746172676574d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "removeDenyList - [reject] duplicate 'target'" $ checkReject "DeserialiseFailure 128 \"Key already set: \\\"target\\\"\"" "81a16e72656d6f766544656e794c697374a266746172676574d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b1566746172676574d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    let simpleTransfer = singletonTx $ TokenTransfer $ TokenTransferBody (TokenAmount 100 2) (accountTokenHolder testAccount) Nothing
+    it "transfer - simple" $ checkOK simpleTransfer "81a1687472616e73666572a266616d6f756e74c48221186469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    let simpleTransferMaxAmt = singletonTx $ TokenTransfer $ TokenTransferBody (TokenAmount maxBound 0) (accountTokenHolder testAccount) Nothing
+    it "transfer - max amount" $ checkOK simpleTransferMaxAmt "81a1687472616e73666572a266616d6f756e74c482001bffffffffffffffff69726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    let simpleTransferMaxDecimals = singletonTx $ TokenTransfer $ TokenTransferBody (TokenAmount maxBound 255) (accountTokenHolder testAccount) Nothing
+    it "transfer - max decimals" $ checkOK simpleTransferMaxDecimals $ "81a1687472616e73666572a266616d6f756e74c48238fe1bffffffffffffffff69726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - [reject] oversize amount" $ checkReject "DeserialiseFailure 34 \"Token amount exceeds expressible bound\"" "81a1687472616e73666572a266616d6f756e74c48238fec24901000000000000000069726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - [reject] oversize decimals" $ checkReject "DeserialiseFailure 32 \"Token amount exponent is too small\"" "81a1687472616e73666572a266616d6f756e74c48238ff1bffffffffffffffff69726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - [reject] positive exponent" $ checkReject "DeserialiseFailure 23 \"Token amount cannot have a positive exponent\"" "81a1687472616e73666572a266616d6f756e74c482010169726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - [reject] negative amount" $ checkReject "DeserialiseFailure 23 \"Unexpected negative token amount\"" "81a1687472616e73666572a266616d6f756e74c482002069726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - bigint amount" $ checkOK simpleTransfer "81a1687472616e73666572a266616d6f756e74c48221c248000000000000006469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - oversize int amount (1)" $ checkOK simpleTransfer "81a1687472616e73666572a266616d6f756e74c4822119006469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - oversize int amount (2)" $ checkOK simpleTransfer "81a1687472616e73666572a266616d6f756e74c482211a0000006469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - oversize int amount (3)" $ checkOK simpleTransfer "81a1687472616e73666572a266616d6f756e74c482211b000000000000006469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - oversize int exponent (1)" $ checkOK simpleTransfer "81a1687472616e73666572a266616d6f756e74c482390001186469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - oversize int exponent (2)" $ checkOK simpleTransfer "81a1687472616e73666572a266616d6f756e74c4823a00000001186469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - oversize int exponent (3)" $ checkOK simpleTransfer "81a1687472616e73666572a266616d6f756e74c482390001186469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - [reject] bigint exponent (1)" $ checkReject "DeserialiseFailure 21 \"expected int\"" "81a1687472616e73666572a266616d6f756e74c482c34101186469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - [reject] bigint exponent (2)" $ checkReject "DeserialiseFailure 21 \"expected int\"" "81a1687472616e73666572a266616d6f756e74c482c349000000000000000001186469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - [reject] floating point amount (1)" $ checkReject "DeserialiseFailure 22 \"expected integer\"" "81a1687472616e73666572a266616d6f756e74c48221f9564069726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - [reject] floating point amount (2)" $ checkReject "DeserialiseFailure 22 \"expected integer\"" "81a1687472616e73666572a266616d6f756e74c48221fa42c8000069726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - [reject] floating point amount (3)" $ checkReject "DeserialiseFailure 22 \"expected integer\"" "81a1687472616e73666572a266616d6f756e74c48221fb405900000000000069726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - [reject] floating point exponent (1)" $ checkReject "DeserialiseFailure 21 \"expected int\"" "81a1687472616e73666572a266616d6f756e74c482f9c000186469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - [reject] floating point exponent (2)" $ checkReject "DeserialiseFailure 21 \"expected int\"" "81a1687472616e73666572a266616d6f756e74c482fac0000000186469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - [reject] floating point exponent (3)" $ checkReject "DeserialiseFailure 21 \"expected int\"" "81a1687472616e73666572a266616d6f756e74c482fbc000000000000000186469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    let memo = Memo $ BSS.toShort $ BS16.decodeLenient "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"
+    let memoTransfer = singletonTx $ TokenTransfer $ TokenTransferBody (TokenAmount 100 2) (accountTokenHolder testAccount) (Just $ UntaggedMemo memo)
+    it "transfer - memo" $ checkOK memoTransfer "81a1687472616e73666572a3646d656d6f590100000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff66616d6f756e74c48221186469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    let taggedMemoTransfer = singletonTx $ TokenTransfer $ TokenTransferBody (TokenAmount 100 2) (accountTokenHolder testAccount) (Just $ CBORMemo memo)
+    it "transfer - cbor memo" $ checkOK taggedMemoTransfer "81a1687472616e73666572a3646d656d6fd818590100000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff66616d6f756e74c48221186469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - oversize memo" $ checkReject "DeserialiseFailure 277 \"Size of the memo (257 bytes) exceeds maximum allowed size (256 bytes).\"" "81a1687472616e73666572a3646d656d6f590101000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0066616d6f756e74c48221186469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - oversize cbor memo" $ checkReject "DeserialiseFailure 279 \"Size of the memo (257 bytes) exceeds maximum allowed size (256 bytes).\"" "81a1687472616e73666572a3646d656d6fd818590101000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0066616d6f756e74c48221186469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    let emptyMemoTransfer = singletonTx $ TokenTransfer $ TokenTransferBody (TokenAmount 100 2) (accountTokenHolder testAccount) (Just $ UntaggedMemo (Memo mempty))
+    it "transfer - reordered fields" $ checkOK emptyMemoTransfer "81a1687472616e73666572a369726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b1566616d6f756e74c482211864646d656d6f40"
+    it "transfer - extra field" $ checkReject "DeserialiseFailure 95 \"Unexpected key \\\"blahasdfasdf\\\"\"" "81a1687472616e73666572a366616d6f756e74c48221186469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b156c626c6168617364666173646602"
+    it "transfer - missing amount" $ checkReject "DeserialiseFailure 70 \"Missing \\\"amount\\\"\"" "81a1687472616e73666572a169726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - duplicate memo" $ checkReject "DeserialiseFailure 26 \"Key already set: \\\"memo\\\"\"" "81a1687472616e73666572a4646d656d6f4100646d656d6f410166616d6f756e74c48221186469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    it "transfer - duplicate amount" $ checkReject "DeserialiseFailure 36 \"Key already set: \\\"amount\\\"\"" "81a1687472616e73666572a366616d6f756e74c48221186466616d6f756e74c4822118c869726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+    let twoTransfers =
+            TokenUpdateTransaction $
+                Seq.fromList
+                    [ TokenTransfer $ TokenTransferBody (TokenAmount 100 2) (accountTokenHolder testAccount) Nothing,
+                      TokenTransfer $ TokenTransferBody (TokenAmount 500 2) (accountTokenHolder testAccount) Nothing
+                    ]
+    it "two transfers" $ checkOK twoTransfers "82a1687472616e73666572a266616d6f756e74c48221186469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15a1687472616e73666572a266616d6f756e74c482211901f469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
+  where
+    testAccount = case addressFromText "4BH5qnFPDfaD3MxnDzfhnu1jAHoBWXnq2i57T6G1eZn1kC194e" of
+        Right addr -> addr
+        Left e -> error e
+    singletonTx = TokenUpdateTransaction . Seq.singleton
+    checkDecode expect bs =
+        assertEqual
+            "decoded transaction"
+            expect
+            (tokenUpdateTransactionFromBytes . B8.fromStrict =<< BS16.decode bs)
+    checkOK expect = checkDecode (Right expect)
+    checkReject msg = checkDecode (Left msg)
+
 tests :: Spec
 tests = parallel $ describe "CBOR" $ do
     testInitializationParametersCBOR
@@ -957,6 +1066,7 @@ tests = parallel $ describe "CBOR" $ do
     testTokenModuleAccountStateJSON
     testTokenStateJSON
     testTokenModuleAccountStateCBOR
+    describe "UpdateTransaction test vectors" $ testTransactionVectors
     it "JSON (de-)serialization roundtrip for TokenState (simple)" $ withMaxSuccess 1000 $ forAll genTokenStateSimple $ \tt ->
         assertEqual
             "JSON (de-)serialization roundtrip failed for TokenState (simple)"
