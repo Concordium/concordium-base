@@ -1,5 +1,5 @@
 use crate::{
-    common::cbor::{self, value, CborSerializationResult},
+    common::cbor::{self, CborSerializationResult, CborUpward},
     protocol_level_tokens::{CborHolderAccount, CoinInfo, RawCbor, TokenAmount, TokenId},
     transactions::Memo,
 };
@@ -135,11 +135,11 @@ impl TokenOperationsPayload {
 #[cbor(transparent)]
 pub struct TokenOperations {
     /// List of protocol level token operations
-    pub operations: Vec<TokenOperation>,
+    pub operations: Vec<CborUpward<TokenOperation>>,
 }
 
-impl FromIterator<TokenOperation> for TokenOperations {
-    fn from_iter<T: IntoIterator<Item = TokenOperation>>(iter: T) -> Self {
+impl FromIterator<CborUpward<TokenOperation>> for TokenOperations {
+    fn from_iter<T: IntoIterator<Item = CborUpward<TokenOperation>>>(iter: T) -> Self {
         Self {
             operations: iter.into_iter().collect(),
         }
@@ -147,7 +147,7 @@ impl FromIterator<TokenOperation> for TokenOperations {
 }
 
 impl TokenOperations {
-    pub fn new(operations: Vec<TokenOperation>) -> Self {
+    pub fn new(operations: Vec<CborUpward<TokenOperation>>) -> Self {
         Self { operations }
     }
 }
@@ -183,10 +183,6 @@ pub enum TokenOperation {
     /// Operation that unpauses execution of any balance changing operations for
     /// a protocol level token
     Unpause(TokenPauseDetails),
-    /// Unknow operation. If new types of operations are added that are unknown
-    /// to this enum, they will be decoded to this variant.
-    #[cbor(other)]
-    Unknown(String, value::Value),
 }
 
 /// Details of an operation that changes a protocol level token supply.
@@ -287,7 +283,7 @@ pub enum CborMemo {
 pub mod test {
     use super::*;
     use crate::{
-        common::cbor,
+        common::cbor::{self, value},
         protocol_level_tokens::{token_holder::test_fixtures::ADDRESS, CborHolderAccount},
     };
     use assert_matches::assert_matches;
@@ -312,14 +308,14 @@ pub mod test {
     #[test]
     fn test_token_operations_cbor() {
         let operations = TokenOperations {
-            operations: vec![TokenOperation::Transfer(TokenTransfer {
+            operations: vec![CborUpward::Known(TokenOperation::Transfer(TokenTransfer {
                 amount: TokenAmount::from_raw(12300, 3),
                 recipient: CborHolderAccount {
                     address: ADDRESS,
                     coin_info: None,
                 },
                 memo: None,
-            })],
+            }))],
         };
 
         let cbor = cbor::cbor_encode(&operations).unwrap();
@@ -458,9 +454,13 @@ pub mod test {
     #[test]
     fn test_token_operation_cbor_unknown_variant() {
         let cbor = hex::decode("a172736f6d65556e6b6e6f776e56617269616e74a266616d6f756e74c4822219300c69726563697069656e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20").unwrap();
-        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
-        assert_matches!(operation_decoded, TokenOperation::Unknown(key, value::Value::Map(_)) => {
-            assert_eq!(key, "someUnknownVariant");
-        });
+        let operation_decoded: CborUpward<TokenOperation> = cbor::cbor_decode(&cbor).unwrap();
+        assert_matches!(
+            operation_decoded,
+            CborUpward::Unknown(value::Value::Map(v)) if matches!(
+                v.as_slice(),
+                [(value::Value::Text(s), _), ..] if s == "someUnknownVariant"
+            )
+        );
     }
 }
