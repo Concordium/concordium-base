@@ -22,12 +22,16 @@ use std::{
 
 impl Serial for () {
     #[inline(always)]
-    fn serial<W: Write>(&self, _out: &mut W) -> Result<(), W::Err> { Ok(()) }
+    fn serial<W: Write>(&self, _out: &mut W) -> Result<(), W::Err> {
+        Ok(())
+    }
 }
 
 impl Deserial for () {
     #[inline(always)]
-    fn deserial<R: Read>(_source: &mut R) -> ParseResult<Self> { Ok(()) }
+    fn deserial<R: Read>(_source: &mut R) -> ParseResult<Self> {
+        Ok(())
+    }
 }
 
 impl<A: Serial, B: Serial> Serial for (A, B) {
@@ -136,31 +140,45 @@ impl<A: Serial, B: Serial, C: Serial, D: Serial, E: Serial, F: Serial> Serial
 }
 
 impl Serial for u8 {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u8(*self) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_u8(*self)
+    }
 }
 
 impl Deserial for u8 {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> { source.read_u8() }
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        source.read_u8()
+    }
 }
 
 impl Serial for u16 {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u16(*self) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_u16(*self)
+    }
 }
 
 impl Deserial for u16 {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> { source.read_u16() }
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        source.read_u16()
+    }
 }
 
 impl Serial for u32 {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u32(*self) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_u32(*self)
+    }
 }
 
 impl Deserial for u32 {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> { source.read_u32() }
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        source.read_u32()
+    }
 }
 
 impl Serial for u64 {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u64(*self) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_u64(*self)
+    }
 }
 
 impl Serial for u128 {
@@ -170,7 +188,9 @@ impl Serial for u128 {
 }
 
 impl Deserial for u64 {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> { source.read_u64() }
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        source.read_u64()
+    }
 }
 
 impl Deserial for u128 {
@@ -181,35 +201,51 @@ impl Deserial for u128 {
 }
 
 impl Serial for i8 {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_i8(*self) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_i8(*self)
+    }
 }
 
 impl Deserial for i8 {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> { source.read_i8() }
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        source.read_i8()
+    }
 }
 
 impl Serial for i16 {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_i16(*self) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_i16(*self)
+    }
 }
 
 impl Deserial for i16 {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> { source.read_i16() }
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        source.read_i16()
+    }
 }
 
 impl Serial for i32 {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_i32(*self) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_i32(*self)
+    }
 }
 
 impl Deserial for i32 {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> { source.read_i32() }
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        source.read_i32()
+    }
 }
 
 impl Serial for i64 {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_i64(*self) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_i64(*self)
+    }
 }
 
 impl Deserial for i64 {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> { source.read_i64() }
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        source.read_i64()
+    }
 }
 
 impl Serial for i128 {
@@ -253,7 +289,9 @@ impl Deserial for bool {
 }
 
 impl Serial for Amount {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u64(self.micro_ccd) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_u64(self.micro_ccd)
+    }
 }
 
 impl Deserial for Amount {
@@ -283,7 +321,9 @@ impl Deserial for AccountBalance {
 }
 
 impl<Kind> Serial for NonZeroThresholdU8<Kind> {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.threshold.serial(out) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.threshold.serial(out)
+    }
 }
 
 impl<Kind> Deserial for NonZeroThresholdU8<Kind> {
@@ -309,76 +349,100 @@ impl<Kind> TryFrom<u8> for NonZeroThresholdU8<Kind> {
         } else {
             Ok(NonZeroThresholdU8 {
                 threshold: value,
-                kind:      marker::PhantomData,
+                kind: marker::PhantomData,
             })
         }
     }
 }
 
 impl<Kind> Clone for NonZeroThresholdU8<Kind> {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 
 impl<Kind> Copy for NonZeroThresholdU8<Kind> {}
 
 impl<Kind> From<NonZeroThresholdU8<Kind>> for u8 {
     #[inline(always)]
-    fn from(value: NonZeroThresholdU8<Kind>) -> Self { value.threshold }
+    fn from(value: NonZeroThresholdU8<Kind>) -> Self {
+        value.threshold
+    }
 }
 
 impl<Kind> PartialEq for NonZeroThresholdU8<Kind> {
-    fn eq(&self, other: &Self) -> bool { self.threshold == other.threshold }
+    fn eq(&self, other: &Self) -> bool {
+        self.threshold == other.threshold
+    }
 }
 
 impl<Kind> PartialOrd for NonZeroThresholdU8<Kind> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(other)) }
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl<Kind> Ord for NonZeroThresholdU8<Kind> {
-    fn cmp(&self, other: &Self) -> Ordering { self.threshold.cmp(&other.threshold) }
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.threshold.cmp(&other.threshold)
+    }
 }
 
 impl<Kind> PartialOrd<u8> for NonZeroThresholdU8<Kind> {
-    fn partial_cmp(&self, other: &u8) -> Option<Ordering> { self.threshold.partial_cmp(other) }
+    fn partial_cmp(&self, other: &u8) -> Option<Ordering> {
+        self.threshold.partial_cmp(other)
+    }
 }
 
 impl<Kind> PartialEq<u8> for NonZeroThresholdU8<Kind> {
-    fn eq(&self, other: &u8) -> bool { self.threshold == *other }
+    fn eq(&self, other: &u8) -> bool {
+        self.threshold == *other
+    }
 }
 
 impl<Kind> Eq for NonZeroThresholdU8<Kind> {}
 
 impl<Kind> Hash for NonZeroThresholdU8<Kind> {
-    fn hash<H: hash::Hasher>(&self, state: &mut H) { self.threshold.hash(state) }
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        self.threshold.hash(state)
+    }
 }
 
 impl<Kind> NonZeroThresholdU8<Kind> {
     /// Threshold of 1.
     pub const ONE: Self = Self {
         threshold: 1,
-        kind:      marker::PhantomData,
+        kind: marker::PhantomData,
     };
     /// Threshold of 2.
     pub const TWO: Self = Self {
         threshold: 2,
-        kind:      marker::PhantomData,
+        kind: marker::PhantomData,
     };
 }
 
 impl schema::SchemaType for PublicKeyEd25519 {
-    fn get_type() -> crate::schema::Type { schema::Type::ByteArray(32) }
+    fn get_type() -> crate::schema::Type {
+        schema::Type::ByteArray(32)
+    }
 }
 
 impl schema::SchemaType for PublicKeyEcdsaSecp256k1 {
-    fn get_type() -> crate::schema::Type { schema::Type::ByteArray(33) }
+    fn get_type() -> crate::schema::Type {
+        schema::Type::ByteArray(33)
+    }
 }
 
 impl schema::SchemaType for SignatureEd25519 {
-    fn get_type() -> crate::schema::Type { schema::Type::ByteArray(64) }
+    fn get_type() -> crate::schema::Type {
+        schema::Type::ByteArray(64)
+    }
 }
 
 impl schema::SchemaType for SignatureEcdsaSecp256k1 {
-    fn get_type() -> crate::schema::Type { schema::Type::ByteArray(64) }
+    fn get_type() -> crate::schema::Type {
+        schema::Type::ByteArray(64)
+    }
 }
 
 impl Serial for ExchangeRate {
@@ -454,7 +518,9 @@ impl Deserial for Timestamp {
 }
 
 impl Serial for Duration {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.millis().serial(out) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.millis().serial(out)
+    }
 }
 
 impl Deserial for Duration {
@@ -475,13 +541,17 @@ impl Serial for &str {
 }
 
 impl<A: Serial> Serial for &A {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { (*self).serial(out) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        (*self).serial(out)
+    }
 }
 
 /// Serialized by writing an `u32` representing the number of bytes for a
 /// utf8-encoding of the string, then writing the bytes. Similar to `&str`.
 impl Serial for String {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.as_str().serial(out) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.as_str().serial(out)
+    }
 }
 
 /// Deserial by reading an `u32` representing the number of bytes, then takes
@@ -495,7 +565,9 @@ impl Deserial for String {
 }
 
 impl<T: Serial> Serial for Box<T> {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.as_ref().serial(out) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.as_ref().serial(out)
+    }
 }
 
 impl<T: Deserial> Deserial for Box<T> {
@@ -508,12 +580,16 @@ impl<T: Deserial> Deserial for Box<T> {
 
 impl<C: ?Sized> Serial for marker::PhantomData<C> {
     #[inline(always)]
-    fn serial<W: Write>(&self, _out: &mut W) -> Result<(), W::Err> { Ok(()) }
+    fn serial<W: Write>(&self, _out: &mut W) -> Result<(), W::Err> {
+        Ok(())
+    }
 }
 
 impl<C: ?Sized> Deserial for marker::PhantomData<C> {
     #[inline(always)]
-    fn deserial<R: Read>(_source: &mut R) -> ParseResult<Self> { Ok(marker::PhantomData) }
+    fn deserial<R: Read>(_source: &mut R) -> ParseResult<Self> {
+        Ok(marker::PhantomData)
+    }
 }
 
 /// Serialized if the `Option` is a `None` we write `0u8`. If `Some`, we write
@@ -548,7 +624,9 @@ impl<T: Deserial> Deserial for Option<T> {
 }
 
 impl Serial for AccountAddress {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_all(&self.0) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_all(&self.0)
+    }
 }
 
 impl Deserial for AccountAddress {
@@ -579,10 +657,7 @@ impl Deserial for ContractAddress {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let index = source.get()?;
         let subindex = source.get()?;
-        Ok(ContractAddress {
-            index,
-            subindex,
-        })
+        Ok(ContractAddress { index, subindex })
     }
 }
 
@@ -710,15 +785,15 @@ impl Deserial for OwnedParameter {
 }
 
 impl Serial for ChainMetadata {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.slot_time.serial(out) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.slot_time.serial(out)
+    }
 }
 
 impl Deserial for ChainMetadata {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let slot_time = source.get()?;
-        Ok(Self {
-            slot_time,
-        })
+        Ok(Self { slot_time })
     }
 }
 
@@ -1255,18 +1330,26 @@ impl Address {
     }
 
     /// Return `true` if and only if the address is an account address.
-    pub fn is_account(&self) -> bool { matches!(self, Address::Account(_)) }
+    pub fn is_account(&self) -> bool {
+        matches!(self, Address::Account(_))
+    }
 
     /// Return `true` if and only if the address is a contract address.
-    pub fn is_contract(&self) -> bool { matches!(self, Address::Contract(_)) }
+    pub fn is_contract(&self) -> bool {
+        matches!(self, Address::Contract(_))
+    }
 }
 
 impl Serial for AttributeTag {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.0.serial(out) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.0.serial(out)
+    }
 }
 
 impl Deserial for AttributeTag {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> { Ok(AttributeTag(source.get()?)) }
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        Ok(AttributeTag(source.get()?))
+    }
 }
 
 impl Serial for AttributeValue {
@@ -1326,10 +1409,7 @@ impl Deserial for OwnedPolicy {
 
 impl<T> Cursor<T> {
     pub fn new(data: T) -> Self {
-        Cursor {
-            offset: 0,
-            data,
-        }
+        Cursor { offset: 0, data }
     }
 }
 
@@ -1364,11 +1444,15 @@ impl<'a, 'b, T: Read, U: Read> Read for Chain<&'a mut T, &'b mut U> {
 }
 
 impl<T: AsRef<[u8]>> HasSize for T {
-    fn size(&self) -> u32 { self.as_ref().len() as u32 }
+    fn size(&self) -> u32 {
+        self.as_ref().len() as u32
+    }
 }
 
 impl<T: AsRef<[u8]>> AsRef<[u8]> for Cursor<T> {
-    fn as_ref(&self) -> &[u8] { self.data.as_ref() }
+    fn as_ref(&self) -> &[u8] {
+        self.data.as_ref()
+    }
 }
 
 impl<T: HasSize> Seek for Cursor<T> {
@@ -1419,7 +1503,9 @@ impl<T: HasSize> Seek for Cursor<T> {
     }
 
     #[inline(always)]
-    fn cursor_position(&self) -> u32 { self.offset as u32 }
+    fn cursor_position(&self) -> u32 {
+        self.offset as u32
+    }
 }
 
 impl Write for Cursor<&mut Vec<u8>> {
@@ -1454,7 +1540,8 @@ impl Write for Cursor<&mut Vec<u8>> {
 pub fn to_bytes<S: Serial>(x: &S) -> Vec<u8> {
     let mut out = Vec::new();
     let mut cursor = Cursor::new(&mut out);
-    x.serial(&mut cursor).expect("Writing to a vector should succeed.");
+    x.serial(&mut cursor)
+        .expect("Writing to a vector should succeed.");
     out
 }
 
@@ -1593,7 +1680,9 @@ mod test {
         let bytes = [0u8; 10];
         let mut cursor = Cursor::new(&bytes);
 
-        cursor.seek(SeekFrom::Current(4)).expect("Seek should succeed");
+        cursor
+            .seek(SeekFrom::Current(4))
+            .expect("Seek should succeed");
 
         let result = cursor.seek(SeekFrom::Current(-2));
         let position = result.expect("Seek should succeed");
@@ -1605,7 +1694,9 @@ mod test {
         let bytes = [0u8; 10];
         let mut cursor = Cursor::new(&bytes);
 
-        cursor.seek(SeekFrom::Current(4)).expect("Seek should succeed");
+        cursor
+            .seek(SeekFrom::Current(4))
+            .expect("Seek should succeed");
 
         let result = cursor.seek(SeekFrom::Current(-5));
         result.expect_err("Should have failed to seek before start of data");
@@ -1616,7 +1707,9 @@ mod test {
         let bytes = [0u8; 10];
         let mut cursor = Cursor::new(&bytes);
 
-        cursor.seek(SeekFrom::Current(4)).expect("Seek should succeed");
+        cursor
+            .seek(SeekFrom::Current(4))
+            .expect("Seek should succeed");
 
         let result = cursor.seek(SeekFrom::Current(7));
         result.expect_err("Should have failed to seek beyond end of data");
@@ -1626,17 +1719,23 @@ mod test {
     fn test_owned_policy_serial_deserial_is_identity() {
         let op = OwnedPolicy {
             identity_provider: 1234,
-            created_at:        Timestamp::from_timestamp_millis(11),
-            valid_to:          Timestamp::from_timestamp_millis(999999),
-            items:             vec![
+            created_at: Timestamp::from_timestamp_millis(11),
+            valid_to: Timestamp::from_timestamp_millis(999999),
+            items: vec![
                 (attributes::COUNTRY_OF_RESIDENCE, b"DK".into()),
-                (attributes::ID_DOC_TYPE, b"A document type with 31 chars..".into()),
+                (
+                    attributes::ID_DOC_TYPE,
+                    b"A document type with 31 chars..".into(),
+                ),
             ],
         };
         let mut buf = Vec::new();
         op.serial(&mut buf).unwrap();
         let res = OwnedPolicy::deserial(&mut Cursor::new(buf)).unwrap();
-        assert_eq!(op.identity_provider, res.identity_provider, "identity provider didn't match");
+        assert_eq!(
+            op.identity_provider, res.identity_provider,
+            "identity provider didn't match"
+        );
         assert_eq!(op.created_at, res.created_at, "created_at didn't match");
         assert_eq!(op.valid_to, res.valid_to, "valid_to didn't match");
         assert_eq!(op.items, res.items, "items didn't match");

@@ -105,7 +105,8 @@ pub trait PrimeField: Field {
 /// prime order size. More correctly this would be called a group, since it is
 /// generally a subset of an elliptic curve, but the name is in use now.
 pub trait Curve:
-    Serialize + Copy + Clone + Sized + Send + Sync + Debug + PartialEq + Eq + 'static {
+    Serialize + Copy + Clone + Sized + Send + Sync + Debug + PartialEq + Eq + 'static
+{
     /// The prime field of the group order size.
     type Scalar: PrimeField + Serialize;
     type MultiExpType: MultiExp<CurvePoint = Self>;
@@ -114,7 +115,9 @@ pub trait Curve:
     /// Size in bytes of group elements when serialized.
     const GROUP_ELEMENT_LENGTH: usize;
     /// Create new instance of multiexp algorithm given some initial points.
-    fn new_multiexp<X: Borrow<Self>>(gs: &[X]) -> Self::MultiExpType { Self::MultiExpType::new(gs) }
+    fn new_multiexp<X: Borrow<Self>>(gs: &[X]) -> Self::MultiExpType {
+        Self::MultiExpType::new(gs)
+    }
     /// Unit for the group operation.
     fn zero_point() -> Self;
     /// Chosen generator of the group.
@@ -185,7 +188,7 @@ pub trait MultiExp {
 }
 
 pub struct GenericMultiExp<C> {
-    table:       Vec<Vec<C>>,
+    table: Vec<Vec<C>>,
     window_size: usize,
 }
 
@@ -219,7 +222,9 @@ impl<C: Curve> MultiExp for GenericMultiExp<C> {
 
     /// Construct new instance of a lookup table with the default window size.
     // fn new<X: Borrow<C>, I: IntoIterator<Item = X>>(gs: I) -> Self {
-    fn new<X: Borrow<C>>(gs: &[X]) -> Self { Self::new(gs, Self::DEFAULT_WINDOW_SIZE) }
+    fn new<X: Borrow<C>>(gs: &[X]) -> Self {
+        Self::new(gs, Self::DEFAULT_WINDOW_SIZE)
+    }
 
     /// This implements the WNAF method from
     /// <https://link.springer.com/content/pdf/10.1007%2F3-540-45537-X_13.pdf>
@@ -281,15 +286,13 @@ impl<C: Curve> MultiExp for GenericMultiExp<C> {
                     v.push(0);
                     pos += 1;
                 } else {
-                    v.push(
-                        if window_val < width / 2 {
-                            carry = 0;
-                            window_val as i64
-                        } else {
-                            carry = 1;
-                            (window_val as i64).wrapping_sub(width as i64)
-                        },
-                    );
+                    v.push(if window_val < width / 2 {
+                        carry = 0;
+                        window_val as i64
+                    } else {
+                        carry = 1;
+                        (window_val as i64).wrapping_sub(width as i64)
+                    });
                     v.extend(std::iter::repeat(0).take(window_size_plus1 - 1));
                     pos += window_size_plus1;
                 }
@@ -411,7 +414,8 @@ pub trait Pairing: Sized + 'static + Clone {
 pub fn multiexp<C, X>(gs: &[X], exps: &[C::Scalar]) -> C
 where
     C: Curve,
-    X: Borrow<C>, {
+    X: Borrow<C>,
+{
     C::new_multiexp(gs).multiexp(exps)
 }
 

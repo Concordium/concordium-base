@@ -37,19 +37,23 @@ pub struct HashBytes<Purpose> {
 }
 
 impl<Purpose> PartialEq for HashBytes<Purpose> {
-    fn eq(&self, other: &Self) -> bool { self.bytes == other.bytes }
+    fn eq(&self, other: &Self) -> bool {
+        self.bytes == other.bytes
+    }
 }
 
 impl<Purpose> Eq for HashBytes<Purpose> {}
 
 impl<Purpose> hash::Hash for HashBytes<Purpose> {
-    fn hash<H: hash::Hasher>(&self, state: &mut H) { self.bytes.hash(state); }
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        self.bytes.hash(state);
+    }
 }
 
 impl<Purpose> Clone for HashBytes<Purpose> {
     fn clone(&self) -> Self {
         Self {
-            bytes:    self.bytes,
+            bytes: self.bytes,
             _phantom: Default::default(),
         }
     }
@@ -91,7 +95,10 @@ pub type Hash = HashBytes<PureHashMarker>;
 pub enum HashFromStrError {
     #[cfg_attr(feature = "derive-serde", error("Not a valid hex string: {0}"))]
     HexDecodeError(#[from] hex::FromHexError),
-    #[cfg_attr(feature = "derive-serde", error("Incorrect length, found {found}, expected 32."))]
+    #[cfg_attr(
+        feature = "derive-serde",
+        error("Incorrect length, found {found}, expected 32.")
+    )]
     IncorrectLength {
         // length that was found
         found: usize,
@@ -109,17 +116,23 @@ impl<Purpose> HashBytes<Purpose> {
 }
 
 impl<Purpose> From<[u8; 32]> for HashBytes<Purpose> {
-    fn from(array: [u8; 32]) -> Self { Self::new(array) }
+    fn from(array: [u8; 32]) -> Self {
+        Self::new(array)
+    }
 }
 
 impl<Purpose> Deref for HashBytes<Purpose> {
     type Target = [u8];
 
-    fn deref(&self) -> &Self::Target { &self.bytes }
+    fn deref(&self) -> &Self::Target {
+        &self.bytes
+    }
 }
 
 impl<Purpose> AsRef<[u8]> for HashBytes<Purpose> {
-    fn as_ref(&self) -> &[u8] { self }
+    fn as_ref(&self) -> &[u8] {
+        self
+    }
 }
 
 #[cfg(feature = "derive-serde")]
@@ -129,9 +142,9 @@ impl<Purpose> FromStr for HashBytes<Purpose> {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let hex_decoded = hex::decode(s)?;
         let found = hex_decoded.len();
-        let bytes = hex_decoded.try_into().map_err(|_| HashFromStrError::IncorrectLength {
-            found,
-        })?;
+        let bytes = hex_decoded
+            .try_into()
+            .map_err(|_| HashFromStrError::IncorrectLength { found })?;
         Ok(HashBytes::new(bytes))
     }
 }
@@ -140,12 +153,17 @@ impl<Purpose> FromStr for HashBytes<Purpose> {
 impl<Purpose> TryFrom<&str> for HashBytes<Purpose> {
     type Error = HashFromStrError;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> { Self::from_str(value) }
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::from_str(value)
+    }
 }
 
 #[derive(Debug)]
 #[cfg_attr(feature = "derive-serde", derive(thiserror::Error))]
-#[cfg_attr(feature = "derive-serde", error("Slice has incompatible length with a hash."))]
+#[cfg_attr(
+    feature = "derive-serde",
+    error("Slice has incompatible length with a hash.")
+)]
 pub struct IncorrectLength;
 
 impl<Purpose> TryFrom<&[u8]> for HashBytes<Purpose> {
@@ -166,7 +184,8 @@ impl<Purpose> TryFrom<&[u8]> for HashBytes<Purpose> {
 impl<'de, Purpose> serde::Deserialize<'de> for HashBytes<Purpose> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>, {
+        D: serde::Deserializer<'de>,
+    {
         struct HashBytesVisitor<Purpose> {
             _phantom: PhantomData<Purpose>,
         }
@@ -191,7 +210,9 @@ impl<'de, Purpose> serde::Deserialize<'de> for HashBytes<Purpose> {
 
 #[cfg(feature = "derive-serde")]
 impl<Purpose> From<HashBytes<Purpose>> for String {
-    fn from(x: HashBytes<Purpose>) -> String { x.to_string() }
+    fn from(x: HashBytes<Purpose>) -> String {
+        x.to_string()
+    }
 }
 
 // a short, 8-character beginning of the SHA

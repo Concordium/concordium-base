@@ -16,7 +16,8 @@ impl<C: Curve> Message<C> {
     // generate random message (for testing)
     pub fn generate<T>(csprng: &mut T) -> Self
     where
-        T: Rng, {
+        T: Rng,
+    {
         Message {
             value: C::generate(csprng),
         }

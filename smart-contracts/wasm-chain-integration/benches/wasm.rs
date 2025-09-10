@@ -30,13 +30,13 @@ static CONTRACT_BYTES_LOOP: &[u8] = include_bytes!("./code/loop-energy.wasm");
 static CONTRACT_BYTES_HOST_FUNCTIONS: &[u8] = include_bytes!("./code/host-functions.wasm");
 
 struct MeteringHost {
-    energy:            InterpreterEnergy,
+    energy: InterpreterEnergy,
     activation_frames: u32,
 }
 
 struct MeteringImport {
     tag: MeteringFunc,
-    ty:  FunctionType,
+    ty: FunctionType,
 }
 
 enum MeteringFunc {
@@ -59,45 +59,33 @@ impl TryFromImport for MeteringImport {
                     let tag = MeteringFunc::ChargeEnergy;
                     let ty = FunctionType {
                         parameters: vec![ValueType::I64],
-                        result:     None,
+                        result: None,
                     };
-                    Ok(MeteringImport {
-                        tag,
-                        ty,
-                    })
+                    Ok(MeteringImport { tag, ty })
                 }
                 "track_call" => {
                     let tag = MeteringFunc::TrackCall;
                     let ty = FunctionType {
                         parameters: vec![],
-                        result:     None,
+                        result: None,
                     };
-                    Ok(MeteringImport {
-                        tag,
-                        ty,
-                    })
+                    Ok(MeteringImport { tag, ty })
                 }
                 "track_return" => {
                     let tag = MeteringFunc::TrackReturn;
                     let ty = FunctionType {
                         parameters: vec![],
-                        result:     None,
+                        result: None,
                     };
-                    Ok(MeteringImport {
-                        tag,
-                        ty,
-                    })
+                    Ok(MeteringImport { tag, ty })
                 }
                 "account_memory" => {
                     let tag = MeteringFunc::ChargeMemoryAlloc;
                     let ty = FunctionType {
                         parameters: vec![ValueType::I32],
-                        result:     Some(ValueType::I32),
+                        result: Some(ValueType::I32),
                     };
-                    Ok(MeteringImport {
-                        tag,
-                        ty,
-                    })
+                    Ok(MeteringImport { tag, ty })
                 }
                 name => bail!("Unsupported import {}.", name),
             }
@@ -106,7 +94,9 @@ impl TryFromImport for MeteringImport {
         }
     }
 
-    fn ty(&self) -> &types::FunctionType { &self.ty }
+    fn ty(&self) -> &types::FunctionType {
+        &self.ty
+    }
 }
 
 impl Host<MeteringImport> for MeteringHost {
@@ -130,7 +120,9 @@ impl Host<MeteringImport> for MeteringHost {
         }
     }
 
-    fn track_return(&mut self) { self.activation_frames += 1; }
+    fn track_return(&mut self) {
+        self.activation_frames += 1;
+    }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     fn call(
@@ -140,9 +132,10 @@ impl Host<MeteringImport> for MeteringHost {
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<NoInterrupt>> {
         match f.tag {
-            MeteringFunc::ChargeEnergy => {
-                self.energy.tick_energy(unsafe { stack.pop_u64() }).map(|_| None)
-            }
+            MeteringFunc::ChargeEnergy => self
+                .energy
+                .tick_energy(unsafe { stack.pop_u64() })
+                .map(|_| None),
             MeteringFunc::TrackCall => {
                 if let Some(fr) = self.activation_frames.checked_sub(1) {
                     self.activation_frames = fr;
@@ -155,9 +148,10 @@ impl Host<MeteringImport> for MeteringHost {
                 self.activation_frames += 1;
                 Ok(None)
             }
-            MeteringFunc::ChargeMemoryAlloc => {
-                self.energy.charge_memory_alloc(unsafe { stack.peek_u32() }).map(|_| None)
-            }
+            MeteringFunc::ChargeMemoryAlloc => self
+                .energy
+                .charge_memory_alloc(unsafe { stack.peek_u32() })
+                .map(|_| None),
         }
     }
 }
@@ -212,7 +206,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 )
                 .unwrap();
                 module.inject_metering(CostConfigurationV1).unwrap();
-                assert!(module.compile::<ProcessedImports>().is_ok(), "Compilation failed.")
+                assert!(
+                    module.compile::<ProcessedImports>().is_ok(),
+                    "Compilation failed."
+                )
             })
         });
 
@@ -262,7 +259,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 )
                 .unwrap();
                 module.inject_metering(CostConfigurationV1).unwrap();
-                assert!(module.compile::<ProcessedImports>().is_ok(), "Compilation failed.")
+                assert!(
+                    module.compile::<ProcessedImports>().is_ok(),
+                    "Compilation failed."
+                )
             })
         });
 
@@ -315,7 +315,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 )
                 .unwrap();
                 module.inject_metering(CostConfigurationV1).unwrap();
-                assert!(module.compile::<ProcessedImports>().is_ok(), "Compilation failed.")
+                assert!(
+                    module.compile::<ProcessedImports>().is_ok(),
+                    "Compilation failed."
+                )
             })
         });
 
@@ -336,7 +339,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("execute n = {}", n), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact.run(&mut TrapHost, "foo_extern", &[Value::I64(*m)]).is_ok(),
+                        artifact
+                            .run(&mut TrapHost, "foo_extern", &[Value::I64(*m)])
+                            .is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -352,7 +357,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("allocate n = {} pages", n), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact.run(&mut TrapHost, "foo_extern", &[Value::I32(*m)]).is_ok(),
+                        artifact
+                            .run(&mut TrapHost, "foo_extern", &[Value::I32(*m)])
+                            .is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -365,7 +372,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("write u32 n = {} times", n / 4), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact.run(&mut TrapHost, "write_u32", &[Value::I32(*m)]).is_ok(),
+                        artifact
+                            .run(&mut TrapHost, "write_u32", &[Value::I32(*m)])
+                            .is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -378,7 +387,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("write u64 n = {} times", n / 8), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact.run(&mut TrapHost, "write_u64", &[Value::I32(*m)]).is_ok(),
+                        artifact
+                            .run(&mut TrapHost, "write_u64", &[Value::I32(*m)])
+                            .is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -391,7 +402,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("write u8 n  = {} times as u32", n), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact.run(&mut TrapHost, "write_u32_u8", &[Value::I32(*m)]).is_ok(),
+                        artifact
+                            .run(&mut TrapHost, "write_u32_u8", &[Value::I32(*m)])
+                            .is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -404,7 +417,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("write u8 n  = {} times as u64", n), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact.run(&mut TrapHost, "write_u64_u8", &[Value::I32(*m)]).is_ok(),
+                        artifact
+                            .run(&mut TrapHost, "write_u64_u8", &[Value::I32(*m)])
+                            .is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -439,7 +454,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_function(name, move |b: &mut criterion::Bencher| {
                 b.iter(|| {
                     let mut host = MeteringHost {
-                        energy:            InterpreterEnergy::new(
+                        energy: InterpreterEnergy::new(
                             nrg * 1000, // should correspond to about 1ms of execution.
                         ),
                         activation_frames: MAX_ACTIVATION_FRAMES,
@@ -448,7 +463,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         .run(&mut host, name, args)
                         .expect_err("Precondition violation, did not terminate with an error.");
                     assert!(
-                        r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>().is_some(),
+                        r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>()
+                            .is_some(),
                         "Execution did not fail due to out of energy: {}",
                         r
                     )
@@ -586,10 +602,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let owner = concordium_contracts_common::AccountAddress([0u8; 32]);
 
         let init_ctx: InitContext<&[u8]> = InitContext {
-            metadata:        ChainMetadata {
+            metadata: ChainMetadata {
                 slot_time: Timestamp::from_timestamp_millis(0),
             },
-            init_origin:     owner,
+            init_origin: owner,
             sender_policies: &[],
         };
 
@@ -599,7 +615,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             },
             invoker: owner,
             self_address: ContractAddress {
-                index:    0,
+                index: 0,
                 subindex: 0,
             },
             self_balance: Amount::from_ccd(1000),
@@ -609,7 +625,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         };
 
         let setup_init_host = || -> InitHost<Parameter<'_>, &InitContext<_>> {
-            InitHost::init(InterpreterEnergy::new(nrg * 1000), Parameter::empty(), &init_ctx, false)
+            InitHost::init(
+                InterpreterEnergy::new(nrg * 1000),
+                Parameter::empty(),
+                &init_ctx,
+                false,
+            )
         };
 
         let setup_receive_host = |state, param| -> ReceiveHost<Parameter<'_>, &ReceiveContext<_>> {
@@ -628,18 +649,18 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             // only move the reference to the artifact making this closure copyable.
             let artifact = &artifact;
             move |b: &mut criterion::Bencher| {
-                b.iter( || {
-                let mut host = setup_init_host();
-                let r = artifact
-                    .run(&mut host, name, args)
-                    .expect_err("Execution should fail due to out of energy.");
-                assert!(
-                    r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>().is_some(), /* Should fail due to out of energy. */
-                    "Execution did not fail due to out of energy: {}.",
-                    r
-                );
-                }
-                )
+                b.iter(|| {
+                    let mut host = setup_init_host();
+                    let r = artifact
+                        .run(&mut host, name, args)
+                        .expect_err("Execution should fail due to out of energy.");
+                    assert!(
+                        r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>()
+                            .is_some(), /* Should fail due to out of energy. */
+                        "Execution did not fail due to out of energy: {}.",
+                        r
+                    );
+                })
             }
         };
 
@@ -649,16 +670,18 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             let artifact = &artifact;
             move |b: &mut criterion::Bencher| {
                 b.iter(|| {
-                    let mut host = setup_receive_host(State::new(state), Parameter::new_unchecked(params));
+                    let mut host =
+                        setup_receive_host(State::new(state), Parameter::new_unchecked(params));
                     let r = artifact
                         .run(&mut host, name, args)
                         .expect_err("Execution should fail due to out of energy.");
                     assert!(
-                        r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>().is_some(), /* Should fail due to out of energy. */
+                        r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>()
+                            .is_some(), /* Should fail due to out of energy. */
                         "Execution did not fail due to out of energy: {}.",
                         r
                     );
-            })
+                })
             }
         };
 
@@ -669,35 +692,52 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         group.bench_function(
             "get_parameter_size",
-            run_receive(None, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], "hostfn.get_parameter_size", &[
-                Value::I64(0),
-            ]),
+            run_receive(
+                None,
+                &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                "hostfn.get_parameter_size",
+                &[Value::I64(0)],
+            ),
         );
 
         group.bench_function(
             "get_parameter_section",
-            run_receive(None, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], "hostfn.get_parameter_section", &[
-                Value::I64(0),
-            ]),
+            run_receive(
+                None,
+                &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                "hostfn.get_parameter_section",
+                &[Value::I64(0)],
+            ),
         );
 
         group.bench_function(
             "state_size",
-            run_receive(Some(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]), &[], "hostfn.state_size", &[
-                Value::I64(0),
-            ]),
+            run_receive(
+                Some(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+                &[],
+                "hostfn.state_size",
+                &[Value::I64(0)],
+            ),
         );
 
         group.bench_function(
             "load_state",
-            run_receive(Some(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]), &[], "hostfn.load_state", &[
-                Value::I64(0),
-            ]),
+            run_receive(
+                Some(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+                &[],
+                "hostfn.load_state",
+                &[Value::I64(0)],
+            ),
         );
 
         group.bench_function(
             "write_state",
-            run_receive(Some(&[0u8; 1 << 16]), &[], "hostfn.write_state", &[Value::I64(0)]),
+            run_receive(
+                Some(&[0u8; 1 << 16]),
+                &[],
+                "hostfn.write_state",
+                &[Value::I64(0)],
+            ),
         );
 
         group.bench_function(
@@ -710,7 +750,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             run_receive(None, &[], "hostfn.get_slot_time", &[Value::I64(0)]),
         );
 
-        group.bench_function("get_init_origin", run_init("init_get_init_origin", &[Value::I64(0)]));
+        group.bench_function(
+            "get_init_origin",
+            run_init("init_get_init_origin", &[Value::I64(0)]),
+        );
 
         group.bench_function(
             "get_receive_invoker",
@@ -724,7 +767,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         group.bench_function(
             "get_receive_self_address",
-            run_receive(None, &[], "hostfn.get_receive_self_address", &[Value::I64(0)]),
+            run_receive(
+                None,
+                &[],
+                "hostfn.get_receive_self_address",
+                &[Value::I64(0)],
+            ),
         );
 
         group.bench_function(
@@ -734,17 +782,28 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         group.bench_function(
             "get_receive_self_balance",
-            run_receive(None, &[], "hostfn.get_receive_self_balance", &[Value::I64(0)]),
+            run_receive(
+                None,
+                &[],
+                "hostfn.get_receive_self_balance",
+                &[Value::I64(0)],
+            ),
         );
 
-        group.bench_function("accept", run_receive(None, &[], "hostfn.accept", &[Value::I64(0)]));
+        group.bench_function(
+            "accept",
+            run_receive(None, &[], "hostfn.accept", &[Value::I64(0)]),
+        );
 
         group.bench_function(
             "simple_transfer",
             run_receive(None, &[], "hostfn.simple_transfer", &[Value::I64(0)]),
         );
 
-        group.bench_function("send", run_receive(None, &[], "hostfn.send", &[Value::I64(0)]));
+        group.bench_function(
+            "send",
+            run_receive(None, &[], "hostfn.send", &[Value::I64(0)]),
+        );
 
         group.bench_function(
             "combine_and",

@@ -55,8 +55,8 @@ pub enum CredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Statement about a credential derived from an identity issued by an
     /// identity provider.
     Account {
-        network:   Network,
-        cred_id:   CredentialRegistrationID,
+        network: Network,
+        cred_id: CredentialRegistrationID,
         statement: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
     },
     /// Statement about a credential issued by a Web3 identity provider, a smart
@@ -64,14 +64,14 @@ pub enum CredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     Web3Id {
         /// The credential type. This is chosen by the provider to provide
         /// some information about what the credential is about.
-        ty:         BTreeSet<String>,
-        network:    Network,
+        ty: BTreeSet<String>,
+        network: Network,
         /// Reference to a specific smart contract instance that issued the
         /// credential.
-        contract:   ContractAddress,
+        contract: ContractAddress,
         /// Credential identifier inside the contract.
         credential: CredentialHolderId,
-        statement:  Vec<AtomicStatement<C, String, AttributeType>>,
+        statement: Vec<AtomicStatement<C, String, AttributeType>>,
     },
 }
 
@@ -103,13 +103,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<s
                 let ty = get_field(&mut value, "type")?;
                 anyhow::ensure!(entrypoint == "credentialEntry", "Invalid entrypoint.");
                 Ok(Self::Web3Id {
-                    ty:         serde_json::from_value(ty)?,
-                    network:    id.network,
-                    contract:   address,
+                    ty: serde_json::from_value(ty)?,
+                    network: id.network,
+                    contract: address,
                     credential: CredentialHolderId::new(ed25519_dalek::VerifyingKey::from_bytes(
                         &parameter.as_ref().try_into()?,
                     )?),
-                    statement:  serde_json::from_value(statement)?,
+                    statement: serde_json::from_value(statement)?,
                 })
             }
             _ => {
@@ -124,7 +124,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer, {
+        S: serde::Serializer,
+    {
         match self {
             CredentialStatement::Account {
                 network,
@@ -166,21 +167,21 @@ pub enum CredentialMetadata {
     /// Metadata of an account credential, i.e., a credential derived from an
     /// identity object.
     Account {
-        issuer:  IpIdentity,
+        issuer: IpIdentity,
         cred_id: CredentialRegistrationID,
     },
     /// Metadata of a Web3Id credential.
     Web3Id {
         contract: ContractAddress,
-        holder:   CredentialHolderId,
+        holder: CredentialHolderId,
     },
 }
 
 /// Metadata about a single [`CredentialProof`].
 pub struct ProofMetadata {
     /// Timestamp of when the proof was created.
-    pub created:       chrono::DateTime<chrono::Utc>,
-    pub network:       Network,
+    pub created: chrono::DateTime<chrono::Utc>,
+    pub network: Network,
     /// The DID of the credential the proof is about.
     pub cred_metadata: CredentialMetadata,
 }
@@ -195,10 +196,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
                 issuer,
                 proofs: _,
             } => ProofMetadata {
-                created:       *created,
-                network:       *network,
+                created: *created,
+                network: *network,
                 cred_metadata: CredentialMetadata::Account {
-                    issuer:  *issuer,
+                    issuer: *issuer,
                     cred_id: *cred_id,
                 },
             },
@@ -211,11 +212,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
                 commitments: _,
                 proofs: _,
             } => ProofMetadata {
-                created:       *created,
-                network:       *network,
+                created: *created,
+                network: *network,
                 cred_metadata: CredentialMetadata::Web3Id {
                     contract: *contract,
-                    holder:   *holder,
+                    holder: *holder,
                 },
             },
         }
@@ -230,8 +231,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
                 proofs,
                 ..
             } => CredentialStatement::Account {
-                network:   *network,
-                cred_id:   *cred_id,
+                network: *network,
+                cred_id: *cred_id,
                 statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
             },
             CredentialProof::Web3Id {
@@ -242,11 +243,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
                 proofs,
                 ..
             } => CredentialStatement::Web3Id {
-                ty:         ty.clone(),
-                network:    *network,
-                contract:   *contract,
+                ty: ty.clone(),
+                network: *network,
+                contract: *contract,
                 credential: *holder,
-                statement:  proofs.iter().map(|(x, _)| x.clone()).collect(),
+                statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
             },
         }
     }
@@ -268,25 +269,25 @@ pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
         cred_id: CredentialRegistrationID,
         /// Issuer of this credential, the identity provider index on the
         /// relevant network.
-        issuer:  IpIdentity,
-        proofs:  Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
+        issuer: IpIdentity,
+        proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
     },
     Web3Id {
         /// Creation timestamp of the proof.
-        created:     chrono::DateTime<chrono::Utc>,
+        created: chrono::DateTime<chrono::Utc>,
         /// Owner of the credential, a public key.
-        holder:      CredentialHolderId,
-        network:     Network,
+        holder: CredentialHolderId,
+        network: Network,
         /// Reference to a specific smart contract instance.
-        contract:    ContractAddress,
+        contract: ContractAddress,
         /// The credential type. This is chosen by the provider to provide
         /// some information about what the credential is about.
-        ty:          BTreeSet<String>,
+        ty: BTreeSet<String>,
         /// Commitments that the user has. These are all the commitments that
         /// are part of the credential, indexed by the attribute tag.
         commitments: SignedCommitments<C>,
         /// Individual proofs for statements.
-        proofs:      Vec<StatementWithProof<C, String, AttributeType>>,
+        proofs: Vec<StatementWithProof<C, String, AttributeType>>,
     },
 }
 
@@ -298,7 +299,7 @@ pub struct SignedCommitments<C: Curve> {
         serialize_with = "crate::common::base16_encode",
         deserialize_with = "crate::common::base16_decode"
     )]
-    pub signature:   ed25519_dalek::Signature,
+    pub signature: ed25519_dalek::Signature,
     pub commitments: BTreeMap<String, pedersen_commitment::Commitment<C>>,
 }
 
@@ -376,7 +377,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer, {
+        S: serde::Serializer,
+    {
         match self {
             CredentialProof::Account {
                 created,
@@ -622,7 +624,7 @@ pub type Challenge = HashBytes<Web3IdChallengeMarker>;
 /// A request for a proof. This is the statement and challenge. The secret data
 /// comes separately.
 pub struct Request<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    pub challenge:             Challenge,
+    pub challenge: Challenge,
     pub credential_statements: Vec<CredentialStatement<C, AttributeType>>,
 }
 
@@ -632,17 +634,20 @@ pub struct Request<C: Curve, AttributeType: Attribute<C::Scalar>> {
 /// role, e.g., an owner of a credential or a revocation key.
 pub struct Ed25519PublicKey<Role> {
     pub public_key: ed25519_dalek::VerifyingKey,
-    phantom:        PhantomData<Role>,
+    phantom: PhantomData<Role>,
 }
 
 impl<Role> From<ed25519_dalek::VerifyingKey> for Ed25519PublicKey<Role> {
-    fn from(value: ed25519_dalek::VerifyingKey) -> Self { Self::new(value) }
+    fn from(value: ed25519_dalek::VerifyingKey) -> Self {
+        Self::new(value)
+    }
 }
 
 impl<Role> serde::Serialize for Ed25519PublicKey<Role> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer, {
+        S: serde::Serializer,
+    {
         let s = self.to_string();
         s.serialize(serializer)
     }
@@ -651,7 +656,8 @@ impl<Role> serde::Serialize for Ed25519PublicKey<Role> {
 impl<'de, Role> serde::Deserialize<'de> for Ed25519PublicKey<Role> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>, {
+        D: serde::Deserializer<'de>,
+    {
         use serde::de::Error;
         let s: String = String::deserialize(deserializer)?;
         s.try_into().map_err(D::Error::custom)
@@ -669,13 +675,17 @@ pub enum Ed25519PublicKeyFromStrError {
 impl<Role> TryFrom<String> for Ed25519PublicKey<Role> {
     type Error = Ed25519PublicKeyFromStrError;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> { Self::try_from(value.as_str()) }
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
+    }
 }
 
 impl<Role> FromStr for Ed25519PublicKey<Role> {
     type Err = Ed25519PublicKeyFromStrError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> { Self::try_from(s) }
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from(s)
+    }
 }
 
 impl<Role> TryFrom<&str> for Ed25519PublicKey<Role> {
@@ -722,11 +732,15 @@ impl<Role> std::fmt::Display for Ed25519PublicKey<Role> {
 impl<Role> Eq for Ed25519PublicKey<Role> {}
 
 impl<Role> PartialEq for Ed25519PublicKey<Role> {
-    fn eq(&self, other: &Self) -> bool { self.public_key.eq(&other.public_key) }
+    fn eq(&self, other: &Self) -> bool {
+        self.public_key.eq(&other.public_key)
+    }
 }
 
 impl<Role> Clone for Ed25519PublicKey<Role> {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 
 impl<Role> Copy for Ed25519PublicKey<Role> {}
@@ -784,11 +798,11 @@ pub type CredentialHolderId = Ed25519PublicKey<CredentialHolderIdRole>;
 /// statements, ownership proof for all Web3 credentials, and a context. The
 /// only missing part to verify the proof are the public commitments.
 pub struct Presentation<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    pub presentation_context:  Challenge,
+    pub presentation_context: Challenge,
     pub verifiable_credential: Vec<CredentialProof<C, AttributeType>>,
     /// Signatures from keys of Web3 credentials (not from ID credentials).
     /// The order is the same as that in the `credential_proofs` field.
-    pub linking_proof:         LinkingProof,
+    pub linking_proof: LinkingProof,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -832,7 +846,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
         transcript.append_message(b"ctx", &params);
 
         let mut request = Request {
-            challenge:             self.presentation_context,
+            challenge: self.presentation_context,
             credential_statements: Vec::new(),
         };
 
@@ -906,7 +920,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer, {
+        S: serde::Serializer,
+    {
         let json = serde_json::json!({
             "type": "VerifiablePresentation",
             "presentationContext": self.presentation_context,
@@ -947,7 +962,8 @@ impl crate::common::Serial for LinkingProof {
 impl serde::Serialize for LinkingProof {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer, {
+        S: serde::Serializer,
+    {
         let json = serde_json::json!({
             "type": "ConcordiumWeakLinkingProofV1",
             "created": self.created,
@@ -997,7 +1013,9 @@ pub trait Web3IdSigner {
 }
 
 impl Web3IdSigner for ed25519_dalek::SigningKey {
-    fn id(&self) -> ed25519_dalek::VerifyingKey { self.verifying_key() }
+    fn id(&self) -> ed25519_dalek::VerifyingKey {
+        self.verifying_key()
+    }
 
     fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature {
         ed25519_dalek::Signer::sign(self, msg.as_ref())
@@ -1005,9 +1023,13 @@ impl Web3IdSigner for ed25519_dalek::SigningKey {
 }
 
 impl Web3IdSigner for crate::common::types::KeyPair {
-    fn id(&self) -> ed25519_dalek::VerifyingKey { self.public() }
+    fn id(&self) -> ed25519_dalek::VerifyingKey {
+        self.public()
+    }
 
-    fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature { self.sign(msg.as_ref()) }
+    fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature {
+        self.sign(msg.as_ref())
+    }
 }
 
 impl Web3IdSigner for ed25519_dalek::SecretKey {
@@ -1026,19 +1048,19 @@ impl Web3IdSigner for ed25519_dalek::SecretKey {
 pub enum CommitmentInputs<'a, C: Curve, AttributeType, Web3IdSigner> {
     /// Inputs are for an identity credential issued by an identity provider.
     Account {
-        issuer:     IpIdentity,
+        issuer: IpIdentity,
         /// The values that are committed to and are required in the proofs.
-        values:     &'a BTreeMap<AttributeTag, AttributeType>,
+        values: &'a BTreeMap<AttributeTag, AttributeType>,
         /// The randomness to go along with commitments in `values`.
         randomness: &'a BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
     },
     /// Inputs are for a credential issued by Web3ID issuer.
     Web3Issuer {
-        signature:  ed25519_dalek::Signature,
+        signature: ed25519_dalek::Signature,
         /// The signer that will sign the presentation.
-        signer:     &'a Web3IdSigner,
+        signer: &'a Web3IdSigner,
         /// All the values the user has and are required in the proofs.
-        values:     &'a BTreeMap<String, AttributeType>,
+        values: &'a BTreeMap<String, AttributeType>,
         /// The randomness to go along with commitments in `values`. This has to
         /// have the same keys as the `values` field, but it is more
         /// convenient if it is a separate map itself.
@@ -1055,31 +1077,31 @@ pub enum CommitmentInputs<'a, C: Curve, AttributeType, Web3IdSigner> {
 /// The full credential, including secrets.
 pub struct Web3IdCredential<C: Curve, AttributeType> {
     /// The credential holder's public key.
-    pub holder_id:         CredentialHolderId,
+    pub holder_id: CredentialHolderId,
     /// The network to which the credential applies.
-    pub network:           Network,
+    pub network: Network,
     /// The address of the credential registry where the credential is tracked.
-    pub registry:          ContractAddress,
+    pub registry: ContractAddress,
     /// Credential type describing what kind of a credential it is.
-    pub credential_type:   BTreeSet<String>,
+    pub credential_type: BTreeSet<String>,
     /// Link to the credential schema.
     pub credential_schema: String,
     /// The issuer's public key.
-    pub issuer_key:        IssuerKey,
+    pub issuer_key: IssuerKey,
     /// Start of the validity of the credential.
-    pub valid_from:        chrono::DateTime<chrono::Utc>,
+    pub valid_from: chrono::DateTime<chrono::Utc>,
     /// After this date, the credential becomes expired. `None` corresponds to a
     /// credential that cannot expire.
-    pub valid_until:       Option<chrono::DateTime<chrono::Utc>>,
+    pub valid_until: Option<chrono::DateTime<chrono::Utc>>,
     /// The values of different attributes, indexed by attribute tags.
-    pub values:            BTreeMap<String, AttributeType>,
+    pub values: BTreeMap<String, AttributeType>,
     /// The randomness to go along with commitments in `values`. This has to
     /// have the same keys as the `values` field, but it is more
     /// convenient if it is a separate map itself.
-    pub randomness:        BTreeMap<String, pedersen_commitment::Randomness<C>>,
+    pub randomness: BTreeMap<String, pedersen_commitment::Randomness<C>>,
     /// The signature on the holder's public key, the contract address of the
     /// issuer, and the commitments from the issuer.
-    pub signature:         ed25519_dalek::Signature,
+    pub signature: ed25519_dalek::Signature,
 }
 
 impl<C: Curve, AttributeType: serde::Serialize> From<Web3IdCredential<C, AttributeType>>
@@ -1088,30 +1110,30 @@ impl<C: Curve, AttributeType: serde::Serialize> From<Web3IdCredential<C, Attribu
     fn from(value: Web3IdCredential<C, AttributeType>) -> Self {
         let id = Method {
             network: value.network,
-            ty:      IdentifierType::ContractData {
-                address:    value.registry,
+            ty: IdentifierType::ContractData {
+                address: value.registry,
                 entrypoint: OwnedEntrypointName::new_unchecked("credentialEntry".into()),
-                parameter:  OwnedParameter::from_serial(&value.holder_id).unwrap(),
+                parameter: OwnedParameter::from_serial(&value.holder_id).unwrap(),
             },
         };
         let verification_method = Method {
             network: value.network,
-            ty:      IdentifierType::PublicKey {
+            ty: IdentifierType::PublicKey {
                 key: value.issuer_key.public_key,
             },
         };
         let cred_id = Method {
             network: value.network,
-            ty:      IdentifierType::PublicKey {
+            ty: IdentifierType::PublicKey {
                 key: value.holder_id.public_key,
             },
         };
         let issuer = Method {
             network: value.network,
-            ty:      IdentifierType::ContractData {
-                address:    value.registry,
+            ty: IdentifierType::ContractData {
+                address: value.registry,
                 entrypoint: OwnedEntrypointName::new_unchecked("issuer".into()),
-                parameter:  OwnedParameter::empty(),
+                parameter: OwnedParameter::empty(),
             },
         };
 
@@ -1298,17 +1320,17 @@ impl<C: Curve, AttributeType> Web3IdCredential<C, AttributeType> {
 pub enum OwnedCommitmentInputs<C: Curve, AttributeType, Web3IdSigner> {
     #[serde(rename_all = "camelCase")]
     Account {
-        issuer:     IpIdentity,
+        issuer: IpIdentity,
         #[serde_as(as = "BTreeMap<serde_with::DisplayFromStr, _>")]
-        values:     BTreeMap<AttributeTag, AttributeType>,
+        values: BTreeMap<AttributeTag, AttributeType>,
         #[serde_as(as = "BTreeMap<serde_with::DisplayFromStr, _>")]
         randomness: BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
     },
     #[serde(rename_all = "camelCase")]
     Web3Issuer {
-        signer:     Web3IdSigner,
+        signer: Web3IdSigner,
         #[serde_as(as = "BTreeMap<serde_with::DisplayFromStr, _>")]
-        values:     BTreeMap<String, AttributeType>,
+        values: BTreeMap<String, AttributeType>,
         /// The randomness to go along with commitments in `values`. This has to
         /// have the same keys as the `values` field, but it is more
         /// convenient if it is a separate map itself.
@@ -1318,7 +1340,7 @@ pub enum OwnedCommitmentInputs<C: Curve, AttributeType, Web3IdSigner> {
             serialize_with = "crate::common::base16_encode",
             deserialize_with = "crate::common::base16_decode"
         )]
-        signature:  ed25519_dalek::Signature,
+        signature: ed25519_dalek::Signature,
     },
 }
 
@@ -1581,7 +1603,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
         attrs: impl ExactSizeIterator<Item = CommitmentInputs<'a, C, AttributeType, Signer>>,
     ) -> Result<Presentation<C, AttributeType>, ProofError>
     where
-        AttributeType: 'a, {
+        AttributeType: 'a,
+    {
         let mut proofs = Vec::with_capacity(attrs.len());
         let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
         transcript.add_bytes(self.challenge);
@@ -1752,7 +1775,8 @@ impl TryFrom<serde_json::Value> for Web3IdAttribute {
 impl serde::Serialize for Web3IdAttribute {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer, {
+        S: serde::Serializer,
+    {
         use serde::ser::{Error, SerializeMap};
         match self {
             Web3IdAttribute::String(ak) => ak.serialize(serializer),
@@ -1861,83 +1885,83 @@ mod tests {
 
         let credential_statements = vec![
             CredentialStatement::Web3Id {
-                ty:         [
+                ty: [
                     "VerifiableCredential".into(),
                     "ConcordiumVerifiableCredential".into(),
                     "TestCredential".into(),
                 ]
                 .into_iter()
                 .collect(),
-                network:    Network::Testnet,
-                contract:   contract_1,
+                network: Network::Testnet,
+                contract: contract_1,
                 credential: CredentialHolderId::new(signer_1.verifying_key()),
-                statement:  vec![
+                statement: vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
                             attribute_tag: "17".into(),
-                            lower:         Web3IdAttribute::Numeric(80),
-                            upper:         Web3IdAttribute::Numeric(1237),
-                            _phantom:      PhantomData,
+                            lower: Web3IdAttribute::Numeric(80),
+                            upper: Web3IdAttribute::Numeric(1237),
+                            _phantom: PhantomData,
                         },
                     },
                     AtomicStatement::AttributeInSet {
                         statement: AttributeInSetStatement {
                             attribute_tag: "23".into(),
-                            set:           [
+                            set: [
                                 Web3IdAttribute::String(AttributeKind("ff".into())),
                                 Web3IdAttribute::String(AttributeKind("aa".into())),
                                 Web3IdAttribute::String(AttributeKind("zz".into())),
                             ]
                             .into_iter()
                             .collect(),
-                            _phantom:      PhantomData,
+                            _phantom: PhantomData,
                         },
                     },
                 ],
             },
             CredentialStatement::Web3Id {
-                ty:         [
+                ty: [
                     "VerifiableCredential".into(),
                     "ConcordiumVerifiableCredential".into(),
                     "TestCredential".into(),
                 ]
                 .into_iter()
                 .collect(),
-                network:    Network::Testnet,
-                contract:   contract_2,
+                network: Network::Testnet,
+                contract: contract_2,
                 credential: CredentialHolderId::new(signer_2.verifying_key()),
-                statement:  vec![
+                statement: vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
                             attribute_tag: 0.to_string(),
-                            lower:         Web3IdAttribute::Numeric(80),
-                            upper:         Web3IdAttribute::Numeric(1237),
-                            _phantom:      PhantomData,
+                            lower: Web3IdAttribute::Numeric(80),
+                            upper: Web3IdAttribute::Numeric(1237),
+                            _phantom: PhantomData,
                         },
                     },
                     AtomicStatement::AttributeNotInSet {
                         statement: AttributeNotInSetStatement {
                             attribute_tag: 1u8.to_string(),
-                            set:           [
+                            set: [
                                 Web3IdAttribute::String(AttributeKind("ff".into())),
                                 Web3IdAttribute::String(AttributeKind("aa".into())),
                                 Web3IdAttribute::String(AttributeKind("zz".into())),
                             ]
                             .into_iter()
                             .collect(),
-                            _phantom:      PhantomData,
+                            _phantom: PhantomData,
                         },
                     },
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
                             attribute_tag: 2.to_string(),
-                            lower:         Web3IdAttribute::Timestamp(
-                                Timestamp::from_timestamp_millis(min_timestamp),
-                            ),
-                            upper:         Web3IdAttribute::Timestamp(
-                                Timestamp::from_timestamp_millis(min_timestamp * 3),
-                            ),
-                            _phantom:      PhantomData,
+                            lower: Web3IdAttribute::Timestamp(Timestamp::from_timestamp_millis(
+                                min_timestamp,
+                            )),
+                            upper: Web3IdAttribute::Timestamp(Timestamp::from_timestamp_millis(
+                                min_timestamp * 3,
+                            )),
+                            _phantom: PhantomData,
                         },
                     },
                 ],
@@ -1975,10 +1999,10 @@ mod tests {
         .unwrap();
 
         let secrets_1 = CommitmentInputs::Web3Issuer {
-            signer:     &signer_1,
-            values:     &values_1,
+            signer: &signer_1,
+            values: &values_1,
             randomness: &randomness_1,
-            signature:  commitments_1.signature,
+            signature: commitments_1.signature,
         };
 
         let mut values_2 = BTreeMap::new();
@@ -2014,10 +2038,10 @@ mod tests {
         )
         .unwrap();
         let secrets_2 = CommitmentInputs::Web3Issuer {
-            signer:     &signer_2,
-            values:     &values_2,
+            signer: &signer_2,
+            values: &values_2,
             randomness: &randomness_2,
-            signature:  commitments_2.signature,
+            signature: commitments_2.signature,
         };
         let attrs = [secrets_1, secrets_2];
         let proof = request
@@ -2070,36 +2094,36 @@ mod tests {
         let contract_1 = ContractAddress::new(1337, 42);
         let credential_statements = vec![
             CredentialStatement::Web3Id {
-                ty:         [
+                ty: [
                     "VerifiableCredential".into(),
                     "ConcordiumVerifiableCredential".into(),
                     "TestCredential".into(),
                 ]
                 .into_iter()
                 .collect(),
-                network:    Network::Testnet,
-                contract:   contract_1,
+                network: Network::Testnet,
+                contract: contract_1,
                 credential: CredentialHolderId::new(signer_1.verifying_key()),
-                statement:  vec![
+                statement: vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
                             attribute_tag: 17.to_string(),
-                            lower:         Web3IdAttribute::Numeric(80),
-                            upper:         Web3IdAttribute::Numeric(1237),
-                            _phantom:      PhantomData,
+                            lower: Web3IdAttribute::Numeric(80),
+                            upper: Web3IdAttribute::Numeric(1237),
+                            _phantom: PhantomData,
                         },
                     },
                     AtomicStatement::AttributeInSet {
                         statement: AttributeInSetStatement {
                             attribute_tag: 23u8.to_string(),
-                            set:           [
+                            set: [
                                 Web3IdAttribute::String(AttributeKind("ff".into())),
                                 Web3IdAttribute::String(AttributeKind("aa".into())),
                                 Web3IdAttribute::String(AttributeKind("zz".into())),
                             ]
                             .into_iter()
                             .collect(),
-                            _phantom:      PhantomData,
+                            _phantom: PhantomData,
                         },
                     },
                 ],
@@ -2111,22 +2135,22 @@ mod tests {
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
                             attribute_tag: 3.into(),
-                            lower:         Web3IdAttribute::Numeric(80),
-                            upper:         Web3IdAttribute::Numeric(1237),
-                            _phantom:      PhantomData,
+                            lower: Web3IdAttribute::Numeric(80),
+                            upper: Web3IdAttribute::Numeric(1237),
+                            _phantom: PhantomData,
                         },
                     },
                     AtomicStatement::AttributeNotInSet {
                         statement: AttributeNotInSetStatement {
                             attribute_tag: 1u8.into(),
-                            set:           [
+                            set: [
                                 Web3IdAttribute::String(AttributeKind("ff".into())),
                                 Web3IdAttribute::String(AttributeKind("aa".into())),
                                 Web3IdAttribute::String(AttributeKind("zz".into())),
                             ]
                             .into_iter()
                             .collect(),
-                            _phantom:      PhantomData,
+                            _phantom: PhantomData,
                         },
                     },
                 ],
@@ -2162,10 +2186,10 @@ mod tests {
         )
         .unwrap();
         let secrets_1 = CommitmentInputs::Web3Issuer {
-            signer:     &signer_1,
-            values:     &values_1,
+            signer: &signer_1,
+            values: &values_1,
             randomness: &randomness_1,
-            signature:  signed_commitments_1.signature,
+            signature: signed_commitments_1.signature,
         };
 
         let mut values_2 = BTreeMap::new();
@@ -2182,9 +2206,9 @@ mod tests {
             );
         }
         let secrets_2 = CommitmentInputs::Account {
-            values:     &values_2,
+            values: &values_2,
             randomness: &randomness_2,
-            issuer:     IpIdentity::from(17u32),
+            issuer: IpIdentity::from(17u32),
         };
         let attrs = [secrets_1, secrets_2];
         let proof = request

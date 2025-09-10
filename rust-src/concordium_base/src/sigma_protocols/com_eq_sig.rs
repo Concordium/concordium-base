@@ -21,7 +21,7 @@ use rand::*;
 #[derive(Clone, Debug, Serialize)]
 pub struct Response<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// The response that the prover knows $r'$ (see specification)
-    response_rho:    P::ScalarField,
+    response_rho: P::ScalarField,
     /// List of responses $(res_m_i, res_R_i)$ that the user knows the messages
     /// m_i and randomness R_i that combine to commitments and the public
     /// randomized signature.
@@ -36,20 +36,20 @@ pub struct ComEqSig<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub commitments: Vec<Commitment<C>>,
     /// The Pointcheval-Sanders public key with which the signature was
     /// generated
-    pub ps_pub_key:  PsSigPublicKey<P>,
+    pub ps_pub_key: PsSigPublicKey<P>,
     /// A commitment key with which the commitments were generated.
-    pub comm_key:    CommitmentKey<C>,
+    pub comm_key: CommitmentKey<C>,
 }
 
 pub type ValuesAndRands<C> = (Value<C>, Randomness<C>);
 
 pub struct ComEqSigSecret<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    pub blind_rand:       BlindingRandomness<P>,
+    pub blind_rand: BlindingRandomness<P>,
     pub values_and_rands: Vec<ValuesAndRands<C>>,
 }
 
 pub struct ComEqSigState<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    pub rho_prime:  P::ScalarField,
+    pub rho_prime: P::ScalarField,
     pub mus_and_rs: Vec<(Value<C>, Randomness<C>)>,
 }
 
@@ -132,10 +132,13 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
         // let v_2_pre_pair = cX_tilda.plus_point(&point);
         // let v_2_pair = P::pair(a_hat, v_2_pre_pair);
         let paired = P::pair(&a_hat, &point);
-        Some(((paired, commitments), ComEqSigState {
-            rho_prime,
-            mus_and_rs: mus_cRs,
-        }))
+        Some((
+            (paired, commitments),
+            ComEqSigState {
+                rho_prime,
+                mus_and_rs: mus_cRs,
+            },
+        ))
     }
 
     #[inline]
@@ -174,7 +177,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
             res_messages_randoms.push((res_m, res_r));
         }
         Some(Response {
-            response_rho:    res_r_prime,
+            response_rho: res_r_prime,
             response_commit: res_messages_randoms,
         })
     }

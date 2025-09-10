@@ -106,11 +106,15 @@ impl FromStr for AttributeKind {
 }
 
 impl fmt::Display for AttributeKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 impl From<u64> for AttributeKind {
-    fn from(x: u64) -> Self { AttributeKind(x.to_string()) }
+    fn from(x: u64) -> Self {
+        AttributeKind(x.to_string())
+    }
 }
 
 impl Attribute<<ArkGroup<G1Projective> as Curve>::Scalar> for AttributeKind {

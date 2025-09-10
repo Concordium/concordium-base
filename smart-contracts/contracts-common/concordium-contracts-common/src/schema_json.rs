@@ -133,7 +133,7 @@ pub enum JsonError {
     /// Trace leading to the original [`JsonError`].
     TraceError {
         field: String,
-        json:  serde_json::Value,
+        json: serde_json::Value,
         error: Box<JsonError>,
     },
 }
@@ -158,21 +158,14 @@ impl Display for JsonError {
             JsonError::ParseIntError(e) => write!(f, "{}", e),
             JsonError::ParseDurationError(e) => write!(f, "{}", e),
             JsonError::ParseTimestampError(e) => write!(f, "{}", e),
-            JsonError::TraceError {
-                ..
-            } => write!(f, "{}", self.display(false)),
+            JsonError::TraceError { .. } => write!(f, "{}", self.display(false)),
         }
     }
 }
 
 impl TraceError for JsonError {
     fn display_layer(&self, verbose: bool) -> (String, Option<&Self>) {
-        if let JsonError::TraceError {
-            error,
-            json,
-            field,
-        } = self
-        {
+        if let JsonError::TraceError { error, json, field } = self {
             let formatted_json =
                 serde_json::to_string_pretty(json).unwrap_or_else(|_| format!("{}", json));
             let message = if verbose {
@@ -188,11 +181,7 @@ impl TraceError for JsonError {
     }
 
     fn get_inner_error(&self) -> Option<&Self> {
-        if let JsonError::TraceError {
-            error,
-            ..
-        } = self
-        {
+        if let JsonError::TraceError { error, .. } = self {
             return Some(error);
         }
 
@@ -258,11 +247,15 @@ impl JsonError {
     /// ]"#.to_string();
     /// assert_eq!(expected_verbose, err.display(true));
     /// ```
-    pub fn display(&self, verbose: bool) -> String { self.display_nested(verbose) }
+    pub fn display(&self, verbose: bool) -> String {
+        self.display_nested(verbose)
+    }
 
     /// Gets the underlying error of a [`JsonError::TraceError`]. For any other
     /// variant, this simply returns the error itself.
-    pub fn get_error(&self) -> &Self { self.get_innermost_error() }
+    pub fn get_error(&self) -> &Self {
+        self.get_innermost_error()
+    }
 }
 
 /// Wrapper around a list of bytes to represent data which failed to be
@@ -274,14 +267,14 @@ pub struct ToJsonErrorData {
 
 impl From<Vec<u8>> for ToJsonErrorData {
     fn from(bytes: Vec<u8>) -> Self {
-        Self {
-            bytes,
-        }
+        Self { bytes }
     }
 }
 
 impl From<ToJsonErrorData> for Vec<u8> {
-    fn from(value: ToJsonErrorData) -> Self { value.bytes }
+    fn from(value: ToJsonErrorData) -> Self {
+        value.bytes
+    }
 }
 
 impl Display for ToJsonErrorData {
@@ -351,15 +344,15 @@ pub enum ToJsonError {
     /// Failed to deserialize data to type expected from schema.
     DeserialError {
         position: u32,
-        schema:   Type,
-        reason:   String,
-        data:     ToJsonErrorData,
+        schema: Type,
+        reason: String,
+        data: ToJsonErrorData,
     },
     /// Trace leading to the original [ToJsonError].
     TraceError {
         position: u32,
-        schema:   Type,
-        error:    Box<ToJsonError>,
+        schema: Type,
+        error: Box<ToJsonError>,
     },
 }
 
@@ -377,9 +370,7 @@ impl Display for ToJsonError {
                 "Failed to deserialize {:?} due to: {} - from position {} of bytes {}",
                 schema, reason, position, data
             ),
-            ToJsonError::TraceError {
-                ..
-            } => write!(f, "{}", self.display(false)),
+            ToJsonError::TraceError { .. } => write!(f, "{}", self.display(false)),
         }
     }
 }
@@ -393,7 +384,10 @@ impl TraceError for ToJsonError {
         } = self
         {
             let message = if verbose {
-                format!("In deserializing position {} into type {:?}", position, schema)
+                format!(
+                    "In deserializing position {} into type {:?}",
+                    position, schema
+                )
             } else {
                 format!("{:?}", schema)
             };
@@ -406,11 +400,7 @@ impl TraceError for ToJsonError {
     }
 
     fn get_inner_error(&self) -> Option<&Self> {
-        if let ToJsonError::TraceError {
-            error,
-            ..
-        } = self
-        {
+        if let ToJsonError::TraceError { error, .. } = self {
             return Some(error);
         }
 
@@ -474,11 +464,15 @@ impl ToJsonError {
     /// // In deserializing position <cursor-position> into type List(...)"#;
     /// err.display(true);
     /// ```
-    pub fn display(&self, verbose: bool) -> String { self.display_nested(verbose) }
+    pub fn display(&self, verbose: bool) -> String {
+        self.display_nested(verbose)
+    }
 
     /// Gets the underlying error of a [`ToJsonError::TraceError`]. For any
     /// other variant, this simply returns the error itself.
-    pub fn get_error(&self) -> &Self { self.get_innermost_error() }
+    pub fn get_error(&self) -> &Self {
+        self.get_innermost_error()
+    }
 }
 
 /// Error with the sole purpose of adding some context to [`ParseError`].
@@ -601,8 +595,9 @@ fn write_bytes_from_json_schema_type<W: Write>(
         }
         Type::AccountAddress => {
             if let Value::String(string) = json {
-                let account: AccountAddress =
-                    string.parse().or(Err(JsonError::FailedParsingAccountAddress))?;
+                let account: AccountAddress = string
+                    .parse()
+                    .or(Err(JsonError::FailedParsingAccountAddress))?;
                 serial!(account, out)
             } else {
                 Err(WrongJsonType("JSON string required".to_string()))
@@ -631,13 +626,12 @@ fn write_bytes_from_json_schema_type<W: Write>(
                         _ => None,
                     })
                     .unwrap_or(0);
-                let contract = ContractAddress {
-                    index,
-                    subindex,
-                };
+                let contract = ContractAddress { index, subindex };
                 serial!(contract, out)
             } else {
-                Err(WrongJsonType("JSON Object with 'index' field required".to_string()))
+                Err(WrongJsonType(
+                    "JSON Object with 'index' field required".to_string(),
+                ))
             }
         }
         Type::Timestamp => {
@@ -645,7 +639,9 @@ fn write_bytes_from_json_schema_type<W: Write>(
                 let timestamp: Timestamp = string.parse()?;
                 serial!(timestamp, out)
             } else {
-                Err(WrongJsonType("JSON String required for timestamp".to_string()))
+                Err(WrongJsonType(
+                    "JSON String required for timestamp".to_string(),
+                ))
             }
         }
         Type::Duration => {
@@ -653,7 +649,9 @@ fn write_bytes_from_json_schema_type<W: Write>(
                 let duration: Duration = string.parse()?;
                 serial!(duration, out)
             } else {
-                Err(WrongJsonType("JSON String required for duration".to_string()))
+                Err(WrongJsonType(
+                    "JSON String required for duration".to_string(),
+                ))
             }
         }
         Type::Pair(left_type, right_type) => {
@@ -705,7 +703,10 @@ fn write_bytes_from_json_schema_type<W: Write>(
 
                 for (i, entry) in entries.iter().enumerate() {
                     if let Value::Array(pair) = entry {
-                        ensure!(pair.len() == 2, MapError("Expected key-value pair".to_string()));
+                        ensure!(
+                            pair.len() == 2,
+                            MapError("Expected key-value pair".to_string())
+                        );
                         let result: Result<(), JsonError> = {
                             write_bytes_from_json_schema_type(key_ty, &pair[0], out)
                                 .map_err(|e| e.add_trace("0".to_string(), entry))?;
@@ -748,7 +749,10 @@ fn write_bytes_from_json_schema_type<W: Write>(
         Type::Struct(fields_ty) => write_bytes_from_json_schema_fields(fields_ty, json, out),
         Type::Enum(variants_ty) => {
             if let Value::Object(map) = json {
-                ensure!(map.len() == 1, EnumError("Only one variant allowed".to_string()));
+                ensure!(
+                    map.len() == 1,
+                    EnumError("Only one variant allowed".to_string())
+                );
                 let (variant_name, fields_value) = map.iter().next().unwrap(); // Safe since we already checked the length
                 let schema_fields_opt = variants_ty
                     .iter()
@@ -771,12 +775,17 @@ fn write_bytes_from_json_schema_type<W: Write>(
                     Err(EnumError(format!("Unknown variant: {}", variant_name)))
                 }
             } else {
-                Err(WrongJsonType("JSON Object with one field required for an Enum".to_string()))
+                Err(WrongJsonType(
+                    "JSON Object with one field required for an Enum".to_string(),
+                ))
             }
         }
         Type::TaggedEnum(variants_ty) => {
             if let Value::Object(fields) = json {
-                ensure!(fields.len() == 1, EnumError("Only one variant allowed.".to_string()));
+                ensure!(
+                    fields.len() == 1,
+                    EnumError("Only one variant allowed.".to_string())
+                );
                 let (variant_name, fields_value) = fields.iter().next().unwrap(); // Safe since we already checked the length
                 let schema_fields_opt = variants_ty
                     .iter()
@@ -790,7 +799,9 @@ fn write_bytes_from_json_schema_type<W: Write>(
                     Err(EnumError(format!("Unknown variant: {}", variant_name)))
                 }
             } else {
-                Err(WrongJsonType("JSON Object required for an EnumTag".to_string()))
+                Err(WrongJsonType(
+                    "JSON Object required for an EnumTag".to_string(),
+                ))
             }
         }
         Type::String(size_len) => {
@@ -821,10 +832,14 @@ fn write_bytes_from_json_schema_type<W: Write>(
                     serial_vector_no_length(contract_name.as_bytes(), out)
                         .or(Err(JsonError::FailedWriting))
                 } else {
-                    Err(WrongJsonType("JSON String required for field \"contract\".".to_string()))
+                    Err(WrongJsonType(
+                        "JSON String required for field \"contract\".".to_string(),
+                    ))
                 }
             } else {
-                Err(WrongJsonType("JSON Object required for contract name.".to_string()))
+                Err(WrongJsonType(
+                    "JSON Object required for contract name.".to_string(),
+                ))
             }
         }
         Type::ReceiveName(size_len) => {
@@ -850,13 +865,19 @@ fn write_bytes_from_json_schema_type<W: Write>(
                         serial_vector_no_length(receive_name.as_bytes(), out)
                             .or(Err(JsonError::FailedWriting))
                     } else {
-                        Err(WrongJsonType("JSON String required for field \"func\".".to_string()))
+                        Err(WrongJsonType(
+                            "JSON String required for field \"func\".".to_string(),
+                        ))
                     }
                 } else {
-                    Err(WrongJsonType("JSON String required for field \"contract\".".to_string()))
+                    Err(WrongJsonType(
+                        "JSON String required for field \"contract\".".to_string(),
+                    ))
                 }
             } else {
-                Err(WrongJsonType("JSON Object required for contract name.".to_string()))
+                Err(WrongJsonType(
+                    "JSON Object required for contract name.".to_string(),
+                ))
             }
         }
         Type::U128 => {
@@ -959,7 +980,11 @@ impl Fields {
 /// Displays a pretty-printed JSON-template of the [`Type`].
 impl Display for Type {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", serde_json::to_string_pretty(&self.to_json_template()).unwrap())
+        write!(
+            f,
+            "{}",
+            serde_json::to_string_pretty(&self.to_json_template()).unwrap()
+        )
     }
 }
 
@@ -1462,9 +1487,11 @@ impl Type {
                 vec.into()
             }
             Self::Set(_, element) => vec![element.to_json_template()].into(),
-            Self::Map(_, key, value) => {
-                vec![json!(vec![key.to_json_template(), value.to_json_template(),])].into()
-            }
+            Self::Map(_, key, value) => vec![json!(vec![
+                key.to_json_template(),
+                value.to_json_template(),
+            ])]
+            .into(),
             Self::ContractName(_) => {
                 let mut contract_name = Map::new();
                 contract_name.insert("contract".to_string(), "<String>".into());
@@ -1546,7 +1573,9 @@ fn write_bytes_from_json_schema_fields<W: Write>(
                 }
                 Ok(())
             } else {
-                Err(WrongJsonType("JSON Object required for named fields".to_string()))
+                Err(WrongJsonType(
+                    "JSON Object required for named fields".to_string(),
+                ))
             }
         }
         Fields::Unnamed(fields) => {
@@ -1561,7 +1590,9 @@ fn write_bytes_from_json_schema_fields<W: Write>(
                 }
                 Ok(())
             } else {
-                Err(WrongJsonType("JSON Array required for unnamed fields".to_string()))
+                Err(WrongJsonType(
+                    "JSON Array required for unnamed fields".to_string(),
+                ))
             }
         }
         Fields::None => Ok(()),
@@ -1605,36 +1636,43 @@ mod tests {
     #[test]
     fn test_schema_template_display_module_version_v3_multiple_contracts() {
         let mut receive_function_map = BTreeMap::new();
-        receive_function_map.insert(String::from("MyFunction"), FunctionV2 {
-            parameter:    Some(Type::AccountAddress),
-            error:        Some(Type::AccountAddress),
-            return_value: Some(Type::AccountAddress),
-        });
+        receive_function_map.insert(
+            String::from("MyFunction"),
+            FunctionV2 {
+                parameter: Some(Type::AccountAddress),
+                error: Some(Type::AccountAddress),
+                return_value: Some(Type::AccountAddress),
+            },
+        );
 
         let mut map = BTreeMap::new();
 
-        map.insert(String::from("MyContract"), ContractV3 {
-            init:    Some(FunctionV2 {
-                parameter:    Some(Type::AccountAddress),
-                error:        Some(Type::AccountAddress),
-                return_value: Some(Type::AccountAddress),
-            }),
-            receive: receive_function_map.clone(),
-            event:   Some(Type::AccountAddress),
-        });
-        map.insert(String::from("MySecondContract"), ContractV3 {
-            init:    Some(FunctionV2 {
-                parameter:    Some(Type::AccountAddress),
-                error:        Some(Type::AccountAddress),
-                return_value: Some(Type::AccountAddress),
-            }),
-            receive: receive_function_map,
-            event:   Some(Type::AccountAddress),
-        });
+        map.insert(
+            String::from("MyContract"),
+            ContractV3 {
+                init: Some(FunctionV2 {
+                    parameter: Some(Type::AccountAddress),
+                    error: Some(Type::AccountAddress),
+                    return_value: Some(Type::AccountAddress),
+                }),
+                receive: receive_function_map.clone(),
+                event: Some(Type::AccountAddress),
+            },
+        );
+        map.insert(
+            String::from("MySecondContract"),
+            ContractV3 {
+                init: Some(FunctionV2 {
+                    parameter: Some(Type::AccountAddress),
+                    error: Some(Type::AccountAddress),
+                    return_value: Some(Type::AccountAddress),
+                }),
+                receive: receive_function_map,
+                event: Some(Type::AccountAddress),
+            },
+        );
 
-        let schema = VersionedModuleSchema::V3(ModuleV3 {
-            contracts: map,
-        });
+        let schema = VersionedModuleSchema::V3(ModuleV3 { contracts: map });
 
         let display = "Contract:  MyContract
   Init:
@@ -1679,27 +1717,31 @@ Contract: MySecondContract
     #[test]
     fn test_schema_template_display_module_version_v3() {
         let mut receive_function_map = BTreeMap::new();
-        receive_function_map.insert(String::from("MyFunction"), FunctionV2 {
-            parameter:    Some(Type::AccountAddress),
-            error:        Some(Type::AccountAddress),
-            return_value: Some(Type::AccountAddress),
-        });
+        receive_function_map.insert(
+            String::from("MyFunction"),
+            FunctionV2 {
+                parameter: Some(Type::AccountAddress),
+                error: Some(Type::AccountAddress),
+                return_value: Some(Type::AccountAddress),
+            },
+        );
 
         let mut map = BTreeMap::new();
 
-        map.insert(String::from("MyContract"), ContractV3 {
-            init:    Some(FunctionV2 {
-                parameter:    Some(Type::AccountAddress),
-                error:        Some(Type::AccountAddress),
-                return_value: Some(Type::AccountAddress),
-            }),
-            receive: receive_function_map,
-            event:   Some(Type::AccountAddress),
-        });
+        map.insert(
+            String::from("MyContract"),
+            ContractV3 {
+                init: Some(FunctionV2 {
+                    parameter: Some(Type::AccountAddress),
+                    error: Some(Type::AccountAddress),
+                    return_value: Some(Type::AccountAddress),
+                }),
+                receive: receive_function_map,
+                event: Some(Type::AccountAddress),
+            },
+        );
 
-        let schema = VersionedModuleSchema::V3(ModuleV3 {
-            contracts: map,
-        });
+        let schema = VersionedModuleSchema::V3(ModuleV3 { contracts: map });
 
         let display = "Contract:  MyContract
   Init:
@@ -1727,26 +1769,30 @@ Contract: MySecondContract
     #[test]
     fn test_schema_template_display_module_version_v2() {
         let mut receive_function_map = BTreeMap::new();
-        receive_function_map.insert(String::from("MyFunction"), FunctionV2 {
-            parameter:    Some(Type::AccountAddress),
-            error:        Some(Type::AccountAddress),
-            return_value: Some(Type::AccountAddress),
-        });
+        receive_function_map.insert(
+            String::from("MyFunction"),
+            FunctionV2 {
+                parameter: Some(Type::AccountAddress),
+                error: Some(Type::AccountAddress),
+                return_value: Some(Type::AccountAddress),
+            },
+        );
 
         let mut map = BTreeMap::new();
 
-        map.insert(String::from("MyContract"), ContractV2 {
-            init:    Some(FunctionV2 {
-                parameter:    Some(Type::AccountAddress),
-                error:        Some(Type::AccountAddress),
-                return_value: Some(Type::AccountAddress),
-            }),
-            receive: receive_function_map,
-        });
+        map.insert(
+            String::from("MyContract"),
+            ContractV2 {
+                init: Some(FunctionV2 {
+                    parameter: Some(Type::AccountAddress),
+                    error: Some(Type::AccountAddress),
+                    return_value: Some(Type::AccountAddress),
+                }),
+                receive: receive_function_map,
+            },
+        );
 
-        let schema = VersionedModuleSchema::V2(ModuleV2 {
-            contracts: map,
-        });
+        let schema = VersionedModuleSchema::V2(ModuleV2 { contracts: map });
 
         let display = "Contract:  MyContract
   Init:
@@ -1772,24 +1818,28 @@ Contract: MySecondContract
     #[test]
     fn test_schema_template_display_module_version_v1() {
         let mut receive_function_map = BTreeMap::new();
-        receive_function_map.insert(String::from("MyFunction"), FunctionV1::Both {
-            parameter:    Type::AccountAddress,
-            return_value: Type::AccountAddress,
-        });
+        receive_function_map.insert(
+            String::from("MyFunction"),
+            FunctionV1::Both {
+                parameter: Type::AccountAddress,
+                return_value: Type::AccountAddress,
+            },
+        );
 
         let mut map = BTreeMap::new();
 
-        map.insert(String::from("MyContract"), ContractV1 {
-            init:    Some(FunctionV1::Both {
-                parameter:    Type::AccountAddress,
-                return_value: Type::AccountAddress,
-            }),
-            receive: receive_function_map,
-        });
+        map.insert(
+            String::from("MyContract"),
+            ContractV1 {
+                init: Some(FunctionV1::Both {
+                    parameter: Type::AccountAddress,
+                    return_value: Type::AccountAddress,
+                }),
+                receive: receive_function_map,
+            },
+        );
 
-        let schema = VersionedModuleSchema::V1(ModuleV1 {
-            contracts: map,
-        });
+        let schema = VersionedModuleSchema::V1(ModuleV1 { contracts: map });
 
         let display = "Contract:  MyContract
   Init:
@@ -1815,15 +1865,16 @@ Contract: MySecondContract
 
         let mut map = BTreeMap::new();
 
-        map.insert(String::from("MyContract"), ContractV0 {
-            state:   Some(Type::AccountAddress),
-            init:    Some(Type::AccountAddress),
-            receive: receive_function_map,
-        });
+        map.insert(
+            String::from("MyContract"),
+            ContractV0 {
+                state: Some(Type::AccountAddress),
+                init: Some(Type::AccountAddress),
+                receive: receive_function_map,
+            },
+        );
 
-        let schema = VersionedModuleSchema::V0(ModuleV0 {
-            contracts: map,
-        });
+        let schema = VersionedModuleSchema::V0(ModuleV0 { contracts: map });
 
         let display = "Contract:  MyContract
   State:
@@ -1873,14 +1924,20 @@ Contract: MySecondContract
     #[test]
     fn test_schema_template_display_duration() {
         let schema = Type::Duration;
-        assert_eq!(json!("<Duration (e.g. `10d 1h 42s`)>"), schema.to_json_template());
+        assert_eq!(
+            json!("<Duration (e.g. `10d 1h 42s`)>"),
+            schema.to_json_template()
+        );
     }
 
     /// Tests schema template display in JSON of a Timestamp
     #[test]
     fn test_schema_template_display_timestamp() {
         let schema = Type::Timestamp;
-        assert_eq!(json!("<Timestamp (e.g. `2000-01-01T12:00:00Z`)>"), schema.to_json_template());
+        assert_eq!(
+            json!("<Timestamp (e.g. `2000-01-01T12:00:00Z`)>"),
+            schema.to_json_template()
+        );
     }
 
     /// Tests schema template display in JSON of an Struct with Field `None`
@@ -1897,7 +1954,10 @@ Contract: MySecondContract
             String::from("Account"),
             Type::AccountAddress,
         )])));
-        assert_eq!(json!({"Account":"<AccountAddress>"}), schema.to_json_template());
+        assert_eq!(
+            json!({"Account":"<AccountAddress>"}),
+            schema.to_json_template()
+        );
     }
 
     /// Tests schema template display in JSON of a ContractName
@@ -1911,7 +1971,10 @@ Contract: MySecondContract
     #[test]
     fn test_schema_template_display_receive_name() {
         let schema = Type::ReceiveName(schema_json::SizeLength::U8);
-        assert_eq!(json!({"contract":"<String>","func":"<String>"}), schema.to_json_template());
+        assert_eq!(
+            json!({"contract":"<String>","func":"<String>"}),
+            schema.to_json_template()
+        );
     }
 
     /// Tests schema template display in JSON of a Map
@@ -1922,7 +1985,10 @@ Contract: MySecondContract
             Box::new(Type::U8),
             Box::new(Type::AccountAddress),
         );
-        assert_eq!(json!([["<UInt8>", "<AccountAddress>"]]), schema.to_json_template());
+        assert_eq!(
+            json!([["<UInt8>", "<AccountAddress>"]]),
+            schema.to_json_template()
+        );
     }
 
     /// Tests schema template display in JSON of a Set
@@ -1943,14 +2009,20 @@ Contract: MySecondContract
     #[test]
     fn test_schema_template_display_array() {
         let schema = Type::Array(4, Box::new(Type::U8));
-        assert_eq!(json!(["<UInt8>", "<UInt8>", "<UInt8>", "<UInt8>"]), schema.to_json_template());
+        assert_eq!(
+            json!(["<UInt8>", "<UInt8>", "<UInt8>", "<UInt8>"]),
+            schema.to_json_template()
+        );
     }
 
     /// Tests schema template display in JSON of a Pair
     #[test]
     fn test_schema_template_display_pair() {
         let schema = Type::Pair(Box::new(Type::AccountAddress), Box::new(Type::U8));
-        assert_eq!(json!(("<AccountAddress>", "<UInt8>")), schema.to_json_template());
+        assert_eq!(
+            json!(("<AccountAddress>", "<UInt8>")),
+            schema.to_json_template()
+        );
     }
 
     /// Tests schema template display in JSON of an ContractAddress
@@ -2112,8 +2184,9 @@ Contract: MySecondContract
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
         let account = AccountAddress(account_bytes);
         let schema = Type::AccountAddress;
-        let bytes =
-            schema.serial_value(&json!(format!("{}", &account))).expect("Serializing failed");
+        let bytes = schema
+            .serial_value(&json!(format!("{}", &account)))
+            .expect("Serializing failed");
 
         let expected = Vec::from(account_bytes);
         assert_eq!(expected, bytes)
@@ -2127,7 +2200,9 @@ Contract: MySecondContract
         let account = AccountAddress(account_bytes);
         let schema = Type::AccountAddress;
         let json = json!(format!("{}", &account).get(1..));
-        let err = schema.serial_value(&json).expect_err("Serializing should fail");
+        let err = schema
+            .serial_value(&json)
+            .expect_err("Serializing should fail");
 
         assert!(matches!(err, JsonError::FailedParsingAccountAddress))
     }
@@ -2138,7 +2213,9 @@ Contract: MySecondContract
     fn test_serial_account_wrong_type_fails() {
         let schema = Type::AccountAddress;
         let json = json!(123);
-        let err = schema.serial_value(&json).expect_err("Serializing should fail");
+        let err = schema
+            .serial_value(&json)
+            .expect_err("Serializing should fail");
 
         assert!(matches!(err, JsonError::WrongJsonType(_)))
     }
@@ -2152,7 +2229,9 @@ Contract: MySecondContract
         let account = AccountAddress(account_bytes);
         let schema = Type::List(SizeLength::U8, Box::new(Type::AccountAddress));
         let json = json!([format!("{}", account), 123]);
-        let err = schema.serial_value(&json).expect_err("Serializing should fail");
+        let err = schema
+            .serial_value(&json)
+            .expect_err("Serializing should fail");
 
         assert!(matches!(
             err,
@@ -2176,7 +2255,9 @@ Contract: MySecondContract
             ("contract".into(), Type::ContractAddress),
         ]));
         let json = json!({ "account": format!("{}", account), "contract": {} });
-        let err = schema.serial_value(&json).expect_err("Serializing should fail");
+        let err = schema
+            .serial_value(&json)
+            .expect_err("Serializing should fail");
 
         assert!(matches!(
             err,
@@ -2201,7 +2282,9 @@ Contract: MySecondContract
         ]));
         let schema = Type::List(SizeLength::U8, Box::new(schema_object));
         let json = json!([{ "account": format!("{}", account), "contract": { "index": 0, "subindex": 0} }, { "account": format!("{}", account), "contract": {} }]);
-        let err = schema.serial_value(&json).expect_err("Serializing should fail");
+        let err = schema
+            .serial_value(&json)
+            .expect_err("Serializing should fail");
 
         assert!(matches!(
             err,
@@ -2359,7 +2442,9 @@ Contract: MySecondContract
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
         let mut cursor = Cursor::new(&account_bytes);
         let schema = Type::AccountAddress;
-        let value = schema.to_json(&mut cursor).expect("Deserializing should not fail");
+        let value = schema
+            .to_json(&mut cursor)
+            .expect("Deserializing should not fail");
 
         let expected = json!(format!("{}", AccountAddress(account_bytes)));
         assert_eq!(expected, value)
@@ -2372,13 +2457,18 @@ Contract: MySecondContract
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
         let mut cursor = Cursor::new(&account_bytes[..30]); // Malformed account address
         let schema = Type::AccountAddress;
-        let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
+        let err = schema
+            .to_json(&mut cursor)
+            .expect_err("Deserializing should fail");
 
-        assert!(matches!(err, ToJsonError::DeserialError {
-            position: 0,
-            schema: Type::AccountAddress,
-            ..
-        }))
+        assert!(matches!(
+            err,
+            ToJsonError::DeserialError {
+                position: 0,
+                schema: Type::AccountAddress,
+                ..
+            }
+        ))
     }
 
     /// Tests that attempting to deserialize a malformed value wrapped in a
@@ -2392,7 +2482,9 @@ Contract: MySecondContract
 
         let mut cursor = Cursor::new(list_bytes);
         let schema = Type::List(SizeLength::U8, Box::new(Type::AccountAddress));
-        let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
+        let err = schema
+            .to_json(&mut cursor)
+            .expect_err("Deserializing should fail");
 
         assert!(matches!(
             err,
@@ -2429,7 +2521,9 @@ Contract: MySecondContract
             ("b".into(), Type::ContractAddress),
         ]));
         let schema = Type::List(SizeLength::U8, Box::new(schema_object));
-        let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
+        let err = schema
+            .to_json(&mut cursor)
+            .expect_err("Deserializing should fail");
 
         assert!(matches!(
             err,
@@ -2485,7 +2579,9 @@ impl Fields {
 }
 
 impl From<std::string::FromUtf8Error> for ParseError {
-    fn from(_: std::string::FromUtf8Error) -> Self { ParseError::default() }
+    fn from(_: std::string::FromUtf8Error) -> Self {
+        ParseError::default()
+    }
 }
 
 /// Deserialize a list of values corresponding to the `item_to_json` function
@@ -2753,8 +2849,12 @@ impl Type {
                 Ok(Value::String(duration.to_string()))
             }
             Type::Pair(left_type, right_type) => {
-                let left = left_type.to_json(source).map_err(|e| e.add_trace(position, self))?;
-                let right = right_type.to_json(source).map_err(|e| e.add_trace(position, self))?;
+                let left = left_type
+                    .to_json(source)
+                    .map_err(|e| e.add_trace(position, self))?;
+                let right = right_type
+                    .to_json(source)
+                    .map_err(|e| e.add_trace(position, self))?;
                 Ok(Value::Array(vec![left, right]))
             }
             Type::List(size_len, ty) => {
@@ -2772,9 +2872,12 @@ impl Type {
                     source,
                     *size_len,
                     |s| {
-                        let key = key_type.to_json(s).map_err(|e| e.add_trace(position, self))?;
-                        let value =
-                            value_type.to_json(s).map_err(|e| e.add_trace(position, self))?;
+                        let key = key_type
+                            .to_json(s)
+                            .map_err(|e| e.add_trace(position, self))?;
+                        let value = value_type
+                            .to_json(s)
+                            .map_err(|e| e.add_trace(position, self))?;
                         Ok(Value::Array(vec![key, value]))
                     },
                     self,
@@ -2787,13 +2890,17 @@ impl Type {
                 })?;
                 let mut values = Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
                 for _ in 0..len {
-                    let value = ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
+                    let value = ty
+                        .to_json(source)
+                        .map_err(|e| e.add_trace(position, self))?;
                     values.push(value);
                 }
                 Ok(Value::Array(values))
             }
             Type::Struct(fields_ty) => {
-                let fields = fields_ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
+                let fields = fields_ty
+                    .to_json(source)
+                    .map_err(|e| e.add_trace(position, self))?;
                 Ok(fields)
             }
             Type::Enum(variants) => {
@@ -2819,8 +2926,9 @@ impl Type {
                 // Map all error cases into the same error.
                 match variant {
                     Ok((name, fields_ty)) => {
-                        let fields =
-                            fields_ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
+                        let fields = fields_ty
+                            .to_json(source)
+                            .map_err(|e| e.add_trace(position, self))?;
                         Ok(json!({ name: fields }))
                     }
                     Err(e) => Err(deserial_error(e.0)),
@@ -2843,8 +2951,9 @@ impl Type {
 
                 match variant {
                     Ok((name, fields_ty)) => {
-                        let fields =
-                            fields_ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
+                        let fields = fields_ty
+                            .to_json(source)
+                            .map_err(|e| e.add_trace(position, self))?;
                         Ok(json!({ name: fields }))
                     }
                     Err(e) => Err(deserial_error(e.0)),

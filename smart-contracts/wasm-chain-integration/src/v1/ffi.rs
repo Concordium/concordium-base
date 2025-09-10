@@ -337,11 +337,7 @@ unsafe extern "C" fn call_receive_v1(
                         let new_state = Box::into_raw(Box::new(state));
                         // NB: We have to make sure to drop the state in Haskell for P5 or earlier.
                         *state_ptr_ptr = new_state;
-                        *output_state_changed = if state_changed {
-                            1
-                        } else {
-                            0
-                        };
+                        *output_state_changed = if state_changed { 1 } else { 0 };
                         ptr
                     }
                     Err(_trap) => std::ptr::null_mut(),
@@ -407,12 +403,12 @@ unsafe extern "C" fn validate_and_process_v1(
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len);
     let validation_config = ValidationConfig {
-        allow_globals_in_init:      allow_globals_in_init != 0,
+        allow_globals_in_init: allow_globals_in_init != 0,
         allow_sign_extension_instr: allow_sign_extension_instr != 0,
     };
     let allowed_imports = &ConcordiumAllowedImports {
         support_upgrade: support_upgrade == 1,
-        enable_debug:    false, // we don't allow debugging when running as part of the chain.
+        enable_debug: false, // we don't allow debugging when running as part of the chain.
     };
 
     let metered = match metering_version {
@@ -450,7 +446,9 @@ unsafe extern "C" fn validate_and_process_v1(
             std::mem::forget(out_buf);
 
             let mut artifact_bytes = Vec::new();
-            artifact.output(&mut artifact_bytes).expect("Artifact serialization does not fail.");
+            artifact
+                .output(&mut artifact_bytes)
+                .expect("Artifact serialization does not fail.");
             artifact_bytes.shrink_to_fit();
             *output_artifact_len = artifact_bytes.len() as size_t;
             *output_artifact_bytes = artifact_bytes.as_mut_ptr();
@@ -771,7 +769,9 @@ extern "C" fn deserialize_persistent_state_v1(
 /// Take the byte array and copy it into a vector.
 /// The vector must be passed to Rust to be deallocated.
 extern "C" fn copy_to_vec_ffi(data: *const u8, len: libc::size_t) -> *mut Vec<u8> {
-    Box::into_raw(Box::new(unsafe { std::slice::from_raw_parts(data, len) }.to_vec()))
+    Box::into_raw(Box::new(
+        unsafe { std::slice::from_raw_parts(data, len) }.to_vec(),
+    ))
 }
 
 #[no_mangle]
@@ -812,7 +812,9 @@ extern "C" fn generate_persistent_state_from_seed(seed: u64, len: u64) -> *mut P
             for i in 0..len {
                 let data = hasher.finalize_reset();
                 hasher.update(data);
-                state_lock.insert(&mut loader, &data, i.to_be_bytes().to_vec()).unwrap();
+                state_lock
+                    .insert(&mut loader, &data, i.to_be_bytes().to_vec())
+                    .unwrap();
             }
         }
         Box::new(mutable.freeze(&mut loader, &mut trie::EmptyCollector))

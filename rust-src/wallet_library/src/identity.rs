@@ -29,12 +29,12 @@ struct IdentityObjectRequestV1 {
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IdentityObjectRequestInput {
-    ip_info:             IpInfo<constants::IpPairing>,
-    global_context:      GlobalContext<constants::ArCurve>,
-    ars_infos:           BTreeMap<ArIdentity, ArInfo<constants::ArCurve>>,
-    ar_threshold:        u8,
-    prf_key:             prf::SecretKey<ArCurve>,
-    id_cred_sec:         PedersenValue<ArCurve>,
+    ip_info: IpInfo<constants::IpPairing>,
+    global_context: GlobalContext<constants::ArCurve>,
+    ars_infos: BTreeMap<ArIdentity, ArInfo<constants::ArCurve>>,
+    ar_threshold: u8,
+    prf_key: prf::SecretKey<ArCurve>,
+    id_cred_sec: PedersenValue<ArCurve>,
     // The blinding_randomness does not have a serde serializer / deserializer. Therefore
     // it is just a String here and manually handled.
     blinding_randomness: String,
@@ -88,10 +88,10 @@ pub fn create_identity_object_request_v1_aux(
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IdentityRecoveryRequestInput {
-    ip_info:        IpInfo<constants::IpPairing>,
+    ip_info: IpInfo<constants::IpPairing>,
     global_context: GlobalContext<constants::ArCurve>,
-    timestamp:      u64,
-    id_cred_sec:    PedersenValue<ArCurve>,
+    timestamp: u64,
+    id_cred_sec: PedersenValue<ArCurve>,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize)]

@@ -93,25 +93,41 @@ impl Curve for RistrettoPoint {
     const GROUP_ELEMENT_LENGTH: usize = 32;
     const SCALAR_LENGTH: usize = 32;
 
-    fn zero_point() -> Self { Self::identity() }
+    fn zero_point() -> Self {
+        Self::identity()
+    }
 
-    fn one_point() -> Self { RISTRETTO_BASEPOINT_POINT }
+    fn one_point() -> Self {
+        RISTRETTO_BASEPOINT_POINT
+    }
 
-    fn is_zero_point(&self) -> bool { self == &Self::zero_point() }
+    fn is_zero_point(&self) -> bool {
+        self == &Self::zero_point()
+    }
 
-    fn inverse_point(&self) -> Self { -self }
+    fn inverse_point(&self) -> Self {
+        -self
+    }
 
     // A doubling operation on the Ristretto representation is not available
     // directly. Moreover, v4.1.1 of `curve25519-dalek` implements `double()`
     // using addition.
     // https://docs.rs/curve25519-dalek/4.1.1/src/curve25519_dalek/ristretto.rs.html#1203-1205
-    fn double_point(&self) -> Self { self + self }
+    fn double_point(&self) -> Self {
+        self + self
+    }
 
-    fn plus_point(&self, other: &Self) -> Self { self + other }
+    fn plus_point(&self, other: &Self) -> Self {
+        self + other
+    }
 
-    fn minus_point(&self, other: &Self) -> Self { self - other }
+    fn minus_point(&self, other: &Self) -> Self {
+        self - other
+    }
 
-    fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self { self * scalar.0 }
+    fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self {
+        self * scalar.0
+    }
 
     fn generate<R: rand::Rng>(rng: &mut R) -> Self {
         let mut uniform_bytes = [0u8; 64];
@@ -120,9 +136,13 @@ impl Curve for RistrettoPoint {
         RistrettoPoint::from_uniform_bytes(&uniform_bytes)
     }
 
-    fn generate_scalar<R: rand::Rng>(rng: &mut R) -> Self::Scalar { Self::Scalar::random(rng) }
+    fn generate_scalar<R: rand::Rng>(rng: &mut R) -> Self::Scalar {
+        Self::Scalar::random(rng)
+    }
 
-    fn scalar_from_u64(n: u64) -> Self::Scalar { Scalar::from(n).into() }
+    fn scalar_from_u64(n: u64) -> Self::Scalar {
+        Scalar::from(n).into()
+    }
 
     fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar {
         // Traverse at most 4 8-byte chunks, for a total of 256 bits.

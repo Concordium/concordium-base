@@ -53,14 +53,14 @@ struct State {
     /// the same person contributes multiple times.
     num_contributions: u32,
     /// Expiry after which point contributors can be rewarded.
-    expiry:            Timestamp,
+    expiry: Timestamp,
     /// The prefix the initializer chose. It is part of the input to every hash
     /// that is computed.
-    prefix:            Prefix,
+    prefix: Prefix,
     /// Stored contributions. The Hash is the lowest per account, and the amount
     /// is the total amount contributed by this account.
     #[concordium(size_length = 4)]
-    contributions:     collections::BTreeMap<AccountAddress, (Amount, Hash)>,
+    contributions: collections::BTreeMap<AccountAddress, (Amount, Hash)>,
 }
 
 #[derive(Serialize, SchemaType)]
@@ -69,7 +69,13 @@ struct InitParameter(Timestamp, Prefix);
 /// Initialize a smart contract.
 /// This method expects as parameter a pair of (u64, Prefix), the expiry and the
 /// prefix.
-#[init(contract = "simple_game", low_level, parameter = "InitParameter", payable, enable_logger)]
+#[init(
+    contract = "simple_game",
+    low_level,
+    parameter = "InitParameter",
+    payable,
+    enable_logger
+)]
 #[inline(always)]
 fn contract_init(
     ctx: &impl HasInitContext<()>,
@@ -220,7 +226,12 @@ fn contribute<A: HasActions>(
 
 /// This entry point finalizes the contract instance and sends out rewards to
 /// all the contributors.
-#[receive(contract = "simple_game", name = "receive_finalize", low_level, enable_logger)]
+#[receive(
+    contract = "simple_game",
+    name = "receive_finalize",
+    low_level,
+    enable_logger
+)]
 #[inline(always)]
 fn finalize<A: HasActions>(
     ctx: &impl HasReceiveContext<()>,

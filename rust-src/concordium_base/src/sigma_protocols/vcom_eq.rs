@@ -19,7 +19,7 @@ type IndexType = u8;
 #[derive(Debug, Clone, Serialize)]
 pub struct VecComEq<C: Curve> {
     /// The commitment C
-    pub comm:  Commitment<C>,
+    pub comm: Commitment<C>,
     /// The commitments C_i for i in I
     #[map_size_length = 2]
     pub comms: BTreeMap<IndexType, Commitment<C>>,
@@ -27,9 +27,9 @@ pub struct VecComEq<C: Curve> {
     /// order. It is assumed that this is non-empty.
     /// TODO: It would be better if this gis was also an indexed map.
     #[size_length = 2]
-    pub gis:   Vec<C>,
+    pub gis: Vec<C>,
     /// The generator h
-    pub h:     C,
+    pub h: C,
     /// The generator `\bar{g}`
     pub g_bar: C,
     /// The generator `\bar{h}`
@@ -41,7 +41,7 @@ pub struct VecComEq<C: Curve> {
 pub struct Response<C: Curve> {
     #[size_length = 2]
     sis: Vec<C::Scalar>,
-    t:   C::Scalar,
+    t: C::Scalar,
     #[map_size_length = 2]
     tis: BTreeMap<IndexType, C::Scalar>,
 }

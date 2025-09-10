@@ -16,19 +16,19 @@ use std::{convert::TryInto, iter::once};
 pub struct SetMembershipProof<C: Curve> {
     /// Commitments to the evaluation of the indicator function `I_{v}` on
     /// the_set and `I_{v] - 1`
-    A:        C,
+    A: C,
     /// Commitment to the blinding factors in `s_L` and `s_R`
-    S:        C,
+    S: C,
     /// Commitment to the t_1 coefficient of polynomial `t(x)`
-    T_1:      C,
+    T_1: C,
     /// Commitment to the t_2 coefficient of polynomial `t(x)`
-    T_2:      C,
+    T_2: C,
     /// Evaluation of t(x) at the challenge point `x`
-    tx:       C::Scalar,
+    tx: C::Scalar,
     /// Blinding factor for the commitment to `tx`
     tx_tilde: C::Scalar,
     /// Blinding factor for the commitment to the inner-product arguments
-    e_tilde:  C::Scalar,
+    e_tilde: C::Scalar,
     /// Inner product proof
     ip_proof: InnerProductProof<C>,
 }

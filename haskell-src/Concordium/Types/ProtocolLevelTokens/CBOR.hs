@@ -41,8 +41,6 @@ import Concordium.Types.Memo
 import Concordium.Types.Tokens
 import qualified Data.FixedByteString as FBS
 
--- * Decoder helpers
-
 -- | Helper function to convert a 'Decoder s a' to a function from a lazy bytestring to 'a'.
 decodeFromBytes :: (forall s. Decoder s a) -> String -> LBS.ByteString -> Either String a
 decodeFromBytes decoder name lbs =
@@ -58,6 +56,22 @@ decodeFromBytes decoder name lbs =
 -- | Helper function to converting an 'Encoder' to a strict bytestring.
 encodeToBytes :: Encoding -> BS.ByteString
 encodeToBytes = CBOR.toStrictByteString
+
+-- * Primitive Decoder/encoder helpers
+
+-- | Convert CBOR.Term to a hex-encoded string
+cborTermToHex :: CBOR.Term -> Text
+cborTermToHex term =
+    let bs = CBOR.toStrictByteString $ CBOR.encodeTerm term
+    in  TextEncoding.decodeUtf8 (Base16.encode bs)
+
+-- | Convert a hex-encoded string to a CBOR.Term.
+hexToCborTerm :: Text -> Either String CBOR.Term
+hexToCborTerm hexText = do
+    bs <- Base16.decode (TextEncoding.encodeUtf8 hexText)
+    decodeFromBytes CBOR.decodeTerm "CBOR term" (LBS.fromStrict bs)
+
+-- * Decoder helpers
 
 -- | A 'MapValueDecoder' consumes a value corresponding to a known key and sets it in the builder.
 --  It should fail if entry in the builder corresponding to the key is already set.
@@ -171,6 +185,17 @@ decodeSequence decoder =
   where
     decodeNext l = (l Seq.|>) <$> decoder
 
+-- | Parse JSON map of additional entries into CBOR Terms
+decodeAdditionalMapJson :: Map.Map Text Text -> AE.Parser (Map.Map Text CBOR.Term)
+decodeAdditionalMapJson =
+    Map.traverseWithKey
+        ( \k hexTxt ->
+            case hexToCborTerm hexTxt of
+                Left err ->
+                    fail $ "Failed to decode CBOR for key " ++ show k ++ ": " ++ err
+                Right term -> return term
+        )
+
 -- * Encoding helpers
 
 -- | An 'Encoding' that represents a key in a CBOR map. The 'Ord' instance corresponds to
@@ -212,6 +237,20 @@ orFail (Just v) = const (Right v)
 orDefault :: Maybe a -> a -> a
 orDefault Nothing = id
 orDefault (Just a) = const a
+
+-- | Encode additional entries of CBOR Terms into JSON
+encodeAdditionalMapJson :: (Map.Map Text CBOR.Term) -> Maybe AE.Value
+encodeAdditionalMapJson additional
+    | null additional = Nothing
+    | otherwise = Just $ AE.object $ map (\(k, v) -> AE.Key.fromText k AE..= cborTermToHex v) (Map.toList additional)
+
+-- | Encode additional entries of CBOR Terms into CBOR
+encodeAdditionalMapCbor :: (Map.Map Text CBOR.Term) -> (Map.Map MapKeyEncoding Encoding)
+encodeAdditionalMapCbor additional =
+    Map.fromList
+        [ (makeMapKeyEncoding (encodeString key), CBOR.encodeTerm val)
+        | (key, val) <- Map.toList additional
+        ]
 
 -- * Token holder parameters
 
@@ -290,10 +329,10 @@ encodeAccountAddress :: AccountAddress -> Encoding
 encodeAccountAddress (AccountAddress (FBS.FixedByteString ba)) =
     encodeByteArray (SBA.fromByteArray ba)
 
--- | An entity that can receive and hold protocol-level tokens. Currently, this
--- can only be a Concordium account address. The type is used in the transaction
+-- | Concordium account address in the context of receiving and holding protocol-level tokens.
+-- The type is used in the transaction
 -- payload, in reject reasons, and in the `TokenModuleEvent`.
-data CborTokenHolder = CborHolderAccount
+data CborAccountAddress = CborAccountAddress
     { -- | The account address.
       chaAccount :: !AccountAddress,
       -- | Although the account can only be a Concordium address, this specifies whether the
@@ -302,8 +341,8 @@ data CborTokenHolder = CborHolderAccount
     }
     deriving (Eq, Show)
 
-instance AE.ToJSON CborTokenHolder where
-    toJSON CborHolderAccount{..} = do
+instance AE.ToJSON CborAccountAddress where
+    toJSON CborAccountAddress{..} = do
         AE.object $
             [ -- Tag with type of receiver
               "type" AE..= AE.String "account",
@@ -311,30 +350,30 @@ instance AE.ToJSON CborTokenHolder where
             ]
                 ++ ["coinInfo" AE..= coinInfo | coinInfo <- toList chaCoinInfo]
 
-instance AE.FromJSON CborTokenHolder where
-    parseJSON = AE.withObject "CborTokenHolder" $ \o -> do
+instance AE.FromJSON CborAccountAddress where
+    parseJSON = AE.withObject "CborAccountAddress" $ \o -> do
         type_string <- o AE..: "type"
         case (type_string :: String) of
             "account" -> do
                 chaAccount <- o AE..: "address"
                 chaCoinInfo <- o AE..:? "coinInfo"
-                return CborHolderAccount{..}
-            _ -> fail ("Unknown CborTokenHolder type " ++ type_string)
+                return CborAccountAddress{..}
+            _ -> fail ("Unknown CborAccountAddress type " ++ type_string)
 
 -- | Create a 'HolderAccount' from an 'AccountAddress'. The address type will be present in the
 --  CBOR encoding.
-accountTokenHolder :: AccountAddress -> CborTokenHolder
+accountTokenHolder :: AccountAddress -> CborAccountAddress
 accountTokenHolder addr =
-    CborHolderAccount
+    CborAccountAddress
         { chaAccount = addr,
           chaCoinInfo = Just CoinInfoConcordium
         }
 
 -- | Create a 'HolderAccount' from an 'AccountAddress'. The address type will not be present in
 --  the CBOR encoding.
-accountTokenHolderShort :: AccountAddress -> CborTokenHolder
+accountTokenHolderShort :: AccountAddress -> CborAccountAddress
 accountTokenHolderShort addr =
-    CborHolderAccount
+    CborAccountAddress
         { chaAccount = addr,
           chaCoinInfo = Nothing
         }
@@ -353,9 +392,9 @@ makeLenses ''HolderAccountBuilder
 emptyHolderAccountBuilder :: HolderAccountBuilder
 emptyHolderAccountBuilder = HolderAccountBuilder Nothing Nothing
 
--- | Helper function for decoding a 'CborTokenHolder' from a 'CBOR.Term'.
-decodeCborTokenHolderHelper :: CBOR.Term -> Either String CborTokenHolder
-decodeCborTokenHolderHelper = \case
+-- | Helper function for decoding a 'CborAccountAddress' from a 'CBOR.Term'.
+decodeCborAccountAddressHelper :: CBOR.Term -> Either String CborAccountAddress
+decodeCborAccountAddressHelper = \case
     CBOR.TTagged tag term
         | tag == 40307 -> do
             keyValues <- case term of
@@ -369,12 +408,12 @@ decodeCborTokenHolderHelper = \case
         | otherwise -> Left $ "token-holder: Expected cryptocurrency address (tag 40307), but found tag " ++ show tag
     other -> Left $ "token-holder: Unexpected term constructor for token holder: " ++ show other
   where
-    build :: Map.Map Int CBOR.Term -> Either String CborTokenHolder
+    build :: Map.Map Int CBOR.Term -> Either String CborAccountAddress
     build m0 = do
         (chaAccount, m1) <- getAndClear 3 convertAddress m0
         (chaCoinInfo, m2) <- getMaybeAndClear 1 convertCoinInfo m1
         unless (Map.null m2) $ Left $ "token-holder: unexpected map key(s): " ++ show (Map.keys m2)
-        return CborHolderAccount{..}
+        return CborAccountAddress{..}
     getAndClear key convert m = do
         let (maybeTerm, m') = m & at key <<.~ Nothing
         term <- maybeTerm `orFail` ("token-holder: Missing " ++ show key)
@@ -395,14 +434,14 @@ decodeCborTokenHolderHelper = \case
             Left _err -> Nothing
             Right coinInfo -> Just coinInfo
 
--- | Decode a CBOR-encoded 'TokenHolder'.
-decodeCborTokenHolder :: Decoder s CborTokenHolder
-decodeCborTokenHolder = do
+-- | Decode a CBOR-encoded 'CborAccountAddress'.
+decodeCborAccountAddress :: Decoder s CborAccountAddress
+decodeCborAccountAddress = do
     term <- CBOR.decodeTerm
-    either fail return $ decodeCborTokenHolderHelper term
+    either fail return $ decodeCborAccountAddressHelper term
 
-encodeCborTokenHolder :: CborTokenHolder -> Encoding
-encodeCborTokenHolder CborHolderAccount{..} =
+encodeCborAccountAddress :: CborAccountAddress -> Encoding
+encodeCborAccountAddress CborAccountAddress{..} =
     encodeTag 40307
         <> encodeMapDeterministic
             ( Map.empty
@@ -444,24 +483,6 @@ encodeSequence encodeItem s =
     encodeListLen (fromIntegral $ Seq.length s)
         <> foldMap encodeItem s
 
--- | Convert CBOR.Term to a hex-encoded string
-cborTermToHex :: CBOR.Term -> Text
-cborTermToHex term =
-    let bs = CBOR.toStrictByteString $ CBOR.encodeTerm term
-    in  TextEncoding.decodeUtf8 (Base16.encode bs)
-
--- | Convert a hex-encoded string to a CBOR.Term.
-hexToCborTerm :: Text -> Either String CBOR.Term
-hexToCborTerm hexText = do
-    bs <- Base16.decode (TextEncoding.encodeUtf8 hexText)
-    decodeTerm bs
-  where
-    decodeTerm bs =
-        case CBOR.deserialiseFromBytes CBOR.decodeTerm (LBS.fromStrict bs) of
-            Left err -> Left $ "Failed to decode CBOR term: " ++ show err
-            Right ("", term) -> Right term
-            Right (remaining, _) -> Left $ "Extra bytes after decoding CBOR term: " ++ show (LBS.length remaining)
-
 -- | A token metadata URL and an optional checksum. The checksum is a SHA256 hash of the metadata at the location of the URL.
 data TokenMetadataUrl = TokenMetadataUrl
     { -- | The URL of the token metadata.
@@ -488,29 +509,15 @@ instance AE.ToJSON TokenMetadataUrl where
         AE.object . catMaybes $
             [ Just ("url" AE..= tmUrl),
               ("checksumSha256" AE..=) <$> tmChecksumSha256,
-              ("_additional" AE..=) <$> additional
+              ("_additional" AE..=) <$> (encodeAdditionalMapJson tmAdditional)
             ]
-      where
-        additional :: Maybe AE.Value
-        additional
-            | null tmAdditional = Nothing
-            | otherwise = Just $ AE.object $ map (\(k, v) -> AE.Key.fromText k AE..= cborTermToHex v) (Map.toList tmAdditional)
 
 instance AE.FromJSON TokenMetadataUrl where
     parseJSON = AE.withObject "TokenMetadataUrl" $ \v -> do
         tmUrl <- v AE..: "url" -- Mandatory field
         tmChecksumSha256 <- v AE..:? "checksumSha256" -- Optional field
-        tmAdditional <- v AE..:? "_additional" >>= parseAdditional
+        tmAdditional <- v AE..:? "_additional" .!= Map.empty >>= decodeAdditionalMapJson
         return TokenMetadataUrl{..}
-      where
-        parseAdditional :: Maybe (KeyMap.KeyMap Text) -> AE.Parser (Map.Map Text CBOR.Term)
-        parseAdditional Nothing = return Map.empty
-        parseAdditional (Just additional)
-            | KeyMap.null additional = return Map.empty
-            | otherwise = do
-                fmap Map.fromList $ forM (KeyMap.toList additional) $ \(k, v) -> do
-                    term <- either (fail . ("Failed to parse hex as CBOR: " ++)) return $ hexToCborTerm v
-                    return (AE.Key.toText k, term)
 
 decodeTokenMetadataUrlHelper :: CBOR.Term -> Either String TokenMetadataUrl
 decodeTokenMetadataUrlHelper rootTerm = do
@@ -558,15 +565,10 @@ decodeTokenMetadataUrl = do
 encodeTokenMetadataUrl :: TokenMetadataUrl -> Encoding
 encodeTokenMetadataUrl TokenMetadataUrl{..} =
     encodeMapDeterministic $
-        additionalMap
+        (encodeAdditionalMapCbor tmAdditional)
             & k "url" ?~ encodeString tmUrl
             & k "checksumSha256" .~ (encodeSha256Hash <$> tmChecksumSha256)
   where
-    additionalMap =
-        Map.fromList
-            [ (makeMapKeyEncoding (encodeString key), CBOR.encodeTerm val)
-            | (key, val) <- Map.toList tmAdditional
-            ]
     k = at . makeMapKeyEncoding . encodeString
     encodeSha256Hash (SHA256.Hash h) = encodeBytes (FBS.toByteString h)
 
@@ -578,7 +580,7 @@ tokenMetadataUrlFromBytes =
 
 -- | CBOR-encode a 'TokenMetadataUrl to a (strict) 'BS.ByteString'.
 tokenMetadataUrlToBytes :: TokenMetadataUrl -> BS.ByteString
-tokenMetadataUrlToBytes = CBOR.toStrictByteString . encodeTokenMetadataUrl
+tokenMetadataUrlToBytes = encodeToBytes . encodeTokenMetadataUrl
 
 -- * Initialization parameters
 
@@ -586,85 +588,72 @@ tokenMetadataUrlToBytes = CBOR.toStrictByteString . encodeTokenMetadataUrl
 --  to initialize the token.
 data TokenInitializationParameters = TokenInitializationParameters
     { -- | The name of the token.
-      tipName :: !Text,
+      tipName :: !(Maybe Text),
       -- | A URL pointing to the token metadata.
-      tipMetadata :: !TokenMetadataUrl,
+      tipMetadata :: !(Maybe TokenMetadataUrl),
       -- | The governance account of this token.
-      tipGovernanceAccount :: !CborTokenHolder,
+      tipGovernanceAccount :: !(Maybe CborAccountAddress),
       -- | Whether the token supports an allow list.
-      tipAllowList :: !Bool,
+      tipAllowList :: !(Maybe Bool),
       -- | Whether the token supports a deny list.
-      tipDenyList :: !Bool,
+      tipDenyList :: !(Maybe Bool),
       -- | The initial supply of the token. If not present, no tokens are minted initially.
       tipInitialSupply :: !(Maybe TokenAmount),
       -- | Whether the token is mintable.
-      tipMintable :: !Bool,
+      tipMintable :: !(Maybe Bool),
       -- | Whether the token is burnable.
-      tipBurnable :: !Bool
+      tipBurnable :: !(Maybe Bool),
+      -- | Any additional state data. Keys in this map SHOULD NOT overlap those
+      --  used for the other (standardised) fields in this structure as that will
+      --  break the invertability of the CBOR encoding.
+      tipAdditional :: !(Map.Map Text CBOR.Term)
     }
     deriving (Eq, Show)
 
--- | Builder for 'TokenInitializationParameters'
-data TokenInitializationParametersBuilder = TokenInitializationParametersBuilder
-    { _tipbName :: Maybe Text,
-      _tipbMetadata :: Maybe TokenMetadataUrl,
-      _tipbGovernanceAccount :: Maybe CborTokenHolder,
-      _tipbAllowList :: Maybe Bool,
-      _tipbDenyList :: Maybe Bool,
-      _tipbInitialSupply :: Maybe TokenAmount,
-      _tipbMintable :: Maybe Bool,
-      _tipbBurnable :: Maybe Bool
-    }
+makeLensesFor
+    [ ("tipName", "tipNameLens"),
+      ("tipMetadata", "tipMetadataLens"),
+      ("tipGovernanceAccount", "tipGovernanceAccountLens"),
+      ("tipAllowList", "tipAllowListLens"),
+      ("tipDenyList", "tipDenyListLens"),
+      ("tipInitialSupply", "tipInitialSupplyLens"),
+      ("tipMintable", "tipMintableLens"),
+      ("tipBurnable", "tipBurnableLens"),
+      ("tipAdditional", "tipAdditionalLens")
+    ]
+    ''TokenInitializationParameters
 
-makeLenses ''TokenInitializationParametersBuilder
-
--- | A 'TokenInitializationParametersBuilder' with no fields initialized.
-emptyTokenInitializationParametersBuilder :: TokenInitializationParametersBuilder
-emptyTokenInitializationParametersBuilder =
-    TokenInitializationParametersBuilder Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
-
--- | Construct a 'TokenInitializationParameters' from a 'TokenInitializationParametersBuilder'.
---  This results in @Left err@ (where @err@ describes the failure reason) when a required parameter
---  is missing. Missing optional parameters are populated with the appropriate default values.
-buildTokenInitializationParameters ::
-    TokenInitializationParametersBuilder -> Either String TokenInitializationParameters
-buildTokenInitializationParameters TokenInitializationParametersBuilder{..} = do
-    tipName <- _tipbName `orFail` "Missing \"name\""
-    tipMetadata <- _tipbMetadata `orFail` "Missing \"metadata\""
-    tipGovernanceAccount <- _tipbGovernanceAccount `orFail` "Missing \"governanceAccount\""
-    let tipAllowList = _tipbAllowList `orDefault` False
-    let tipDenyList = _tipbDenyList `orDefault` False
-    let tipInitialSupply = _tipbInitialSupply
-    let tipMintable = _tipbMintable `orDefault` False
-    let tipBurnable = _tipbBurnable `orDefault` False
-    return TokenInitializationParameters{..}
+-- | A 'TokenInitializationParameters' with no fields initialized.
+emptyTokenInitializationParameters :: TokenInitializationParameters
+emptyTokenInitializationParameters =
+    TokenInitializationParameters Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Map.empty
 
 instance AE.ToJSON TokenInitializationParameters where
     toJSON TokenInitializationParameters{..} = do
-        AE.object $
-            [ "name" AE..= tipName,
-              "metadata" AE..= tipMetadata,
-              "governanceAccount" AE..= tipGovernanceAccount,
-              "allowList" AE..= tipAllowList,
-              "denyList" AE..= tipDenyList,
-              "mintable" AE..= tipMintable,
-              "burnable" AE..= tipBurnable
+        AE.object . catMaybes $
+            [ ("name" AE..=) <$> tipName,
+              ("metadata" AE..=) <$> tipMetadata,
+              ("governanceAccount" AE..=) <$> tipGovernanceAccount,
+              ("allowList" AE..=) <$> tipAllowList,
+              ("denyList" AE..=) <$> tipDenyList,
+              ("initialSupply" AE..=) <$> tipInitialSupply,
+              ("mintable" AE..=) <$> tipMintable,
+              ("burnable" AE..=) <$> tipBurnable,
+              ("_additional" AE..=) <$> (encodeAdditionalMapJson tipAdditional)
             ]
-                ++ ["initialSupply" AE..= initSupply | initSupply <- toList tipInitialSupply]
 
 instance AE.FromJSON TokenInitializationParameters where
     parseJSON = AE.withObject "TokenInitializationParameters" $ \o -> do
-        _tipbName <- o AE..:? "name"
-        _tipbMetadata <- o AE..:? "metadata"
-        _tipbGovernanceAccount <- o AE..:? "governanceAccount"
-        _tipbAllowList <- o AE..:? "allowList"
-        _tipbDenyList <- o AE..:? "denyList"
-        _tipbInitialSupply <- o AE..:? "initialSupply"
-        _tipbMintable <- o AE..:? "mintable"
-        _tipbBurnable <- o AE..:? "burnable"
-        case buildTokenInitializationParameters TokenInitializationParametersBuilder{..} of
-            Left e -> fail e
-            Right res -> return res
+        tipName <- o AE..:? "name"
+        tipMetadata <- o AE..:? "metadata"
+        tipGovernanceAccount <- o AE..:? "governanceAccount"
+        tipAllowList <- o AE..:? "allowList"
+        tipDenyList <- o AE..:? "denyList"
+        tipInitialSupply <- o AE..:? "initialSupply"
+        tipMintable <- o AE..:? "mintable"
+        tipBurnable <- o AE..:? "burnable"
+        tipAdditional <- o AE..:? "_additional" .!= Map.empty >>= decodeAdditionalMapJson
+        return $ TokenInitializationParameters{..}
 
 -- | Decode a CBOR-encoded 'TokenInitializationParameters'.
 --  This decoder enforces CBOR-validity (in particular, no duplicate map keys), disallows
@@ -674,70 +663,44 @@ decodeTokenInitializationParameters :: Decoder s TokenInitializationParameters
 decodeTokenInitializationParameters =
     decodeMap
         valDecoder
-        buildTokenInitializationParameters
-        emptyTokenInitializationParametersBuilder
+        Right
+        emptyTokenInitializationParameters
   where
-    valDecoder k@"name" = Just $ mapValueDecoder k decodeString tipbName
-    valDecoder k@"metadata" = Just $ mapValueDecoder k decodeTokenMetadataUrl tipbMetadata
-    valDecoder k@"governanceAccount" = Just $ mapValueDecoder k decodeCborTokenHolder tipbGovernanceAccount
-    valDecoder k@"allowList" = Just $ mapValueDecoder k decodeBool tipbAllowList
-    valDecoder k@"denyList" = Just $ mapValueDecoder k decodeBool tipbDenyList
-    valDecoder k@"initialSupply" = Just $ mapValueDecoder k decodeTokenAmount tipbInitialSupply
-    valDecoder k@"mintable" = Just $ mapValueDecoder k decodeBool tipbMintable
-    valDecoder k@"burnable" = Just $ mapValueDecoder k decodeBool tipbBurnable
-    valDecoder _ = Nothing
+    valDecoder k@"name" = Just $ mapValueDecoder k decodeString tipNameLens
+    valDecoder k@"metadata" = Just $ mapValueDecoder k decodeTokenMetadataUrl tipMetadataLens
+    valDecoder k@"governanceAccount" = Just $ mapValueDecoder k decodeCborAccountAddress tipGovernanceAccountLens
+    valDecoder k@"allowList" = Just $ mapValueDecoder k decodeBool tipAllowListLens
+    valDecoder k@"denyList" = Just $ mapValueDecoder k decodeBool tipDenyListLens
+    valDecoder k@"initialSupply" = Just $ mapValueDecoder k decodeTokenAmount tipInitialSupplyLens
+    valDecoder k@"mintable" = Just $ mapValueDecoder k decodeBool tipMintableLens
+    valDecoder k@"burnable" = Just $ mapValueDecoder k decodeBool tipBurnableLens
+    valDecoder k = Just $ mapValueDecoder k CBOR.decodeTerm (tipAdditionalLens . (at k))
 
 -- | Parse a 'TokenInitializationParameters' from a 'LBS.ByteString'. The entire bytestring must
 --  be consumed in the parsing.
 tokenInitializationParametersFromBytes :: LBS.ByteString -> Either String TokenInitializationParameters
-tokenInitializationParametersFromBytes lbs =
-    case CBOR.deserialiseFromBytes decodeTokenInitializationParameters lbs of
-        Left e -> Left (show e)
-        Right ("", res) -> return res
-        Right (remaining, _) ->
-            Left $
-                show (LBS.length remaining) ++ " bytes remaining after parsing token initialization parameters"
+tokenInitializationParametersFromBytes = decodeFromBytes decodeTokenInitializationParameters "token initialization parameters"
 
 -- | Encode a 'TokenInitializationParameters' as CBOR.
-encodeTokenInitializationParametersNoDefaults :: TokenInitializationParameters -> Encoding
-encodeTokenInitializationParametersNoDefaults TokenInitializationParameters{..} =
+encodeTokenInitializationParameters :: TokenInitializationParameters -> Encoding
+encodeTokenInitializationParameters TokenInitializationParameters{..} =
     encodeMapDeterministic $
-        Map.empty
-            & k "name" ?~ encodeString tipName
-            & k "metadata" ?~ encodeTokenMetadataUrl tipMetadata
-            & k "governanceAccount" ?~ encodeCborTokenHolder tipGovernanceAccount
-            & k "allowList" ?~ encodeBool tipAllowList
-            & k "denyList" ?~ encodeBool tipDenyList
+        (encodeAdditionalMapCbor tipAdditional)
+            & k "name" .~ (encodeString <$> tipName)
+            & k "metadata" .~ (encodeTokenMetadataUrl <$> tipMetadata)
+            & k "governanceAccount" .~ (encodeCborAccountAddress <$> tipGovernanceAccount)
+            & k "allowList" .~ (encodeBool <$> tipAllowList)
+            & k "denyList" .~ (encodeBool <$> tipDenyList)
             & k "initialSupply" .~ (encodeTokenAmount <$> tipInitialSupply)
-            & k "mintable" ?~ encodeBool tipMintable
-            & k "burnable" ?~ encodeBool tipBurnable
+            & k "mintable" .~ (encodeBool <$> tipMintable)
+            & k "burnable" .~ (encodeBool <$> tipBurnable)
   where
     k = at . makeMapKeyEncoding . encodeString
-
--- | Encode a 'TokenInitializationParameters' as CBOR. Keys that hold their default values will
---  be omitted from the encoding.
-encodeTokenInitializationParametersWithDefaults :: TokenInitializationParameters -> Encoding
-encodeTokenInitializationParametersWithDefaults TokenInitializationParameters{..} =
-    encodeMapDeterministic $
-        Map.empty
-            & k "name" ?~ encodeString tipName
-            & k "metadata" ?~ encodeTokenMetadataUrl tipMetadata
-            & k "governanceAccount" ?~ encodeCborTokenHolder tipGovernanceAccount
-            & setIfTrue "allowList" tipAllowList
-            & setIfTrue "denyList" tipDenyList
-            & k "initialSupply" .~ (encodeTokenAmount <$> tipInitialSupply)
-            & setIfTrue "mintable" tipMintable
-            & setIfTrue "burnable" tipBurnable
-  where
-    k = at . makeMapKeyEncoding . encodeString
-    setIfTrue _ False = id
-    setIfTrue key True = k key ?~ encodeBool True
 
 -- | CBOR-encode a 'TokenInitializationParameters' to a (strict) 'BS.ByteString'.
---  This uses default values in the encoding.
 tokenInitializationParametersToBytes :: TokenInitializationParameters -> BS.ByteString
 tokenInitializationParametersToBytes =
-    CBOR.toStrictByteString . encodeTokenInitializationParametersWithDefaults
+    CBOR.toStrictByteString . encodeTokenInitializationParameters
 
 -- | A 'TaggableMemo' represents a 'Memo' that may optionally be tagged as CBOR-encoded.
 --  Memos are often assumed to be CBOR-encoded, but the tag can be used to make this explicit.
@@ -812,7 +775,7 @@ data TokenTransferBody = TokenTransferBody
     { -- | The amount to transfer.
       ttAmount :: !TokenAmount,
       -- | The recipient account address.
-      ttRecipient :: !CborTokenHolder,
+      ttRecipient :: !CborAccountAddress,
       -- | An optional memo associated with the transfer.
       ttMemo :: !(Maybe TaggableMemo)
     }
@@ -836,7 +799,7 @@ instance AE.FromJSON TokenTransferBody where
 -- | Builder
 data TokenTransferBuilder = TokenTransferBuilder
     { _ttbAmount :: Maybe TokenAmount,
-      _ttbRecipient :: Maybe CborTokenHolder,
+      _ttbRecipient :: Maybe CborAccountAddress,
       _ttbMemo :: Maybe TaggableMemo
     }
 
@@ -862,7 +825,7 @@ decodeTokenTransfer =
     decodeMap valDecoder buildTokenTransfer emptyTokenTransferBuilder
   where
     valDecoder k@"amount" = Just $ mapValueDecoder k decodeTokenAmount ttbAmount
-    valDecoder k@"recipient" = Just $ mapValueDecoder k decodeCborTokenHolder ttbRecipient
+    valDecoder k@"recipient" = Just $ mapValueDecoder k decodeCborAccountAddress ttbRecipient
     valDecoder k@"memo" = Just $ mapValueDecoder k decodeTaggableMemo ttbMemo
     valDecoder _ = Nothing
 
@@ -872,7 +835,7 @@ encodeTokenTransfer TokenTransferBody{..} =
     encodeMapDeterministic $
         Map.empty
             & k "amount" ?~ encodeTokenAmount ttAmount
-            & k "recipient" ?~ encodeCborTokenHolder ttRecipient
+            & k "recipient" ?~ encodeCborAccountAddress ttRecipient
             & k "memo" .~ (encodeTaggableMemo <$> ttMemo)
   where
     k = at . makeMapKeyEncoding . encodeString
@@ -888,13 +851,13 @@ data TokenOperation
     | -- | Burn a specified token amount from the token governance account.
       TokenBurn {toBurnAmount :: !TokenAmount}
     | -- | Add the specified account to the allow list.
-      TokenAddAllowList {toTarget :: !CborTokenHolder}
+      TokenAddAllowList {toTarget :: !CborAccountAddress}
     | -- | Remove the specified account from the allow list.
-      TokenRemoveAllowList {toTarget :: !CborTokenHolder}
+      TokenRemoveAllowList {toTarget :: !CborAccountAddress}
     | -- | Add the specified account to the deny list.
-      TokenAddDenyList {toTarget :: !CborTokenHolder}
+      TokenAddDenyList {toTarget :: !CborAccountAddress}
     | -- | Remove the specified account from the deny list.
-      TokenRemoveDenyList {toTarget :: !CborTokenHolder}
+      TokenRemoveDenyList {toTarget :: !CborAccountAddress}
     | -- | Pause transfer/mint/burn operations for the token.
       TokenPause
     | -- | Unpause transfer/mint/burn operations for the token.
@@ -1004,7 +967,7 @@ decodeTokenOperation = do
                     "token-operation (" ++ Text.unpack opType ++ "): missing amount"
         decodeMap valDecoder build Nothing
     decodeListTarget opType = do
-        let valDecoder k@"target" = Just (mapValueDecoder k decodeCborTokenHolder id)
+        let valDecoder k@"target" = Just (mapValueDecoder k decodeCborAccountAddress id)
             valDecoder _ = Nothing
             build (Just v) = Right v
             build Nothing =
@@ -1039,7 +1002,7 @@ encodeTokenOperation = \case
             <> encodeString opType
             <> encodeMapLen 1
             <> encodeString "target"
-            <> encodeCborTokenHolder target
+            <> encodeCborAccountAddress target
     encodePause =
         encodeMapLen 1
             <> encodeString "pause"
@@ -1068,14 +1031,7 @@ decodeTokenUpdateTransaction = TokenUpdateTransaction <$> decodeSequence decodeT
 -- | Parse a 'TokenTransaction' from a 'LBS.ByteString'. The entire bytestring
 --  must be consumed in the parsing.
 tokenUpdateTransactionFromBytes :: LBS.ByteString -> Either String TokenUpdateTransaction
-tokenUpdateTransactionFromBytes lbs =
-    case CBOR.deserialiseFromBytes decodeTokenUpdateTransaction lbs of
-        Left e -> Left (show e)
-        Right ("", res) -> return res
-        Right (remaining, _) ->
-            Left $
-                show (LBS.length remaining)
-                    ++ " bytes remaining after parsing token transaction"
+tokenUpdateTransactionFromBytes = decodeFromBytes decodeTokenUpdateTransaction "token transaction"
 
 -- | Encode a 'TokenTransaction' as CBOR.
 encodeTokenUpdateTransaction :: TokenUpdateTransaction -> Encoding
@@ -1083,7 +1039,7 @@ encodeTokenUpdateTransaction = encodeSequence encodeTokenOperation . tokenOperat
 
 -- | CBOR-encode a 'TokenTransaction' to a (strict) 'BS.ByteString'.
 tokenUpdateTransactionToBytes :: TokenUpdateTransaction -> BS.ByteString
-tokenUpdateTransactionToBytes = CBOR.toStrictByteString . encodeTokenUpdateTransaction
+tokenUpdateTransactionToBytes = encodeToBytes . encodeTokenUpdateTransaction
 
 -- * Token module events
 
@@ -1098,13 +1054,13 @@ data EncodedTokenEvent = EncodedTokenEvent
 
 data TokenEvent
     = -- | An account was added to the allow list.
-      AddAllowListEvent !CborTokenHolder
+      AddAllowListEvent !CborAccountAddress
     | -- | An account was removed from the allow list.
-      RemoveAllowListEvent !CborTokenHolder
+      RemoveAllowListEvent !CborAccountAddress
     | -- | An account was added to the deny list.
-      AddDenyListEvent !CborTokenHolder
+      AddDenyListEvent !CborAccountAddress
     | -- | An account was removed from the deny list.
-      RemoveDenyListEvent !CborTokenHolder
+      RemoveDenyListEvent !CborAccountAddress
     | -- | The execution of balance-changing operations was paused.
       Pause
     | -- | The execution of balance-changing operations was unpaused.
@@ -1113,12 +1069,12 @@ data TokenEvent
 
 -- | CBOR-encode the details for the list update events in the form:
 --  > {"target": <TokenHolder>}
-encodeTargetDetails :: CborTokenHolder -> TokenEventDetails
+encodeTargetDetails :: CborAccountAddress -> TokenEventDetails
 encodeTargetDetails target =
     TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
         encodeMapLen 1
             <> encodeString "target"
-            <> encodeCborTokenHolder target
+            <> encodeCborAccountAddress target
 
 -- | CBOR-encoded event details consisting of just the empty map.
 --  > {}
@@ -1161,7 +1117,7 @@ encodeTokenEvent = \case
 
 -- | Decoder for the event details of the list update events.
 --  This is the "token-list-update-details" type in the CDDL schema.
-decodeTokenEventTarget :: Decoder s CborTokenHolder
+decodeTokenEventTarget :: Decoder s CborAccountAddress
 decodeTokenEventTarget = do
     maybeMapLen <- decodeMapLenOrIndef
     forM_ maybeMapLen $ \mapLen ->
@@ -1173,7 +1129,7 @@ decodeTokenEventTarget = do
         fail $
             "token-event: expected \"target\" key, but saw "
                 ++ show label
-    target <- decodeCborTokenHolder
+    target <- decodeCborAccountAddress
     when (isNothing maybeMapLen) $ do
         isEnd <- decodeBreakOr
         unless isEnd $ fail "token-event: expected end of map"
@@ -1191,16 +1147,8 @@ decodeTokenEvent EncodedTokenEvent{..} = case tokenEventTypeBytes eteType of
     unknownType -> Left $ "token-event: unsupported event type: " ++ show unknownType
   where
     detailsLBS = LBS.fromStrict $ BSS.fromShort $ tokenEventDetailsBytes eteDetails
-    handleDeserializationResult = \case
-        Left e -> Left $ "token-event: failed to decode event details: " ++ show e
-        Right ("", target) -> Right target
-        Right (remaining, _) ->
-            Left $
-                "token-event: "
-                    ++ show (LBS.length remaining)
-                    ++ " bytes remaining after parsing event details"
-    decodeTarget = handleDeserializationResult $ CBOR.deserialiseFromBytes decodeTokenEventTarget detailsLBS
-    decodePauseUnpause = handleDeserializationResult $ CBOR.deserialiseFromBytes decodeEmptyMap detailsLBS
+    decodeTarget = decodeFromBytes decodeTokenEventTarget "event details" detailsLBS
+    decodePauseUnpause = decodeFromBytes decodeEmptyMap "event details" detailsLBS
 
 -- * Reject reasons
 
@@ -1220,7 +1168,7 @@ data TokenRejectReason
         { -- | The index in the list of operations of the failing operation.
           trrOperationIndex :: !Word64,
           -- | The address that could not be resolved.
-          trrAddress :: !CborTokenHolder
+          trrAddress :: !CborAccountAddress
         }
     | -- | The balance of tokens on the sender account is insufficient to perform the operation.
       TokenBalanceInsufficient
@@ -1262,7 +1210,7 @@ data TokenRejectReason
           trrOperationIndex :: !Word64,
           -- | (Optionally) the address that does not have the necessary permissions to perform
           --  the operation.
-          trrAddressNotPermitted :: !(Maybe CborTokenHolder),
+          trrAddressNotPermitted :: !(Maybe CborAccountAddress),
           -- | The reason why the operation is not permitted.
           trrReason :: !(Maybe Text)
         }
@@ -1272,7 +1220,7 @@ data TokenRejectReason
 --  constructor.
 data AddressNotFoundBuilder = AddressNotFoundBuilder
     { _anfbTransactionIndex :: Maybe Word64,
-      _anfbRecipient :: Maybe CborTokenHolder
+      _anfbRecipient :: Maybe CborAccountAddress
     }
 
 makeLenses ''AddressNotFoundBuilder
@@ -1387,7 +1335,7 @@ buildMintWouldOverflow MintWouldOverflowBuilder{..} = do
 --  constructor.
 data OperationNotPermittedBuilder = OperationNotPermittedBuilder
     { _onpbTransactionIndex :: Maybe Word64,
-      _onpbAddressNotPermitted :: Maybe CborTokenHolder,
+      _onpbAddressNotPermitted :: Maybe CborAccountAddress,
       _onpbReason :: Maybe Text
     }
 
@@ -1415,7 +1363,7 @@ encodeTokenRejectReason AddressNotFound{..} =
             Just . BSS.toShort . CBOR.toStrictByteString . encodeMapDeterministic $
                 Map.empty
                     & k "index" ?~ encodeWord64 trrOperationIndex
-                    & k "address" ?~ encodeCborTokenHolder trrAddress
+                    & k "address" ?~ encodeCborAccountAddress trrAddress
         }
   where
     k = at . makeMapKeyEncoding . encodeString
@@ -1473,7 +1421,7 @@ encodeTokenRejectReason OperationNotPermitted{..} =
             Just . BSS.toShort . CBOR.toStrictByteString . encodeMapDeterministic $
                 Map.empty
                     & k "index" ?~ encodeWord64 trrOperationIndex
-                    & k "address" .~ fmap encodeCborTokenHolder trrAddressNotPermitted
+                    & k "address" .~ fmap encodeCborAccountAddress trrAddressNotPermitted
                     & k "reason" .~ fmap encodeString trrReason
         }
   where
@@ -1488,7 +1436,7 @@ decodeTokenRejectReasonDetails "addressNotFound" =
         emptyAddressNotFoundBuilder
   where
     valDecoder k@"index" = Just $ mapValueDecoder k decodeWord64 anfbTransactionIndex
-    valDecoder k@"address" = Just $ mapValueDecoder k decodeCborTokenHolder anfbRecipient
+    valDecoder k@"address" = Just $ mapValueDecoder k decodeCborAccountAddress anfbRecipient
     valDecoder _ = Nothing
 decodeTokenRejectReasonDetails "tokenBalanceInsufficient" =
     decodeMap
@@ -1536,7 +1484,7 @@ decodeTokenRejectReasonDetails "operationNotPermitted" =
         emptyOperationNotPermittedBuilder
   where
     valDecoder k@"index" = Just $ mapValueDecoder k decodeWord64 onpbTransactionIndex
-    valDecoder k@"address" = Just $ mapValueDecoder k decodeCborTokenHolder onpbAddressNotPermitted
+    valDecoder k@"address" = Just $ mapValueDecoder k decodeCborAccountAddress onpbAddressNotPermitted
     valDecoder k@"reason" = Just $ mapValueDecoder k decodeString onpbReason
     valDecoder _ = Nothing
 decodeTokenRejectReasonDetails unknownType =
@@ -1551,13 +1499,7 @@ decodeTokenRejectReason EncodedTokenRejectReason{..} = case etrrDetails of
                 ++ show etrrType
     Just details -> do
         let detailsLBS = LBS.fromStrict $ BSS.fromShort details
-        case CBOR.deserialiseFromBytes (decodeTokenRejectReasonDetails etrrType) detailsLBS of
-            Left e -> Left (show e)
-            Right ("", res) -> return res
-            Right (remaining, _) ->
-                Left $
-                    show (LBS.length remaining)
-                        ++ " bytes remaining after parsing token reject reason details"
+        decodeFromBytes (decodeTokenRejectReasonDetails etrrType) "token reject reason details" detailsLBS
 
 -- * Token Module state
 
@@ -1567,11 +1509,11 @@ decodeTokenRejectReason EncodedTokenRejectReason{..} = case etrrDetails of
 --  whether the token module supports it.
 data TokenModuleState = TokenModuleState
     { -- | The name of the token.
-      tmsName :: !Text,
+      tmsName :: !(Maybe Text),
       -- | A URL pointing to the token metadata.
-      tmsMetadata :: !TokenMetadataUrl,
+      tmsMetadata :: !(Maybe TokenMetadataUrl),
       -- | The governance account address of the token.
-      tmsGovernanceAccount :: !CborTokenHolder,
+      tmsGovernanceAccount :: !(Maybe CborAccountAddress),
       -- | Whether the token is paused.
       tmsPaused :: !(Maybe Bool),
       -- | Whether the token supports an allow list.
@@ -1591,46 +1533,32 @@ data TokenModuleState = TokenModuleState
 
 instance AE.ToJSON TokenModuleState where
     toJSON TokenModuleState{..} =
-        AE.object
-            ( [ "name" AE..= tmsName,
-                "metadata" AE..= tmsMetadata,
-                "governanceAccount" AE..= tmsGovernanceAccount,
-                "paused" AE..= tmsPaused,
-                "allowList" AE..= tmsAllowList,
-                "denyList" AE..= tmsDenyList,
-                "mintable" AE..= tmsMintable,
-                "burnable" AE..= tmsBurnable
-              ]
-                ++ [ "_additional"
-                        AE..= AE.object
-                            [ AE.Key.fromText k AE..= cborTermToHex v
-                            | (k, v) <- Map.toList tmsAdditional
-                            ]
-                   | not (null tmsAdditional)
-                   ]
-            )
+        AE.object . catMaybes $
+            [ ("name" AE..=) <$> tmsName,
+              ("metadata" AE..=) <$> tmsMetadata,
+              ("governanceAccount" AE..=) <$> tmsGovernanceAccount,
+              ("paused" AE..=) <$> tmsPaused,
+              ("allowList" AE..=) <$> tmsAllowList,
+              ("denyList" AE..=) <$> tmsDenyList,
+              ("mintable" AE..=) <$> tmsMintable,
+              ("burnable" AE..=) <$> tmsBurnable,
+              ("_additional" AE..=) <$> (encodeAdditionalMapJson tmsAdditional)
+            ]
 
 instance AE.FromJSON TokenModuleState where
     parseJSON = AE.withObject "TokenModuleState" $ \v -> do
-        tmsName <- v AE..: "name"
-        tmsMetadata <- v AE..: "metadata"
-        tmsGovernanceAccount <- v AE..: "governanceAccount"
-        tmsPaused <- v AE..: "paused"
-        tmsAllowList <- v AE..: "allowList"
-        tmsDenyList <- v AE..: "denyList"
-        tmsMintable <- v AE..: "mintable"
-        tmsBurnable <- v AE..: "burnable"
+        tmsName <- v AE..:? "name"
+        tmsMetadata <- v AE..:? "metadata"
+        tmsGovernanceAccount <- v AE..:? "governanceAccount"
+        tmsPaused <- v AE..:? "paused"
+        tmsAllowList <- v AE..:? "allowList"
+        tmsDenyList <- v AE..:? "denyList"
+        tmsMintable <- v AE..:? "mintable"
+        tmsBurnable <- v AE..:? "burnable"
         -- Decode each hex string into a CBOR.Term
         tmsAdditional <-
-            (v AE..:? "_additional" .!= Map.empty)
-                >>= Map.traverseWithKey
-                    ( \k hexTxt ->
-                        case hexToCborTerm hexTxt of
-                            Left err ->
-                                fail $ "Failed to decode CBOR for key " ++ show k ++ ": " ++ err
-                            Right term -> return term
-                    )
-
+            v AE..:? "_additional" .!= Map.empty
+                >>= decodeAdditionalMapJson
         return TokenModuleState{..}
 
 -- | Encode a 'TokenModuleState' as CBOR. Any keys in 'tmsAdditional' that overlap with
@@ -1638,27 +1566,22 @@ instance AE.FromJSON TokenModuleState where
 encodeTokenModuleState :: TokenModuleState -> Encoding
 encodeTokenModuleState TokenModuleState{..} =
     encodeMapDeterministic $
-        additionalMap
-            & k "name" ?~ encodeString tmsName
-            & k "metadata" ?~ encodeTokenMetadataUrl tmsMetadata
-            & k "governanceAccount" ?~ encodeCborTokenHolder tmsGovernanceAccount
+        (encodeAdditionalMapCbor tmsAdditional)
+            & k "name" .~ (encodeString <$> tmsName)
+            & k "metadata" .~ (encodeTokenMetadataUrl <$> tmsMetadata)
+            & k "governanceAccount" .~ (encodeCborAccountAddress <$> tmsGovernanceAccount)
             & k "paused" .~ fmap encodeBool tmsPaused
             & k "allowList" .~ fmap encodeBool tmsAllowList
             & k "denyList" .~ fmap encodeBool tmsDenyList
             & k "mintable" .~ fmap encodeBool tmsMintable
             & k "burnable" .~ fmap encodeBool tmsBurnable
   where
-    additionalMap =
-        Map.fromList
-            [ (makeMapKeyEncoding (encodeString key), CBOR.encodeTerm val)
-            | (key, val) <- Map.toList tmsAdditional
-            ]
     k = at . makeMapKeyEncoding . encodeString
 
 -- | CBOR-encode a 'TokenModuleState' to a (strict) 'BS.ByteString'.
 --  This uses default values in the encoding.
 tokenModuleStateToBytes :: TokenModuleState -> BS.ByteString
-tokenModuleStateToBytes = CBOR.toStrictByteString . encodeTokenModuleState
+tokenModuleStateToBytes = encodeToBytes . encodeTokenModuleState
 
 -- | Decode a CBOR-encoded 'TokenModuleState'.
 decodeTokenModuleState :: Decoder s TokenModuleState
@@ -1667,20 +1590,15 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
     decodeVal key = Just $ mapValueDecoder key CBOR.decodeTerm (at key)
     build :: Map.Map Text CBOR.Term -> Either String TokenModuleState
     build m0 = do
-        (tmsName, m1) <- getAndClear "name" convertText m0
-        (tmsMetadata, m2) <- getAndClear "metadata" convertTokenMetadataUrl m1
-        (tmsGovernanceAccount, m3) <- getAndClear "governanceAccount" convertCborTokenHolder m2
+        (tmsName, m1) <- getMaybeAndClear "name" convertText m0
+        (tmsMetadata, m2) <- getMaybeAndClear "metadata" convertTokenMetadataUrl m1
+        (tmsGovernanceAccount, m3) <- getMaybeAndClear "governanceAccount" convertCborAccountAddress m2
         (tmsPaused, m4) <- getMaybeAndClear "paused" convertBool m3
         (tmsAllowList, m5) <- getMaybeAndClear "allowList" convertBool m4
         (tmsDenyList, m6) <- getMaybeAndClear "denyList" convertBool m5
         (tmsMintable, m7) <- getMaybeAndClear "mintable" convertBool m6
         (tmsBurnable, tmsAdditional) <- getMaybeAndClear "burnable" convertBool m7
         return TokenModuleState{..}
-    getAndClear key convert m = do
-        let (maybeTerm, m') = m & at key <<.~ Nothing
-        term <- maybeTerm `orFail` ("Missing " ++ show key)
-        val <- convert term `orFail` ("Invalid " ++ show key)
-        return (val, m')
     getMaybeAndClear key convert m = do
         let (maybeTerm, m') = m & at key <<.~ Nothing
         maybeVal <- forM maybeTerm $ \term -> convert term `orFail` ("Invalid " ++ show key)
@@ -1696,19 +1614,13 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
     convertTokenMetadataUrl :: CBOR.Term -> Maybe TokenMetadataUrl
     convertTokenMetadataUrl = either (const Nothing) Just . decodeTokenMetadataUrlHelper
 
-    convertCborTokenHolder :: CBOR.Term -> Maybe CborTokenHolder
-    convertCborTokenHolder = either (const Nothing) Just . decodeCborTokenHolderHelper
+    convertCborAccountAddress :: CBOR.Term -> Maybe CborAccountAddress
+    convertCborAccountAddress = either (const Nothing) Just . decodeCborAccountAddressHelper
 
 -- | Parse a 'TokenModuleState' from a 'LBS.ByteString'. The entire bytestring must
 --  be consumed in the parsing.
 tokenModuleStateFromBytes :: LBS.ByteString -> Either String TokenModuleState
-tokenModuleStateFromBytes lbs =
-    case CBOR.deserialiseFromBytes decodeTokenModuleState lbs of
-        Left e -> Left (show e)
-        Right ("", res) -> return res
-        Right (remaining, _) ->
-            Left $
-                show (LBS.length remaining) ++ " bytes remaining after parsing token module state"
+tokenModuleStateFromBytes = decodeFromBytes decodeTokenModuleState "token module state"
 
 -- * Token account state
 
@@ -1742,30 +1654,14 @@ instance AE.ToJSON TokenModuleAccountState where
         AE.object . catMaybes $
             [ ("allowList" AE..=) <$> tmasAllowList,
               ("denyList" AE..=) <$> tmasDenyList,
-              ("additional" AE..=) <$> additional
+              ("_additional" AE..=) <$> encodeAdditionalMapJson tmasAdditional
             ]
-      where
-        additional
-            | null tmasAdditional = Nothing
-            | otherwise =
-                Just $
-                    AE.object
-                        [ AE.Key.fromText k AE..= cborTermToHex v
-                        | (k, v) <- Map.toList tmasAdditional
-                        ]
 
 instance AE.FromJSON TokenModuleAccountState where
     parseJSON = AE.withObject "TokenModuleAccountState" $ \v -> do
         tmasAllowList <- v AE..:? "allowList"
         tmasDenyList <- v AE..:? "denyList"
-        additional <- v AE..:? "additional" AE..!= Map.empty
-        tmasAdditional <-
-            Map.traverseWithKey
-                ( \k hexVal -> case hexToCborTerm hexVal of
-                    Left err -> fail $ "Failed to decode CBOR key " ++ show k ++ ": " ++ err
-                    Right term -> return term
-                )
-                additional
+        tmasAdditional <- v AE..:? "_additional" AE..!= Map.empty >>= decodeAdditionalMapJson
         return TokenModuleAccountState{..}
 
 -- | Encode a 'TokenModuleAccountState' as CBOR. Any keys in 'tmasAdditional' that overlap with
@@ -1773,20 +1669,15 @@ instance AE.FromJSON TokenModuleAccountState where
 encodeTokenModuleAccountState :: TokenModuleAccountState -> Encoding
 encodeTokenModuleAccountState TokenModuleAccountState{..} =
     encodeMapDeterministic $
-        additionalMap
+        encodeAdditionalMapCbor tmasAdditional
             & k "allowList" .~ fmap encodeBool tmasAllowList
             & k "denyList" .~ fmap encodeBool tmasDenyList
   where
-    additionalMap =
-        Map.fromList
-            [ (makeMapKeyEncoding (encodeString key), CBOR.encodeTerm val)
-            | (key, val) <- Map.toList tmasAdditional
-            ]
     k = at . makeMapKeyEncoding . encodeString
 
 -- | CBOR-encode a 'TokenModuleAccountState' to a (strict) 'BS.ByteString'.
 tokenModuleAccountStateToBytes :: TokenModuleAccountState -> BS.ByteString
-tokenModuleAccountStateToBytes = CBOR.toStrictByteString . encodeTokenModuleAccountState
+tokenModuleAccountStateToBytes = encodeToBytes . encodeTokenModuleAccountState
 
 -- | Decode a CBOR-encoded 'TokenModuleAccountState'.
 decodeTokenModuleAccountState :: Decoder s TokenModuleAccountState
@@ -1808,11 +1699,4 @@ decodeTokenModuleAccountState = decodeMap decodeVal build Map.empty
 -- | Parse a 'TokenModuleAccountState' from a 'LBS.ByteString'. The entire bytestring must
 --  be consumed in the parsing.
 tokenModuleAccountStateFromBytes :: LBS.ByteString -> Either String TokenModuleAccountState
-tokenModuleAccountStateFromBytes lbs =
-    case CBOR.deserialiseFromBytes decodeTokenModuleAccountState lbs of
-        Left e -> Left (show e)
-        Right ("", res) -> return res
-        Right (remaining, _) ->
-            Left $
-                show (LBS.length remaining)
-                    ++ " bytes remaining after parsing token module account state"
+tokenModuleAccountStateFromBytes = decodeFromBytes decodeTokenModuleAccountState "token module account state"

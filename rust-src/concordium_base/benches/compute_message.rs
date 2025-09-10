@@ -41,7 +41,7 @@ fn bench_compute_message(c: &mut Criterion) {
 
     let now = YearMonth::now();
     let valid_to_next_year = YearMonth {
-        year:  now.year + 1,
+        year: now.year + 1,
         month: now.month,
     };
 
@@ -97,7 +97,7 @@ fn bench_validate_request(c: &mut Criterion) {
 
     let id_use_data = test_create_id_use_data(&mut csprng);
     let acc_data = InitialAccountData {
-        keys:      {
+        keys: {
             let mut keys = BTreeMap::new();
             keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
             keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
@@ -137,7 +137,7 @@ fn bench_sign_identity_object(c: &mut Criterion) {
 
     let id_use_data = test_create_id_use_data(&mut csprng);
     let acc_data = InitialAccountData {
-        keys:      {
+        keys: {
             let mut keys = BTreeMap::new();
             keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
             keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));

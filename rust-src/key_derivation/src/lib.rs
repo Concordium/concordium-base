@@ -57,7 +57,9 @@ impl FromStr for Net {
 }
 
 impl fmt::Display for Net {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", self.net_code()) }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.net_code())
+    }
 }
 
 #[derive(Debug, Error)]
@@ -117,7 +119,7 @@ pub struct ConcordiumHdWallet {
     /// derivation paths are used depending on the chosen network to avoid
     /// collisions between a Testnet and Mainnet.
     #[serde(rename = "net")]
-    pub net:  Net,
+    pub net: Net,
 }
 
 pub type CredId = <ArCurve as Curve>::Scalar;
@@ -338,15 +340,15 @@ fn split_u64_into_chunks(x: u64) -> [u32; 4] {
 /// The [`ConcordiumHdWallet`] together indices that uniquely determine the
 /// account.
 pub struct CredentialContext {
-    pub wallet:                  ConcordiumHdWallet,
+    pub wallet: ConcordiumHdWallet,
     /// Index of the identity provider on the network.
     pub identity_provider_index: IpIdentity,
     /// Index of the identity. This is used to distinguish different identity
     /// objects for the same identity provider.
-    pub identity_index:          u32,
+    pub identity_index: u32,
     /// Index of a credential. This is used to generate credentials from an
     /// identity object.
-    pub credential_index:        u8,
+    pub credential_index: u8,
 }
 
 impl CredentialContext {

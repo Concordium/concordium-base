@@ -12,7 +12,8 @@ impl CborSerialize for AccountAddress {
 impl CborDeserialize for AccountAddress {
     fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         Ok(Self(CborDeserialize::deserialize(decoder)?))
     }
 }
@@ -26,7 +27,8 @@ impl CborSerialize for Hash {
 impl CborDeserialize for Hash {
     fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         let bytes = <[u8; SHA256]>::deserialize(decoder)?;
         Ok(Hash::from(bytes))
     }

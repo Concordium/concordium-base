@@ -17,7 +17,11 @@ fn global_offset_test() {
         &crate::v0::ConcordiumAllowedImports,
         &contract,
     );
-    assert!(res.is_ok(), "Mutable global offsets allowed in data and elem sections: {:?}", res);
+    assert!(
+        res.is_ok(),
+        "Mutable global offsets allowed in data and elem sections: {:?}",
+        res
+    );
 }
 
 #[test]
@@ -31,7 +35,10 @@ fn mut_global_offset_test() {
         &contract,
     );
 
-    assert!(res.is_err(), "Mutable global offsets _not_ allowed in data and elem sections.");
+    assert!(
+        res.is_err(),
+        "Mutable global offsets _not_ allowed in data and elem sections."
+    );
 }
 
 #[test]
@@ -43,7 +50,10 @@ fn init_global_with_ref_test() {
         &crate::v0::ConcordiumAllowedImports,
         &contract,
     );
-    assert!(res.is_err(), "Globals cannot be initialized with references to other globals.");
+    assert!(
+        res.is_err(),
+        "Globals cannot be initialized with references to other globals."
+    );
 }
 
 #[test]
@@ -56,20 +66,26 @@ fn init_data_with_global_offset() {
         ValidationConfig::V0,
         &crate::v1::ConcordiumAllowedImports {
             support_upgrade: true,
-            enable_debug:    false,
+            enable_debug: false,
         },
         &contract,
     );
-    assert!(res.is_ok(), "Globals can be used in V0 data section validation.");
+    assert!(
+        res.is_ok(),
+        "Globals can be used in V0 data section validation."
+    );
     let res = instantiate::<ProcessedImports, _>(
         ValidationConfig::V1,
         &crate::v1::ConcordiumAllowedImports {
             support_upgrade: true,
-            enable_debug:    false,
+            enable_debug: false,
         },
         &contract,
     );
-    assert!(res.is_err(), "Globals cannot be used in V1 data section validation.");
+    assert!(
+        res.is_err(),
+        "Globals cannot be used in V1 data section validation."
+    );
 }
 
 #[test]
@@ -82,18 +98,24 @@ fn init_element_with_global_offset() {
         ValidationConfig::V0,
         &crate::v1::ConcordiumAllowedImports {
             support_upgrade: true,
-            enable_debug:    false,
+            enable_debug: false,
         },
         &contract,
     );
-    assert!(res.is_ok(), "Globals can be used in V0 element section validation.");
+    assert!(
+        res.is_ok(),
+        "Globals can be used in V0 element section validation."
+    );
     let res = instantiate::<ProcessedImports, _>(
         ValidationConfig::V1,
         &crate::v1::ConcordiumAllowedImports {
             support_upgrade: true,
-            enable_debug:    false,
+            enable_debug: false,
         },
         &contract,
     );
-    assert!(res.is_err(), "Globals cannot be used in V1 element section validation.");
+    assert!(
+        res.is_err(),
+        "Globals cannot be used in V1 element section validation."
+    );
 }
