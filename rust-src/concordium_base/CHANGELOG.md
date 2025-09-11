@@ -8,6 +8,7 @@
 - Added a newly defined type `WasmVersionInt` to make the Wasm Version (Smart contract version) forwards compatible by storing it there as a u8.
 - Remove `CborTokenHolder` wrapper.
 - Support decoding indefinite length CBOR byte and text strings
+- Move `BakerPoolInfo` definition to concoridum-rust-sdk
 
 ## 8.0.0 (2025-08-18)
 
