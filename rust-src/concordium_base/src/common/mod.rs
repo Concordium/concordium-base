@@ -1,6 +1,7 @@
 //! Common types and operations used throughout the Concordium chain
 //! development.
 pub mod cbor;
+mod encoded;
 #[cfg(test)]
 mod helpers;
 mod impls;
@@ -8,6 +9,8 @@ mod serde_impls;
 mod serialize;
 pub mod types;
 mod version;
+
+pub use encoded::*;
 
 #[cfg(test)]
 pub use self::helpers::serialize_deserialize;
