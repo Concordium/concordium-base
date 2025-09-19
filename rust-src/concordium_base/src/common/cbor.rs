@@ -1420,7 +1420,7 @@ mod test {
 
         let value = CborUpward::Known(TestEnum::Var1(3));
         let cbor = cbor_encode(&value).unwrap();
-        assert_eq!(hex::encode(&cbor), "a1647661723103");
+        assert_eq!(hex::encode(&cbor), "d99c3703");
         let value_decoded: CborUpward<TestEnum> = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
