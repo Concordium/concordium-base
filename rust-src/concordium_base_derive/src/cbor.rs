@@ -429,10 +429,15 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
     })
 }
 
+struct DeserializeImpls {
+    deserialize_body: TokenStream,
+    deserialize_maybe_known_body: Option<TokenStream>,
+}
+
 fn cbor_deserialize_enum_body(
     variants: &Punctuated<Variant, Comma>,
     opts: &CborOpts,
-) -> syn::Result<(TokenStream, Option<TokenStream>)> {
+) -> syn::Result<DeserializeImpls> {
     if opts.transparent {
         return Err(syn::Error::new(
             Span::call_site(),
@@ -464,13 +469,13 @@ fn cbor_deserialize_enum_body(
             }
         };
 
-        (
-            quote! {
+        DeserializeImpls {
+            deserialize_body: quote! {
                 #cbor_module::CborDeserialize::deserialize_maybe_known(decoder)
                   .and_then(|upward| upward.known_or_else(|_| #cbor_module::CborSerializationError::unknown_map_key(#cbor_module::MapKeyRef::Text(""))))
                 // todo use error #cbor_module::CborSerializationError::unknown_map_key(#cbor_module::MapKeyRef::Text(&key))
             },
-            Some(quote! {
+            deserialize_maybe_known_body: Some(quote! {
                 let mut map_decoder = decoder.decode_map_expect_size(1)?;
 
                 let Some(key): Option<String> = #cbor_module::CborMapDecoder::deserialize_key(&mut map_decoder)? else {
@@ -488,7 +493,7 @@ fn cbor_deserialize_enum_body(
                     }
                 })
             }),
-        )
+        }
     } else if opts.tagged {
         let tagged_variant_idents = cbor_variants
             .cbor_tagged_variants()
@@ -535,13 +540,13 @@ fn cbor_deserialize_enum_body(
             }
         };
 
-        (
-            quote! {
+        DeserializeImpls {
+            deserialize_body: quote! {
                 #cbor_module::CborDeserialize::deserialize_maybe_known(decoder)
                   .and_then(|upward| upward.known_or_else(|_| #cbor_module::__private::anyhow::anyhow!("tag x not among declared variants").into()))
                 // todo use error #cbor_module::__private::anyhow::anyhow!("tag {} not among declared variants", tag).into()
             },
-            Some(quote! {
+            deserialize_maybe_known_body: Some(quote! {
                 Ok(match #cbor_module::CborDecoder::peek_data_item_header(&mut decoder)? {
                     #(
                         #cbor_module::DataItemHeader::Tag(#tagged_variant_tags) => {
@@ -558,7 +563,7 @@ fn cbor_deserialize_enum_body(
                     }
                 })
             }),
-        )
+        }
     } else {
         return Err(syn::Error::new(
             Span::call_site(),
@@ -574,10 +579,11 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
 
     let cbor_module = get_cbor_module()?;
 
-    let (deserialize_body, deserialize_maybe_known_body) = match &ast.data {
-        Data::Struct(DataStruct { fields, .. }) => {
-            (cbor_deserialize_struct_body(fields, &opts)?, None)
-        }
+    let deserialize_impls = match &ast.data {
+        Data::Struct(DataStruct { fields, .. }) => DeserializeImpls {
+            deserialize_body: cbor_deserialize_struct_body(fields, &opts)?,
+            deserialize_maybe_known_body: None,
+        },
         Data::Enum(DataEnum { variants, .. }) => cbor_deserialize_enum_body(variants, &opts)?,
         _ => {
             return Err(syn::Error::new(
@@ -595,8 +601,10 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
         quote!()
     };
 
+    let deserialize_body = deserialize_impls.deserialize_body;
+
     Ok(
-        if let Some(deserialize_maybe_known_body) = deserialize_maybe_known_body {
+        if let Some(deserialize_maybe_known_body) = deserialize_impls.deserialize_maybe_known_body {
             quote! {
                 impl #impl_generics #cbor_module::CborDeserialize for #name #ty_generics #where_clauses {
                     fn deserialize<C: #cbor_module::CborDecoder>(decoder: C) -> #cbor_module::CborSerializationResult<Self> {
