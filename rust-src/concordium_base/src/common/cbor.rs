@@ -61,10 +61,20 @@
 //! }
 //! ```
 //!
-//! Each varaint is serialized prefixed with the declared tag (except for the
+//! Each variant is serialized prefixed with the declared tag (except for the
 //! untagged variant).
 //!
 //! All enum variants must be single element tuples.
+//!
+//! ### `CborUpward` type
+//!
+//! In the enum examples above, the type `CborUpward<TestEnum>` will implement
+//! `CborSerialize` and `CborDeserialize`. Wrapping enums in the `CborUpward` types will deserialize known variants to
+//! `CborUpward::Known` and unknown variants to `CborUpward::Unknown`. In the case of deserializing an unknown variant in the map representation,
+//! the value in `CborUpward::Unknown` will be a [`Value::Map`](value::Value::Map) with a single entry. In the case of the tagged representation, the value
+//! in `CborUpward::Unknown` will be a [`Value::Tag`](value::Value::Tag) including the tagged value.
+//! In any case, deserializing to `CborUpward<TestEnum>` and serializing again, will be the identity operation, no
+//! matter if the variant is known or not.
 //!
 //! ### Supported attributes
 //!
