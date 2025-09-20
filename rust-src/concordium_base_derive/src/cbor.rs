@@ -466,35 +466,45 @@ fn cbor_deserialize_enum_body(
             }
         } else {
             quote! {
-                #cbor_module::Upward::Unknown(#cbor_module::value::Value::Map(vec![(#cbor_module::value::Value::Text(key), #cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?)]))
+                #cbor_module::Upward::Unknown((key, #cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?))
             }
         };
 
         DeserializeImpls {
             deserialize_body: quote! {
-                #cbor_module::CborDeserialize::deserialize_maybe_known(decoder)
-                  .and_then(|upward| upward.known_or_else(|_| #cbor_module::CborSerializationError::unknown_map_key(#cbor_module::MapKeyRef::Text(""))))
-                // todo use error #cbor_module::CborSerializationError::unknown_map_key(#cbor_module::MapKeyRef::Text(&key))
+                Self::deserialize_impl(decoder)
+                    .and_then(|upward| upward.known_or_else(|(key, _value)|
+                        #cbor_module::CborSerializationError::unknown_map_key(#cbor_module::MapKeyRef::Text(&key))
+                ))
             },
             deserialize_maybe_known_body: Some(quote! {
-                let mut map_decoder = decoder.decode_map_expect_size(1)?;
-
-                let Some(key): Option<String> = #cbor_module::CborMapDecoder::deserialize_key(&mut map_decoder)? else {
-                    return Err(#cbor_module::__private::anyhow::anyhow!("expected an array element since size has already been checked to be 1").into());
-                };
-
-                Ok(match key.as_str() {
-                    #(
-                        #variant_map_keys => {
-                            #cbor_module::Upward::Known(Self::#variant_idents(#cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?))
-                        }
-                    )*
-                    _ => {
-                        #deserialize_unknown
-                    }
-                })
+                Self::deserialize_impl(decoder).map(|upward| upward.map_unknown(|(key, value)|
+                    #cbor_module::value::Value::Map(vec![(#cbor_module::value::Value::Text(key), value)])
+                ))
             }),
-            impl_block: None,
+            impl_block: Some(quote! {
+                fn deserialize_impl<C: #cbor_module::CborDecoder>(
+                    mut decoder: C,
+                ) -> #cbor_module::CborSerializationResult<#cbor_module::Upward<Self, (String, #cbor_module::value::Value)>>
+                {
+                    let mut map_decoder = decoder.decode_map_expect_size(1)?;
+
+                    let Some(key): Option<String> = #cbor_module::CborMapDecoder::deserialize_key(&mut map_decoder)? else {
+                        return Err(#cbor_module::__private::anyhow::anyhow!("expected an array element since size has already been checked to be 1").into());
+                    };
+
+                    Ok(match key.as_str() {
+                        #(
+                            #variant_map_keys => {
+                                #cbor_module::Upward::Known(Self::#variant_idents(#cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?))
+                            }
+                        )*
+                        _ => {
+                            #deserialize_unknown
+                        }
+                    })
+                }
+            }),
         }
     } else if opts.tagged {
         let tagged_variant_idents = cbor_variants
@@ -545,12 +555,14 @@ fn cbor_deserialize_enum_body(
         DeserializeImpls {
             deserialize_body: quote! {
                 Self::deserialize_impl(decoder)
-                    .and_then(|upward| upward.known_or_else(|(tag, value)|
-                        #cbor_module::__private::anyhow::anyhow!("tag {} not among declared variants", tag).into()))
+                    .and_then(|upward| upward.known_or_else(|(tag, _value)|
+                        #cbor_module::__private::anyhow::anyhow!("tag {} not among declared variants", tag).into()
+                ))
             },
             deserialize_maybe_known_body: Some(quote! {
-                Self::deserialize_impl(decoder)
-                    .map(|upward| upward.map_unknown(|(tag, value)| #cbor_module::value::Value::Tag(tag, Box::new(value))))
+                Self::deserialize_impl(decoder).map(|upward| upward.map_unknown(|(tag, value)|
+                    #cbor_module::value::Value::Tag(tag, Box::new(value))
+                ))
             }),
             impl_block: Some(quote! {
                 fn deserialize_impl<C: #cbor_module::CborDecoder>(
