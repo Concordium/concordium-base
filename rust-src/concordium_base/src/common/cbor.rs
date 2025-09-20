@@ -254,6 +254,18 @@ impl<A, R> Upward<A, R> {
             Upward::Known(output) => Ok(output),
         }
     }
+
+    /// Maps an `Upward<A, R>` to `Upward<A, S>` by applying a function to
+    /// the residual value in `Unknown`.
+    pub fn map_unknown<S, F>(self, f: F) -> Upward<A, S>
+    where
+        F: FnOnce(R) -> S,
+    {
+        match self {
+            Self::Known(x) => Upward::Known(x),
+            Self::Unknown(r) => Upward::Unknown(f(r)),
+        }
+    }
 }
 
 pub type CborUpward<A> = Upward<A, value::Value>;
