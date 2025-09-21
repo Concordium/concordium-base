@@ -1,5 +1,6 @@
+use crate::common::upward::CborUpward;
 use crate::{
-    common::cbor::{self, CborSerializationResult, CborUpward},
+    common::cbor::{self, CborSerializationResult},
     protocol_level_tokens::{CborHolderAccount, CoinInfo, RawCbor, TokenAmount, TokenId},
     transactions::Memo,
 };

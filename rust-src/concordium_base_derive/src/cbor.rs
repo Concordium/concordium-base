@@ -462,30 +462,30 @@ fn cbor_deserialize_enum_body(
 
         let deserialize_unknown = if let Some(other_ident) = cbor_variants.other_ident() {
             quote! {
-                #cbor_module::Upward::Known(Self::#other_ident(key.into(), #cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?))
+                #cbor_module::__private::MaybeKnown::Known(Self::#other_ident(key.into(), #cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?))
             }
         } else {
             quote! {
-                #cbor_module::Upward::Unknown((key, #cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?))
+                #cbor_module::__private::MaybeKnown::Unknown((key, #cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?))
             }
         };
 
         DeserializeImpls {
             deserialize_body: quote! {
                 Self::deserialize_impl(decoder)
-                    .and_then(|upward| upward.known_or_else(|(key, _value)|
+                    .and_then(|maybe_known| maybe_known.known_or_else(|(key, _value)|
                         #cbor_module::CborSerializationError::unknown_map_key(#cbor_module::MapKeyRef::Text(&key))
                 ))
             },
             deserialize_maybe_known_body: Some(quote! {
-                Self::deserialize_impl(decoder).map(|upward| upward.map_unknown(|(key, value)|
+                Self::deserialize_impl(decoder).map(|maybe_known| maybe_known.map_unknown(|(key, value)|
                     #cbor_module::value::Value::Map(vec![(#cbor_module::value::Value::Text(key), value)])
                 ))
             }),
             impl_block: Some(quote! {
                 fn deserialize_impl<C: #cbor_module::CborDecoder>(
                     mut decoder: C,
-                ) -> #cbor_module::CborSerializationResult<#cbor_module::Upward<Self, (String, #cbor_module::value::Value)>>
+                ) -> #cbor_module::CborSerializationResult<#cbor_module::__private::MaybeKnown<Self, (String, #cbor_module::value::Value)>>
                 {
                     let mut map_decoder = decoder.decode_map_expect_size(1)?;
 
@@ -496,7 +496,7 @@ fn cbor_deserialize_enum_body(
                     Ok(match key.as_str() {
                         #(
                             #variant_map_keys => {
-                                #cbor_module::Upward::Known(Self::#variant_idents(#cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?))
+                                #cbor_module::__private::MaybeKnown::Known(Self::#variant_idents(#cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?))
                             }
                         )*
                         _ => {
@@ -534,7 +534,7 @@ fn cbor_deserialize_enum_body(
 
         let deserialize_untagged = if let Some(untagged_ident) = cbor_variants.untagged_ident() {
             quote! {
-                #cbor_module::Upward::Known(Self::#untagged_ident(#cbor_module::CborDeserialize::deserialize(decoder)?))
+                #cbor_module::__private::MaybeKnown::Known(Self::#untagged_ident(#cbor_module::CborDeserialize::deserialize(decoder)?))
             }
         } else {
             quote! {
@@ -544,36 +544,36 @@ fn cbor_deserialize_enum_body(
 
         let deserialize_unknown = if let Some(other_ident) = cbor_variants.other_ident() {
             quote! {
-                #cbor_module::Upward::Known(Self::#other_ident(tag, #cbor_module::CborDeserialize::deserialize(decoder)?))
+                #cbor_module::__private::MaybeKnown::Known(Self::#other_ident(tag, #cbor_module::CborDeserialize::deserialize(decoder)?))
             }
         } else {
             quote! {
-                #cbor_module::Upward::Unknown((tag, #cbor_module::CborDeserialize::deserialize(decoder)?))
+                #cbor_module::__private::MaybeKnown::Unknown((tag, #cbor_module::CborDeserialize::deserialize(decoder)?))
             }
         };
 
         DeserializeImpls {
             deserialize_body: quote! {
                 Self::deserialize_impl(decoder)
-                    .and_then(|upward| upward.known_or_else(|(tag, _value)|
+                    .and_then(|maybe_known| maybe_known.known_or_else(|(tag, _value)|
                         #cbor_module::__private::anyhow::anyhow!("tag {} not among declared variants", tag).into()
                 ))
             },
             deserialize_maybe_known_body: Some(quote! {
-                Self::deserialize_impl(decoder).map(|upward| upward.map_unknown(|(tag, value)|
+                Self::deserialize_impl(decoder).map(|maybe_known| maybe_known.map_unknown(|(tag, value)|
                     #cbor_module::value::Value::Tag(tag, Box::new(value))
                 ))
             }),
             impl_block: Some(quote! {
                 fn deserialize_impl<C: #cbor_module::CborDecoder>(
                     mut decoder: C,
-                ) -> #cbor_module::CborSerializationResult<#cbor_module::Upward<Self, (u64, #cbor_module::value::Value)>>
+                ) -> #cbor_module::CborSerializationResult<#cbor_module::__private::MaybeKnown<Self, (u64, #cbor_module::value::Value)>>
                 {
                     Ok(match #cbor_module::CborDecoder::peek_data_item_header(&mut decoder)? {
                         #(
                             #cbor_module::DataItemHeader::Tag(#tagged_variant_tags) => {
                                 #deserialize_variant_tags;
-                                #cbor_module::Upward::Known(Self::#tagged_variant_idents(#cbor_module::CborDeserialize::deserialize(decoder)?))
+                                #cbor_module::__private::MaybeKnown::Known(Self::#tagged_variant_idents(#cbor_module::CborDeserialize::deserialize(decoder)?))
                             }
                         )*
                         #cbor_module::DataItemHeader::Tag(tag) => {
@@ -638,7 +638,7 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
 
                 fn deserialize_maybe_known<C: #cbor_module::CborDecoder>(
                     mut decoder: C,
-                ) -> #cbor_module::CborSerializationResult<#cbor_module::CborUpward<Self>>
+                ) -> #cbor_module::CborSerializationResult<#cbor_module::CborMaybeKnown<Self>>
                 {
                     #decode_tag
                     #deserialize_maybe_known_body

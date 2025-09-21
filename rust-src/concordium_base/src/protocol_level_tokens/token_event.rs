@@ -1,11 +1,11 @@
+use super::{cbor::RawCbor, CborHolderAccount, TokenAmount, TokenId};
+use crate::common::upward::{CborUpward, Upward};
 use crate::{
-    common::cbor::{self, CborSerializationResult, CborUpward, Upward},
+    common::cbor::{self, CborSerializationResult},
     transactions::Memo,
 };
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
-
-use super::{cbor::RawCbor, CborHolderAccount, TokenAmount, TokenId};
 
 /// An event produced from the effect of a token transaction.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

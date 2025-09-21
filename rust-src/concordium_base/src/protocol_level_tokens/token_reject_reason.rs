@@ -1,5 +1,6 @@
+use crate::common::upward::{CborUpward, Upward};
 use crate::{
-    common::{cbor, cbor::CborSerializationResult, cbor::CborUpward, cbor::Upward},
+    common::{cbor, cbor::CborSerializationResult},
     protocol_level_tokens::{
         token_holder::CborHolderAccount, RawCbor, TokenAmount, TokenId,
         TokenModuleCborTypeDiscriminator,

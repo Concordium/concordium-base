@@ -14,10 +14,7 @@ use crate::{
     },
     common::{
         self,
-        cbor::{
-            CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize,
-            Upward,
-        },
+        cbor::{CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize},
         types::{Amount, KeyIndex, KeyPair, Timestamp, TransactionSignature, TransactionTime, *},
         Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
         Serial, Serialize,
@@ -2147,6 +2144,7 @@ pub mod cost {
 /// See also the [send] module above which combines construction with signing.
 pub mod construct {
     use super::*;
+    use crate::common::upward::Upward;
     use crate::{
         common::cbor,
         protocol_level_tokens::{RawCbor, TokenId, TokenOperation, TokenOperations},
