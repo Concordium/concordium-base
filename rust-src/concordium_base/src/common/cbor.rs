@@ -233,10 +233,10 @@ use std::{
 #[doc(hidden)]
 pub mod __private {
     // Reexports
-    use crate::common::cbor::{value, CborMaybeKnown};
     pub use anyhow;
 
     // Types used by macros
+    use super::*;
     /// Like `CborMaybeKnown` by allows specifying residual type
     pub enum MaybeKnown<A, R> {
         Known(A),
