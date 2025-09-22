@@ -237,7 +237,7 @@ pub mod __private {
 
     // Types used by macros
     use super::*;
-    /// Like `CborMaybeKnown` by allows specifying residual type
+    /// Like `CborMaybeKnown` but allows specifying residual type
     pub enum MaybeKnown<A, R> {
         Known(A),
         Unknown(R),
