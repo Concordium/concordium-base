@@ -139,10 +139,10 @@ pub struct TokenOperations {
     pub operations: Vec<CborUpward<TokenOperation>>,
 }
 
-impl FromIterator<CborUpward<TokenOperation>> for TokenOperations {
-    fn from_iter<T: IntoIterator<Item = CborUpward<TokenOperation>>>(iter: T) -> Self {
+impl FromIterator<TokenOperation> for TokenOperations {
+    fn from_iter<T: IntoIterator<Item = TokenOperation>>(iter: T) -> Self {
         Self {
-            operations: iter.into_iter().collect(),
+            operations: iter.into_iter().map(CborUpward::Known).collect(),
         }
     }
 }

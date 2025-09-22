@@ -3,6 +3,7 @@ use crate::common::cbor::{
     CborSerialize,
 };
 
+/// Type for forward-compatibility with the Concordium Node API.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Upward<A, R = ()> {
     /// New unknown variant, the structure is not known to the current version
@@ -36,6 +37,8 @@ impl<A, R> Upward<A, R> {
     }
 }
 
+/// Special case where the residual type is a CBOR value, so that CBOR can be deserialized
+/// to an unknown variant in the case that the library version is behind.
 pub type CborUpward<A> = Upward<A, value::Value>;
 
 impl<T: CborSerialize> CborSerialize for CborUpward<T> {
