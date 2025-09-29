@@ -297,20 +297,6 @@ impl Deserial for DelegationTarget {
     }
 }
 
-/// Additional information about a baking pool.
-/// This information is added with the introduction of delegation in protocol
-/// version 4.
-#[derive(SerdeSerialize, SerdeDeserialize, PartialEq, Eq, Serial, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct BakerPoolInfo {
-    /// Whether the pool allows delegators.
-    pub open_status: OpenStatus,
-    /// The URL that links to the metadata about the pool.
-    pub metadata_url: UrlText,
-    /// The commission rates charged by the pool owner.
-    pub commission_rates: CommissionRates,
-}
-
 /// Slot number
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
