@@ -50,3 +50,4 @@ pub type size_t = usize;
 /// Module that provides a simple API for symmetric encryption in the output
 /// formats used by Concordium.
 pub mod encryption;
+pub mod upward;
