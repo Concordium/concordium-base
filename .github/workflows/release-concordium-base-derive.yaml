@@ -5,6 +5,8 @@ on:
   workflow_dispatch: # allows manual trigger
 
   push:
+
+    ## TODO - remove me later
     branches:
       - feature/COR1786-release-git-action-concordium-base-derive
 
@@ -20,6 +22,13 @@ jobs:
   concordium-base-derive-release:
     name: concordium-base-derive:release
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        # Set the default working directory to concordium_base_derive
+        working-directory: rust-src/concordium_base_derive
+
+    ## TODO - bring this back later for main
     #environment: release
 
     steps:
@@ -28,20 +37,11 @@ jobs:
         with:
           submodules: recursive
 
-      ## REMOVE LATER
-      - name: show curent path
-        run: pwd
-
-      # Change to the correct directory
-      - name: Change directory
-        run: cd rust-src/concordium_base_derive
-
       # Validate that the tag version matches the version in Cargo.toml
       - name: validate tag version has correct matching tag
         run: |
           echo "Validating tag version $TAG matches expected version from Cargo.toml"
           pwd
-          ls
           EXPECTED_VERSION_FROM_CARGO=$(yq .package.version ./Cargo.toml)
           TAG_VERSION_NUMBER=${TAG##releases/concordium_base_derive/}
           
@@ -59,4 +59,5 @@ jobs:
           CARGO_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           echo "Publishing Concordium Base Derive to crates.io for version: $TAG_VERSION"
+          pwd
           #cargo publish --token $CARGO_TOKEN --locked
