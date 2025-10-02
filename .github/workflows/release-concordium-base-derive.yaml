@@ -50,5 +50,4 @@ jobs:
           CARGO_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           echo "Publishing Concordium Base Derive to crates.io for version: $TAG_VERSION"
-          pwd
           cargo publish --token $CARGO_TOKEN --locked
