@@ -28,6 +28,10 @@ jobs:
         with:
           submodules: recursive
 
+      ## REMOVE LATER
+      - name: show curent path
+        run: pwd
+
       # Change to the correct directory
       - name: Change directory
         run: cd rust-src/concordium-base-derive
