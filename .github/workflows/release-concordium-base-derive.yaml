@@ -5,6 +5,9 @@ on:
   workflow_dispatch: # allows manual trigger
 
   push:
+    branches:
+      - feature/COR1786-release-git-action-concordium-base-derive
+
     tags:
       - releases/concordium_base_derive/*
 
