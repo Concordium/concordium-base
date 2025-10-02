@@ -34,7 +34,7 @@ jobs:
 
       # Change to the correct directory
       - name: Change directory
-        run: cd rust-src/concordium-base-derive
+        run: cd rust-src/concordium_base_derive
 
       # Validate that the tag version matches the version in Cargo.toml
       - name: validate tag version has correct matching tag
