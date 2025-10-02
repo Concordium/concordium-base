@@ -20,7 +20,7 @@ jobs:
   concordium-base-derive-release:
     name: concordium-base-derive:release
     runs-on: ubuntu-latest
-    environment: release
+    #environment: release
 
     steps:
       - name: Checkout
