@@ -1,0 +1,536 @@
+//! Functionality to prove and verify attribute commitments based on id credentials. These are to a large
+//! extent equivalent to attribute commitments deployed on chain, but there is no on-chain account involved.
+
+use super::{account_holder, secret_sharing::*, types::*, utils};
+use crate::{
+    bulletproofs::range_proof::prove_less_than_or_equal
+    ,
+    curve_arithmetic::{Curve, Field, Pairing},
+    dodis_yampolskiy_prf as prf
+    ,
+    pedersen_commitment::{
+        Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
+    },
+    random_oracle::RandomOracle,
+    sigma_protocols::{
+        com_enc_eq, com_eq_sig, com_mult, common::*,
+    },
+};
+use anyhow::{bail, ensure};
+use rand::*;
+use std::collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet};
+
+
+/// Construct proof for attribute commitments from id credential
+#[allow(clippy::too_many_arguments)]
+pub fn prove_credential_attributes<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Clone + Attribute<C::Scalar>,
+>(
+    context: IpContext<'_, P, C>,
+    id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
+    id_object_use_data: &IdObjectUseData<P, C>,
+    cred_counter: u8,
+    policy: Policy<C, AttributeType>,
+    cred_key_info: CredentialPublicKeys,
+    addr: Option<&AccountAddress>,
+    secret_data: &impl HasAttributeRandomness<C>,
+) -> anyhow::Result<(
+    CredentialAttributeCommitmentInfo<P, C, AttributeType>,
+    CredentialAttributeCommitmentRandomness<C>,
+)> {
+    let mut csprng = thread_rng();
+
+    let (ip_sig, prio, alist) = (
+        id_object.get_signature(),
+        id_object.get_common_pio_fields(),
+        id_object.get_attribute_list(),
+    );
+    let sig_retrieval_rand = &id_object_use_data.randomness;
+    let aci = &id_object_use_data.aci;
+
+    let prf_key = &aci.prf_key;
+    let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
+    let cred_id_exponent = match aci.prf_key.prf_exponent(cred_counter) {
+        Ok(exp) => exp,
+        Err(_) => bail!(
+            "Cannot create CDI with this account number because K + {} = 0.",
+            cred_counter
+        ),
+    };
+
+    // RegId as well as Prf key commitments must be computed
+    // with the same generators as in the commitment key.
+    let cred_id = context
+        .global_context
+        .on_chain_commitment_key
+        .hide(
+            &Value::<C>::new(cred_id_exponent),
+            &PedersenRandomness::zero(),
+        )
+        .0;
+
+    // Check that all the chosen identity providers (in the pre-identity object) are
+    // available in the given context, and remove the ones that are not.
+    let chosen_ars = {
+        let mut chosen_ars = BTreeMap::new();
+        for ar_id in prio.choice_ar_parameters.ar_identities.iter() {
+            if let Some(info) = context.ars_infos.get(ar_id) {
+                // FIXME: We could get rid of this clone if we passed in a map of references.
+                let _ = chosen_ars.insert(*ar_id, info.clone()); // since we are
+                // iterating over
+                // a set, this
+                // will always
+                // be Some
+            } else {
+                bail!("Cannot find anonymity revoker {} in the context.", ar_id)
+            }
+        }
+        chosen_ars
+    };
+
+    // sharing data for id cred sec
+    let (id_cred_data, cmm_id_cred_sec_sharing_coeff, cmm_coeff_randomness) = account_holder::compute_sharing_data(
+        id_cred_sec,
+        &chosen_ars,
+        prio.choice_ar_parameters.threshold,
+        &context.global_context.on_chain_commitment_key,
+    );
+
+    let number_of_ars = prio.choice_ar_parameters.ar_identities.len();
+    // filling ar data
+    let ar_data = id_cred_data
+        .iter()
+        .map(|item| {
+            (
+                item.ar.ar_identity,
+                ChainArData {
+                    enc_id_cred_pub_share: item.encrypted_share,
+                },
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    let ip_pub_key = &context.ip_info.ip_verify_key;
+
+    // retrieve the signature on the underlying idcredsec + prf_key + attribute_list
+    let retrieved_sig = ip_sig.retrieve(sig_retrieval_rand);
+
+    // and then we blind the signature to disassociate it from the message.
+    // only the second part is used (as per the protocol)
+    let (blinded_sig, blind_rand) = retrieved_sig.blind(&mut csprng);
+    // We now compute commitments to all the items in the attribute list.
+    // We use the on-chain pedersen commitment key.
+    let (commitments, commitment_rands) = compute_commitments(
+        &context.global_context.on_chain_commitment_key,
+        alist,
+        prf_key,
+        cred_counter,
+        &cmm_id_cred_sec_sharing_coeff,
+        cmm_coeff_randomness,
+        &policy,
+        secret_data,
+        &mut csprng,
+    )?;
+
+    // We have all the values now.
+    let cred_values = CredentialAttributeCommitmentValues {
+        cred_id,
+        threshold: prio.choice_ar_parameters.threshold,
+        ar_data,
+        ip_identity: context.ip_info.ip_identity,
+        policy,
+        cred_key_info,
+    };
+
+    // We now produce all the proofs.
+    // Compute the challenge prefix by hashing the values.
+    // FIXME: We should do something different here.
+    // Eventually we'll have to include the genesis hash.
+    let mut ro = RandomOracle::domain("credential");
+    ro.append_message(b"cred_values", &cred_values);
+    ro.append_message(b"address", &addr);
+    ro.append_message(b"global_context", &context.global_context);
+
+    let mut id_cred_pub_share_numbers = Vec::with_capacity(number_of_ars);
+    let mut id_cred_pub_provers = Vec::with_capacity(number_of_ars);
+    let mut id_cred_pub_secrets = Vec::with_capacity(number_of_ars);
+
+    // create provers for knowledge of id_cred_sec.
+    for item in id_cred_data.iter() {
+        let secret = com_enc_eq::ComEncEqSecret {
+            value: item.share.clone(),
+            elgamal_rand: item.encryption_randomness.clone(),
+            pedersen_rand: item.randomness_cmm_to_share.clone(),
+        };
+
+        let item_prover = com_enc_eq::ComEncEq {
+            cipher: item.encrypted_share,
+            commitment: item.cmm_to_share,
+            pub_key: item.ar.ar_public_key,
+            cmm_key: context.global_context.on_chain_commitment_key,
+            encryption_in_exponent_generator: item.ar.ar_public_key.generator,
+        };
+
+        id_cred_pub_share_numbers.push(item.ar.ar_identity);
+        id_cred_pub_provers.push(item_prover);
+        id_cred_pub_secrets.push(secret);
+    }
+
+    // Proof that the registration id is computed correctly from the prf key K and
+    // the cred_counter x.
+    let (prover_reg_id, secret_reg_id) = compute_pok_reg_id(
+        &context.global_context.on_chain_commitment_key,
+        prf_key.clone(),
+        &commitments.cmm_prf,
+        &commitment_rands.prf_rand,
+        cred_counter,
+        &commitments.cmm_cred_counter,
+        &commitment_rands.cred_counter_rand,
+        &commitment_rands.max_accounts_rand,
+        cred_id_exponent,
+        cred_id,
+    );
+
+    let choice_ar_handles = cred_values.ar_data.keys().copied().collect::<BTreeSet<_>>();
+
+    // Proof of knowledge of the signature of the identity provider.
+    let (prover_sig, secret_sig) = compute_pok_sig(
+        &context.global_context.on_chain_commitment_key,
+        &commitments,
+        &commitment_rands,
+        id_cred_sec,
+        prf_key,
+        alist,
+        prio.choice_ar_parameters.threshold,
+        &choice_ar_handles,
+        ip_pub_key,
+        &blinded_sig,
+        blind_rand,
+    )?;
+
+    let prover = AndAdapter {
+        first: prover_reg_id,
+        second: prover_sig,
+    };
+    let prover = prover.add_prover(ReplicateAdapter {
+        protocols: id_cred_pub_provers,
+    });
+
+    let secret = ((secret_reg_id, secret_sig), id_cred_pub_secrets);
+    let proof = match prove(&mut ro, &prover, secret, &mut csprng) {
+        Some(x) => x,
+        None => bail!("Cannot produce zero knowledge proof."),
+    };
+
+    let cred_counter_less_than_max_accounts = match prove_less_than_or_equal(
+        &mut ro,
+        &mut csprng,
+        8,
+        u64::from(cred_counter),
+        u64::from(alist.max_accounts),
+        context.global_context.bulletproof_generators(),
+        &context.global_context.on_chain_commitment_key,
+        &commitment_rands.cred_counter_rand,
+        &commitment_rands.max_accounts_rand,
+    ) {
+        Some(x) => x,
+        None => bail!("Cannot produce proof that cred_counter <= max_accounts."),
+    };
+
+    // A list of signatures on the challenge used by the other proofs using the
+    // credential keys.
+    // The challenge has domain separator "credential" followed by appending all
+    // values of the credential to the ro, specifically appending the
+    // CredentialDeploymentValues struct.
+    //
+    // The domain seperator in combination with appending all the data of the
+    // credential deployment should make it non-reusable.
+
+    let id_proofs = CredentialAttributeCommitmentProofs {
+        sig: blinded_sig,
+        commitments,
+        challenge: proof.challenge,
+        proof_id_cred_pub: id_cred_pub_share_numbers
+            .into_iter()
+            .zip(proof.response.r2.responses)
+            .collect(),
+        proof_reg_id: proof.response.r1.r1,
+        proof_ip_sig: proof.response.r1.r2,
+        cred_counter_less_than_max_accounts,
+    };
+
+    let info = CredentialAttributeCommitmentInfo {
+        values: cred_values,
+        proofs: id_proofs,
+    };
+    Ok((info, commitment_rands))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compute_pok_sig<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+>(
+    commitment_key: &PedersenKey<C>,
+    commitments: &CredentialAttributeCommitments<C>,
+    commitment_rands: &CredentialAttributeCommitmentRandomness<C>,
+    id_cred_sec: &Value<C>,
+    prf_key: &prf::SecretKey<C>,
+    alist: &AttributeList<C::Scalar, AttributeType>,
+    threshold: Threshold,
+    ar_list: &BTreeSet<ArIdentity>,
+    ip_pub_key: &crate::ps_sig::PublicKey<P>,
+    blinded_sig: &crate::ps_sig::BlindedSignature<P>,
+    blind_rand: crate::ps_sig::BlindingRandomness<P>,
+) -> anyhow::Result<(com_eq_sig::ComEqSig<P, C>, com_eq_sig::ComEqSigSecret<P, C>)> {
+    let att_vec = &alist.alist;
+    // number of user chosen attributes (+4 is for tags, valid_to, created_at,
+    // max_accounts)
+    let num_user_attributes = att_vec.len() + 4;
+    // To these there are always two attributes (idCredSec and prf key) added.
+    let num_total_attributes = num_user_attributes + 2;
+    let ar_scalars = match utils::encode_ars(ar_list) {
+        Some(x) => x,
+        None => bail!("Cannot encode anonymity revokers."),
+    };
+    let num_ars = ar_scalars.len(); // we commit to each anonymity revoker, with randomness 0
+    // and finally we also commit to the anonymity revocation threshold.
+    // so the total number of commitments is as follows
+    let num_total_commitments = num_total_attributes + num_ars + 1;
+
+    let y_tildas = &ip_pub_key.y_tildas;
+
+    ensure!(
+        y_tildas.len() > att_vec.len() + num_ars + 5,
+        "The PS key must be long enough to accommodate all the attributes"
+    );
+
+    ensure!(
+        y_tildas.len() >= num_total_attributes,
+        "Too many attributes {} >= {}",
+        y_tildas.len(),
+        num_total_attributes
+    );
+
+    let mut gxs = Vec::with_capacity(num_total_commitments);
+
+    let mut secrets = Vec::with_capacity(num_total_commitments);
+    secrets.push((
+        id_cred_sec.clone(),
+        commitment_rands.id_cred_sec_rand.clone(),
+    ));
+    gxs.push(y_tildas[0]);
+    secrets.push((prf_key.to_value(), commitment_rands.prf_rand.clone()));
+    gxs.push(y_tildas[1]);
+
+    let public_vals =
+        utils::encode_public_credential_values(alist.created_at, alist.valid_to, threshold)?;
+
+    // commitment randomness (0) for the public parameters.
+    let zero = PedersenRandomness::<C>::zero();
+    secrets.push((Value::new(public_vals), zero.clone()));
+    gxs.push(y_tildas[2]);
+    for i in 3..num_ars + 3 {
+        // the encoded id revoker are commited with randomness 0.
+        secrets.push((Value::new(ar_scalars[i - 3]), zero.clone()));
+        gxs.push(y_tildas[i]);
+    }
+
+    let att_rands = &commitment_rands.attributes_rand;
+
+    let tags_val = utils::encode_tags(alist.alist.keys())?;
+    let tags_cmm = commitment_key.hide_worker(&tags_val, &zero);
+
+    let max_accounts_val = Value::new(C::scalar_from_u64(alist.max_accounts.into()));
+    let max_accounts_cmm =
+        commitment_key.hide(&max_accounts_val, &commitment_rands.max_accounts_rand);
+
+    secrets.push((Value::new(tags_val), zero.clone()));
+    gxs.push(y_tildas[num_ars + 3]);
+    secrets.push((max_accounts_val, commitment_rands.max_accounts_rand.clone()));
+    gxs.push(y_tildas[num_ars + 4]);
+
+    // NB: It is crucial here that we use a btreemap. This guarantees that
+    // the att_vec.iter() iterator is ordered by keys.
+    for (&g, (tag, v)) in y_tildas.iter().skip(num_ars + 3 + 1).zip(att_vec.iter()) {
+        secrets.push((
+            Value::new(v.to_field_element()),
+            // if we commited with non-zero randomness get it.
+            // otherwise we must have commited with zero randomness
+            // which we should use
+            att_rands.get(tag).cloned().unwrap_or_else(|| zero.clone()),
+        ));
+        gxs.push(g);
+    }
+
+    let mut comm_vec = Vec::with_capacity(num_total_commitments);
+    let cmm_id_cred_sec = commitments.cmm_id_cred_sec_sharing_coeff[0];
+    comm_vec.push(cmm_id_cred_sec);
+    comm_vec.push(commitments.cmm_prf);
+
+    // add commitment to threshold with randomness 0
+    comm_vec.push(commitment_key.hide_worker(&public_vals, &zero));
+
+    // and all commitments to ARs with randomness 0
+    for ar in ar_scalars.iter() {
+        comm_vec.push(commitment_key.hide_worker(ar, &zero));
+    }
+
+    comm_vec.push(tags_cmm);
+    comm_vec.push(max_accounts_cmm);
+
+    for (idx, v) in alist.alist.iter() {
+        match commitments.cmm_attributes.get(idx) {
+            None => {
+                // need to commit with randomness 0
+                let value = Value::<C>::new(v.to_field_element());
+                let cmm = commitment_key.hide(&value, &zero);
+                comm_vec.push(cmm);
+            }
+            Some(cmm) => comm_vec.push(*cmm),
+        }
+    }
+
+    let secret = com_eq_sig::ComEqSigSecret {
+        blind_rand,
+        values_and_rands: secrets,
+    };
+    let prover = com_eq_sig::ComEqSig {
+        blinded_sig: blinded_sig.clone(),
+        commitments: comm_vec,
+        // FIXME: Figure out how to get rid of the clone
+        ps_pub_key: ip_pub_key.clone(),
+        comm_key: *commitment_key,
+    };
+    Ok((prover, secret))
+}
+
+/// Computing the commitments for the credential deployment info. We only
+/// compute commitments for values that are not revealed as part of the policy.
+/// For the other values the verifier (the chain) will compute commitments with
+/// randomness 0 in order to verify knowledge of the signature.
+#[allow(clippy::too_many_arguments)]
+pub fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
+    commitment_key: &PedersenKey<C>,
+    alist: &AttributeList<C::Scalar, AttributeType>,
+    prf_key: &prf::SecretKey<C>,
+    cred_counter: u8,
+    cmm_id_cred_sec_sharing_coeff: &[Commitment<C>],
+    cmm_coeff_randomness: Vec<PedersenRandomness<C>>,
+    policy: &Policy<C, AttributeType>,
+    secret_data: &impl HasAttributeRandomness<C>,
+    csprng: &mut R,
+) -> anyhow::Result<(CredentialAttributeCommitments<C>, CredentialAttributeCommitmentRandomness<C>)> {
+    let id_cred_sec_rand = if let Some(v) = cmm_coeff_randomness.first() {
+        v.clone()
+    } else {
+        bail!("Commitment randomness is an empty vector.");
+    };
+
+    let (cmm_prf, prf_rand) = commitment_key.commit(&prf_key, csprng);
+
+    let cred_counter = Value::<C>::new(C::scalar_from_u64(u64::from(cred_counter)));
+    let (cmm_cred_counter, cred_counter_rand) = commitment_key.commit(&cred_counter, csprng);
+    let max_accounts = Value::<C>::new(C::scalar_from_u64(u64::from(alist.max_accounts)));
+    let (cmm_max_accounts, max_accounts_rand) = commitment_key.commit(&max_accounts, csprng);
+    let att_vec = &alist.alist;
+    let n = att_vec.len();
+    // only commitments to attributes which are not revealed.
+    ensure!(
+        n >= policy.policy_vec.len(),
+        "Attribute list is shorter than the number of revealed items in the policy."
+    );
+    let cmm_len = n - policy.policy_vec.len();
+    let mut cmm_attributes = BTreeMap::new();
+    let mut attributes_rand = HashMap::with_capacity(cmm_len);
+    for (&i, val) in att_vec.iter() {
+        // in case the value is openened there is no need to hide it.
+        // We can just commit with randomness 0.
+        if !policy.policy_vec.contains_key(&i) {
+            let value = Value::<C>::new(val.to_field_element());
+            let attr_rand = secret_data.get_attribute_commitment_randomness(&i)?;
+            let cmm = commitment_key.hide(&value, &attr_rand);
+            cmm_attributes.insert(i, cmm);
+            attributes_rand.insert(i, attr_rand);
+        }
+    }
+    let cdc = CredentialAttributeCommitments {
+        cmm_prf,
+        cmm_cred_counter,
+        cmm_max_accounts,
+        cmm_attributes,
+        cmm_id_cred_sec_sharing_coeff: cmm_id_cred_sec_sharing_coeff.to_owned(),
+    };
+
+    let cr = CredentialAttributeCommitmentRandomness {
+        id_cred_sec_rand,
+        prf_rand,
+        cred_counter_rand,
+        max_accounts_rand,
+        attributes_rand,
+    };
+    Ok((cdc, cr))
+}
+
+/// proof of knowledge of registration id
+#[allow(clippy::too_many_arguments)]
+fn compute_pok_reg_id<C: Curve>(
+    on_chain_commitment_key: &PedersenKey<C>,
+    prf_key: prf::SecretKey<C>,
+    cmm_prf: &Commitment<C>,
+    prf_rand: &PedersenRandomness<C>,
+    cred_counter: u8,
+    cmm_cred_counter: &Commitment<C>,
+    cred_counter_rand: &PedersenRandomness<C>,
+    // max_accounts_rand is not used at the moment.
+    // it should be used for the range proof that cred_counter < max_accounts, but
+    // that is not yet available
+    _max_accounts_rand: &PedersenRandomness<C>,
+    reg_id_exponent: C::Scalar,
+    reg_id: C,
+) -> (com_mult::ComMult<C>, com_mult::ComMultSecret<C>) {
+    // Commitment to 1 with randomness 0, to serve as the right-hand side in
+    // com_mult proof.
+    // NOTE: In order for this to work the reg_id must be computed
+    // with the same base as the first element of the commitment key.
+    let cmm_one = on_chain_commitment_key.hide(
+        &Value::<C>::new(C::Scalar::one()),
+        &PedersenRandomness::zero(),
+    );
+
+    // commitments are the public values. They all have to
+    let public = [
+        cmm_prf.combine(cmm_cred_counter),
+        Commitment(reg_id),
+        cmm_one,
+    ];
+    // finally the secret keys are derived from actual committed values
+    // and the randomness.
+
+    let mut k = C::scalar_from_u64(u64::from(cred_counter));
+    k.add_assign(&prf_key);
+
+    // combine the two random values
+    let mut rand_1 = C::Scalar::zero();
+    rand_1.add_assign(prf_rand);
+    rand_1.add_assign(cred_counter_rand);
+    // reg_id is the commitment to reg_id_exponent with randomness 0
+    // the right-hand side of the equation is commitment to 1 with randomness 0
+    let values = [Value::new(k), Value::new(reg_id_exponent)];
+    let rands = [
+        PedersenRandomness::new(rand_1),
+        PedersenRandomness::zero(),
+        PedersenRandomness::zero(),
+    ];
+
+    let secret = com_mult::ComMultSecret { values, rands };
+
+    let prover = com_mult::ComMult {
+        cmms: public,
+        cmm_key: *on_chain_commitment_key,
+    };
+    (prover, secret)
+}

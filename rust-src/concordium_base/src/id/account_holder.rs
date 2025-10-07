@@ -486,11 +486,11 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
 /// Convenient data structure to collect data related to a single AR
 pub struct SingleArData<'a, C: Curve> {
     pub ar: &'a ArInfo<C>,
-    share: Value<C>,
+    pub share: Value<C>,
     pub encrypted_share: Cipher<C>,
-    encryption_randomness: crate::elgamal::Randomness<C>,
+    pub encryption_randomness: crate::elgamal::Randomness<C>,
     pub cmm_to_share: Commitment<C>,
-    randomness_cmm_to_share: PedersenRandomness<C>,
+    pub randomness_cmm_to_share: PedersenRandomness<C>,
 }
 
 type SharingData<'a, C> = (
