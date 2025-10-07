@@ -2,28 +2,29 @@
 //! extent equivalent to attribute commitments deployed on chain, but there is no on-chain account involved.
 
 use super::{account_holder, secret_sharing::*, types::*, utils};
+use crate::bulletproofs::range_proof::verify_less_than_or_equal;
+use crate::common::types::TransactionTime;
+use crate::pedersen_commitment::{CommitmentKey, Randomness};
 use crate::{
-    bulletproofs::range_proof::prove_less_than_or_equal
-    ,
+    bulletproofs::range_proof::prove_less_than_or_equal,
     curve_arithmetic::{Curve, Field, Pairing},
-    dodis_yampolskiy_prf as prf
-    ,
+    dodis_yampolskiy_prf as prf,
     pedersen_commitment::{
         Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
     },
     random_oracle::RandomOracle,
-    sigma_protocols::{
-        com_enc_eq, com_eq_sig, com_mult, common::*,
-    },
+    sigma_protocols::{com_enc_eq, com_eq_sig, com_mult, common::*},
 };
 use anyhow::{bail, ensure};
+use core::fmt;
+use core::fmt::Display;
+use either::Either;
 use rand::*;
 use std::collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet};
 
-
 /// Construct proof for attribute commitments from id credential
 #[allow(clippy::too_many_arguments)]
-pub fn prove_credential_attributes<
+pub fn prove_credential_attribute_commitments<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Clone + Attribute<C::Scalar>,
@@ -79,10 +80,10 @@ pub fn prove_credential_attributes<
             if let Some(info) = context.ars_infos.get(ar_id) {
                 // FIXME: We could get rid of this clone if we passed in a map of references.
                 let _ = chosen_ars.insert(*ar_id, info.clone()); // since we are
-                // iterating over
-                // a set, this
-                // will always
-                // be Some
+                                                                 // iterating over
+                                                                 // a set, this
+                                                                 // will always
+                                                                 // be Some
             } else {
                 bail!("Cannot find anonymity revoker {} in the context.", ar_id)
             }
@@ -91,12 +92,13 @@ pub fn prove_credential_attributes<
     };
 
     // sharing data for id cred sec
-    let (id_cred_data, cmm_id_cred_sec_sharing_coeff, cmm_coeff_randomness) = account_holder::compute_sharing_data(
-        id_cred_sec,
-        &chosen_ars,
-        prio.choice_ar_parameters.threshold,
-        &context.global_context.on_chain_commitment_key,
-    );
+    let (id_cred_data, cmm_id_cred_sec_sharing_coeff, cmm_coeff_randomness) =
+        account_holder::compute_sharing_data(
+            id_cred_sec,
+            &chosen_ars,
+            prio.choice_ar_parameters.threshold,
+            &context.global_context.on_chain_commitment_key,
+        );
 
     let number_of_ars = prio.choice_ar_parameters.ar_identities.len();
     // filling ar data
@@ -297,8 +299,8 @@ fn compute_pok_sig<
         None => bail!("Cannot encode anonymity revokers."),
     };
     let num_ars = ar_scalars.len(); // we commit to each anonymity revoker, with randomness 0
-    // and finally we also commit to the anonymity revocation threshold.
-    // so the total number of commitments is as follows
+                                    // and finally we also commit to the anonymity revocation threshold.
+                                    // so the total number of commitments is as follows
     let num_total_commitments = num_total_attributes + num_ars + 1;
 
     let y_tildas = &ip_pub_key.y_tildas;
@@ -423,7 +425,10 @@ pub fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
     policy: &Policy<C, AttributeType>,
     secret_data: &impl HasAttributeRandomness<C>,
     csprng: &mut R,
-) -> anyhow::Result<(CredentialAttributeCommitments<C>, CredentialAttributeCommitmentRandomness<C>)> {
+) -> anyhow::Result<(
+    CredentialAttributeCommitments<C>,
+    CredentialAttributeCommitmentRandomness<C>,
+)> {
     let id_cred_sec_rand = if let Some(v) = cmm_coeff_randomness.first() {
         v.clone()
     } else {
@@ -533,4 +538,298 @@ fn compute_pok_reg_id<C: Curve>(
         cmm_key: *on_chain_commitment_key,
     };
     (prover, secret)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Reason why verification of a credential commitment failed.
+pub enum AttributeCommitmentVerificationError {
+    RegId,
+    IdCredPub,
+    Signature,
+    Dlog,
+    Policy,
+    Ar,
+    Proof,
+}
+
+impl Display for AttributeCommitmentVerificationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            AttributeCommitmentVerificationError::RegId => write!(f, "RegIdVerificationError"),
+            AttributeCommitmentVerificationError::IdCredPub => write!(f, "IdCredPubVerificationError"),
+            AttributeCommitmentVerificationError::Signature => write!(f, "SignatureVerificationError"),
+            AttributeCommitmentVerificationError::Dlog => write!(f, "DlogVerificationError"),
+            AttributeCommitmentVerificationError::Policy => write!(f, "PolicyVerificationError"),
+            AttributeCommitmentVerificationError::Ar => write!(f, "AnonymityRevokerVerificationError"),
+            AttributeCommitmentVerificationError::Proof => write!(f, "ProofVerificationError"),
+        }
+    }
+}
+/// Verify credential deployment info. This checks that the data is consistent,
+/// and that the credential is signed by the specified identity provider.
+pub fn verify_credential_attribute_commitments<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+    A: HasArPublicKey<C>,
+>(
+    global_context: &GlobalContext<C>,
+    ip_info: &IpInfo<P>,
+    // NB: The following map only needs to be a superset of the ars
+    // in the cdi.
+    known_ars: &BTreeMap<ArIdentity, A>,
+    cdi: &CredentialAttributeCommitmentInfo<P, C, AttributeType>,
+    new_or_existing: &Either<TransactionTime, AccountAddress>,
+) -> Result<(), AttributeCommitmentVerificationError> {
+    // We need to check that the threshold is actually equal to
+    // the number of coefficients in the sharing polynomial
+    // (corresponding to the degree+1)
+    let addr = new_or_existing.as_ref().right();
+    let rt_usize: usize = cdi.values.threshold.into();
+    if rt_usize
+        != cdi
+            .proofs
+            .commitments
+            .cmm_id_cred_sec_sharing_coeff
+            .len()
+    {
+        return Err(AttributeCommitmentVerificationError::Ar);
+    }
+    let on_chain_commitment_key = global_context.on_chain_commitment_key;
+    let gens = global_context.bulletproof_generators();
+    let ip_verify_key = &ip_info.ip_verify_key;
+    // Compute the challenge prefix by hashing the values.
+    let mut ro = RandomOracle::domain("credential");
+    ro.append_message(b"cred_values", &cdi.values);
+    ro.append_message(b"address", &addr);
+    ro.append_message(b"global_context", &global_context);
+
+    let commitments = &cdi.proofs.commitments;
+
+    // We now need to construct a uniform verifier
+    // since we cannot check proofs independently.
+
+    let verifier_reg_id = com_mult::ComMult {
+        cmms: [
+            commitments.cmm_prf.combine(&commitments.cmm_cred_counter),
+            Commitment(cdi.values.cred_id),
+            Commitment(on_chain_commitment_key.g),
+        ],
+        cmm_key: on_chain_commitment_key,
+    };
+    // FIXME: Figure out a pattern to get rid of these clone's.
+    let response_reg_id = cdi.proofs.proof_reg_id.clone();
+    
+    let verifier_sig = pok_sig_verifier(
+        &on_chain_commitment_key,
+        cdi.values.threshold,
+        &cdi.values
+            .ar_data
+            .keys()
+            .copied()
+            .collect::<BTreeSet<ArIdentity>>(),
+        &cdi.values.policy,
+        commitments,
+        ip_verify_key,
+        &cdi.proofs.sig,
+    );
+    let verifier_sig = if let Some(v) = verifier_sig {
+        v
+    } else {
+        return Err(AttributeCommitmentVerificationError::Signature);
+    };
+
+    let response_sig = cdi.proofs.proof_ip_sig.clone();
+
+    let (id_cred_pub_verifier, id_cred_pub_responses) = id_cred_pub_verifier(
+        &on_chain_commitment_key,
+        known_ars,
+        &cdi.values.ar_data,
+        &commitments.cmm_id_cred_sec_sharing_coeff,
+        &cdi.proofs.proof_id_cred_pub,
+    )?;
+
+    let verifier = AndAdapter {
+        first: verifier_reg_id,
+        second: verifier_sig,
+    };
+    let verifier = verifier.add_prover(id_cred_pub_verifier);
+    let response = AndResponse {
+        r1: AndResponse {
+            r1: response_reg_id,
+            r2: response_sig,
+        },
+        r2: id_cred_pub_responses,
+    };
+    let proof = SigmaProof {
+        challenge: cdi.proofs.challenge,
+        response,
+    };
+
+    if !verify(&mut ro, &verifier, &proof) {
+        return Err(AttributeCommitmentVerificationError::Proof);
+    }
+
+    if !verify_less_than_or_equal(
+        &mut ro,
+        8,
+        &cdi.proofs.commitments.cmm_cred_counter,
+        &cdi.proofs.commitments.cmm_max_accounts,
+        &cdi.proofs.cred_counter_less_than_max_accounts,
+        gens,
+        &on_chain_commitment_key,
+    ) {
+        return Err(AttributeCommitmentVerificationError::Proof);
+    }
+
+    let check_policy = verify_policy(&on_chain_commitment_key, commitments, &cdi.values.policy);
+
+    if !check_policy {
+        return Err(AttributeCommitmentVerificationError::Policy);
+    }
+
+    Ok(())
+}
+
+/// verify id_cred data
+fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
+    commitment_key: &CommitmentKey<C>,
+    known_ars: &BTreeMap<ArIdentity, A>,
+    chain_ar_data: &BTreeMap<ArIdentity, ChainArData<C>>,
+    cmm_sharing_coeff: &[Commitment<C>],
+    proof_id_cred_pub: &BTreeMap<ArIdentity, com_enc_eq::Response<C>>,
+) -> Result<IdCredPubVerifiers<C>, AttributeCommitmentVerificationError> {
+    let mut provers = Vec::with_capacity(proof_id_cred_pub.len());
+    let mut responses = Vec::with_capacity(proof_id_cred_pub.len());
+
+    // The encryptions and the proofs have to match.
+    if chain_ar_data.len() != proof_id_cred_pub.len() {
+        return Err(AttributeCommitmentVerificationError::IdCredPub);
+    }
+
+    // The following relies on the fact that iterators over BTreeMap are
+    // over sorted values.
+    for ((ar_id, ar_data), (ar_id_1, response)) in
+        chain_ar_data.iter().zip(proof_id_cred_pub.iter())
+    {
+        if ar_id != ar_id_1 {
+            return Err(AttributeCommitmentVerificationError::IdCredPub);
+        }
+        let cmm_share = utils::commitment_to_share(&ar_id.to_scalar::<C>(), cmm_sharing_coeff);
+
+        // finding the correct AR data.
+        let ar_info = known_ars
+            .get(ar_id)
+            .ok_or(AttributeCommitmentVerificationError::IdCredPub)?;
+        let item_prover = com_enc_eq::ComEncEq {
+            cipher: ar_data.enc_id_cred_pub_share,
+            commitment: cmm_share,
+            pub_key: *ar_info.get_public_key(),
+            cmm_key: *commitment_key,
+            encryption_in_exponent_generator: ar_info.get_public_key().generator,
+        };
+        provers.push(item_prover);
+        responses.push(response.clone());
+    }
+    Ok((
+        ReplicateAdapter { protocols: provers },
+        ReplicateResponse { responses },
+    ))
+}
+
+/// Verify a policy. This currently does not do anything since
+/// the only check that is done is that the commitments are opened correctly,
+/// and that check is part of the signature check.
+fn verify_policy<C: Curve, AttributeType: Attribute<C::Scalar>>(
+    _commitment_key: &CommitmentKey<C>,
+    _commitments: &CredentialAttributeCommitments<C>,
+    _policy: &Policy<C, AttributeType>,
+) -> bool {
+    true
+}
+
+/// Verify the proof of knowledge of signature on the attribute list.
+/// A none return value means we cannot construct a verifier, and consequently
+/// it should be interperted as the signature being invalid.
+#[allow(clippy::too_many_arguments)]
+fn pok_sig_verifier<
+    'a,
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+>(
+    commitment_key: &'a CommitmentKey<C>,
+    threshold: Threshold,
+    choice_ar_parameters: &BTreeSet<ArIdentity>,
+    policy: &'a Policy<C, AttributeType>,
+    commitments: &'a CredentialAttributeCommitments<C>,
+    ip_pub_key: &'a crate::ps_sig::PublicKey<P>,
+    blinded_sig: &'a crate::ps_sig::BlindedSignature<P>,
+) -> Option<com_eq_sig::ComEqSig<P, C>> {
+    let ar_scalars = utils::encode_ars(choice_ar_parameters)?;
+    // Capacity for id_cred_sec, cmm_prf, (threshold, valid_to, created_at), tags
+    // ar_scalars and cmm_attributes
+    let mut comm_vec = Vec::with_capacity(4 + ar_scalars.len() + commitments.cmm_attributes.len());
+    let cmm_id_cred_sec = *commitments.cmm_id_cred_sec_sharing_coeff.first()?;
+    comm_vec.push(cmm_id_cred_sec);
+    comm_vec.push(commitments.cmm_prf);
+
+    // compute commitments with randomness 0
+    let zero = Randomness::zero();
+    let public_params =
+        utils::encode_public_credential_values(policy.created_at, policy.valid_to, threshold)
+            .ok()?;
+    // add commitment to public values with randomness 0
+    comm_vec.push(commitment_key.hide_worker(&public_params, &zero));
+    // and all commitments to ARs with randomness 0
+    for ar in ar_scalars {
+        comm_vec.push(commitment_key.hide_worker(&ar, &zero));
+    }
+
+    let tags = {
+        match utils::encode_tags::<C::Scalar, _>(
+            policy
+                .policy_vec
+                .keys()
+                .chain(commitments.cmm_attributes.keys()),
+        ) {
+            Ok(v) => v,
+            Err(_) => return None,
+        }
+    };
+
+    // add commitment with randomness 0 for variant, valid_to and created_at
+    comm_vec.push(commitment_key.hide(&Value::<C>::new(tags), &zero));
+    comm_vec.push(commitments.cmm_max_accounts);
+
+    // now, we go through the policy and remaining commitments and
+    // put them into the vector of commitments in order to check the signature.
+    // NB: It is crucial that they are put into the vector ordered by tags, since
+    // otherwise the signature will not check out.
+    // At this point we know all tags are distinct.
+
+    let f = |v: Either<&AttributeType, &Commitment<_>>| match v {
+        Either::Left(v) => {
+            let value = Value::<C>::new(v.to_field_element());
+            comm_vec.push(commitment_key.hide(&value, &zero));
+        }
+        Either::Right(v) => {
+            comm_vec.push(*v);
+        }
+    };
+
+    utils::merge_iter(
+        policy.policy_vec.iter(),
+        commitments.cmm_attributes.iter(),
+        f,
+    );
+
+    Some(com_eq_sig::ComEqSig {
+        // FIXME: Figure out how to restructure to get rid of this clone.
+        blinded_sig: blinded_sig.clone(),
+        commitments: comm_vec,
+        // FIXME: Figure out how to restructure to get rid of this clone.
+        ps_pub_key: ip_pub_key.clone(),
+        comm_key: *commitment_key,
+    })
 }
