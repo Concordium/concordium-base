@@ -556,11 +556,17 @@ impl Display for AttributeCommitmentVerificationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             AttributeCommitmentVerificationError::RegId => write!(f, "RegIdVerificationError"),
-            AttributeCommitmentVerificationError::IdCredPub => write!(f, "IdCredPubVerificationError"),
-            AttributeCommitmentVerificationError::Signature => write!(f, "SignatureVerificationError"),
+            AttributeCommitmentVerificationError::IdCredPub => {
+                write!(f, "IdCredPubVerificationError")
+            }
+            AttributeCommitmentVerificationError::Signature => {
+                write!(f, "SignatureVerificationError")
+            }
             AttributeCommitmentVerificationError::Dlog => write!(f, "DlogVerificationError"),
             AttributeCommitmentVerificationError::Policy => write!(f, "PolicyVerificationError"),
-            AttributeCommitmentVerificationError::Ar => write!(f, "AnonymityRevokerVerificationError"),
+            AttributeCommitmentVerificationError::Ar => {
+                write!(f, "AnonymityRevokerVerificationError")
+            }
             AttributeCommitmentVerificationError::Proof => write!(f, "ProofVerificationError"),
         }
     }
@@ -586,13 +592,7 @@ pub fn verify_credential_attribute_commitments<
     // (corresponding to the degree+1)
     let addr = new_or_existing.as_ref().right();
     let rt_usize: usize = cdi.values.threshold.into();
-    if rt_usize
-        != cdi
-            .proofs
-            .commitments
-            .cmm_id_cred_sec_sharing_coeff
-            .len()
-    {
+    if rt_usize != cdi.proofs.commitments.cmm_id_cred_sec_sharing_coeff.len() {
         return Err(AttributeCommitmentVerificationError::Ar);
     }
     let on_chain_commitment_key = global_context.on_chain_commitment_key;
@@ -619,7 +619,7 @@ pub fn verify_credential_attribute_commitments<
     };
     // FIXME: Figure out a pattern to get rid of these clone's.
     let response_reg_id = cdi.proofs.proof_reg_id.clone();
-    
+
     let verifier_sig = pok_sig_verifier(
         &on_chain_commitment_key,
         cdi.values.threshold,
@@ -832,4 +832,155 @@ fn pok_sig_verifier<
         ps_pub_key: ip_pub_key.clone(),
         comm_key: *commitment_key,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::{
+        common::types::{KeyIndex, KeyPair},
+        curve_arithmetic::arkworks_instances::ArkGroup,
+        id::{constants::*, identity_provider::*, secret_sharing::Threshold, test::*},
+    };
+    use ark_bls12_381::g1;
+    use ark_ec::short_weierstrass::Projective;
+
+    type ExampleCurve = ArkGroup<Projective<g1::Config>>;
+
+    const EXPIRY: TransactionTime = TransactionTime {
+        seconds: 111111111111111111,
+    };
+
+    // TODO abr do we need this test
+    /// This test proves attribute commitments and check values were set correct.
+    /// It does not test the proofs for correct-/soundness.
+    #[test]
+    pub fn test_create_credential() {
+        // Create IP info with threshold = num_ars - 1
+        let max_attrs = 10;
+        let num_ars = 4;
+        let mut csprng = thread_rng();
+        let IpData {
+            public_ip_info: ip_info,
+            ip_secret_key,
+            ip_cdi_secret_key,
+        } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let id_use_data = test_create_id_use_data(&mut csprng);
+        let acc_data = InitialAccountData {
+            keys: {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold::TWO,
+        };
+        let global_ctx = GlobalContext::<ExampleCurve>::generate(String::from("genesis_string"));
+
+        let (ars_infos, _) =
+            test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
+        let (context, pio, _) = test_create_pio(
+            &id_use_data,
+            &ip_info,
+            &ars_infos,
+            &global_ctx,
+            num_ars,
+            &acc_data,
+        );
+        let alist: AttributeList<<IpPairing as Pairing>::ScalarField, AttributeKind> =
+            test_create_attributes();
+        let ver_ok = verify_credentials::<IpPairing, AttributeKind, ArCurve>(
+            &pio,
+            context,
+            &alist,
+            EXPIRY,
+            &ip_secret_key,
+            &ip_cdi_secret_key,
+        );
+        let (ip_sig, _) = ver_ok.unwrap();
+
+        // Create CDI arguments
+        let id_object = IdentityObject {
+            pre_identity_object: pio,
+            alist,
+            signature: ip_sig,
+        };
+        let valid_to = YearMonth::new(2022, 5).unwrap(); // May 2022
+        let created_at = YearMonth::new(2020, 5).unwrap(); // May 2020
+        let policy = Policy {
+            valid_to,
+            created_at,
+            policy_vec: {
+                let mut tree = BTreeMap::new();
+                tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
+                tree
+            },
+            _phantom: Default::default(),
+        };
+        let mut keys = BTreeMap::new();
+        keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+        keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+        keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
+        let sigthres = SignatureThreshold::TWO;
+        let acc_data = CredentialData {
+            keys,
+            threshold: sigthres,
+        };
+
+        let cred_ctr = 42;
+        let (cdi, _) = prove_credential_attribute_commitments(
+            context,
+            &id_object,
+            &id_use_data,
+            cred_ctr,
+            policy.clone(),
+            acc_data.get_cred_key_info(),
+            None,
+            &SystemAttributeRandomness {},
+        )
+        .expect("Could not generate CDI");
+
+        // Check cred_account
+        let cred_account_ok = {
+            let key_info = cdi.values.cred_key_info;
+            key_info.keys.len() == 3 && key_info.threshold == sigthres
+        };
+        assert!(cred_account_ok, "CDI cred_account is invalid");
+
+        // Check reg_id
+        let reg_id_exponent = id_use_data.aci.prf_key.prf_exponent(cred_ctr).unwrap();
+        let reg_id = global_ctx
+            .on_chain_commitment_key
+            .hide(
+                &Value::<ExampleCurve>::new(reg_id_exponent),
+                &PedersenRandomness::zero(),
+            )
+            .0;
+        assert_eq!(cdi.values.cred_id, reg_id, "CDI reg_id is invalid");
+
+        // Check ip_identity
+        assert_eq!(
+            cdi.values.ip_identity, ip_info.ip_identity,
+            "CDI ip_identity is invalid"
+        );
+
+        // Check threshold
+        assert_eq!(
+            cdi.values.threshold,
+            Threshold(num_ars - 1),
+            "CDI threshold is invalid"
+        );
+
+        // Check ar_data
+        assert_eq!(
+            cdi.values.ar_data.len() as u8,
+            num_ars,
+            "CDI ar_data length is invalid"
+        );
+
+        // Check policy
+        assert_eq!(cdi.values.policy, policy, "CDI policy is invalid");
+    }
 }
