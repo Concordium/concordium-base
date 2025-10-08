@@ -32,11 +32,8 @@ pub fn prove_identity_attributes<
     context: IpContext<'_, P, C>,
     id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
     id_object_use_data: &IdObjectUseData<P, C>,
-    cred_counter: u8,
     policy: Policy<C, AttributeType>,
-    cred_key_info: CredentialPublicKeys,
     addr: Option<&AccountAddress>,
-    secret_data: &impl HasAttributeRandomness<C>,
 ) -> anyhow::Result<(
     IdentityAttributesCommitmentInfo<P, C, AttributeType>,
     IdentityAttributesCommitmentRandomness<C>,
@@ -53,24 +50,7 @@ pub fn prove_identity_attributes<
 
     let prf_key = &aci.prf_key;
     let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
-    let cred_id_exponent = match aci.prf_key.prf_exponent(cred_counter) {
-        Ok(exp) => exp,
-        Err(_) => bail!(
-            "Cannot create CDI with this account number because K + {} = 0.",
-            cred_counter
-        ),
-    };
 
-    // RegId as well as Prf key commitments must be computed
-    // with the same generators as in the commitment key.
-    let cred_id = context
-        .global_context
-        .on_chain_commitment_key
-        .hide(
-            &Value::<C>::new(cred_id_exponent),
-            &PedersenRandomness::zero(),
-        )
-        .0;
 
     // Check that all the chosen identity providers (in the pre-identity object) are
     // available in the given context, and remove the ones that are not.
@@ -138,12 +118,10 @@ pub fn prove_identity_attributes<
 
     // We have all the values now.
     let cred_values = IdentityAttributesCommitmentValues {
-        cred_id,
         threshold: prio.choice_ar_parameters.threshold,
         ar_data,
         ip_identity: context.ip_info.ip_identity,
         policy,
-        cred_key_info,
     };
 
     // We now produce all the proofs.
@@ -543,11 +521,8 @@ fn compute_pok_reg_id<C: Curve>(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Reason why verification of a credential commitment failed.
 pub enum AttributeCommitmentVerificationError {
-    RegId,
     IdCredPub,
     Signature,
-    Dlog,
-    Policy,
     Ar,
     Proof,
 }
@@ -555,15 +530,12 @@ pub enum AttributeCommitmentVerificationError {
 impl Display for AttributeCommitmentVerificationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            AttributeCommitmentVerificationError::RegId => write!(f, "RegIdVerificationError"),
             AttributeCommitmentVerificationError::IdCredPub => {
                 write!(f, "IdCredPubVerificationError")
             }
             AttributeCommitmentVerificationError::Signature => {
                 write!(f, "SignatureVerificationError")
             }
-            AttributeCommitmentVerificationError::Dlog => write!(f, "DlogVerificationError"),
-            AttributeCommitmentVerificationError::Policy => write!(f, "PolicyVerificationError"),
             AttributeCommitmentVerificationError::Ar => {
                 write!(f, "AnonymityRevokerVerificationError")
             }
@@ -605,20 +577,6 @@ pub fn verify_identity_attributes<
 
     let commitments = &cdi.proofs.commitments;
 
-    // We now need to construct a uniform verifier
-    // since we cannot check proofs independently.
-
-    let verifier_reg_id = com_mult::ComMult {
-        cmms: [
-            commitments.cmm_prf.combine(&commitments.cmm_cred_counter),
-            Commitment(cdi.values.cred_id),
-            Commitment(on_chain_commitment_key.g),
-        ],
-        cmm_key: on_chain_commitment_key,
-    };
-    // FIXME: Figure out a pattern to get rid of these clone's.
-    let response_reg_id = cdi.proofs.proof_reg_id.clone();
-
     let verifier_sig = pok_sig_verifier(
         &on_chain_commitment_key,
         cdi.values.threshold,
@@ -649,15 +607,11 @@ pub fn verify_identity_attributes<
     )?;
 
     let verifier = AndAdapter {
-        first: verifier_reg_id,
-        second: verifier_sig,
+        first: verifier_sig,
+        second: id_cred_pub_verifier,
     };
-    let verifier = verifier.add_prover(id_cred_pub_verifier);
     let response = AndResponse {
-        r1: AndResponse {
-            r1: response_reg_id,
-            r2: response_sig,
-        },
+        r1: response_sig,
         r2: id_cred_pub_responses,
     };
     let proof = SigmaProof {
@@ -667,24 +621,6 @@ pub fn verify_identity_attributes<
 
     if !verify(&mut ro, &verifier, &proof) {
         return Err(AttributeCommitmentVerificationError::Proof);
-    }
-
-    if !verify_less_than_or_equal(
-        &mut ro,
-        8,
-        &cdi.proofs.commitments.cmm_cred_counter,
-        &cdi.proofs.commitments.cmm_max_accounts,
-        &cdi.proofs.cred_counter_less_than_max_accounts,
-        gens,
-        &on_chain_commitment_key,
-    ) {
-        return Err(AttributeCommitmentVerificationError::Proof);
-    }
-
-    let check_policy = verify_policy(&on_chain_commitment_key, commitments, &cdi.values.policy);
-
-    if !check_policy {
-        return Err(AttributeCommitmentVerificationError::Policy);
     }
 
     Ok(())
@@ -734,17 +670,6 @@ fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
         ReplicateAdapter { protocols: provers },
         ReplicateResponse { responses },
     ))
-}
-
-/// Verify a policy. This currently does not do anything since
-/// the only check that is done is that the commitments are opened correctly,
-/// and that check is part of the signature check.
-fn verify_policy<C: Curve, AttributeType: Attribute<C::Scalar>>(
-    _commitment_key: &CommitmentKey<C>,
-    _commitments: &IdentityAttributesCommitments<C>,
-    _policy: &Policy<C, AttributeType>,
-) -> bool {
-    true
 }
 
 /// Verify the proof of knowledge of signature on the attribute list.
