@@ -328,42 +328,51 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSigPu
         csprng: &mut R,
         f: impl FnOnce(Self, Self::SecretData, &mut R),
     ) {
-        todo!()
-        // use crate::ps_sig::{SecretKey as PsSigSecretKey, SigRetrievalRandomness, UnknownMessage};
-        // let ps_sk: PsSigSecretKey<P> = PsSigSecretKey::generate(data_size, csprng);
-        // let ps_pk: PsSigPublicKey<P> = PsSigPublicKey::from(&ps_sk);
-        // let cmm_key = CommitmentKey::generate(csprng);
+        use crate::ps_sig::{SecretKey as PsSigSecretKey, SigRetrievalRandomness, UnknownMessage};
+        let ps_sk: PsSigSecretKey<P> = PsSigSecretKey::generate(data_size, csprng);
+        let ps_pk: PsSigPublicKey<P> = PsSigPublicKey::from(&ps_sk);
+        let cmm_key = CommitmentKey::generate(csprng);
 
-        // let mut secrets = Vec::with_capacity(data_size);
-        // // commitment to the signer.
-        // // the randomness used to mask the actual values.
-        // let mask = SigRetrievalRandomness::generate_non_zero(csprng);
-        // let mut comm_to_signer: P::G1 = ps_pk.g.mul_by_scalar(&mask);
-        // let mut commitments = Vec::with_capacity(data_size);
-        // for cY_j in ps_pk.ys.iter().take(csprng.gen_range(0..data_size)) {
-        //     let v_j = Value::generate(csprng);
-        //     let (c_j, r_j) = cmm_key.commit(&v_j, csprng);
-        //     comm_to_signer = comm_to_signer.plus_point(&cY_j.mul_by_scalar(&v_j));
-        //     secrets.push((v_j, r_j));
-        //     commitments.push(c_j);
-        // }
-        // let unknown_message = UnknownMessage(comm_to_signer);
-        // let sig = ps_sk
-        //     .sign_unknown_message(&unknown_message, csprng)
-        //     .retrieve(&mask);
-        // let (blinded_sig, blind_rand) = sig.blind(csprng);
-        // let ces = ComEqSig {
-        //     commitments,
-        //     ps_pub_key: ps_pk,
-        //     comm_key: cmm_key,
-        //     blinded_sig,
-        // };
+        let mut values = Vec::with_capacity(data_size);
+        let mut commit_rands = Vec::with_capacity(data_size);
+        // commitment to the signer.
+        // the randomness used to mask the actual values.
+        let mask = SigRetrievalRandomness::generate_non_zero(csprng);
+        let mut comm_to_signer: P::G1 = ps_pk.g.mul_by_scalar(&mask);
+        let mut commitments = BTreeMap::new();
+        for (i, cY_j) in ps_pk
+            .ys
+            .iter()
+            .take(csprng.gen_range(0..data_size))
+            .enumerate()
+        {
+            let v_j = Value::generate(csprng);
+            let (c_j, r_j) = cmm_key.commit(&v_j, csprng);
+            comm_to_signer = comm_to_signer.plus_point(&cY_j.mul_by_scalar(&v_j));
+            values.push(v_j);
+            commit_rands.push(r_j);
+            commitments.insert(i as u32, c_j);
+        }
+        let unknown_message = UnknownMessage(comm_to_signer);
+        let sig = ps_sk
+            .sign_unknown_message(&unknown_message, csprng)
+            .retrieve(&mask);
+        let (blinded_sig, blind_rand) = sig.blind(csprng);
+        let ces = ComEqSigPub {
+            blinded_sig,
+            msg_vec_length: data_size,
+            commitments,
+            revealed_values: BTreeMap::new(),
+            ps_pub_key: ps_pk,
+            comm_key: cmm_key,
+        };
 
-        // let secret = ComEqSigPubWitness {
-        //     blind_rand,
-        //     values_and_rands: secrets,
-        // };
-        // f(ces, secret, csprng)
+        let secret = ComEqSigPubWitness {
+            blind_rand,
+            values,
+            commit_rands,
+        };
+        f(ces, secret, csprng)
     }
 }
 
