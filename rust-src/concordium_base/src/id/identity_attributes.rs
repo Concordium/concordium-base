@@ -30,7 +30,6 @@ pub fn prove_identity_attributes<
     id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
     id_object_use_data: &IdObjectUseData<P, C>,
     policy: Policy<C, AttributeType>,
-    addr: Option<&AccountAddress>, // TODO abr remove
 ) -> anyhow::Result<(
     IdentityAttributesCommitmentInfo<P, C, AttributeType>,
     IdentityAttributesCommitmentRandomness<C>,
@@ -75,7 +74,6 @@ pub fn prove_identity_attributes<
             &context.global_context.on_chain_commitment_key,
         );
 
-    let number_of_ars = prio.choice_ar_parameters.ar_identities.len();
     // filling ar data
     let ar_data = id_cred_data
         .iter()
@@ -110,35 +108,29 @@ pub fn prove_identity_attributes<
     )?;
 
     // We have all the values now.
-    let cred_values = IdentityAttributesCommitmentValues {
+    let id_attribute_values = IdentityAttributesCommitmentValues {
         threshold: prio.choice_ar_parameters.threshold,
         ar_data,
         ip_identity: context.ip_info.ip_identity,
         policy,
     };
 
-    // TODO abr
-    // A list of signatures on the challenge used by the other proofs using the
-    // credential keys.
-    // The challenge has domain separator "credential" followed by appending all
-    // values of the credential to the ro, specifically appending the
-    // CredentialDeploymentValues struct.
-    //
-    // The domain seperator in combination with appending all the data of the
-    // credential deployment should make it non-reusable.
-
     // We now produce all the proofs.
-    // Compute the challenge prefix by hashing the values.
-    // FIXME: We should do something different here.
-    // Eventually we'll have to include the genesis hash.
-    let mut ro = RandomOracle::domain("credential");
-    ro.append_message(b"cred_values", &cred_values);
-    ro.append_message(b"address", &addr);
+
+    // TODO abr
+
+
+    // The challenge has domain separator "IdentityAttributes" followed by appending all
+    // values of the identity attributes to the ro, specifically appending the
+    // IdentityAttributesCommitmentValues struct.
+    // This should make the individual proofs non-reusable.
+    let mut ro = RandomOracle::domain("IdentityAttributes");
+    ro.append_message(b"identity_attribute_values", &id_attribute_values);
     ro.append_message(b"global_context", &context.global_context);
 
-    let mut id_cred_pub_share_numbers = Vec::with_capacity(number_of_ars);
-    let mut id_cred_pub_provers = Vec::with_capacity(number_of_ars);
-    let mut id_cred_pub_secrets = Vec::with_capacity(number_of_ars);
+    let mut id_cred_pub_share_numbers = Vec::with_capacity(id_cred_data.len());
+    let mut id_cred_pub_provers = Vec::with_capacity(id_cred_data.len());
+    let mut id_cred_pub_secrets = Vec::with_capacity(id_cred_data.len());
 
     // create provers for knowledge of id_cred_sec.
     for item in id_cred_data.iter() {
@@ -161,7 +153,7 @@ pub fn prove_identity_attributes<
         id_cred_pub_secrets.push(secret);
     }
 
-    let choice_ar_handles = cred_values.ar_data.keys().copied().collect::<BTreeSet<_>>();
+    let choice_ar_handles = id_attribute_values.ar_data.keys().copied().collect::<BTreeSet<_>>();
 
     // Proof of knowledge of the signature of the identity provider.
     let (prover_sig, secret_sig) = compute_pok_sig(
@@ -203,7 +195,7 @@ pub fn prove_identity_attributes<
     };
 
     let info = IdentityAttributesCommitmentInfo {
-        values: cred_values,
+        values: id_attribute_values,
         proofs: id_proofs,
     };
 
@@ -371,7 +363,6 @@ struct CommitmentRandomness<C: Curve> {
 /// compute commitments for values that are not revealed as part of the policy.
 /// For the other values the verifier (the chain) will compute commitments with
 /// randomness 0 in order to verify knowledge of the signature.
-#[allow(clippy::too_many_arguments)]
 fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     commitment_key: &PedersenKey<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
@@ -583,7 +574,6 @@ fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
 /// Verify the proof of knowledge of signature on the attribute list.
 /// A none return value means we cannot construct a verifier, and consequently
 /// it should be interperted as the signature being invalid.
-#[allow(clippy::too_many_arguments)]
 fn pok_sig_verifier<
     'a,
     P: Pairing,
