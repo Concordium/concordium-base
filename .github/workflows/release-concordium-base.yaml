@@ -6,7 +6,7 @@ on:
   
   push:
     branches:
-      - feature/fix-git-action-release-yaml
+      - fix-git-action-release-yaml
     tags:
       - releases/concordium-base/*
   
