@@ -37,6 +37,9 @@ jobs:
         EXPECTED_VERSION_FROM_CARGO=$(yq .package.version ./Cargo.toml)
         TAG_VERSION_NUMBER=${TAG##releases/concordium_base/}
 
+        echo "expected: $EXPECTED_VERSION_FROM_CARGO"
+        echo "current: $TAG_VERSION_NUMBER"
+
         # Check if the tag version number matches the expected version from Cargo.toml
         if [ "$TAG_VERSION_NUMBER" != "$EXPECTED_VERSION_FROM_CARGO" ]; then
           echo "version tagged: $TAG_VERSION_NUMBER  does not match cargo version: $EXPECTED_VERSION_FROM_CARGO. Exiting."
