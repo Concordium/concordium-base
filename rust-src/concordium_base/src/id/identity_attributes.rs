@@ -661,6 +661,7 @@ mod test {
     };
     use crate::id::{identity_provider, test};
     use std::collections::BTreeMap;
+    use crate::common;
 
     struct IdentityObjectFixture {
         id_object: IdentityObjectV1<IpPairing, ArCurve, AttributeKind>,
@@ -670,6 +671,7 @@ mod test {
         global_ctx: GlobalContext<ArCurve>,
     }
 
+    /// Create identity object for use in tests
     fn identity_object_fixture() -> IdentityObjectFixture {
         let mut csprng = rand::thread_rng();
 
@@ -743,6 +745,8 @@ mod test {
         )
         .expect("verify");
     }
+
+  
 
     // todo abr test invalid variants
 }
