@@ -206,6 +206,11 @@ pub fn prove_identity_attributes<
         values: cred_values,
         proofs: id_proofs,
     };
+
+    let commitment_rands = IdentityAttributesCommitmentRandomness {
+        attributes_rand: commitment_rands.attributes_rand,
+    };
+
     Ok((info, commitment_rands))
 }
 
@@ -348,6 +353,20 @@ fn compute_pok_sig<
     Ok((prover, secret))
 }
 
+/// Randomness for commitments
+struct CommitmentRandomness<C: Curve> {
+    /// Randomness of the commitment to idCredSec.
+    pub id_cred_sec_rand: PedersenRandomness<C>,
+    /// Randomness of the commitment to the PRF key.
+    pub prf_rand: PedersenRandomness<C>,
+    /// Randomness of the commitment to the maximum number of accounts the user
+    /// may create from the identity object.
+    pub max_accounts_rand: PedersenRandomness<C>,
+    /// Randomness, if any, used to commit to user-chosen attributes, such as
+    /// country of nationality.
+    pub attributes_rand: HashMap<AttributeTag, PedersenRandomness<C>>,
+}
+
 /// Computing the commitments for the credential deployment info. We only
 /// compute commitments for values that are not revealed as part of the policy.
 /// For the other values the verifier (the chain) will compute commitments with
@@ -363,7 +382,7 @@ pub fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
     csprng: &mut R,
 ) -> anyhow::Result<(
     IdentityAttributesCommitments<C>,
-    IdentityAttributesCommitmentRandomness<C>,
+    CommitmentRandomness<C>,
 )> {
     let id_cred_sec_rand = if let Some(v) = cmm_coeff_randomness.first() {
         v.clone()

@@ -2734,17 +2734,6 @@ pub struct IdentityAttributesCommitments<C: Curve> {
 /// prove a property of the value.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct IdentityAttributesCommitmentRandomness<C: Curve> {
-    // TODO abr remove more fields?
-    #[serde(rename = "idCredSecRand")]
-    /// Randomness of the commitment to idCredSec.
-    pub id_cred_sec_rand: PedersenRandomness<C>,
-    #[serde(rename = "prfRand")]
-    /// Randomness of the commitment to the PRF key.
-    pub prf_rand: PedersenRandomness<C>,
-    #[serde(rename = "maxAccountsRand")]
-    /// Randomness of the commitment to the maximum number of accounts the user
-    /// may create from the identity object.
-    pub max_accounts_rand: PedersenRandomness<C>,
     #[serde(rename = "attributesRand")]
     /// Randomness, if any, used to commit to user-chosen attributes, such as
     /// country of nationality.
