@@ -129,14 +129,14 @@ impl RandomOracle {
     /// Append all items from an iterator to the random oracle. Equivalent to
     /// repeatedly calling append in sequence.
     /// Returns the new state of the random oracle, consuming the initial state.
-    pub fn extend_from_kv<'a, I, S,T, B: AsRef<[u8]>>(&mut self, label: B, iter: I)
+    pub fn extend_from_kv<'a, I, S, T, B: AsRef<[u8]>>(&mut self, label: B, iter: I)
     where
         S: Serial + 'a,
         T: Serial + 'a,
-        I: IntoIterator<Item = (&'a S,&'a T)>,
+        I: IntoIterator<Item = (&'a S, &'a T)>,
     {
         self.add_bytes(label);
-        for (i,v) in iter.into_iter() {
+        for (i, v) in iter.into_iter() {
             self.add_bytes("index");
             self.add(i);
             self.add_bytes("value");

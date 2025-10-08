@@ -26,9 +26,9 @@ pub struct ComEqSigPub<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// The length of the message vector
     pub msg_vec_length: usize,
     /// The commitments where the index indicates the position of the committed value in the signed message vector
-    pub commitments: BTreeMap<ValueIndex,Commitment<C>>,
+    pub commitments: BTreeMap<ValueIndex, Commitment<C>>,
     ///  The revealed values and their indices in the message vector.
-    pub revealed_values: BTreeMap<ValueIndex,Value<C>>,
+    pub revealed_values: BTreeMap<ValueIndex, P::ScalarField>,
     /// The Pointcheval-Sanders public key with which the signature was generated
     pub ps_pub_key: PsSigPublicKey<P>,
     /// A commitment key with which the commitments were generated.
@@ -41,7 +41,7 @@ pub struct ComEqSigPubWitness<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// The message vector (for simplicity the full message vector)
     pub values: Vec<Value<C>>,
     /// The commitment randomness
-    pub commit_rands: Vec<Randomness<C>>
+    pub commit_rands: Vec<Randomness<C>>,
 }
 
 pub struct ComEqSigState<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
@@ -58,9 +58,9 @@ pub struct Response<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// The response for the randomness r' term in the aggregate dlog.
     response_rho: P::ScalarField,
     /// The (rest of the) s_i terms of the response
-    response_si: Vec<P::ScalarField>,
+    response_s: Vec<P::ScalarField>,
     /// The t_i terms of the response
-    response_ti: Vec<C::Scalar>,
+    response_t: Vec<C::Scalar>,
 }
 
 #[allow(non_snake_case)]
@@ -76,7 +76,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSigPu
         // Append all public values of the proof
         ro.append_message(b"blinded_sig", &self.blinded_sig);
         ro.append_message(b"message_vec_length", &(self.msg_vec_length as u32)); //TODO: Check this hack
-        // Here it is important to also add the indices!
+                                                                                 // Here it is important to also add the indices!
         ro.extend_from_kv(b"commitments", self.commitments.iter());
         // Here it is important to also add the indices!
         ro.extend_from_kv(b"revealed_values", self.revealed_values.iter());
@@ -101,7 +101,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSigPu
         let g_two = self.ps_pub_key.g_tilda;
         // The Y_tilda parts of the public key
         let Y_tilda = |i| self.ps_pub_key.y_tildas[i];
-        // The parts of the blinded signature
+        // The first part of the blinded signature
         let a_hat = self.blinded_sig.sig.0;
         // The commitment key
         let cmm_key = self.comm_key;
@@ -115,22 +115,21 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSigPu
         // The number of revealed messages
         let rev_val_length = self.revealed_values.len();
         // Basic sanity check
-        if rev_val_length > n {
+        if rev_val_length < n {
             return None;
         }
         // The number of commitments
         let com_length = self.commitments.len();
         // Basic sanity check
-        if com_length > n-rev_val_length {
-            return  None;
+        if com_length > n - rev_val_length {
+            return None;
         }
 
         // For every private value an alpha needs to be generated
-        let mut alphas = Vec::with_capacity(n-rev_val_length);
+        let mut alphas = Vec::with_capacity(n - rev_val_length);
         // For every commitment a r_tilde needs to be generated
         let mut tilda_rs = Vec::with_capacity(com_length);
         let mut commitments = Vec::with_capacity(com_length);
-
 
         // The commit message consists of a point `paired` in the target group computed as `v_1^{rho_prime}\prod u_i^{alpha_j}`
         // and the Pedersen commitments to some of the `alpha_j` using randomness `tilde_rs`
@@ -146,27 +145,27 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSigPu
         for i in 0..n {
             match self.revealed_values.get(&(i as u32)) {
                 // Do nothing for revealed values
-                None => {
-                    // but check that the revealed value is not committed
-                    if self.commitments.contains_key(&(i as u32)){
-                        return None
-                    }
-                },
-                // Do computation for the index
                 Some(_) => {
+                    // but check that the revealed value is not committed
+                    if self.commitments.contains_key(&(i as u32)) {
+                        return None;
+                    }
+                }
+                // Do computation for the index
+                None => {
                     // Random value alpha_i.
                     let alpha_i = Value::generate_non_zero(csprng);
                     // Compute Y_tilda^{alpha_i} and add it to point
                     let Y_tilda_alpha_i = Y_tilda(i).mul_by_scalar(&alpha_i);
-                    point.plus_point(&Y_tilda_alpha_i);
+                    point = point.plus_point(&Y_tilda_alpha_i);
                     // Commit to alpha_i if value is committed
-                    if self.commitments.contains_key(&(i as u32)){
+                    if self.commitments.contains_key(&(i as u32)) {
                         let (c_i, tilda_r_i) = cmm_key.commit(&alpha_i, csprng);
                         tilda_rs.push(tilda_r_i);
                         commitments.push(c_i);
                     }
                     alphas.push(alpha_i);
-                },
+                }
             }
         }
         let paired = P::pair(&a_hat, &point);
@@ -175,7 +174,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSigPu
             ComEqSigState {
                 rho_prime,
                 alphas,
-                tilda_rs
+                tilda_rs,
             },
         ))
     }
@@ -187,19 +186,19 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSigPu
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
     ) -> Option<Self::Response> {
-        // Number of commitments must match 
+        // Number of commitments must match
         if witness.commit_rands.len() != state.tilda_rs.len() {
-            return None
+            return None;
         }
         let n = self.msg_vec_length;
         // Public length must match vector length in witness
         if witness.values.len() != n {
-            return None
+            return None;
         }
         // Number of alphas must match private message vector length
         if state.alphas.len() != self.msg_vec_length - self.revealed_values.len() {
-            return None
-        } 
+            return None;
+        }
 
         // Compute response_rho as rho_prime - challenge * r_prime
         let r_prime = witness.blind_rand.1;
@@ -213,19 +212,19 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSigPu
         let mut i = 0;
         for j in 0..n {
             // Only compute s_i for private values
-            if !self.revealed_values.contains_key(&(j as u32)){
+            if !self.revealed_values.contains_key(&(j as u32)) {
                 let mut s_i = *challenge;
                 s_i.mul_assign(&witness.values[j]);
                 s_i.negate();
-                s_i.add_assign(&state.alphas[i]); 
+                s_i.add_assign(&state.alphas[i]);
                 response_si.push(s_i);
-                i += 1           
+                i += 1
             }
         }
 
         // Compute t_i as tilda_rs_i - challenge * commit_rands_i
         let mut response_ti = Vec::with_capacity(state.tilda_rs.len());
-        for (ref tilda_rs_i, ref commit_rands_i) in izip!(state.tilda_rs,witness.commit_rands) {
+        for (ref tilda_rs_i, ref commit_rands_i) in izip!(state.tilda_rs, witness.commit_rands) {
             let mut t_i = *challenge;
             t_i.mul_assign(commit_rands_i);
             t_i.negate();
@@ -234,7 +233,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSigPu
         }
 
         Some(Response {
-            response_rho, response_si, response_ti
+            response_rho,
+            response_s: response_si,
+            response_t: response_ti,
         })
     }
 
@@ -244,66 +245,81 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSigPu
         challenge: &Self::ProtocolChallenge,
         response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
-        todo!()
-        // let g_tilda = self.ps_pub_key.g_tilda;
-        // let a_hat = self.blinded_sig.sig.0;
-        // let b_hat = self.blinded_sig.sig.1;
-        // let cX_tilda = self.ps_pub_key.x_tilda;
-        // let cY_tildas = &self.ps_pub_key.y_tildas;
-        // let cmm_key = self.comm_key;
+        // Generator of G2 as used by the signature scheme
+        let g_two = self.ps_pub_key.g_tilda;
+        // The X_tilda and Y_tilda parts of the public key
+        let X_tilda = self.ps_pub_key.x_tilda;
+        let Y_tilda = |i| self.ps_pub_key.y_tildas[i];
+        // The parts of the blinded signature
+        let a_hat = self.blinded_sig.sig.0;
+        let b_hat = self.blinded_sig.sig.1;
+        // The commitment key
+        let cmm_key = self.comm_key;
 
-        // let commitments = &self.commitments;
-        // let n = commitments.len();
-        // if response.response_commit.len() != n {
-        //     return None;
-        // }
-        // if n > cY_tildas.len() {
-        //     return None;
-        // }
+        // The length of the message vector
+        let n = self.msg_vec_length;
+        // must be smaller than the public key length
+        if n > self.ps_pub_key.len() {
+            return None;
+        }
+        // The number of revealed messages
+        let rev_val_length = self.revealed_values.len();
+        // The s_i vector length should match the cardinality of private values.
+        if response.response_s.len() + rev_val_length != n {
+            return None;
+        }
+        let commitments = &self.commitments;
+        let com_len = commitments.len();
+        // The t_i vector length must match the number of commitments
+        if response.response_t.len() != com_len {
+            return None;
+        }
 
-        // // storing values for multiexponentiation. gs is bases, es is powers.
-        // let mut gs = Vec::with_capacity(n + 2);
-        // let mut es = Vec::with_capacity(n + 2);
+        // Compute the commitments a_i
+        let mut ai_coms = Vec::with_capacity(com_len);
+        // As in `compute_commit_message` we defer the pairing operation to the end, thus we compute the components in G2 first.
+        // Compute product of Y_tildas ^ revealed values using multiexponentiation
+        let mut rev_prod_base = Vec::with_capacity(rev_val_length);
+        let mut rev_prod_exp = Vec::with_capacity(rev_val_length);
+        // Compute product of Y_tildas ^ s_i for private values using multiexponentiation
+        let mut si_prod_base = Vec::with_capacity(n - rev_val_length);
+        let mut si_prod_exp = Vec::with_capacity(n - rev_val_length);
+        for i in 0..n {
+            match self.revealed_values.get(&(i as u32)) {
+                // If value is revealed add it to the product of revealed values
+                Some(v) => {
+                    if self.commitments.contains_key(&(i as u32)) {
+                        return None;
+                    }
+                    rev_prod_base.push(Y_tilda(i));
+                    rev_prod_exp.push(*v);
+                }
+                // Otherwise add it to the private value products and check if we need to compute an a_i
+                None => {
+                    let s_i = response.response_s[i];
+                    if let Some(C_i) = self.commitments.get(&(i as u32)) {
+                        let bases = [C_i.0, cmm_key.g, cmm_key.h];
+                        let exp = [*challenge, s_i, response.response_t[i]];
+                        let a_i = multiexp(&bases, &exp);
+                        ai_coms.push(Commitment(a_i))
+                    }
+                    si_prod_base.push(Y_tilda(i));
+                    si_prod_exp.push(s_i);
+                }
+            }
+        }
+        let rev_prod = multiexp(&rev_prod_base, &rev_prod_exp);
+        let si_prod = multiexp(&si_prod_base, &si_prod_exp);
 
-        // gs.push(g_tilda);
-        // es.push(response.response_rho);
-        // let mut cmms = Vec::with_capacity(n);
-        // for (cC_i, cY_tilda, (res_m, res_r)) in izip!(
-        //     commitments.iter(),
-        //     cY_tildas,
-        //     response.response_commit.iter()
-        // ) {
-        //     // compute C_i^c * g^mu_i h^R_i
-        //     let bases = [cC_i.0, cmm_key.g, cmm_key.h];
-        //     let powers = [*challenge, *res_m, *res_r];
-        //     let cP = multiexp(&bases, &powers);
-        //     cmms.push(Commitment(cP));
-        //     gs.push(*cY_tilda);
-        //     es.push(*res_m);
-        // }
-        // // finally add X_tilda and -challenge to the powers.
-        // gs.push(cX_tilda);
-        // {
-        //     let mut x = *challenge;
-        //     x.negate();
-        //     es.push(x);
-        // }
+        // Finally compute a = e(a_hat,si_prod * (X_tilda * rev_prod) ^ -c) * e(b_hat,g_two^c)
+        let point = X_tilda.plus_point(&rev_prod);
+        let point = point.mul_by_scalar(challenge);
+        let point = point.inverse_point();
+        let point = point.plus_point(&si_prod);
+        let maybe_a = P::pairing_product(&b_hat, &g_two.mul_by_scalar(challenge), &a_hat, &point);
 
-        // // let point =
-        // // point.plus_point(&cX_tilda.inverse_point().mul_by_scalar(challenge));
-
-        // let point = multiexp(&gs, &es);
-
-        // // We have now computed a point `point` such that
-        // // ```v_3^{-c} * v_1^R \prod u_i^w_i = e(a_hat, point)```
-        // // If the proof is correct then the challenge was computed with
-        // // v_2^c * v^3{-c} * ...
-        // // where * is the multiplication in the target field (of which the G_T is a multiplicative subgroup).
-
-        // // Combine the pairing computations to compute the product.
-        // let paired = P::pairing_product(&b_hat, &g_tilda.mul_by_scalar(challenge), &a_hat, &point);
-
-        // paired.map(|paired| (paired, cmms))
+        // Map the Option<a> to an Option<CommitMessage>
+        maybe_a.map(|a| (a, ai_coms))
     }
 
     #[cfg(test)]
