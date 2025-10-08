@@ -2,7 +2,6 @@
 //! extent equivalent to attribute commitments deployed on chain, but there is no on-chain account credentials involved.
 
 use super::{account_holder, secret_sharing::*, types::*, utils};
-use crate::common::types::TransactionTime;
 use crate::pedersen_commitment::{CommitmentKey, Randomness};
 use crate::{
     curve_arithmetic::{Curve, Pairing},
@@ -115,11 +114,6 @@ pub fn prove_identity_attributes<
         policy,
     };
 
-    // We now produce all the proofs.
-
-    // TODO abr
-
-
     // The challenge has domain separator "IdentityAttributes" followed by appending all
     // values of the identity attributes to the ro, specifically appending the
     // IdentityAttributesCommitmentValues struct.
@@ -127,6 +121,8 @@ pub fn prove_identity_attributes<
     let mut ro = RandomOracle::domain("IdentityAttributes");
     ro.append_message(b"identity_attribute_values", &id_attribute_values);
     ro.append_message(b"global_context", &context.global_context);
+
+    // We now produce all the proofs.
 
     let mut id_cred_pub_share_numbers = Vec::with_capacity(id_cred_data.len());
     let mut id_cred_pub_provers = Vec::with_capacity(id_cred_data.len());
@@ -153,7 +149,11 @@ pub fn prove_identity_attributes<
         id_cred_pub_secrets.push(secret);
     }
 
-    let choice_ar_handles = id_attribute_values.ar_data.keys().copied().collect::<BTreeSet<_>>();
+    let choice_ar_handles = id_attribute_values
+        .ar_data
+        .keys()
+        .copied()
+        .collect::<BTreeSet<_>>();
 
     // Proof of knowledge of the signature of the identity provider.
     let (prover_sig, secret_sig) = compute_pok_sig(
@@ -456,12 +456,10 @@ pub fn verify_identity_attributes<
     // in the cdi.
     known_ars: &BTreeMap<ArIdentity, A>,
     cdi: &IdentityAttributesCommitmentInfo<P, C, AttributeType>,
-    new_or_existing: &Either<TransactionTime, AccountAddress>,
 ) -> Result<(), AttributeCommitmentVerificationError> {
     // We need to check that the threshold is actually equal to
     // the number of coefficients in the sharing polynomial
     // (corresponding to the degree+1)
-    let addr = new_or_existing.as_ref().right();
     let rt_usize: usize = cdi.values.threshold.into();
     if rt_usize != cdi.proofs.commitments.cmm_id_cred_sec_sharing_coeff.len() {
         return Err(AttributeCommitmentVerificationError::Ar);
@@ -469,9 +467,8 @@ pub fn verify_identity_attributes<
     let on_chain_commitment_key = global_context.on_chain_commitment_key;
     let ip_verify_key = &ip_info.ip_verify_key;
     // Compute the challenge prefix by hashing the values.
-    let mut ro = RandomOracle::domain("credential");
-    ro.append_message(b"cred_values", &cdi.values);
-    ro.append_message(b"address", &addr);
+    let mut ro = RandomOracle::domain("IdentityAttributes");
+    ro.append_message(b"identity_attribute_values", &cdi.values);
     ro.append_message(b"global_context", &global_context);
 
     let commitments = &cdi.proofs.commitments;
@@ -573,7 +570,7 @@ fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
 
 /// Verify the proof of knowledge of signature on the attribute list.
 /// A none return value means we cannot construct a verifier, and consequently
-/// it should be interperted as the signature being invalid.
+/// it should be interpreted as the signature being invalid.
 fn pok_sig_verifier<
     'a,
     P: Pairing,
