@@ -653,6 +653,8 @@ fn pok_sig_verifier<
 
 #[cfg(test)]
 mod test {
+    use crate::common;
+    use crate::curve_arithmetic::Curve;
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
     use crate::id::identity_attributes::{prove_identity_attributes, verify_identity_attributes};
     use crate::id::types::{
@@ -661,7 +663,7 @@ mod test {
     };
     use crate::id::{identity_provider, test};
     use std::collections::BTreeMap;
-    use crate::common;
+    use std::mem;
 
     struct IdentityObjectFixture {
         id_object: IdentityObjectV1<IpPairing, ArCurve, AttributeKind>,
@@ -719,8 +721,9 @@ mod test {
         }
     }
 
+    /// Test that the verifier accepts a valid proof
     #[test]
-    pub fn test_prove_and_verify_identity_attributes() {
+    pub fn test_identity_attributes_completeness() {
         let id_object_fixture = identity_object_fixture();
 
         let policy = Policy {
@@ -737,6 +740,7 @@ mod test {
             policy,
         )
         .expect("prove");
+
         verify_identity_attributes(
             &id_object_fixture.global_ctx,
             &id_object_fixture.ip_info,
@@ -746,7 +750,106 @@ mod test {
         .expect("verify");
     }
 
-  
+    /// Test that the verifier does not accept the proof if the
+    /// id cred pub encryption
+    #[test]
+    pub fn test_identity_attributes_soundness_ar_shares_encryption() {
+        let id_object_fixture = identity_object_fixture();
 
-    // todo abr test invalid variants
+        let policy = Policy {
+            valid_to: id_object_fixture.id_object.alist.valid_to,
+            created_at: id_object_fixture.id_object.alist.created_at,
+            policy_vec: Default::default(),
+            _phantom: Default::default(),
+        };
+
+        let (mut id_attr_info, _) = prove_identity_attributes(
+            ip_context(&id_object_fixture),
+            &id_object_fixture.id_object,
+            &id_object_fixture.id_use_data,
+            policy,
+        )
+        .expect("prove");
+
+        // make one of the ar share encryptions invalid
+        let mut enc = id_attr_info.values.ar_data.values_mut().next().unwrap();
+        enc.enc_id_cred_pub_share.1 = enc
+            .enc_id_cred_pub_share
+            .1
+            .plus_point(&ArCurve::one_point());
+
+        verify_identity_attributes(
+            &id_object_fixture.global_ctx,
+            &id_object_fixture.ip_info,
+            &id_object_fixture.ars_infos,
+            &id_attr_info,
+        )
+        .expect_err("verify");
+    }
+
+    /// Test that the verifier does not accept the proof if the
+    /// identity provider signature does not match the provided values.
+    #[test]
+    pub fn test_identity_attributes_soundness_ip_signature() {
+        let id_object_fixture = identity_object_fixture();
+
+        let policy = Policy {
+            valid_to: id_object_fixture.id_object.alist.valid_to,
+            created_at: id_object_fixture.id_object.alist.created_at,
+            policy_vec: Default::default(),
+            _phantom: Default::default(),
+        };
+
+        let (id_attr_info, _) = prove_identity_attributes(
+            ip_context(&id_object_fixture),
+            &id_object_fixture.id_object,
+            &id_object_fixture.id_use_data,
+            policy,
+        )
+        .expect("prove");
+
+        // change one of the public values in the signature
+        let mut id_attr_info_invalid = id_attr_info.clone();
+        id_attr_info_invalid.values.threshold.0 -= 1;
+
+        verify_identity_attributes(
+            &id_object_fixture.global_ctx,
+            &id_object_fixture.ip_info,
+            &id_object_fixture.ars_infos,
+            &id_attr_info_invalid,
+        )
+        .expect_err("verify");
+
+        // change one of the public values in the signature
+        let mut id_attr_info_invalid = id_attr_info.clone();
+        let ar_to_remove = *id_attr_info_invalid.values.ar_data.keys().next().unwrap();
+        id_attr_info_invalid.values.ar_data.remove(&ar_to_remove);
+
+        verify_identity_attributes(
+            &id_object_fixture.global_ctx,
+            &id_object_fixture.ip_info,
+            &id_object_fixture.ars_infos,
+            &id_attr_info_invalid,
+        )
+        .expect_err("verify");
+
+        // change one of the committed values in the signature
+        let mut id_attr_info_invalid = id_attr_info.clone();
+        let mut attr_cmm = id_attr_info_invalid
+            .proofs
+            .commitments
+            .cmm_attributes
+            .values_mut()
+            .next()
+            .unwrap();
+        attr_cmm.0 = attr_cmm.0.plus_point(&ArCurve::one_point());
+
+        verify_identity_attributes(
+            &id_object_fixture.global_ctx,
+            &id_object_fixture.ip_info,
+            &id_object_fixture.ars_infos,
+            &id_attr_info_invalid,
+        )
+        .expect_err("verify");
+    }
 }
