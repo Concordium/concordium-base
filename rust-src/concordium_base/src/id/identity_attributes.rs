@@ -650,3 +650,102 @@ fn pok_sig_verifier<
         comm_key: *commitment_key,
     })
 }
+
+#[cfg(test)]
+mod test {
+    use crate::common::types::{KeyIndex, KeyPair};
+    use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
+    use crate::id::identity_attributes::{prove_identity_attributes, verify_identity_attributes};
+    use crate::id::types::{
+        ArIdentity, ArInfo, AttributeTag, CredentialData, GlobalContext, IdObjectUseData,
+        IdentityObjectV1, InitialAccountData, IpContext, IpData, IpInfo, Policy, YearMonth,
+    };
+    use crate::id::{identity_provider, test};
+    use concordium_contracts_common::SignatureThreshold;
+    use std::collections::BTreeMap;
+    use std::process::id;
+
+    struct IdentityObjectFixture {
+        id_object: IdentityObjectV1<IpPairing, ArCurve, AttributeKind>,
+        id_use_data: IdObjectUseData<IpPairing, ArCurve>,
+        ip_info: IpInfo<IpPairing>,
+        ars_infos: BTreeMap<ArIdentity, ArInfo<ArCurve>>,
+        global_ctx: GlobalContext<ArCurve>,
+    }
+
+    fn identity_object_fixture() -> IdentityObjectFixture {
+        let mut csprng = rand::thread_rng();
+
+        let max_attrs = 10;
+        let num_ars = 5;
+        let IpData {
+            public_ip_info: ip_info,
+            ip_secret_key,
+            ..
+        } = test::test_create_ip_info(&mut csprng, num_ars, max_attrs);
+
+        let global_ctx = GlobalContext::generate(String::from("genesis_string"));
+
+        let (ars_infos, _ars_secret) =
+            test::test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
+
+        let id_use_data = test::test_create_id_use_data(&mut csprng);
+        let (context, pio, randomness) =
+            test::test_create_pio_v1(&id_use_data, &ip_info, &ars_infos, &global_ctx, num_ars);
+        let alist = test::test_create_attributes();
+        let ip_sig =
+            identity_provider::verify_credentials_v1(&pio, context, &alist, &ip_secret_key)
+                .expect("verify credentials");
+
+        let id_object = IdentityObjectV1 {
+            pre_identity_object: pio,
+            alist: alist.clone(),
+            signature: ip_sig,
+        };
+
+        IdentityObjectFixture {
+            id_object,
+            id_use_data,
+            ars_infos,
+            ip_info,
+            global_ctx,
+        }
+    }
+
+    fn ip_context(id_object_fixture: &IdentityObjectFixture) -> IpContext<'_, IpPairing, ArCurve> {
+        IpContext {
+            ip_info: &id_object_fixture.ip_info,
+            ars_infos: &id_object_fixture.ars_infos,
+            global_context: &id_object_fixture.global_ctx,
+        }
+    }
+
+    #[test]
+    pub fn test_prove_and_verify_identity_attributes() {
+        let id_object_fixture = identity_object_fixture();
+
+        let policy = Policy {
+            valid_to: id_object_fixture.id_object.alist.valid_to,
+            created_at: id_object_fixture.id_object.alist.created_at,
+            policy_vec: Default::default(),
+            _phantom: Default::default(),
+        };
+
+        let (id_attr_info, _) = prove_identity_attributes(
+            ip_context(&id_object_fixture),
+            &id_object_fixture.id_object,
+            &id_object_fixture.id_use_data,
+            policy,
+        )
+        .expect("prove");
+        verify_identity_attributes(
+            &id_object_fixture.global_ctx,
+            &id_object_fixture.ip_info,
+            &id_object_fixture.ars_infos,
+            &id_attr_info,
+        )
+        .expect("verify");
+    }
+
+    // todo abr test invalid variants
+}
