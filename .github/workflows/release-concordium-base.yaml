@@ -20,7 +20,6 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        shell: bash
         working-directory: rust-src/concordium_base
 
     # environment: release
@@ -48,8 +47,7 @@ jobs:
     - name: Publish to crates.io
       env:
         CARGO_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          echo "Publishing Concordium Base to crates.io for version: $TAG_VERSION"
-          pwd
-          # cargo publish --token $CARGO_TOKEN --locked
+      run: |
+        echo "Publishing Concordium Base to crates.io for version: $TAG_VERSION"
+        # cargo publish --token $CARGO_TOKEN --locked
   
