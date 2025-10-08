@@ -6,7 +6,7 @@ on:
   
   push:
     branches:
-      - fix-git-action-release-yaml
+      - feature/fix-git-action-release-yaml
     tags:
       - releases/concordium-base/*
   
@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
+        shell: bash
         working-directory: rust-src/concordium_base
 
     # environment: release
