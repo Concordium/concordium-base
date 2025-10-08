@@ -653,17 +653,14 @@ fn pok_sig_verifier<
 
 #[cfg(test)]
 mod test {
-    use crate::common::types::{KeyIndex, KeyPair};
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
     use crate::id::identity_attributes::{prove_identity_attributes, verify_identity_attributes};
     use crate::id::types::{
-        ArIdentity, ArInfo, AttributeTag, CredentialData, GlobalContext, IdObjectUseData,
-        IdentityObjectV1, InitialAccountData, IpContext, IpData, IpInfo, Policy, YearMonth,
+        ArIdentity, ArInfo, GlobalContext, IdObjectUseData, IdentityObjectV1, IpContext, IpData,
+        IpInfo, Policy,
     };
     use crate::id::{identity_provider, test};
-    use concordium_contracts_common::SignatureThreshold;
     use std::collections::BTreeMap;
-    use std::process::id;
 
     struct IdentityObjectFixture {
         id_object: IdentityObjectV1<IpPairing, ArCurve, AttributeKind>,
