@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
+        shell: bash
         working-directory: rust-src/concordium_base
 
     # environment: release
