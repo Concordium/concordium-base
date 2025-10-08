@@ -1,11 +1,11 @@
-//! Functionality related to constructing and identity credential proofs.
+//! Functionality related to constructing and verifying identity credential proofs.
 //!
 #[cfg(test)]
 mod tests {
+    use crate::id::types::Attribute;
     use crate::web3id::*;
     use crate::{
         base::CredentialRegistrationID,
-        curve_arithmetic::Curve,
         id::{
             constants::{ArCurve, AttributeKind},
             id_proof_types::AtomicStatement,
@@ -42,12 +42,15 @@ mod tests {
     type ExampleAttributeList = AttributeList<BaseField, ExampleAttribute>;
 
     /// Create example attributes to be used by tests.
-    pub fn test_create_attribute_list() -> ExampleAttributeList {
+    pub fn test_create_attribute_list(
+        attribute_tag: u8,
+        numeric_attribute_value: u64,
+    ) -> ExampleAttributeList {
         let mut alist = BTreeMap::new();
-
-        // alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
-        // alist.insert(AttributeTag::from(8u8), AttributeKind::from(31));
-        alist.insert(AttributeTag::from(3u8), AttributeKind::from(137));
+        alist.insert(
+            AttributeTag::from(attribute_tag),
+            AttributeKind::from(numeric_attribute_value),
+        );
 
         let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
         let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
@@ -61,11 +64,16 @@ mod tests {
     }
 
     #[test]
-    /// A test flow of an `accountCreation` proof then using these credentials/randomness to generate some proofs about given statements `accountCredentialProof`.
+    /// A test flow of the on-chain account creation proof where the generated
+    /// credentials/commitments/randomness are reused to produce an additional
+    /// zero-knowledge proof (as done in user wallets) for a given account credential statement.
     ///
     /// JSON serialization of requests and presentations is also tested.
     fn test_identity_proof() -> anyhow::Result<()> {
         let mut rng = rand::thread_rng();
+        let global_ctx = GlobalContext::generate(String::from("genesis_string"));
+        let numeric_attribute_value = 137u64;
+        let attribute_tag = 3u8;
 
         // Generate PIO
         let max_attrs = 10;
@@ -75,8 +83,6 @@ mod tests {
             ip_secret_key,
             ..
         } = test_create_ip_info(&mut rng, num_ars, max_attrs);
-
-        let global_ctx = GlobalContext::generate(String::from("genesis_string"));
 
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut rng);
@@ -88,7 +94,7 @@ mod tests {
             *randomness == *id_use_data.randomness,
             "Returned randomness is not equal to used randomness."
         );
-        let alist = test_create_attribute_list();
+        let alist = test_create_attribute_list(attribute_tag, numeric_attribute_value);
         let ver_ok = verify_credentials_v1(&pio, context, &alist, &ip_secret_key);
         assert!(ver_ok.is_ok(), "Signature on the credential is invalid.");
 
@@ -105,10 +111,7 @@ mod tests {
         let policy = Policy {
             valid_to,
             created_at,
-            policy_vec: {
-                BTreeMap::new()
-                // tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
-            },
+            policy_vec: { BTreeMap::new() },
             _phantom: Default::default(),
         };
         let acc_data = CredentialData {
@@ -136,18 +139,20 @@ mod tests {
         let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
         assert_eq!(cdi_check, Ok(()));
 
-        let credential_attribute_commitments = cdi.proofs.id_proofs.commitments.cmm_attributes;
-
-        // Now re-generate the identity credential commitments to the attributes
-        // we need a slighly different type, the `CommitmentInputs`, to make proofs about them.
         let mut values = BTreeMap::new();
-        values.insert(3.into(), Web3IdAttribute::Numeric(137));
+        values.insert(
+            attribute_tag.into(),
+            Web3IdAttribute::Numeric(numeric_attribute_value),
+        );
 
         let mut randomness = BTreeMap::new();
-        let randomness_tag_3 = commitmnet_randomness.attributes_rand.get(&3).unwrap();
+        let randomness_at_tag = commitmnet_randomness
+            .attributes_rand
+            .get(&attribute_tag)
+            .unwrap();
         randomness.insert(
-            3.into(),
-            pedersen_commitment::Randomness::<ArCurve>::new(**randomness_tag_3),
+            attribute_tag.into(),
+            pedersen_commitment::Randomness::<ArCurve>::new(**randomness_at_tag),
         );
         let secrets: CommitmentInputs<
             '_,
@@ -157,44 +162,26 @@ mod tests {
         > = CommitmentInputs::Account {
             values: &values,
             randomness: &randomness,
-            issuer: IpIdentity::from(17u32),
+            issuer: IpIdentity::from(0u32),
         };
         let commitment_inputs = [secrets];
 
-        // Now generate the proofs with regards to the identity credential attribute statements.
+        // Now generate the proofs with regards to the account credential attribute statements.
         let challenge = Challenge::new(rng.gen());
-        let params = GlobalContext::generate("Test".into());
 
-        // TODO: Maybe these two values need to match any randomness from the `credentialDeployment` instead of randomly generated.
-        let cred_id_exp = ArCurve::generate_scalar(&mut rng);
-        let cred_id = CredentialRegistrationID::from_exponent(&params, cred_id_exp);
+        let cred_id = CredentialRegistrationID::new(cdi.values.cred_id);
 
         let credential_statements = vec![CredentialStatement::Account {
             network: Network::Testnet,
             cred_id,
-            statement: vec![
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: 3.into(),
-                        lower: Web3IdAttribute::Numeric(0),
-                        upper: Web3IdAttribute::Numeric(1237),
-                        _phantom: PhantomData,
-                    },
+            statement: vec![AtomicStatement::AttributeInRange {
+                statement: AttributeInRangeStatement {
+                    attribute_tag: 3.into(),
+                    lower: Web3IdAttribute::Numeric(0),
+                    upper: Web3IdAttribute::Numeric(1237),
+                    _phantom: PhantomData,
                 },
-                // AtomicStatement::AttributeNotInSet {
-                //     statement: AttributeNotInSetStatement {
-                //         attribute_tag: 1u8.into(),
-                //         set: [
-                //             Web3IdAttribute::String(AttributeKind("ff".into())),
-                //             Web3IdAttribute::String(AttributeKind("aa".into())),
-                //             Web3IdAttribute::String(AttributeKind("zz".into())),
-                //         ]
-                //         .into_iter()
-                //         .collect(),
-                //         _phantom: PhantomData,
-                //     },
-                // },
-            ],
+            }],
         }];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
@@ -205,7 +192,7 @@ mod tests {
         let proof = request
             .clone()
             .prove(
-                &params,
+                &global_ctx,
                 <[CommitmentInputs<
                     '_,
                     ArkGroup<ark_ec::short_weierstrass::Projective<ark_bls12_381::g1::Config>>,
@@ -215,30 +202,29 @@ mod tests {
             )
             .context("Cannot prove")?;
 
-        // let commitments = {
-        //     let key = params.on_chain_commitment_key;
-        //     let mut comms = BTreeMap::new();
-        //     for (tag, value) in randomness.iter() {
-        //         let _ = comms.insert(
-        //             AttributeTag::from(*tag),
-        //             key.hide(
-        //                 &pedersen_commitment::Value::<ArCurve>::new(
-        //                     values.get(tag).unwrap().to_field_element(),
-        //                 ),
-        //                 value,
-        //             ),
-        //         );
-        //     }
-        //     comms
-        // };
+        let commitments = {
+            let key = global_ctx.on_chain_commitment_key;
+            let mut comms = BTreeMap::new();
+            for (tag, value) in randomness.iter() {
+                let _ = comms.insert(
+                    AttributeTag::from(*tag),
+                    // TODO: Ask Daniel why we hide the commitment and not directly use them.
+                    key.hide(
+                        &pedersen_commitment::Value::<ArCurve>::new(
+                            values.get(tag).unwrap().to_field_element(),
+                        ),
+                        value,
+                    ),
+                );
+            }
+            comms
+        };
 
-        let public = vec![CredentialsInputs::Account {
-            commitments: credential_attribute_commitments,
-        }];
+        let public = vec![CredentialsInputs::Account { commitments }];
 
         anyhow::ensure!(
             proof
-                .verify(&params, public.iter())
+                .verify(&global_ctx, public.iter())
                 .context("Verification of presentation failed.")?
                 == request,
             "Proof verification failed."
