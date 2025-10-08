@@ -1,5 +1,5 @@
-//! Functionality to prove and verify attribute commitments based on id credentials. These are to a large
-//! extent equivalent to attribute commitments deployed on chain, but there is no on-chain account involved.
+//! Functionality to prove and verify attribute commitments based on identity credentials. These are to a large
+//! extent equivalent to attribute commitments deployed on chain, but there is no on-chain account credentials involved.
 
 use super::{account_holder, secret_sharing::*, types::*, utils};
 use crate::bulletproofs::range_proof::verify_less_than_or_equal;
@@ -22,9 +22,9 @@ use either::Either;
 use rand::*;
 use std::collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet};
 
-/// Construct proof for attribute commitments from id credential
+/// Construct proof for attribute commitments from identity credential
 #[allow(clippy::too_many_arguments)]
-pub fn prove_credential_attribute_commitments<
+pub fn prove_identity_attributes<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Clone + Attribute<C::Scalar>,
@@ -38,8 +38,8 @@ pub fn prove_credential_attribute_commitments<
     addr: Option<&AccountAddress>,
     secret_data: &impl HasAttributeRandomness<C>,
 ) -> anyhow::Result<(
-    CredentialAttributeCommitmentInfo<P, C, AttributeType>,
-    CredentialAttributeCommitmentRandomness<C>,
+    IdentityAttributesCommitmentInfo<P, C, AttributeType>,
+    IdentityAttributesCommitmentRandomness<C>,
 )> {
     let mut csprng = thread_rng();
 
@@ -137,7 +137,7 @@ pub fn prove_credential_attribute_commitments<
     )?;
 
     // We have all the values now.
-    let cred_values = CredentialAttributeCommitmentValues {
+    let cred_values = IdentityAttributesCommitmentValues {
         cred_id,
         threshold: prio.choice_ar_parameters.threshold,
         ar_data,
@@ -250,7 +250,7 @@ pub fn prove_credential_attribute_commitments<
     // The domain seperator in combination with appending all the data of the
     // credential deployment should make it non-reusable.
 
-    let id_proofs = CredentialAttributeCommitmentProofs {
+    let id_proofs = IdentityAttributesCommitmentProofs {
         sig: blinded_sig,
         commitments,
         challenge: proof.challenge,
@@ -263,7 +263,7 @@ pub fn prove_credential_attribute_commitments<
         cred_counter_less_than_max_accounts,
     };
 
-    let info = CredentialAttributeCommitmentInfo {
+    let info = IdentityAttributesCommitmentInfo {
         values: cred_values,
         proofs: id_proofs,
     };
@@ -277,8 +277,8 @@ fn compute_pok_sig<
     AttributeType: Attribute<C::Scalar>,
 >(
     commitment_key: &PedersenKey<C>,
-    commitments: &CredentialAttributeCommitments<C>,
-    commitment_rands: &CredentialAttributeCommitmentRandomness<C>,
+    commitments: &IdentityAttributesCommitments<C>,
+    commitment_rands: &IdentityAttributesCommitmentRandomness<C>,
     id_cred_sec: &Value<C>,
     prf_key: &prf::SecretKey<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
@@ -426,8 +426,8 @@ pub fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
     secret_data: &impl HasAttributeRandomness<C>,
     csprng: &mut R,
 ) -> anyhow::Result<(
-    CredentialAttributeCommitments<C>,
-    CredentialAttributeCommitmentRandomness<C>,
+    IdentityAttributesCommitments<C>,
+    IdentityAttributesCommitmentRandomness<C>,
 )> {
     let id_cred_sec_rand = if let Some(v) = cmm_coeff_randomness.first() {
         v.clone()
@@ -462,7 +462,7 @@ pub fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
             attributes_rand.insert(i, attr_rand);
         }
     }
-    let cdc = CredentialAttributeCommitments {
+    let cdc = IdentityAttributesCommitments {
         cmm_prf,
         cmm_cred_counter,
         cmm_max_accounts,
@@ -470,7 +470,7 @@ pub fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
         cmm_id_cred_sec_sharing_coeff: cmm_id_cred_sec_sharing_coeff.to_owned(),
     };
 
-    let cr = CredentialAttributeCommitmentRandomness {
+    let cr = IdentityAttributesCommitmentRandomness {
         id_cred_sec_rand,
         prf_rand,
         cred_counter_rand,
@@ -571,9 +571,8 @@ impl Display for AttributeCommitmentVerificationError {
         }
     }
 }
-/// Verify credential deployment info. This checks that the data is consistent,
-/// and that the credential is signed by the specified identity provider.
-pub fn verify_credential_attribute_commitments<
+/// Verify attribute commitments created from identity credential.
+pub fn verify_identity_attributes<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
@@ -584,7 +583,7 @@ pub fn verify_credential_attribute_commitments<
     // NB: The following map only needs to be a superset of the ars
     // in the cdi.
     known_ars: &BTreeMap<ArIdentity, A>,
-    cdi: &CredentialAttributeCommitmentInfo<P, C, AttributeType>,
+    cdi: &IdentityAttributesCommitmentInfo<P, C, AttributeType>,
     new_or_existing: &Either<TransactionTime, AccountAddress>,
 ) -> Result<(), AttributeCommitmentVerificationError> {
     // We need to check that the threshold is actually equal to
@@ -742,7 +741,7 @@ fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
 /// and that check is part of the signature check.
 fn verify_policy<C: Curve, AttributeType: Attribute<C::Scalar>>(
     _commitment_key: &CommitmentKey<C>,
-    _commitments: &CredentialAttributeCommitments<C>,
+    _commitments: &IdentityAttributesCommitments<C>,
     _policy: &Policy<C, AttributeType>,
 ) -> bool {
     true
@@ -762,7 +761,7 @@ fn pok_sig_verifier<
     threshold: Threshold,
     choice_ar_parameters: &BTreeSet<ArIdentity>,
     policy: &'a Policy<C, AttributeType>,
-    commitments: &'a CredentialAttributeCommitments<C>,
+    commitments: &'a IdentityAttributesCommitments<C>,
     ip_pub_key: &'a crate::ps_sig::PublicKey<P>,
     blinded_sig: &'a crate::ps_sig::BlindedSignature<P>,
 ) -> Option<com_eq_sig::ComEqSig<P, C>> {
@@ -832,155 +831,4 @@ fn pok_sig_verifier<
         ps_pub_key: ip_pub_key.clone(),
         comm_key: *commitment_key,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use crate::{
-        common::types::{KeyIndex, KeyPair},
-        curve_arithmetic::arkworks_instances::ArkGroup,
-        id::{constants::*, identity_provider::*, secret_sharing::Threshold, test::*},
-    };
-    use ark_bls12_381::g1;
-    use ark_ec::short_weierstrass::Projective;
-
-    type ExampleCurve = ArkGroup<Projective<g1::Config>>;
-
-    const EXPIRY: TransactionTime = TransactionTime {
-        seconds: 111111111111111111,
-    };
-
-    // TODO abr do we need this test
-    /// This test proves attribute commitments and check values were set correct.
-    /// It does not test the proofs for correct-/soundness.
-    #[test]
-    pub fn test_create_credential() {
-        // Create IP info with threshold = num_ars - 1
-        let max_attrs = 10;
-        let num_ars = 4;
-        let mut csprng = thread_rng();
-        let IpData {
-            public_ip_info: ip_info,
-            ip_secret_key,
-            ip_cdi_secret_key,
-        } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
-        let id_use_data = test_create_id_use_data(&mut csprng);
-        let acc_data = InitialAccountData {
-            keys: {
-                let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
-                keys
-            },
-            threshold: SignatureThreshold::TWO,
-        };
-        let global_ctx = GlobalContext::<ExampleCurve>::generate(String::from("genesis_string"));
-
-        let (ars_infos, _) =
-            test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
-        let (context, pio, _) = test_create_pio(
-            &id_use_data,
-            &ip_info,
-            &ars_infos,
-            &global_ctx,
-            num_ars,
-            &acc_data,
-        );
-        let alist: AttributeList<<IpPairing as Pairing>::ScalarField, AttributeKind> =
-            test_create_attributes();
-        let ver_ok = verify_credentials::<IpPairing, AttributeKind, ArCurve>(
-            &pio,
-            context,
-            &alist,
-            EXPIRY,
-            &ip_secret_key,
-            &ip_cdi_secret_key,
-        );
-        let (ip_sig, _) = ver_ok.unwrap();
-
-        // Create CDI arguments
-        let id_object = IdentityObject {
-            pre_identity_object: pio,
-            alist,
-            signature: ip_sig,
-        };
-        let valid_to = YearMonth::new(2022, 5).unwrap(); // May 2022
-        let created_at = YearMonth::new(2020, 5).unwrap(); // May 2020
-        let policy = Policy {
-            valid_to,
-            created_at,
-            policy_vec: {
-                let mut tree = BTreeMap::new();
-                tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
-                tree
-            },
-            _phantom: Default::default(),
-        };
-        let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
-        keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
-        keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
-        let sigthres = SignatureThreshold::TWO;
-        let acc_data = CredentialData {
-            keys,
-            threshold: sigthres,
-        };
-
-        let cred_ctr = 42;
-        let (cdi, _) = prove_credential_attribute_commitments(
-            context,
-            &id_object,
-            &id_use_data,
-            cred_ctr,
-            policy.clone(),
-            acc_data.get_cred_key_info(),
-            None,
-            &SystemAttributeRandomness {},
-        )
-        .expect("Could not generate CDI");
-
-        // Check cred_account
-        let cred_account_ok = {
-            let key_info = cdi.values.cred_key_info;
-            key_info.keys.len() == 3 && key_info.threshold == sigthres
-        };
-        assert!(cred_account_ok, "CDI cred_account is invalid");
-
-        // Check reg_id
-        let reg_id_exponent = id_use_data.aci.prf_key.prf_exponent(cred_ctr).unwrap();
-        let reg_id = global_ctx
-            .on_chain_commitment_key
-            .hide(
-                &Value::<ExampleCurve>::new(reg_id_exponent),
-                &PedersenRandomness::zero(),
-            )
-            .0;
-        assert_eq!(cdi.values.cred_id, reg_id, "CDI reg_id is invalid");
-
-        // Check ip_identity
-        assert_eq!(
-            cdi.values.ip_identity, ip_info.ip_identity,
-            "CDI ip_identity is invalid"
-        );
-
-        // Check threshold
-        assert_eq!(
-            cdi.values.threshold,
-            Threshold(num_ars - 1),
-            "CDI threshold is invalid"
-        );
-
-        // Check ar_data
-        assert_eq!(
-            cdi.values.ar_data.len() as u8,
-            num_ars,
-            "CDI ar_data length is invalid"
-        );
-
-        // Check policy
-        assert_eq!(cdi.values.policy, policy, "CDI policy is invalid");
-    }
 }

@@ -5,12 +5,12 @@ pub mod account_holder;
 pub mod anonymity_revoker;
 pub mod chain;
 pub mod constants;
-pub mod credential_attribute_commitment;
 #[cfg(feature = "ffi")]
 mod ffi;
 pub mod id_proof_types;
 pub mod id_prover;
 pub mod id_verifier;
+pub mod identity_attributes;
 pub mod identity_provider;
 pub mod secret_sharing;
 pub mod types;
@@ -38,4 +38,3 @@ pub use crate::ps_sig;
 #[cfg(any(test, feature = "internal-test-helpers"))]
 #[doc(hidden)]
 pub mod test;
-
