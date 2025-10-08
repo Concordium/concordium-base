@@ -2,7 +2,7 @@ name: Relase Concordium Base
 
 on:
 
-  workflow_dispach: 
+  workflow_dispatch: 
   
   push:
     tags:
@@ -19,6 +19,7 @@ jobs:
     defaults:
       run:
         working-directory: rust-src/concordium_base
+
     environment: release
 
     steps:
@@ -41,10 +42,10 @@ jobs:
           echo "Tag version number matches expected version from Cargo.toml. Proceeding with release."
         fi
 
-    - name: Publish to crate.io
+    - name: Publish to crates.io
       env:
         CARGO_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          echo "Publishing Concordium Base to crates.io for version: $TAG_VERSION"
-          cargo publish --token $CARGO_TOKEN --locked
+      run: |
+        echo "Publishing Concordium Base to crates.io for version: $TAG_VERSION"
+        cargo publish --token $CARGO_TOKEN --locked
   
