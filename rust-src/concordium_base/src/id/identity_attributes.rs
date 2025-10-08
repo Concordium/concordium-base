@@ -653,7 +653,6 @@ fn pok_sig_verifier<
 
 #[cfg(test)]
 mod test {
-    use crate::common;
     use crate::curve_arithmetic::Curve;
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
     use crate::id::identity_attributes::{prove_identity_attributes, verify_identity_attributes};
@@ -663,7 +662,6 @@ mod test {
     };
     use crate::id::{identity_provider, test};
     use std::collections::BTreeMap;
-    use std::mem;
 
     struct IdentityObjectFixture {
         id_object: IdentityObjectV1<IpPairing, ArCurve, AttributeKind>,
@@ -691,7 +689,7 @@ mod test {
             test::test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
 
         let id_use_data = test::test_create_id_use_data(&mut csprng);
-        let (context, pio, randomness) =
+        let (context, pio, _randomness) =
             test::test_create_pio_v1(&id_use_data, &ip_info, &ars_infos, &global_ctx, num_ars);
         let alist = test::test_create_attributes();
         let ip_sig =
@@ -772,7 +770,7 @@ mod test {
         .expect("prove");
 
         // make one of the ar share encryptions invalid
-        let mut enc = id_attr_info.values.ar_data.values_mut().next().unwrap();
+        let enc = id_attr_info.values.ar_data.values_mut().next().unwrap();
         enc.enc_id_cred_pub_share.1 = enc
             .enc_id_cred_pub_share
             .1
@@ -835,7 +833,7 @@ mod test {
 
         // change one of the committed values in the signature
         let mut id_attr_info_invalid = id_attr_info.clone();
-        let mut attr_cmm = id_attr_info_invalid
+        let attr_cmm = id_attr_info_invalid
             .proofs
             .commitments
             .cmm_attributes
