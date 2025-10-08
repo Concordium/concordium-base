@@ -1099,7 +1099,7 @@ fn compute_pok_sig<
 /// For the other values the verifier (the chain) will compute commitments with
 /// randomness 0 in order to verify knowledge of the signature.
 #[allow(clippy::too_many_arguments)]
-pub fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
+fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     commitment_key: &PedersenKey<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
     prf_key: &prf::SecretKey<C>,

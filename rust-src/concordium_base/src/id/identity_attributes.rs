@@ -222,7 +222,7 @@ fn compute_pok_sig<
 >(
     commitment_key: &PedersenKey<C>,
     commitments: &IdentityAttributesCommitments<C>,
-    commitment_rands: &IdentityAttributesCommitmentRandomness<C>,
+    commitment_rands: &CommitmentRandomness<C>,
     id_cred_sec: &Value<C>,
     prf_key: &prf::SecretKey<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
@@ -372,7 +372,7 @@ struct CommitmentRandomness<C: Curve> {
 /// For the other values the verifier (the chain) will compute commitments with
 /// randomness 0 in order to verify knowledge of the signature.
 #[allow(clippy::too_many_arguments)]
-pub fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
+fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     commitment_key: &PedersenKey<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
     prf_key: &prf::SecretKey<C>,
@@ -380,10 +380,7 @@ pub fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
     cmm_coeff_randomness: Vec<PedersenRandomness<C>>,
     policy: &Policy<C, AttributeType>,
     csprng: &mut R,
-) -> anyhow::Result<(
-    IdentityAttributesCommitments<C>,
-    CommitmentRandomness<C>,
-)> {
+) -> anyhow::Result<(IdentityAttributesCommitments<C>, CommitmentRandomness<C>)> {
     let id_cred_sec_rand = if let Some(v) = cmm_coeff_randomness.first() {
         v.clone()
     } else {
@@ -421,7 +418,7 @@ pub fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
         cmm_id_cred_sec_sharing_coeff: cmm_id_cred_sec_sharing_coeff.to_owned(),
     };
 
-    let cr = IdentityAttributesCommitmentRandomness {
+    let cr = CommitmentRandomness {
         id_cred_sec_rand,
         prf_rand,
         max_accounts_rand,
