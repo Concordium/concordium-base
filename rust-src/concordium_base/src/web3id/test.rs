@@ -1,5 +1,3 @@
-//! Functionality related to constructing and verifying identity credential proofs.
-//!
 #[cfg(test)]
 mod tests {
     use crate::id::types::Attribute;
@@ -211,7 +209,6 @@ mod tests {
             for (tag, value) in randomness.iter() {
                 let _ = comms.insert(
                     AttributeTag::from(*tag),
-                    // TODO: Ask Daniel why we hide the commitment and not directly use them.
                     key.hide(
                         &pedersen_commitment::Value::<ArCurve>::new(
                             values.get(tag).unwrap().to_field_element(),

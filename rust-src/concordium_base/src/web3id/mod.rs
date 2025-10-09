@@ -6,7 +6,7 @@
 
 pub mod did;
 
-#[cfg(any(test))]
+#[cfg(test)]
 #[doc(hidden)]
 pub mod test;
 
