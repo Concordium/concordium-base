@@ -17,7 +17,7 @@ use core::fmt;
 use core::fmt::Display;
 use either::Either;
 use rand::*;
-use std::collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet};
+use std::collections::{btree_map::BTreeMap, BTreeSet};
 
 /// Construct proof for attribute commitments from identity credential
 pub fn prove_identity_attributes<
@@ -389,7 +389,6 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
         n >= policy.policy_vec.len(),
         "Attribute list is shorter than the number of revealed items in the policy."
     );
-    let cmm_len = n - policy.policy_vec.len();
     let mut cmm_attributes = BTreeMap::new();
     let mut attributes_rand = BTreeMap::new();
     for (&i, val) in att_vec.iter() {
