@@ -2732,9 +2732,7 @@ pub struct IdentityAttributesCommitments<C: Curve> {
 /// This randomness is needed later on if the user wishes to do
 /// something with those commitments, for example reveal the commited value, or
 /// prove a property of the value.
-#[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct IdentityAttributesCommitmentRandomness<C: Curve> {
-    #[serde(rename = "attributesRand")]
     /// Randomness, if any, used to commit to user-chosen attributes, such as
     /// country of nationality.
     pub attributes_rand: BTreeMap<AttributeTag, PedersenRandomness<C>>,

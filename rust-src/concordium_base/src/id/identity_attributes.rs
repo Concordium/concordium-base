@@ -117,7 +117,7 @@ pub fn prove_identity_attributes<
     // The challenge has domain separator "IdentityAttributes" followed by appending all
     // values of the identity attributes to the ro, specifically appending the
     // IdentityAttributesCommitmentValues struct.
-    // This should make the individual proofs non-reusable.
+    // This should make the individual parts of the proof non-reusable.
     let mut ro = RandomOracle::domain("IdentityAttributes");
     ro.append_message(b"identity_attribute_values", &id_attribute_values);
     ro.append_message(b"global_context", &context.global_context);
@@ -199,11 +199,11 @@ pub fn prove_identity_attributes<
         proofs: id_proofs,
     };
 
-    let commitment_rands = IdentityAttributesCommitmentRandomness {
+    let cmm_rand = IdentityAttributesCommitmentRandomness {
         attributes_rand: commitment_rands.attributes_rand,
     };
 
-    Ok((info, commitment_rands))
+    Ok((info, cmm_rand))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -348,15 +348,15 @@ fn compute_pok_sig<
 /// Randomness for commitments
 struct CommitmentRandomness<C: Curve> {
     /// Randomness of the commitment to idCredSec.
-    pub id_cred_sec_rand: PedersenRandomness<C>,
+    id_cred_sec_rand: PedersenRandomness<C>,
     /// Randomness of the commitment to the PRF key.
-    pub prf_rand: PedersenRandomness<C>,
+    prf_rand: PedersenRandomness<C>,
     /// Randomness of the commitment to the maximum number of accounts the user
     /// may create from the identity object.
-    pub max_accounts_rand: PedersenRandomness<C>,
+    max_accounts_rand: PedersenRandomness<C>,
     /// Randomness, if any, used to commit to user-chosen attributes, such as
     /// country of nationality.
-    pub attributes_rand: BTreeMap<AttributeTag, PedersenRandomness<C>>,
+    attributes_rand: BTreeMap<AttributeTag, PedersenRandomness<C>>,
 }
 
 /// Computing the commitments for the credential deployment info. We only
@@ -401,20 +401,20 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
             attributes_rand.insert(i, attr_rand);
         }
     }
-    let cdc = IdentityAttributesCommitments {
+    let id_attr_cmms = IdentityAttributesCommitments {
         cmm_prf,
         cmm_max_accounts,
         cmm_attributes,
         cmm_id_cred_sec_sharing_coeff: cmm_id_cred_sec_sharing_coeff.to_owned(),
     };
 
-    let cr = CommitmentRandomness {
+    let cmm_rand = CommitmentRandomness {
         id_cred_sec_rand,
         prf_rand,
         max_accounts_rand,
         attributes_rand,
     };
-    Ok((cdc, cr))
+    Ok((id_attr_cmms, cmm_rand))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -452,38 +452,48 @@ pub fn verify_identity_attributes<
     global_context: &GlobalContext<C>,
     ip_info: &IpInfo<P>,
     // NB: The following map only needs to be a superset of the ars
-    // in the cdi.
+    // in the identity attribute values.
     known_ars: &BTreeMap<ArIdentity, A>,
-    cdi: &IdentityAttributesCommitmentInfo<P, C, AttributeType>,
+    id_attr_info: &IdentityAttributesCommitmentInfo<P, C, AttributeType>,
 ) -> Result<(), AttributeCommitmentVerificationError> {
+    if ip_info.ip_identity != id_attr_info.values.ip_identity {
+        return Err(AttributeCommitmentVerificationError::Signature);
+    }
     // We need to check that the threshold is actually equal to
     // the number of coefficients in the sharing polynomial
     // (corresponding to the degree+1)
-    let rt_usize: usize = cdi.values.threshold.into();
-    if rt_usize != cdi.proofs.commitments.cmm_id_cred_sec_sharing_coeff.len() {
+    let rt_usize: usize = id_attr_info.values.threshold.into();
+    if rt_usize
+        != id_attr_info
+            .proofs
+            .commitments
+            .cmm_id_cred_sec_sharing_coeff
+            .len()
+    {
         return Err(AttributeCommitmentVerificationError::Ar);
     }
     let on_chain_commitment_key = global_context.on_chain_commitment_key;
     let ip_verify_key = &ip_info.ip_verify_key;
     // Compute the challenge prefix by hashing the values.
     let mut ro = RandomOracle::domain("IdentityAttributes");
-    ro.append_message(b"identity_attribute_values", &cdi.values);
+    ro.append_message(b"identity_attribute_values", &id_attr_info.values);
     ro.append_message(b"global_context", &global_context);
 
-    let commitments = &cdi.proofs.commitments;
+    let commitments = &id_attr_info.proofs.commitments;
 
     let verifier_sig = pok_sig_verifier(
         &on_chain_commitment_key,
-        cdi.values.threshold,
-        &cdi.values
+        id_attr_info.values.threshold,
+        &id_attr_info
+            .values
             .ar_data
             .keys()
             .copied()
             .collect::<BTreeSet<ArIdentity>>(),
-        &cdi.values.policy,
+        &id_attr_info.values.policy,
         commitments,
         ip_verify_key,
-        &cdi.proofs.sig,
+        &id_attr_info.proofs.sig,
     );
     let verifier_sig = if let Some(v) = verifier_sig {
         v
@@ -491,14 +501,14 @@ pub fn verify_identity_attributes<
         return Err(AttributeCommitmentVerificationError::Signature);
     };
 
-    let response_sig = cdi.proofs.proof_ip_sig.clone();
+    let response_sig = id_attr_info.proofs.proof_ip_sig.clone();
 
     let (id_cred_pub_verifier, id_cred_pub_responses) = id_cred_pub_verifier(
         &on_chain_commitment_key,
         known_ars,
-        &cdi.values.ar_data,
+        &id_attr_info.values.ar_data,
         &commitments.cmm_id_cred_sec_sharing_coeff,
-        &cdi.proofs.proof_id_cred_pub,
+        &id_attr_info.proofs.proof_id_cred_pub,
     )?;
 
     let verifier = AndAdapter {
@@ -510,7 +520,7 @@ pub fn verify_identity_attributes<
         r2: id_cred_pub_responses,
     };
     let proof = SigmaProof {
-        challenge: cdi.proofs.challenge,
+        challenge: id_attr_info.proofs.challenge,
         response,
     };
 
@@ -654,12 +664,15 @@ fn pok_sig_verifier<
 mod test {
     use crate::curve_arithmetic::Curve;
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
-    use crate::id::identity_attributes::{prove_identity_attributes, verify_identity_attributes};
+    use crate::id::identity_attributes::{
+        prove_identity_attributes, verify_identity_attributes, AttributeCommitmentVerificationError,
+    };
     use crate::id::types::{
         ArIdentity, ArInfo, GlobalContext, IdObjectUseData, IdentityObjectV1, IpContext, IpData,
         IpInfo, Policy,
     };
     use crate::id::{identity_provider, test};
+    use assert_matches::assert_matches;
     use std::collections::BTreeMap;
 
     struct IdentityObjectFixture {
@@ -775,13 +788,45 @@ mod test {
             .1
             .plus_point(&ArCurve::one_point());
 
-        verify_identity_attributes(
+        let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
             &id_object_fixture.ip_info,
             &id_object_fixture.ars_infos,
             &id_attr_info,
+        );
+
+        assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
+    }
+
+    /// Test that the verifier fails if identity provider is not set correctly.
+    #[test]
+    pub fn test_identity_attributes_soundness_ip() {
+        let id_object_fixture = identity_object_fixture();
+
+        let policy = Policy {
+            valid_to: id_object_fixture.id_object.alist.valid_to,
+            created_at: id_object_fixture.id_object.alist.created_at,
+            policy_vec: Default::default(),
+            _phantom: Default::default(),
+        };
+
+        let (mut id_attr_info, _) = prove_identity_attributes(
+            ip_context(&id_object_fixture),
+            &id_object_fixture.id_object,
+            &id_object_fixture.id_use_data,
+            policy,
         )
-        .expect_err("verify");
+        .expect("prove");
+
+        id_attr_info.values.ip_identity.0 += 1;
+
+        let res = verify_identity_attributes(
+            &id_object_fixture.global_ctx,
+            &id_object_fixture.ip_info,
+            &id_object_fixture.ars_infos,
+            &id_attr_info,
+        );
+        assert_matches!(res, Err(AttributeCommitmentVerificationError::Signature));
     }
 
     /// Test that the verifier does not accept the proof if the
@@ -805,30 +850,39 @@ mod test {
         )
         .expect("prove");
 
-        // change one of the public values in the signature
+        // change one of the public values in the signature: decrease ar threshold
         let mut id_attr_info_invalid = id_attr_info.clone();
         id_attr_info_invalid.values.threshold.0 -= 1;
+        id_attr_info_invalid
+            .proofs
+            .commitments
+            .cmm_id_cred_sec_sharing_coeff
+            .pop();
 
-        verify_identity_attributes(
+        let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
             &id_object_fixture.ip_info,
             &id_object_fixture.ars_infos,
             &id_attr_info_invalid,
-        )
-        .expect_err("verify");
+        );
+        assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
 
-        // change one of the public values in the signature
+        // change one of the public values in the signature: remove one of the ars
         let mut id_attr_info_invalid = id_attr_info.clone();
         let ar_to_remove = *id_attr_info_invalid.values.ar_data.keys().next().unwrap();
         id_attr_info_invalid.values.ar_data.remove(&ar_to_remove);
+        id_attr_info_invalid
+            .proofs
+            .proof_id_cred_pub
+            .remove(&ar_to_remove);
 
-        verify_identity_attributes(
+        let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
             &id_object_fixture.ip_info,
             &id_object_fixture.ars_infos,
             &id_attr_info_invalid,
-        )
-        .expect_err("verify");
+        );
+        assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
 
         // change one of the committed values in the signature
         let mut id_attr_info_invalid = id_attr_info.clone();
@@ -841,12 +895,12 @@ mod test {
             .unwrap();
         attr_cmm.0 = attr_cmm.0.plus_point(&ArCurve::one_point());
 
-        verify_identity_attributes(
+        let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
             &id_object_fixture.ip_info,
             &id_object_fixture.ars_infos,
             &id_attr_info_invalid,
-        )
-        .expect_err("verify");
+        );
+        assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
     }
 }
