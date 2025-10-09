@@ -199,11 +199,11 @@ pub fn prove_identity_attributes<
         proofs: id_proofs,
     };
 
-    let cmm_rnds = IdentityAttributesCommitmentRandomness {
+    let cmm_rand = IdentityAttributesCommitmentRandomness {
         attributes_rand: commitment_rands.attributes_rand,
     };
 
-    Ok((info, cmm_rnds))
+    Ok((info, cmm_rand))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -409,13 +409,13 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
         cmm_id_cred_sec_sharing_coeff: cmm_id_cred_sec_sharing_coeff.to_owned(),
     };
 
-    let cmm_rnds = CommitmentRandomness {
+    let cmm_rand = CommitmentRandomness {
         id_cred_sec_rand,
         prf_rand,
         max_accounts_rand,
         attributes_rand,
     };
-    Ok((id_attr_cmms, cmm_rnds))
+    Ok((id_attr_cmms, cmm_rand))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
