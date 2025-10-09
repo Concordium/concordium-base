@@ -115,7 +115,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSigPu
         // The number of revealed messages
         let rev_val_length = self.revealed_values.len();
         // Basic sanity check
-        if rev_val_length < n {
+        if rev_val_length > n {
             return None;
         }
         // The number of commitments
