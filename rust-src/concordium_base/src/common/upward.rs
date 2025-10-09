@@ -5,10 +5,24 @@ use crate::common::cbor::{
 use std::any::type_name;
 
 /// Type for forward-compatibility with the Concordium Node API.
+///
+/// # `serde` implementation (deprecated).
+///
+/// To ensure some level of backwards-compatibility this implements
+/// [`serde::Serialize`] and [`serde::Deserialize`], but serializing
+/// `Upward::Unknown` will produce a runtime error and deserializing can only
+/// produce `Upward::Known`.
+/// The serde implementation should be considered deprecated and might be
+/// removed in a future version.#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Upward<A, R = ()> {
     /// New unknown variant, the structure is not known to the current version
     /// of this library. Consider updating the library if support is needed.
+    ///
+    /// For protocols that support decoding unknown data, the residual value is
+    /// a representation of unknown data (represented by a dynamic data type).
+    /// This is the case for CBOR e.g., but not possible for protobuf that is
+    /// not self-descriptive.
     Unknown(R),
     /// Known variant.
     Known(A),
@@ -288,5 +302,25 @@ impl<A> std::iter::FromIterator<Upward<A>> for Upward<Vec<A>> {
             }
         }
         Upward::Known(vec)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_upward_from_iterator_all_known() {
+        let list = vec![Upward::Known(42); 50];
+        let res = list.into_iter().collect::<Upward<_>>().unwrap();
+        assert_eq!(vec![42; 50], res)
+    }
+
+    #[test]
+    fn test_upward_from_iterator_some_unknown() {
+        let mut list = vec![Upward::Known(42); 50];
+        list[25] = Upward::Unknown(());
+        let res = list.into_iter().collect::<Upward<_>>();
+        assert_eq!(Upward::Unknown(()), res)
     }
 }
