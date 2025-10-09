@@ -19,7 +19,7 @@ use either::Either;
 use rand::*;
 use std::collections::{btree_map::BTreeMap, BTreeSet};
 
-/// Construct proof for attribute commitments from identity credential
+/// Construct proof for attribute credentials from identity credential
 pub fn prove_identity_attributes<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -30,8 +30,8 @@ pub fn prove_identity_attributes<
     id_object_use_data: &IdObjectUseData<P, C>,
     policy: Policy<C, AttributeType>,
 ) -> anyhow::Result<(
-    IdentityAttributesCommitmentInfo<P, C, AttributeType>,
-    IdentityAttributesCommitmentRandomness<C>,
+    IdentityAttributesCredentialsInfo<P, C, AttributeType>,
+    IdentityAttributesCredentialsRandomness<C>,
 )> {
     let mut csprng = thread_rng();
 
@@ -107,7 +107,7 @@ pub fn prove_identity_attributes<
     )?;
 
     // We have all the values now.
-    let id_attribute_values = IdentityAttributesCommitmentValues {
+    let id_attribute_values = IdentityAttributesCredentialsValues {
         threshold: prio.choice_ar_parameters.threshold,
         ar_data,
         ip_identity: context.ip_info.ip_identity,
@@ -183,7 +183,7 @@ pub fn prove_identity_attributes<
         None => bail!("Cannot produce zero knowledge proof."),
     };
 
-    let id_proofs = IdentityAttributesCommitmentProofs {
+    let id_proofs = IdentityAttributesCredentialsProofs {
         sig: blinded_sig,
         commitments,
         challenge: proof.challenge,
@@ -194,12 +194,12 @@ pub fn prove_identity_attributes<
         proof_ip_sig: proof.response.r1,
     };
 
-    let info = IdentityAttributesCommitmentInfo {
+    let info = IdentityAttributesCredentialsInfo {
         values: id_attribute_values,
         proofs: id_proofs,
     };
 
-    let cmm_rand = IdentityAttributesCommitmentRandomness {
+    let cmm_rand = IdentityAttributesCredentialsRandomness {
         attributes_rand: commitment_rands.attributes_rand,
     };
 
@@ -213,7 +213,7 @@ fn compute_pok_sig<
     AttributeType: Attribute<C::Scalar>,
 >(
     commitment_key: &PedersenKey<C>,
-    commitments: &IdentityAttributesCommitments<C>,
+    commitments: &IdentityAttributesCredentialsCommitments<C>,
     commitment_rands: &CommitmentRandomness<C>,
     id_cred_sec: &Value<C>,
     prf_key: &prf::SecretKey<C>,
@@ -371,7 +371,10 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     cmm_coeff_randomness: Vec<PedersenRandomness<C>>,
     policy: &Policy<C, AttributeType>,
     csprng: &mut R,
-) -> anyhow::Result<(IdentityAttributesCommitments<C>, CommitmentRandomness<C>)> {
+) -> anyhow::Result<(
+    IdentityAttributesCredentialsCommitments<C>,
+    CommitmentRandomness<C>,
+)> {
     let id_cred_sec_rand = if let Some(v) = cmm_coeff_randomness.first() {
         v.clone()
     } else {
@@ -401,7 +404,7 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
             attributes_rand.insert(i, attr_rand);
         }
     }
-    let id_attr_cmms = IdentityAttributesCommitments {
+    let id_attr_cmms = IdentityAttributesCredentialsCommitments {
         cmm_prf,
         cmm_max_accounts,
         cmm_attributes,
@@ -454,7 +457,7 @@ pub fn verify_identity_attributes<
     // NB: The following map only needs to be a superset of the ars
     // in the identity attribute values.
     known_ars: &BTreeMap<ArIdentity, A>,
-    id_attr_info: &IdentityAttributesCommitmentInfo<P, C, AttributeType>,
+    id_attr_info: &IdentityAttributesCredentialsInfo<P, C, AttributeType>,
 ) -> Result<(), AttributeCommitmentVerificationError> {
     if ip_info.ip_identity != id_attr_info.values.ip_identity {
         return Err(AttributeCommitmentVerificationError::Signature);
@@ -590,7 +593,7 @@ fn pok_sig_verifier<
     threshold: Threshold,
     choice_ar_parameters: &BTreeSet<ArIdentity>,
     policy: &'a Policy<C, AttributeType>,
-    commitments: &'a IdentityAttributesCommitments<C>,
+    commitments: &'a IdentityAttributesCredentialsCommitments<C>,
     ip_pub_key: &'a crate::ps_sig::PublicKey<P>,
     blinded_sig: &'a crate::ps_sig::BlindedSignature<P>,
 ) -> Option<com_eq_sig::ComEqSig<P, C>> {
@@ -664,7 +667,7 @@ fn pok_sig_verifier<
 mod test {
     use crate::curve_arithmetic::Curve;
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
-    use crate::id::identity_attributes::{
+    use crate::id::identity_attributes_credentials::{
         prove_identity_attributes, verify_identity_attributes, AttributeCommitmentVerificationError,
     };
     use crate::id::types::{
