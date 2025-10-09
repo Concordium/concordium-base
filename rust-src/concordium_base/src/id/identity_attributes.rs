@@ -199,11 +199,11 @@ pub fn prove_identity_attributes<
         proofs: id_proofs,
     };
 
-    let commitment_rands = IdentityAttributesCommitmentRandomness {
+    let cmm_rnds = IdentityAttributesCommitmentRandomness {
         attributes_rand: commitment_rands.attributes_rand,
     };
 
-    Ok((info, commitment_rands))
+    Ok((info, cmm_rnds))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -402,20 +402,20 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
             attributes_rand.insert(i, attr_rand);
         }
     }
-    let cdc = IdentityAttributesCommitments {
+    let id_attr_cmms = IdentityAttributesCommitments {
         cmm_prf,
         cmm_max_accounts,
         cmm_attributes,
         cmm_id_cred_sec_sharing_coeff: cmm_id_cred_sec_sharing_coeff.to_owned(),
     };
 
-    let cr = CommitmentRandomness {
+    let cmm_rnds = CommitmentRandomness {
         id_cred_sec_rand,
         prf_rand,
         max_accounts_rand,
         attributes_rand,
     };
-    Ok((cdc, cr))
+    Ok((id_attr_cmms, cmm_rnds))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -453,7 +453,7 @@ pub fn verify_identity_attributes<
     global_context: &GlobalContext<C>,
     ip_info: &IpInfo<P>,
     // NB: The following map only needs to be a superset of the ars
-    // in the cdi.
+    // in the identity attribute values.
     known_ars: &BTreeMap<ArIdentity, A>,
     id_attr_info: &IdentityAttributesCommitmentInfo<P, C, AttributeType>,
 ) -> Result<(), AttributeCommitmentVerificationError> {
@@ -464,7 +464,13 @@ pub fn verify_identity_attributes<
     // the number of coefficients in the sharing polynomial
     // (corresponding to the degree+1)
     let rt_usize: usize = id_attr_info.values.threshold.into();
-    if rt_usize != id_attr_info.proofs.commitments.cmm_id_cred_sec_sharing_coeff.len() {
+    if rt_usize
+        != id_attr_info
+            .proofs
+            .commitments
+            .cmm_id_cred_sec_sharing_coeff
+            .len()
+    {
         return Err(AttributeCommitmentVerificationError::Ar);
     }
     let on_chain_commitment_key = global_context.on_chain_commitment_key;
@@ -479,7 +485,8 @@ pub fn verify_identity_attributes<
     let verifier_sig = pok_sig_verifier(
         &on_chain_commitment_key,
         id_attr_info.values.threshold,
-        &id_attr_info.values
+        &id_attr_info
+            .values
             .ar_data
             .keys()
             .copied()
