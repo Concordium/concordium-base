@@ -2737,7 +2737,7 @@ pub struct IdentityAttributesCommitmentRandomness<C: Curve> {
     #[serde(rename = "attributesRand")]
     /// Randomness, if any, used to commit to user-chosen attributes, such as
     /// country of nationality.
-    pub attributes_rand: HashMap<AttributeTag, PedersenRandomness<C>>,
+    pub attributes_rand: BTreeMap<AttributeTag, PedersenRandomness<C>>,
 }
 
 /// This structure contains all proofs, which are required to prove identity attributes commitments created
