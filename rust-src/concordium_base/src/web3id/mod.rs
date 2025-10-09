@@ -54,7 +54,9 @@ pub const LINKING_DOMAIN_STRING: &[u8] = b"WEB3ID:LINKING";
 /// Encryption of identity credential public part
 #[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
 #[serde(transparent)]
-pub struct IdCredentialPubEncryption<C: Curve>(BTreeMap<ArIdentity, ChainArData<C>>);
+pub struct IdCredentialPubEncryption<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
+    BTreeMap<P, ChainArData<C>>,
+);
 
 /// A statement about a single credential, either an identity credential or a
 /// Web3 credential.
@@ -1676,17 +1678,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                     .expect("todo");
 
                 let mut proofs = Vec::new();
-                let attribute_values: BTreeMap<_, _> = identity_attributes_info
-                    .proofs
-                    .commitments
-                    .cmm_attributes
-                    .iter()
-                    .map(|(ar_id, _cmm)| {
-                        let _rand = it_attr_cmm_rand.attributes_rand.get(ar_id).expect("todo");
-                        let _value = todo!(); // open commitment
-                        (*ar_id, _value)
-                    })
-                    .collect();
                 for statement in statement {
                     let proof = statement
                         .prove(
@@ -1694,7 +1685,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                             global,
                             ro,
                             csprng,
-                            &attribute_values,
+                            &id_object.get_attribute_list().alist,
                             &it_attr_cmm_rand.attributes_rand,
                         )
                         .ok_or(ProofError::MissingAttribute)?;
