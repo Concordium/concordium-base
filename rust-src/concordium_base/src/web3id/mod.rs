@@ -8,6 +8,13 @@ pub mod did;
 
 // TODO:
 // - Documentation.
+use crate::curve_arithmetic::Pairing;
+use crate::id::identity_attributes;
+use crate::id::types::{
+    ArIdentity, ArPublicKey, ChainArData, HasIdentityObjectFields, IdObjectUseData,
+    IdentityAttributesCommitmentInfo, IdentityAttributesCommitmentValues, IpContext, IpInfo,
+    Policy, YearMonth,
+};
 use crate::{
     base::CredentialRegistrationID,
     cis4_types::IssuerKey,
@@ -44,6 +51,11 @@ pub const REVOKE_DOMAIN_STRING: &[u8] = b"WEB3ID:REVOKE";
 /// the credential secret key.
 pub const LINKING_DOMAIN_STRING: &[u8] = b"WEB3ID:LINKING";
 
+/// Encryption of identity credential secret
+#[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct IdentityCredentialSecretEncryption<C: Curve>(BTreeMap<ArIdentity, ChainArData<C>>);
+
 /// A statement about a single credential, either an identity credential or a
 /// Web3 credential.
 #[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
@@ -52,11 +64,20 @@ pub const LINKING_DOMAIN_STRING: &[u8] = b"WEB3ID:LINKING";
     bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned")
 )]
 pub enum CredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    /// Statement about a credential derived from an identity issued by an
+    /// Statement about an account credential derived from an identity issued by an
     /// identity provider.
     Account {
         network: Network,
         cred_id: CredentialRegistrationID,
+        statement: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
+    },
+    /// Statement about identity attributes derived directly from an identity issued by an
+    /// identity provider.
+    IdentityCredentials {
+        network: Network,
+        /// Statement about the issued attributes origin and integrity
+        identity_attributes_values: IdentityAttributesCommitmentValues<C, AttributeType>,
+        /// Attribute statements
         statement: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
     },
     /// Statement about a credential issued by a Web3 identity provider, a smart
@@ -112,6 +133,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<s
                     statement: serde_json::from_value(statement)?,
                 })
             }
+            // todo handle IdentityCredentials
             _ => {
                 anyhow::bail!("Only ID credentials and Web3 credentials are supported.")
             }
@@ -152,6 +174,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 });
                 json.serialize(serializer)
             }
+            CredentialStatement::IdentityCredentials { .. } => {
+                todo!()
+            }
         }
     }
 }
@@ -170,6 +195,13 @@ pub enum CredentialMetadata {
         issuer: IpIdentity,
         cred_id: CredentialRegistrationID,
     },
+    /// Metadata of identity attributes derived directly from an
+    /// identity object.
+    IdentityCredentials {
+        issuer: IpIdentity,
+        valid_to: YearMonth,
+        created_at: YearMonth,
+    },
     /// Metadata of a Web3Id credential.
     Web3Id {
         contract: ContractAddress,
@@ -186,7 +218,9 @@ pub struct ProofMetadata {
     pub cred_metadata: CredentialMetadata,
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, AttributeType> {
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
+    CredentialProof<P, C, AttributeType>
+{
     pub fn metadata(&self) -> ProofMetadata {
         match self {
             CredentialProof::Account {
@@ -219,6 +253,20 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
                     holder: *holder,
                 },
             },
+            CredentialProof::IdentityCredentials {
+                created,
+                network,
+                identity_attributes_info,
+                ..
+            } => ProofMetadata {
+                created: *created,
+                network: *network,
+                cred_metadata: CredentialMetadata::IdentityCredentials {
+                    issuer: identity_attributes_info.values.ip_identity,
+                    valid_to: identity_attributes_info.values.policy.valid_to,
+                    created_at: identity_attributes_info.values.policy.created_at,
+                },
+            },
         }
     }
 
@@ -249,6 +297,16 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
                 credential: *holder,
                 statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
             },
+            CredentialProof::IdentityCredentials {
+                network,
+                identity_attributes_info,
+                proofs,
+                ..
+            } => CredentialStatement::IdentityCredentials {
+                network: *network,
+                identity_attributes_values: identity_attributes_info.values.clone(),
+                statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
+            },
         }
     }
 }
@@ -260,7 +318,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
 /// all the information needed to verify it, except the issuer's public key in
 /// case of the `Web3Id` proof, and the public commitments in case of the
 /// `Account` proof.
-pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
+pub enum CredentialProof<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
     Account {
         /// Creation timestamp of the proof.
         created: chrono::DateTime<chrono::Utc>,
@@ -270,6 +332,14 @@ pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
         /// Issuer of this credential, the identity provider index on the
         /// relevant network.
         issuer: IpIdentity,
+        proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
+    },
+    IdentityCredentials {
+        /// Creation timestamp of the proof.
+        created: chrono::DateTime<chrono::Utc>,
+        network: Network,
+        /// Commitments to attribute values
+        identity_attributes_info: IdentityAttributesCommitmentInfo<P, C, AttributeType>,
         proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
     },
     Web3Id {
@@ -372,8 +442,11 @@ impl<C: Curve> SignedCommitments<C> {
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
-    for CredentialProof<C, AttributeType>
+impl<
+        P: Pairing,
+        C: Curve<Scalar = P::ScalarField>,
+        AttributeType: Attribute<C::Scalar> + serde::Serialize,
+    > serde::Serialize for CredentialProof<P, C, AttributeType>
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -427,6 +500,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 });
                 json.serialize(serializer)
             }
+            CredentialProof::IdentityCredentials { .. } => {
+                todo!()
+            }
         }
     }
 }
@@ -455,8 +531,11 @@ fn get_optional_field(
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned>
-    TryFrom<serde_json::Value> for CredentialProof<C, AttributeType>
+impl<
+        P: Pairing,
+        C: Curve<Scalar = P::ScalarField>,
+        AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned,
+    > TryFrom<serde_json::Value> for CredentialProof<P, C, AttributeType>
 {
     type Error = anyhow::Error;
 
@@ -554,13 +633,14 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                     ty,
                 })
             }
+            // todo how to handle IdentityCredential variant?
             _ => anyhow::bail!("Only IDPs and smart contracts can be issuers."),
         }
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
-    for CredentialProof<C, AttributeType>
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
+    crate::common::Serial for CredentialProof<P, C, AttributeType>
 {
     fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
         match self {
@@ -601,6 +681,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
                 holder.serial(out);
                 commitments.serial(out);
                 proofs.serial(out)
+            }
+            CredentialProof::IdentityCredentials { .. } => {
+                todo!()
             }
         }
     }
@@ -797,9 +880,13 @@ pub type CredentialHolderId = Ed25519PublicKey<CredentialHolderIdRole>;
 /// A presentation is the response to a [`Request`]. It contains proofs for
 /// statements, ownership proof for all Web3 credentials, and a context. The
 /// only missing part to verify the proof are the public commitments.
-pub struct Presentation<C: Curve, AttributeType: Attribute<C::Scalar>> {
+pub struct Presentation<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
     pub presentation_context: Challenge,
-    pub verifiable_credential: Vec<CredentialProof<C, AttributeType>>,
+    pub verifiable_credential: Vec<CredentialProof<P, C, AttributeType>>,
     /// Signatures from keys of Web3 credentials (not from ID credentials).
     /// The order is the same as that in the `credential_proofs` field.
     pub linking_proof: LinkingProof,
@@ -820,7 +907,9 @@ pub enum PresentationVerificationError {
     InvalidCredential,
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeType> {
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
+    Presentation<P, C, AttributeType>
+{
     /// Get an iterator over the metadata for each of the verifiable credentials
     /// in the order they appear in the presentation.
     pub fn metadata(&self) -> impl ExactSizeIterator<Item = ProofMetadata> + '_ {
@@ -839,7 +928,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
     pub fn verify<'a>(
         &self,
         params: &GlobalContext<C>,
-        public: impl ExactSizeIterator<Item = &'a CredentialsInputs<C>>,
+        public: impl ExactSizeIterator<Item = &'a CredentialsInputs<P, C>>,
     ) -> Result<Request<C, AttributeType>, PresentationVerificationError> {
         let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
         transcript.add_bytes(self.presentation_context);
@@ -884,8 +973,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
-    for Presentation<C, AttributeType>
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
+    crate::common::Serial for Presentation<P, C, AttributeType>
 {
     fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
         self.presentation_context.serial(out);
@@ -894,8 +983,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<serde_json::Value>
-    for Presentation<C, AttributeType>
+impl<
+        P: Pairing,
+        C: Curve<Scalar = P::ScalarField>,
+        AttributeType: Attribute<C::Scalar> + DeserializeOwned,
+    > TryFrom<serde_json::Value> for Presentation<P, C, AttributeType>
 {
     type Error = anyhow::Error;
 
@@ -915,8 +1007,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<s
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
-    for Presentation<C, AttributeType>
+impl<
+        P: Pairing,
+        C: Curve<Scalar = P::ScalarField>,
+        AttributeType: Attribute<C::Scalar> + serde::Serialize,
+    > serde::Serialize for Presentation<P, C, AttributeType>
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -1045,7 +1140,13 @@ impl Web3IdSigner for ed25519_dalek::SecretKey {
 
 /// The additional inputs, additional to the [`Request`] that are needed to
 /// produce a [`Presentation`].
-pub enum CommitmentInputs<'a, C: Curve, AttributeType, Web3IdSigner> {
+pub enum CommitmentInputs<
+    'a,
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+    Web3IdSigner,
+> {
     /// Inputs are for an identity credential issued by an identity provider.
     Account {
         issuer: IpIdentity,
@@ -1053,6 +1154,13 @@ pub enum CommitmentInputs<'a, C: Curve, AttributeType, Web3IdSigner> {
         values: &'a BTreeMap<AttributeTag, AttributeType>,
         /// The randomness to go along with commitments in `values`.
         randomness: &'a BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
+    },
+    /// Inputs are for an identity credential issued by an identity provider.
+    IdentityCredentials {
+        context: IpContext<'a, P, C>,
+        id_object: Box<dyn HasIdentityObjectFields<P, C, AttributeType>>,
+        id_object_use_data: IdObjectUseData<P, C>,
+        policy: Policy<C, AttributeType>,
     },
     /// Inputs are for a credential issued by Web3ID issuer.
     Web3Issuer {
@@ -1297,12 +1405,12 @@ impl<C: Curve, AttributeType: DeserializeOwned> TryFrom<serde_json::Value>
     }
 }
 
-impl<C: Curve, AttributeType> Web3IdCredential<C, AttributeType> {
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdCredential<C, AttributeType> {
     /// Convert the credential into inputs for a proof.
-    pub fn into_inputs<'a, S: Web3IdSigner>(
+    pub fn into_inputs<'a, P: Pairing<ScalarField = C::Scalar>, S: Web3IdSigner>(
         &'a self,
         signer: &'a S,
-    ) -> CommitmentInputs<'a, C, AttributeType, S> {
+    ) -> CommitmentInputs<'a, P, C, AttributeType, S> {
         CommitmentInputs::Web3Issuer {
             signature: self.signature,
             signer,
@@ -1327,6 +1435,10 @@ pub enum OwnedCommitmentInputs<C: Curve, AttributeType, Web3IdSigner> {
         randomness: BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
     },
     #[serde(rename_all = "camelCase")]
+    IdentityCredentials {
+        // todo
+    },
+    #[serde(rename_all = "camelCase")]
     Web3Issuer {
         signer: Web3IdSigner,
         #[serde_as(as = "BTreeMap<serde_with::DisplayFromStr, _>")]
@@ -1344,13 +1456,18 @@ pub enum OwnedCommitmentInputs<C: Curve, AttributeType, Web3IdSigner> {
     },
 }
 
-impl<'a, C: Curve, AttributeType, Web3IdSigner>
-    From<&'a OwnedCommitmentInputs<C, AttributeType, Web3IdSigner>>
-    for CommitmentInputs<'a, C, AttributeType, Web3IdSigner>
+impl<
+        'a,
+        P: Pairing,
+        C: Curve<Scalar = P::ScalarField>,
+        AttributeType: Attribute<C::Scalar>,
+        Web3IdSigner,
+    > From<&'a OwnedCommitmentInputs<C, AttributeType, Web3IdSigner>>
+    for CommitmentInputs<'a, P, C, AttributeType, Web3IdSigner>
 {
     fn from(
         owned: &'a OwnedCommitmentInputs<C, AttributeType, Web3IdSigner>,
-    ) -> CommitmentInputs<'a, C, AttributeType, Web3IdSigner> {
+    ) -> CommitmentInputs<'a, P, C, AttributeType, Web3IdSigner> {
         match owned {
             OwnedCommitmentInputs::Account {
                 issuer,
@@ -1372,6 +1489,9 @@ impl<'a, C: Curve, AttributeType, Web3IdSigner>
                 randomness,
                 signature: *signature,
             },
+            OwnedCommitmentInputs::IdentityCredentials { .. } => {
+                todo!()
+            }
         }
     }
 }
@@ -1397,11 +1517,15 @@ pub enum ProofError {
 
 /// Verify a single credential. This only checks the cryptographic parts and
 /// ignores the metadata such as issuance date.
-fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
+fn verify_single_credential<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+>(
     global: &GlobalContext<C>,
     transcript: &mut RandomOracle,
-    cred_proof: &CredentialProof<C, AttributeType>,
-    public: &CredentialsInputs<C>,
+    cred_proof: &CredentialProof<P, C, AttributeType>,
+    public: &CredentialsInputs<P, C>,
 ) -> bool {
     match (&cred_proof, public) {
         (
@@ -1420,6 +1544,41 @@ fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
                     global,
                     transcript,
                     commitments,
+                    proof,
+                ) {
+                    return false;
+                }
+            }
+        }
+        (
+            CredentialProof::IdentityCredentials {
+                proofs,
+                identity_attributes_info,
+                ..
+            },
+            CredentialsInputs::IdentityCredentials {
+                global_context,
+                ip_info,
+                known_ars,
+            },
+        ) => {
+            if !identity_attributes::verify_identity_attributes(
+                global_context,
+                ip_info,
+                known_ars,
+                identity_attributes_info,
+            )
+            .is_ok()
+            {
+                return false;
+            }
+
+            for (statement, proof) in proofs.iter() {
+                if !statement.verify(
+                    ProofVersion::Version2,
+                    global,
+                    transcript,
+                    &identity_attributes_info.proofs.commitments.cmm_attributes,
                     proof,
                 ) {
                     return false;
@@ -1459,13 +1618,13 @@ fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, AttributeType> {
-    fn prove<Signer: Web3IdSigner>(
+    fn prove<P: Pairing<ScalarField = C::Scalar>, Signer: Web3IdSigner>(
         self,
         global: &GlobalContext<C>,
         ro: &mut RandomOracle,
         csprng: &mut impl rand::Rng,
-        input: CommitmentInputs<C, AttributeType, Signer>,
-    ) -> Result<CredentialProof<C, AttributeType>, ProofError> {
+        input: CommitmentInputs<P, C, AttributeType, Signer>,
+    ) -> Result<CredentialProof<P, C, AttributeType>, ProofError> {
         match (self, input) {
             (
                 CredentialStatement::Account {
@@ -1500,6 +1659,59 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                     network,
                     created,
                     issuer,
+                })
+            }
+            (
+                CredentialStatement::IdentityCredentials {
+                    network, statement, ..
+                },
+                CommitmentInputs::IdentityCredentials {
+                    context,
+                    id_object,
+                    id_object_use_data,
+                    policy,
+                },
+            ) => {
+                let (identity_attributes_info, it_attr_cmm_rand) =
+                    identity_attributes::prove_identity_attributes(
+                        context,
+                        id_object.as_ref(),
+                        &id_object_use_data,
+                        policy,
+                    )
+                    .expect("todo");
+
+                let mut proofs = Vec::new();
+                let attribute_values: BTreeMap<_, _> = identity_attributes_info
+                    .proofs
+                    .commitments
+                    .cmm_attributes
+                    .iter()
+                    .map(|(ar_id, _cmm)| {
+                        let _rand = it_attr_cmm_rand.attributes_rand.get(ar_id).expect("todo");
+                        let _value = todo!(); // open commitment
+                        (*ar_id, _value)
+                    })
+                    .collect();
+                for statement in statement {
+                    let proof = statement
+                        .prove(
+                            ProofVersion::Version2,
+                            global,
+                            ro,
+                            csprng,
+                            &attribute_values,
+                            &it_attr_cmm_rand.attributes_rand,
+                        )
+                        .ok_or(ProofError::MissingAttribute)?;
+                    proofs.push((statement, proof));
+                }
+                let created = chrono::Utc::now();
+                Ok(CredentialProof::IdentityCredentials {
+                    proofs,
+                    network,
+                    created,
+                    identity_attributes_info,
                 })
             }
             (
@@ -1579,9 +1791,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
     }
 }
 
-fn linking_proof_message_to_sign<C: Curve, AttributeType: Attribute<C::Scalar>>(
+fn linking_proof_message_to_sign<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+>(
     challenge: Challenge,
-    proofs: &[CredentialProof<C, AttributeType>],
+    proofs: &[CredentialProof<P, C, AttributeType>],
 ) -> Vec<u8> {
     use crate::common::Serial;
     use sha2::Digest;
@@ -1597,11 +1813,11 @@ fn linking_proof_message_to_sign<C: Curve, AttributeType: Attribute<C::Scalar>>(
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
     /// Construct a proof for the [`Request`] using the provided cryptographic
     /// parameters and secrets.
-    pub fn prove<'a, Signer: 'a + Web3IdSigner>(
+    pub fn prove<'a, P: Pairing<ScalarField = C::Scalar>, Signer: 'a + Web3IdSigner>(
         self,
         params: &GlobalContext<C>,
-        attrs: impl ExactSizeIterator<Item = CommitmentInputs<'a, C, AttributeType, Signer>>,
-    ) -> Result<Presentation<C, AttributeType>, ProofError>
+        attrs: impl ExactSizeIterator<Item = CommitmentInputs<'a, P, C, AttributeType, Signer>>,
+    ) -> Result<Presentation<P, C, AttributeType>, ProofError>
     where
         AttributeType: 'a,
     {
@@ -1651,12 +1867,19 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
     rename_all_fields = "camelCase",
     tag = "type"
 )]
-pub enum CredentialsInputs<C: Curve> {
+pub enum CredentialsInputs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     Account {
         // All the commitments of the credential.
         // In principle we only ever need to borrow this, but it is simpler to
         // have the owned map instead of a reference to it.
         commitments: BTreeMap<AttributeTag, pedersen_commitment::Commitment<C>>,
+    },
+    IdentityCredentials {
+        global_context: GlobalContext<C>,
+        ip_info: IpInfo<P>,
+        // NB: The following map only needs to be a superset of the ars
+        // in the cdi.
+        known_ars: BTreeMap<ArIdentity, ArPublicKey<C>>,
     },
     Web3 {
         /// The public key of the issuer.

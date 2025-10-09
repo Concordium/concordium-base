@@ -17,7 +17,7 @@ use core::fmt;
 use core::fmt::Display;
 use either::Either;
 use rand::*;
-use std::collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet};
+use std::collections::{btree_map::BTreeMap, BTreeSet};
 
 /// Construct proof for attribute commitments from identity credential
 pub fn prove_identity_attributes<
@@ -26,7 +26,7 @@ pub fn prove_identity_attributes<
     AttributeType: Clone + Attribute<C::Scalar>,
 >(
     context: IpContext<'_, P, C>,
-    id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
+    id_object: &(impl HasIdentityObjectFields<P, C, AttributeType> + ?Sized),
     id_object_use_data: &IdObjectUseData<P, C>,
     policy: Policy<C, AttributeType>,
 ) -> anyhow::Result<(
@@ -356,7 +356,7 @@ struct CommitmentRandomness<C: Curve> {
     pub max_accounts_rand: PedersenRandomness<C>,
     /// Randomness, if any, used to commit to user-chosen attributes, such as
     /// country of nationality.
-    pub attributes_rand: HashMap<AttributeTag, PedersenRandomness<C>>,
+    pub attributes_rand: BTreeMap<AttributeTag, PedersenRandomness<C>>,
 }
 
 /// Computing the commitments for the credential deployment info. We only
@@ -389,9 +389,8 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
         n >= policy.policy_vec.len(),
         "Attribute list is shorter than the number of revealed items in the policy."
     );
-    let cmm_len = n - policy.policy_vec.len();
     let mut cmm_attributes = BTreeMap::new();
-    let mut attributes_rand = HashMap::with_capacity(cmm_len);
+    let mut attributes_rand = BTreeMap::new();
     for (&i, val) in att_vec.iter() {
         // in case the value is openened there is no need to hide it.
         // We can just commit with randomness 0.
