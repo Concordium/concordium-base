@@ -785,6 +785,37 @@ mod test {
         .expect_err("verify");
     }
 
+    /// Test that the verifier fails if identity provider is not set correctly.
+    #[test]
+    pub fn test_identity_attributes_soundness_ip() {
+        let id_object_fixture = identity_object_fixture();
+
+        let policy = Policy {
+            valid_to: id_object_fixture.id_object.alist.valid_to,
+            created_at: id_object_fixture.id_object.alist.created_at,
+            policy_vec: Default::default(),
+            _phantom: Default::default(),
+        };
+
+        let (mut id_attr_info, _) = prove_identity_attributes(
+            ip_context(&id_object_fixture),
+            &id_object_fixture.id_object,
+            &id_object_fixture.id_use_data,
+            policy,
+        )
+        .expect("prove");
+
+        id_attr_info.values.ip_identity.0 += 1;
+
+        verify_identity_attributes(
+            &id_object_fixture.global_ctx,
+            &id_object_fixture.ip_info,
+            &id_object_fixture.ars_infos,
+            &id_attr_info,
+        )
+        .expect_err("verify");
+    }
+
     /// Test that the verifier does not accept the proof if the
     /// identity provider signature does not match the provided values.
     #[test]
