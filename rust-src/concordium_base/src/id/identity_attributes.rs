@@ -356,7 +356,7 @@ struct CommitmentRandomness<C: Curve> {
     max_accounts_rand: PedersenRandomness<C>,
     /// Randomness, if any, used to commit to user-chosen attributes, such as
     /// country of nationality.
-    attributes_rand: HashMap<AttributeTag, PedersenRandomness<C>>,
+    attributes_rand: BTreeMap<AttributeTag, PedersenRandomness<C>>,
 }
 
 /// Computing the commitments for the credential deployment info. We only
@@ -391,7 +391,7 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     );
     let cmm_len = n - policy.policy_vec.len();
     let mut cmm_attributes = BTreeMap::new();
-    let mut attributes_rand = HashMap::with_capacity(cmm_len);
+    let mut attributes_rand = BTreeMap::new();
     for (&i, val) in att_vec.iter() {
         // in case the value is openened there is no need to hide it.
         // We can just commit with randomness 0.
