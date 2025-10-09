@@ -12,8 +12,7 @@ use crate::curve_arithmetic::Pairing;
 use crate::id::identity_attributes;
 use crate::id::types::{
     ArIdentity, ArPublicKey, ChainArData, HasIdentityObjectFields, IdObjectUseData,
-    IdentityAttributesCommitmentInfo, IdentityAttributesCommitmentValues, IpContext, IpInfo,
-    Policy, YearMonth,
+    IdentityAttributesCommitmentInfo, IpContext, IpInfo, Policy, YearMonth,
 };
 use crate::{
     base::CredentialRegistrationID,
@@ -54,7 +53,7 @@ pub const LINKING_DOMAIN_STRING: &[u8] = b"WEB3ID:LINKING";
 /// Encryption of identity credential public part
 #[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
 #[serde(transparent)]
-pub struct IdCredentialPubEncryption<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
+pub struct IdCredentialPubEncryption<P: Pairing + Ord, C: Curve<Scalar = P::ScalarField>>(
     BTreeMap<P, ChainArData<C>>,
 );
 
