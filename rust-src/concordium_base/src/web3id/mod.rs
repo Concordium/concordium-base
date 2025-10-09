@@ -51,10 +51,10 @@ pub const REVOKE_DOMAIN_STRING: &[u8] = b"WEB3ID:REVOKE";
 /// the credential secret key.
 pub const LINKING_DOMAIN_STRING: &[u8] = b"WEB3ID:LINKING";
 
-/// Encryption of identity credential secret
+/// Encryption of identity credential public part
 #[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
 #[serde(transparent)]
-pub struct IdentityCredentialSecretEncryption<C: Curve>(BTreeMap<ArIdentity, ChainArData<C>>);
+pub struct IdCredentialPubEncryption<C: Curve>(BTreeMap<ArIdentity, ChainArData<C>>);
 
 /// A statement about a single credential, either an identity credential or a
 /// Web3 credential.
@@ -75,8 +75,6 @@ pub enum CredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// identity provider.
     IdentityCredentials {
         network: Network,
-        /// Statement about the issued attributes origin and integrity
-        identity_attributes_values: IdentityAttributesCommitmentValues<C, AttributeType>,
         /// Attribute statements
         statement: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
     },
@@ -298,13 +296,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
                 statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
             },
             CredentialProof::IdentityCredentials {
-                network,
-                identity_attributes_info,
-                proofs,
-                ..
+                network, proofs, ..
             } => CredentialStatement::IdentityCredentials {
                 network: *network,
-                identity_attributes_values: identity_attributes_info.values.clone(),
                 statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
             },
         }
@@ -338,7 +332,7 @@ pub enum CredentialProof<
         /// Creation timestamp of the proof.
         created: chrono::DateTime<chrono::Utc>,
         network: Network,
-        /// Commitments to attribute values
+        /// Commitments to attribute values and their proofs
         identity_attributes_info: IdentityAttributesCommitmentInfo<P, C, AttributeType>,
         proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
     },
