@@ -2079,6 +2079,7 @@ mod tests {
     use chrono::TimeZone;
     use rand::Rng;
     use std::marker::PhantomData;
+    use crate::id::constants::IpPairing;
 
     #[test]
     /// Test that constructing proofs for web3 only credentials works in the
@@ -2254,7 +2255,7 @@ mod tests {
             contract_2,
         )
         .unwrap();
-        let secrets_2 = CommitmentInputs::Web3Issuer {
+        let secrets_2 = CommitmentInputs::Web3Issuer::<IpPairing,_ ,_ , _> {
             signer: &signer_2,
             values: &values_2,
             randomness: &randomness_2,
@@ -2281,7 +2282,7 @@ mod tests {
 
         let data = serde_json::to_string_pretty(&proof)?;
         assert!(
-            serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok(),
+            serde_json::from_str::<Presentation<IpPairing, ArCurve, Web3IdAttribute>>(&data).is_ok(),
             "Cannot deserialize proof correctly."
         );
 
@@ -2422,7 +2423,7 @@ mod tests {
                 pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
             );
         }
-        let secrets_2 = CommitmentInputs::Account {
+        let secrets_2 = CommitmentInputs::Account::<IpPairing,_ ,_ , _> {
             values: &values_2,
             randomness: &randomness_2,
             issuer: IpIdentity::from(17u32),
@@ -2468,7 +2469,7 @@ mod tests {
 
         let data = serde_json::to_string_pretty(&proof)?;
         assert!(
-            serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok(),
+            serde_json::from_str::<Presentation<IpPairing, ArCurve, Web3IdAttribute>>(&data).is_ok(),
             "Cannot deserialize proof correctly."
         );
 
