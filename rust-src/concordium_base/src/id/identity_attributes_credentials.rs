@@ -118,7 +118,7 @@ pub fn prove_identity_attributes<
     // values of the identity attributes to the ro, specifically appending the
     // IdentityAttributesCommitmentValues struct.
     // This should make the individual parts of the proof non-reusable.
-    let mut ro = RandomOracle::domain("IdentityAttributes");
+    let mut ro = RandomOracle::domain("IdentityAttributesCredentials");
     ro.append_message(b"identity_attribute_values", &id_attribute_values);
     ro.append_message(b"global_context", &context.global_context);
 
@@ -478,7 +478,7 @@ pub fn verify_identity_attributes<
     let on_chain_commitment_key = global_context.on_chain_commitment_key;
     let ip_verify_key = &ip_info.ip_verify_key;
     // Compute the challenge prefix by hashing the values.
-    let mut ro = RandomOracle::domain("IdentityAttributes");
+    let mut ro = RandomOracle::domain("IdentityAttributesCredentials");
     ro.append_message(b"identity_attribute_values", &id_attr_info.values);
     ro.append_message(b"global_context", &global_context);
 
