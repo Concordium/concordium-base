@@ -2703,9 +2703,9 @@ impl<C: Curve> HasAttributeRandomness<C> for SystemAttributeRandomness {
     }
 }
 
-/// The commitments produced by identity attribute commitments created from identity credential
+/// The commitments produced by identity attribute credentials created from identity credential
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
-pub struct IdentityAttributesCommitments<C: Curve> {
+pub struct IdentityAttributesCredentialsCommitments<C: Curve> {
     /// commitment to the prf key
     #[serde(rename = "cmmPrf")]
     pub cmm_prf: PedersenCommitment<C>,
@@ -2728,20 +2728,20 @@ pub struct IdentityAttributesCommitments<C: Curve> {
 }
 
 /// Randomness that is generated to commit to attributes when
-/// proving identity attribute commitments.
+/// proving identity attribute credentials.
 /// This randomness is needed later on if the user wishes to do
 /// something with those commitments, for example reveal the commited value, or
 /// prove a property of the value.
-pub struct IdentityAttributesCommitmentRandomness<C: Curve> {
+pub struct IdentityAttributesCredentialsRandomness<C: Curve> {
     /// Randomness, if any, used to commit to user-chosen attributes, such as
     /// country of nationality.
     pub attributes_rand: BTreeMap<AttributeTag, PedersenRandomness<C>>,
 }
 
-/// This structure contains all proofs, which are required to prove identity attributes commitments created
+/// This structure contains all proofs, which are required to prove identity attributes credentials created
 /// from identity credential.
 #[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
-pub struct IdentityAttributesCommitmentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// (Blinded) Signature derived from the signature on the pre-identity
     /// object by the IP
     #[serde(
@@ -2756,7 +2756,7 @@ pub struct IdentityAttributesCommitmentProofs<P: Pairing, C: Curve<Scalar = P::S
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub commitments: IdentityAttributesCommitments<C>,
+    pub commitments: IdentityAttributesCredentialsCommitments<C>,
     /// Challenge used for all of the proofs.
     #[serde(
         rename = "challenge",
@@ -2784,9 +2784,9 @@ pub struct IdentityAttributesCommitmentProofs<P: Pairing, C: Curve<Scalar = P::S
     pub proof_ip_sig: com_eq_sig::Response<P, C>,
 }
 
-/// Values (as opposed to proofs) in identity attribute commitments created from identity credential.
+/// Values (as opposed to proofs) in identity attribute credentials created from identity credential.
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
-pub struct IdentityAttributesCommitmentValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
+pub struct IdentityAttributesCredentialsValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Identity of the identity provider who signed the identity object from
     /// which this credential is derived.
     #[serde(rename = "ipIdentity")]
@@ -2806,18 +2806,18 @@ pub struct IdentityAttributesCommitmentValues<C: Curve, AttributeType: Attribute
     pub policy: Policy<C, AttributeType>,
 }
 
-/// Identity attributes commitments created from identity credential, and proofs that it is
+/// Identity attributes credentials created from identity credential, and proofs that it is
 /// well-formed.
 #[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
-pub struct IdentityAttributesCommitmentInfo<
+pub struct IdentityAttributesCredentialsInfo<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 > {
     #[serde(flatten)]
-    pub values: IdentityAttributesCommitmentValues<C, AttributeType>,
+    pub values: IdentityAttributesCredentialsValues<C, AttributeType>,
     #[serde(rename = "proofs")]
-    pub proofs: IdentityAttributesCommitmentProofs<P, C>,
+    pub proofs: IdentityAttributesCredentialsProofs<P, C>,
 }
 
 /// A request for recovering an identity
