@@ -3,7 +3,9 @@
 #[cfg(test)]
 mod tests {
     use crate::id::types::Attribute;
-    use crate::web3id::*;
+    use crate::web3id::{
+        Challenge, CommitmentInputs, CredentialStatement, CredentialsInputs, Presentation, Request,
+    };
     use crate::{
         base::CredentialRegistrationID,
         id::{
@@ -42,7 +44,7 @@ mod tests {
     type ExampleAttributeList = AttributeList<BaseField, ExampleAttribute>;
 
     /// Create example attributes to be used by tests.
-    pub fn test_create_attribute_list(
+    fn test_create_attribute_list(
         attribute_tag: u8,
         numeric_attribute_value: u64,
     ) -> ExampleAttributeList {
@@ -63,13 +65,14 @@ mod tests {
         }
     }
 
-    #[test]
     /// A test flow of the on-chain account creation proof where the generated
     /// credentials/commitments/randomness are reused to produce an additional
     /// zero-knowledge proof (as done in user wallets) for a given account credential statement.
     ///
     /// JSON serialization of requests and presentations is also tested.
-    fn test_identity_proof() -> anyhow::Result<()> {
+    #[test]
+    fn test_deploy_account_credentials_and_test_verifiable_presentation_from_account_credentials(
+    ) -> anyhow::Result<()> {
         let mut rng = rand::thread_rng();
         let global_ctx = GlobalContext::generate(String::from("genesis_string"));
         let numeric_attribute_value = 137u64;

@@ -10,7 +10,6 @@ mod ffi;
 pub mod id_proof_types;
 pub mod id_prover;
 pub mod id_verifier;
-pub mod identity_proofs;
 pub mod identity_provider;
 pub mod secret_sharing;
 pub mod types;
