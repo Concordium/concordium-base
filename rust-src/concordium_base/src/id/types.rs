@@ -2704,7 +2704,7 @@ impl<C: Curve> HasAttributeRandomness<C> for SystemAttributeRandomness {
 }
 
 /// The commitments produced by identity attribute commitments created from identity credential
-#[derive(Debug, PartialEq, Eq, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 pub struct IdentityAttributesCommitments<C: Curve> {
     /// commitment to the prf key
     #[serde(rename = "cmmPrf")]
@@ -2732,9 +2732,7 @@ pub struct IdentityAttributesCommitments<C: Curve> {
 /// This randomness is needed later on if the user wishes to do
 /// something with those commitments, for example reveal the commited value, or
 /// prove a property of the value.
-#[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct IdentityAttributesCommitmentRandomness<C: Curve> {
-    #[serde(rename = "attributesRand")]
     /// Randomness, if any, used to commit to user-chosen attributes, such as
     /// country of nationality.
     pub attributes_rand: BTreeMap<AttributeTag, PedersenRandomness<C>>,
@@ -2742,7 +2740,7 @@ pub struct IdentityAttributesCommitmentRandomness<C: Curve> {
 
 /// This structure contains all proofs, which are required to prove identity attributes commitments created
 /// from identity credential.
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone)]
+#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
 pub struct IdentityAttributesCommitmentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// (Blinded) Signature derived from the signature on the pre-identity
     /// object by the IP
@@ -2787,7 +2785,7 @@ pub struct IdentityAttributesCommitmentProofs<P: Pairing, C: Curve<Scalar = P::S
 }
 
 /// Values (as opposed to proofs) in identity attribute commitments created from identity credential.
-#[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
 pub struct IdentityAttributesCommitmentValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Identity of the identity provider who signed the identity object from
     /// which this credential is derived.
@@ -2810,7 +2808,7 @@ pub struct IdentityAttributesCommitmentValues<C: Curve, AttributeType: Attribute
 
 /// Identity attributes commitments created from identity credential, and proofs that it is
 /// well-formed.
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone)]
+#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
 pub struct IdentityAttributesCommitmentInfo<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
