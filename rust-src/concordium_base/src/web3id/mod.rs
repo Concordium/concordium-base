@@ -9,10 +9,10 @@ pub mod did;
 // TODO:
 // - Documentation.
 use crate::curve_arithmetic::Pairing;
-use crate::id::identity_attributes;
+use crate::id::identity_attributes_credentials;
 use crate::id::types::{
     ArIdentity, ArPublicKey, ChainArData, HasIdentityObjectFields, IdObjectUseData,
-    IdentityAttributesCommitmentInfo, IpContext, IpInfo, Policy, YearMonth,
+    IdentityAttributesCredentialsInfo, IpContext, IpInfo, Policy, YearMonth,
 };
 use crate::{
     base::CredentialRegistrationID,
@@ -334,7 +334,7 @@ pub enum CredentialProof<
         created: chrono::DateTime<chrono::Utc>,
         network: Network,
         /// Commitments to attribute values and their proofs
-        identity_attributes_info: IdentityAttributesCommitmentInfo<P, C, AttributeType>,
+        identity_attributes_info: IdentityAttributesCredentialsInfo<P, C, AttributeType>,
         proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
     },
     Web3Id {
@@ -1557,7 +1557,7 @@ fn verify_single_credential<
                 known_ars,
             },
         ) => {
-            if !identity_attributes::verify_identity_attributes(
+            if !identity_attributes_credentials::verify_identity_attributes(
                 global_context,
                 ip_info,
                 known_ars,
@@ -1668,7 +1668,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                 },
             ) => {
                 let (identity_attributes_info, it_attr_cmm_rand) =
-                    identity_attributes::prove_identity_attributes(
+                    identity_attributes_credentials::prove_identity_attributes(
                         context,
                         id_object.as_ref(),
                         &id_object_use_data,
