@@ -6,6 +6,11 @@ use std::any::type_name;
 
 /// Type for forward-compatibility with the Concordium Node API.
 ///
+/// Wraps enum types which are expected to be extended some future version of
+/// the Concordium Node API allowing the current SDK version to handle when new
+/// variants are introduced in the API, unknown to this version of the SDK.
+/// This is also used for helper methods extracting deeply nested information.
+///
 /// # `serde` implementation (deprecated).
 ///
 /// To ensure some level of backwards-compatibility this implements
@@ -13,7 +18,7 @@ use std::any::type_name;
 /// `Upward::Unknown` will produce a runtime error and deserializing can only
 /// produce `Upward::Known`.
 /// The serde implementation should be considered deprecated and might be
-/// removed in a future version.#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// removed in a future version.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Upward<A, R = ()> {
     /// New unknown variant, the structure is not known to the current version
