@@ -676,6 +676,7 @@ mod test {
     };
     use crate::id::{identity_provider, test};
     use assert_matches::assert_matches;
+    use itertools::Itertools;
     use std::collections::BTreeMap;
 
     struct IdentityObjectFixture {
@@ -743,6 +744,41 @@ mod test {
             valid_to: id_object_fixture.id_object.alist.valid_to,
             created_at: id_object_fixture.id_object.alist.created_at,
             policy_vec: Default::default(),
+            _phantom: Default::default(),
+        };
+
+        let (id_attr_info, _) = prove_identity_attributes(
+            ip_context(&id_object_fixture),
+            &id_object_fixture.id_object,
+            &id_object_fixture.id_use_data,
+            policy,
+        )
+        .expect("prove");
+
+        verify_identity_attributes(
+            &id_object_fixture.global_ctx,
+            &id_object_fixture.ip_info,
+            &id_object_fixture.ars_infos,
+            &id_attr_info,
+        )
+        .expect("verify");
+    }
+
+    /// Test that the verifier accepts a valid proof. Test variant with revealed attribute values
+    #[test]
+    pub fn test_identity_attributes_completeness_with_revealed_attributes() {
+        let id_object_fixture = identity_object_fixture();
+        let reveal = id_object_fixture
+            .id_object
+            .alist
+            .alist
+            .first_key_value()
+            .unwrap();
+
+        let policy = Policy {
+            valid_to: id_object_fixture.id_object.alist.valid_to,
+            created_at: id_object_fixture.id_object.alist.created_at,
+            policy_vec: [(*reveal.0, reveal.1.clone())].into_iter().collect(),
             _phantom: Default::default(),
         };
 
