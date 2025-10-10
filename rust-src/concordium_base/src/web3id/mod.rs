@@ -6,6 +6,10 @@
 
 pub mod did;
 
+#[cfg(test)]
+#[doc(hidden)]
+pub mod test;
+
 // TODO:
 // - Documentation.
 use crate::{
