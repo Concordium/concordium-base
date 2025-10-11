@@ -676,7 +676,6 @@ mod test {
     };
     use crate::id::{identity_provider, test};
     use assert_matches::assert_matches;
-    use itertools::Itertools;
     use std::collections::BTreeMap;
 
     struct IdentityObjectFixture {

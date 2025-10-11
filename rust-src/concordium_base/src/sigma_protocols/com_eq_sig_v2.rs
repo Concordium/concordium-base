@@ -12,58 +12,39 @@ use crate::{
     common::*,
     curve_arithmetic::*,
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
-    ps_sig::{BlindedSignature, BlindingRandomness, PublicKey as PsSigPublicKey},
+    ps_sig::{BlindedSignature, PublicKey as PsSigPublicKey},
     random_oracle::RandomOracle,
 };
-use itertools::izip;
 use rand::*;
 
-#[derive(Clone, Debug, Serialize)]
-pub struct Response<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    /// The response that the prover knows $r'$ (see specification)
-    r_prime: P::ScalarField,
-    /// List of responses $(res_m_i, res_R_i)$ that the user knows the messages
-    /// m_i and randomness R_i that combine to commitments and the public
-    /// randomized signature.
-    #[size_length = 4]
-    ms_rs: Vec<(P::ScalarField, C::Scalar)>,
-}
-
-/// How to handle a signed message
+/// How to handle a single part of the signed message
 #[derive(Clone)]
-pub enum MessageHandling<C: Curve> {
+pub enum MsgPartHandling<C: Curve> {
     /// The message is proven known and equal to a commitment to the value
     EqualToCommitment(Commitment<C>),
     /// The value is revealed
     Revealed(Value<C>),
-    // /// The value is proven known
-    // Known
+    /// The value is proven known
+    Known,
 }
 
-impl<C: Curve> Serial for MessageHandling<C> {
+// Serialization used to hash into the transcript
+impl<C: Curve> Serial for MsgPartHandling<C> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         match &self {
-            MessageHandling::EqualToCommitment(cmm) => {
+            MsgPartHandling::EqualToCommitment(cmm) => {
                 out.put(&0u8);
                 out.put(cmm);
             }
-            MessageHandling::Revealed(value) => {
+            MsgPartHandling::Revealed(value) => {
                 out.put(&1u8);
                 out.put(value);
             }
+            MsgPartHandling::Known => {
+                out.put(&2u8);
+            }
         }
     }
-}
-
-/// How to handle a signed message
-#[derive(Clone)]
-pub enum MessageSecret<C: Curve> {
-    /// The message is proven known and equal to a commitment to the value
-    EqualToCommitment(Value<C>, Randomness<C>),
-    /// The value is revealed
-    Revealed(Value<C>),
-    // /// The value is proven known
-    // Known
 }
 
 pub struct ComEqSig<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
@@ -71,7 +52,7 @@ pub struct ComEqSig<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub blinded_sig: BlindedSignature<P>,
     /// A list of how to handle each message in the signature.
     /// Length must be equal to the number of signed messages in the signature
-    pub msgs_handling: Vec<MessageHandling<C>>,
+    pub msgs_handling: Vec<MsgPartHandling<C>>,
     /// The Pointcheval-Sanders public key with which the signature was
     /// generated
     pub ps_pub_key: PsSigPublicKey<P>,
@@ -79,14 +60,51 @@ pub struct ComEqSig<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub comm_key: CommitmentKey<C>,
 }
 
-pub struct ComEqSigSecret<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    pub r_prime: BlindingRandomness<P>,
-    pub msgs_secret: Vec<MessageSecret<C>>,
+/// Random state used to calculate sigma protocol commitment and to calculate response later
+pub struct ComEqSigState<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    r_prime_rand: P::ScalarField,
+    msgs_rand: Vec<MsgPartSecret<C>>,
 }
 
-pub struct ComEqSigState<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    pub r_prime: P::ScalarField,
-    pub ms_rs: Vec<(Value<C>, Randomness<C>)>,
+/// How to handle a signed message
+#[derive(Debug, Clone)]
+pub enum MsgPartSecret<C: Curve> {
+    /// The message is proven known and equal to a commitment to the value
+    EqualToCommitment(Value<C>, Randomness<C>),
+    /// The value is revealed
+    Revealed,
+    /// The value is proven known
+    Known(Value<C>),
+}
+
+impl<C: Curve> Serial for MsgPartSecret<C> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        todo!()
+    }
+}
+
+impl<C: Curve> Deserial for MsgPartSecret<C> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        todo!()
+    }
+}
+
+/// Secret values used in proof
+pub struct ComEqSigSecret<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    pub r_prime: Secret<P::ScalarField>,
+    pub msgs: Vec<MsgPartSecret<C>>,
+}
+
+/// Response in sigma protocol
+#[derive(Clone, Debug, Serialize)]
+pub struct Response<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    /// The response that the prover knows $r'$ (see specification)
+    r_prime_resp: P::ScalarField,
+    /// List of responses $(res_m_i, res_R_i)$ that the user knows the messages
+    /// m_i and randomness R_i that combine to commitments and the public
+    /// randomized signature.
+    #[size_length = 4]
+    msgs_resp: Vec<MsgPartSecret<C>>,
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P, C> {
@@ -131,46 +149,59 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
         let cmm_count = self
             .msgs_handling
             .iter()
-            .filter(|msg| matches!(msg, MessageHandling::EqualToCommitment(_)))
+            .filter(|msg| matches!(msg, MsgPartHandling::EqualToCommitment(_)))
             .count();
 
-        // Random elements corresponding to the messages m_i, used as responses
-        // for the aggregate log part of the proof, and the randomness r_i used
-        // for the commitment part of the proof.
-        let mut ms_rs = Vec::with_capacity(cmm_count);
+        // Random elements corresponding to the secrets (used for blinding when the .
+        let mut msgs_rand = Vec::with_capacity(self.msgs_handling.len());
 
         // randomness corresponding to the r'
-        let r_prime = <P::G2 as Curve>::generate_non_zero_scalar(csprng);
+        let r_prime_rand = <P::G2 as Curve>::generate_non_zero_scalar(csprng);
 
-        // The auxiliary point which we are going to pair with a_hat to obtain the final
-        // challenge. This is using the bilinearity property of pairings and differs
-        // from the specification in the way the computation is carried out, but
-        // not in the observable outcomes.
-        let mut v_2_curve = g_tilda.mul_by_scalar(&r_prime);
+        // Group element to pair with a_hat to obtain the commitment
+        // corresponding to v_2.
+        let mut v_2_curve = g_tilda.mul_by_scalar(&r_prime_rand);
 
         let mut cmms = Vec::with_capacity(cmm_count);
         for (i, msg_handling) in self.msgs_handling.iter().enumerate() {
-            if let MessageHandling::EqualToCommitment(_) = msg_handling {
-                // Random value.
-                let m_i = Value::generate_non_zero(csprng);
+            match msg_handling {
+                MsgPartHandling::EqualToCommitment(_) => {
+                    // Random value.
+                    let m_i = Value::generate_non_zero(csprng);
 
-                // And a point in G2 computed from it.
-                let y_exp_m_i = y_tilda(i).mul_by_scalar(&m_i);
-                // A commitment to the value v_i, and a randomness
-                let (c_i, r_i) = cmm_key.commit(&m_i, csprng);
+                    // A commitment to the value m_i, and a randomness
+                    let (c_i, r_i) = cmm_key.commit(&m_i, csprng);
+                    cmms.push(c_i);
 
-                cmms.push(c_i);
+                    let y_exp_m_i = y_tilda(i).mul_by_scalar(&m_i);
+                    v_2_curve = v_2_curve.plus_point(&y_exp_m_i);
 
-                // Save these for later
-                ms_rs.push((m_i, r_i));
+                    // Save state for response
+                    msgs_rand.push(MsgPartSecret::EqualToCommitment(m_i, r_i));
+                }
+                MsgPartHandling::Revealed(_) => {
+                    msgs_rand.push(MsgPartSecret::Revealed);
+                }
+                MsgPartHandling::Known => {
+                    // Random value.
+                    let m_i = Value::generate_non_zero(csprng);
 
-                // And the other point to the running total (since we have to hash the result of
-                // the pairing)
-                v_2_curve = v_2_curve.plus_point(&y_exp_m_i);
+                    let y_exp_m_i = y_tilda(i).mul_by_scalar(&m_i);
+                    v_2_curve = v_2_curve.plus_point(&y_exp_m_i);
+
+                    // Save state for response
+                    msgs_rand.push(MsgPartSecret::Known(m_i));
+                }
             }
         }
         let v_2 = P::pair(&a_hat, &v_2_curve);
-        Some(((v_2, cmms), ComEqSigState { r_prime, ms_rs }))
+        Some((
+            (v_2, cmms),
+            ComEqSigState {
+                r_prime_rand,
+                msgs_rand,
+            },
+        ))
     }
 
     #[inline]
@@ -180,47 +211,52 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
     ) -> Option<Self::Response> {
-        let cmm_count = secret
-            .msgs_secret
-            .iter()
-            .filter(|secret| matches!(secret, MessageSecret::EqualToCommitment(_, _)))
-            .count();
-
-        if state.ms_rs.len() != cmm_count {
-            return None;
-        }
-
-        let r_prime = secret.r_prime.1;
         // If challange = 0 the proof is not going to be valid.
         // However this is an exceedingly unlikely case
-        let mut res_r_prime = *challenge;
-        res_r_prime.mul_assign(&r_prime);
-        res_r_prime.negate();
-        res_r_prime.add_assign(&state.r_prime);
+        let mut r_prime_resp = *challenge;
+        r_prime_resp.mul_assign(&secret.r_prime);
+        r_prime_resp.negate();
+        r_prime_resp.add_assign(&state.r_prime_rand);
 
-        let mut res_ms_rs = Vec::with_capacity(cmm_count);
-        for ((m, r), (ref m_t, ref r_t)) in izip!(
-            secret.msgs_secret.iter().filter_map(|msg| match msg {
-                MessageSecret::EqualToCommitment(m, r) => Some((m, r)),
-                MessageSecret::Revealed(_) => None,
-            }),
-            state.ms_rs
-        ) {
-            let mut res_m = *challenge;
-            res_m.mul_assign(m);
-            res_m.negate();
-            res_m.add_assign(m_t);
+        let mut msgs_resp = Vec::with_capacity(self.msgs_handling.len());
+        for (msg_part_state, msg_part_secret) in state.msgs_rand.iter().zip(secret.msgs.iter()) {
+            match (msg_part_state, msg_part_secret) {
+                (
+                    MsgPartSecret::EqualToCommitment(m_i_rand, r_i_rand),
+                    MsgPartSecret::EqualToCommitment(m_i, r_i),
+                ) => {
+                    let mut m_i_resp = *challenge;
+                    m_i_resp.mul_assign(m_i);
+                    m_i_resp.negate();
+                    m_i_resp.add_assign(m_i_rand);
 
-            let mut res_r = *challenge;
-            res_r.mul_assign(r);
-            res_r.negate();
-            res_r.add_assign(r_t);
+                    let mut r_i_resp = *challenge;
+                    r_i_resp.mul_assign(r_i);
+                    r_i_resp.negate();
+                    r_i_resp.add_assign(r_i_rand);
 
-            res_ms_rs.push((res_m, res_r));
+                    msgs_resp.push(MsgPartSecret::EqualToCommitment(
+                        Value::new(m_i_resp),
+                        Randomness::new(r_i_resp),
+                    ));
+                }
+                (MsgPartSecret::Revealed, MsgPartSecret::Revealed) => {
+                    msgs_resp.push(MsgPartSecret::Revealed);
+                }
+                (MsgPartSecret::Known(m_i_rand), MsgPartSecret::Known(m_i)) => {
+                    let mut m_i_resp = *challenge;
+                    m_i_resp.mul_assign(m_i);
+                    m_i_resp.negate();
+                    m_i_resp.add_assign(m_i_rand);
+
+                    msgs_resp.push(MsgPartSecret::Known(Value::new(m_i_resp)));
+                }
+                _ => return None,
+            }
         }
         Some(Response {
-            r_prime: res_r_prime,
-            ms_rs: res_ms_rs,
+            r_prime_resp,
+            msgs_resp,
         })
     }
 
@@ -244,57 +280,51 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
         let cmm_count = self
             .msgs_handling
             .iter()
-            .filter(|msg| matches!(msg, MessageHandling::EqualToCommitment(_)))
+            .filter(|msg| matches!(msg, MsgPartHandling::EqualToCommitment(_)))
             .count();
-
-        if response.ms_rs.len() != cmm_count {
-            return None;
-        }
 
         // storing values for multiexponentiation. gs is bases, es is powers.
         let mut gs = Vec::with_capacity(self.msgs_handling.len() + 2);
         let mut es = Vec::with_capacity(self.msgs_handling.len() + 2);
 
         gs.push(g_tilda);
-        es.push(response.r_prime);
+        es.push(response.r_prime_resp);
         let challenge_neg = {
             let mut x = *challenge;
             x.negate();
             x
         };
         let mut cmms = Vec::with_capacity(cmm_count);
-        for ((i, c_i), (res_m, res_r)) in izip!(
-            self.msgs_handling
-                .iter()
-                .enumerate()
-                .filter_map(|(i, msg)| match msg {
-                    MessageHandling::EqualToCommitment(c_i) => Some((i, c_i)),
-                    MessageHandling::Revealed(_) => None,
-                }),
-            response.ms_rs.iter()
-        ) {
-            // compute c_i^c * g^m_i h^r_i
-            let bases = [c_i.0, cmm_key.g, cmm_key.h];
-            let powers = [*challenge, *res_m, *res_r];
-            let c = multiexp(&bases, &powers);
-            cmms.push(Commitment(c));
-            gs.push(y_tilda(i));
-            es.push(*res_m);
-        }
-
-        for (i, m_i) in self
+        for (i, (msg_handling, msg_part_resp)) in self
             .msgs_handling
             .iter()
+            .zip(&response.msgs_resp)
             .enumerate()
-            .filter_map(|(i, msg)| match msg {
-                MessageHandling::EqualToCommitment(c_i) => None,
-                MessageHandling::Revealed(value) => Some((i, value)),
-            })
         {
-            gs.push(y_tilda(i));
-            let mut exp = challenge_neg;
-            exp.mul_assign(m_i);
-            es.push(exp);
+            match (msg_handling, msg_part_resp) {
+                (
+                    MsgPartHandling::EqualToCommitment(c_i),
+                    MsgPartSecret::EqualToCommitment(m_i_resp, r_i_resp),
+                ) => {
+                    let bases = [c_i.0, cmm_key.g, cmm_key.h];
+                    let powers = [*challenge, **m_i_resp.value, **r_i_resp.randomness];
+                    let c = multiexp(&bases, &powers);
+                    cmms.push(Commitment(c));
+                    gs.push(y_tilda(i));
+                    es.push(**m_i_resp);
+                }
+                (MsgPartHandling::Revealed(m_i), MsgPartSecret::Revealed) => {
+                    gs.push(y_tilda(i));
+                    let mut exp = challenge_neg;
+                    exp.mul_assign(m_i);
+                    es.push(exp);
+                }
+                (MsgPartHandling::Known, MsgPartSecret::Known(m_i_resp)) => {
+                    gs.push(y_tilda(i));
+                    es.push(**m_i_resp);
+                }
+                _ => return None,
+            }
         }
 
         // finally add X_tilda and -challenge to the power (adjustment since X_tilda is not part of the commitment)
@@ -336,19 +366,26 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
         // the randomness used to mask the actual values.
         let mask = SigRetrievalRandomness::generate_non_zero(csprng);
         let mut comm_to_signer: P::G1 = ps_pk.g.mul_by_scalar(&mask);
-        let mut messages = Vec::with_capacity(data_size);
-        for cY_j in ps_pk.ys.iter().take(csprng.gen_range(0..data_size)) {
+        let mut msgs_handling = Vec::with_capacity(data_size);
+        for y_j in ps_pk.ys.iter().take(csprng.gen_range(0..data_size)) {
             let v_j = Value::generate(csprng);
-            comm_to_signer = comm_to_signer.plus_point(&cY_j.mul_by_scalar(&v_j));
+            comm_to_signer = comm_to_signer.plus_point(&y_j.mul_by_scalar(&v_j));
 
-            let commitment = csprng.gen_bool(0.5);
-            if commitment {
-                let (c_j, r_j) = cmm_key.commit(&v_j, csprng);
-                secrets.push(MessageSecret::EqualToCommitment(v_j, r_j));
-                messages.push(MessageHandling::EqualToCommitment(c_j));
-            } else {
-                secrets.push(MessageSecret::Revealed(Clone::clone(&v_j)));
-                messages.push(MessageHandling::Revealed(v_j));
+            match csprng.gen_range(0..3) {
+                0 => {
+                    let (c_j, r_j) = cmm_key.commit(&v_j, csprng);
+                    secrets.push(MsgPartSecret::EqualToCommitment(v_j, r_j));
+                    msgs_handling.push(MsgPartHandling::EqualToCommitment(c_j));
+                }
+                1 => {
+                    secrets.push(MsgPartSecret::Revealed);
+                    msgs_handling.push(MsgPartHandling::Revealed(v_j));
+                }
+                2 => {
+                    secrets.push(MsgPartSecret::Known(v_j));
+                    msgs_handling.push(MsgPartHandling::Known);
+                }
+                _ => unreachable!(),
             }
         }
         let unknown_message = UnknownMessage(comm_to_signer);
@@ -357,15 +394,15 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
             .retrieve(&mask);
         let (blinded_sig, blind_rand) = sig.blind(csprng);
         let ces = ComEqSig {
-            msgs_handling: messages,
+            msgs_handling,
             ps_pub_key: ps_pk,
             comm_key: cmm_key,
             blinded_sig,
         };
 
         let secret = ComEqSigSecret {
-            r_prime: blind_rand,
-            msgs_secret: secrets,
+            r_prime: blind_rand.1,
+            msgs: secrets,
         };
         f(ces, secret, csprng)
     }
@@ -384,13 +421,11 @@ mod tests {
     type G1 = ArkGroup<G1Projective>;
     type Bls12 = ark_ec::models::bls12::Bls12<ark_bls12_381::Config>;
 
-    const TEST_RUNS: usize = 200;
-
     #[test]
     #[allow(non_snake_case)]
     pub fn test_com_eq_sig_correctness() {
         let mut csprng = thread_rng();
-        for i in 1..TEST_RUNS + 1 {
+        for i in 1..20 {
             ComEqSig::<Bls12, G1>::with_valid_data(i, &mut csprng, |ces, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
                 let mut ro = RandomOracle::domain(challenge_prefix);
@@ -408,7 +443,7 @@ mod tests {
     #[allow(non_snake_case)]
     pub fn test_com_eq_sig_soundness() {
         let mut csprng = thread_rng();
-        for i in 1..TEST_RUNS + 1 {
+        for i in 1..20 {
             ComEqSig::<Bls12, G1>::with_valid_data(i, &mut csprng, |ces, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
                 let ro = RandomOracle::domain(challenge_prefix);
@@ -437,7 +472,7 @@ mod tests {
                     if !wrong_ces.msgs_handling.is_empty() {
                         let idx = csprng.gen_range(0..wrong_ces.msgs_handling.len());
                         let tmp = wrong_ces.msgs_handling[idx].clone();
-                        wrong_ces.msgs_handling[idx] = MessageHandling::EqualToCommitment(
+                        wrong_ces.msgs_handling[idx] = MsgPartHandling::EqualToCommitment(
                             wrong_ces
                                 .comm_key
                                 .commit(&Value::<G1>::generate(csprng), csprng)
