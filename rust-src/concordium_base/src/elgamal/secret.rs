@@ -24,7 +24,7 @@ pub struct SecretKey<C: Curve> {
 
 impl<C: Curve> Debug for SecretKey<C> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str("<Secret>")
+        f.write_str("<SecretKey>")
     }
 }
 
