@@ -114,13 +114,14 @@ pub fn prove_identity_attributes<
         policy,
     };
 
-    // The challenge has domain separator "IdentityAttributes" followed by appending all
-    // values of the identity attributes to the ro, specifically appending the
+    // The transcript has domain separator "IdentityAttributesCredentials" followed by appending all
+    // values of the identity attributes to the transcript, specifically appending the
     // IdentityAttributesCommitmentValues struct.
-    // This should make the individual parts of the proof non-reusable.
-    let mut ro = RandomOracle::domain("IdentityAttributesCredentials");
-    ro.append_message(b"identity_attribute_values", &id_attribute_values);
-    ro.append_message(b"global_context", &context.global_context);
+    // This should make the proof non-reusable.
+    let mut transcript = RandomOracle::domain("IdentityAttributesCredentials");
+    // We should add the genesis hash also at some point
+    transcript.append_message(b"identity_attribute_values", &id_attribute_values);
+    transcript.append_message(b"global_context", &context.global_context);
 
     // We now produce all the proofs.
 
@@ -178,7 +179,7 @@ pub fn prove_identity_attributes<
     };
 
     let secret = (secret_sig, id_cred_pub_secrets);
-    let proof = match prove(&mut ro, &prover, secret, &mut csprng) {
+    let proof = match prove(&mut transcript, &prover, secret, &mut csprng) {
         Some(x) => x,
         None => bail!("Cannot produce zero knowledge proof."),
     };
