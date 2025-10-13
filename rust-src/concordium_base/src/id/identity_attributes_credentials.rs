@@ -678,9 +678,9 @@ mod test {
         IpInfo, Policy,
     };
     use crate::id::{identity_provider, test};
+    use crate::random_oracle::RandomOracle;
     use assert_matches::assert_matches;
     use std::collections::BTreeMap;
-    use crate::random_oracle::RandomOracle;
 
     struct IdentityObjectFixture {
         id_object: IdentityObjectV1<IpPairing, ArCurve, AttributeKind>,
@@ -882,7 +882,7 @@ mod test {
             &id_object_fixture.ip_info,
             &id_object_fixture.ars_infos,
             &id_attr_info,
-            &mut  transcript,
+            &mut transcript,
         );
         assert_matches!(res, Err(AttributeCommitmentVerificationError::Signature));
     }

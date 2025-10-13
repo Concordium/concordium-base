@@ -1562,6 +1562,7 @@ fn verify_single_credential<
                 ip_info,
                 known_ars,
                 identity_attributes_info,
+                transcript,
             )
             .is_ok()
             {
@@ -1673,6 +1674,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                         id_object.as_ref(),
                         &id_object_use_data,
                         policy,
+                        ro,
                     )
                     .expect("todo");
 
