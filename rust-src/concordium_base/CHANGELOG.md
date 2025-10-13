@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Changed `Debug` implementation of secret keys and cleartext values to not print the key or value.
+
 ## 8.0.0-alpha.3 (2025-10-08)
 
 - Add support for additional fields in `TokenModuleInitializationParameters`

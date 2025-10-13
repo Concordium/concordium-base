@@ -1,22 +1,31 @@
 // -*- mode: rust; -*-
 
 //! Elgamal secret key types
+
 use super::{cipher::*, message::*};
 use crate::{
     common::*,
     curve_arithmetic::{Curve, Field, Value},
 };
 use anyhow::{bail, Result};
+use core::fmt;
 use rand::*;
 use std::collections::HashMap;
+use std::fmt::{Debug, Formatter};
 
 /// Elgamal secret key packed together with a chosen generator.
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeBase16Serialize)]
+#[derive(PartialEq, Eq, Clone, Serialize, SerdeBase16Serialize)]
 pub struct SecretKey<C: Curve> {
     /// Generator of the group, not secret but convenient to have here.
     pub generator: C,
     /// Secret key.
     pub scalar: C::Scalar,
+}
+
+impl<C: Curve> Debug for SecretKey<C> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("<Secret>")
+    }
 }
 
 // THIS IS COMMENTED FOR NOW FOR COMPATIBILITY WITH BLS CURVE IMPLEMENTATION

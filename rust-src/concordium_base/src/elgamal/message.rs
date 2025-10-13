@@ -1,15 +1,23 @@
 //! Elgamal message  types
 
+use core::fmt;
 use rand::*;
+use std::fmt::{Debug, Formatter};
 
 use crate::{common::*, curve_arithmetic::Curve};
 
-#[derive(Debug, PartialEq, Eq, Serialize, SerdeBase16Serialize)]
+#[derive(PartialEq, Eq, Serialize, SerdeBase16Serialize)]
 #[repr(transparent)]
 /// Message to be encrypted. This is a simple wrapper around a group element,
 /// but we use it for added type safety.
 pub struct Message<C: Curve> {
     pub value: C,
+}
+
+impl<C: Curve> Debug for Message<C> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("<Message>")
+    }
 }
 
 impl<C: Curve> Message<C> {
