@@ -9,11 +9,13 @@ use super::{
     unknown_message::*,
 };
 use crate::{common::*, curve_arithmetic::*};
+use core::fmt;
+use std::fmt::{Debug, Formatter};
 
 use rand::*;
 
 /// A secret key
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub struct SecretKey<C: Pairing> {
     /// Generator of the first pairing group. Not secret, but needed for various
     /// operations.
@@ -24,6 +26,12 @@ pub struct SecretKey<C: Pairing> {
     #[size_length = 4]
     pub ys: Vec<C::ScalarField>,
     pub x: C::ScalarField,
+}
+
+impl<C: Pairing> Debug for SecretKey<C> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("<SecretKey>")
+    }
 }
 
 impl<C: Pairing> PartialEq for SecretKey<C> {
