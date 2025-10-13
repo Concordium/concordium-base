@@ -29,6 +29,7 @@ pub fn prove_identity_attributes<
     id_object: &(impl HasIdentityObjectFields<P, C, AttributeType> + ?Sized),
     id_object_use_data: &IdObjectUseData<P, C>,
     policy: Policy<C, AttributeType>,
+    transcript: &mut RandomOracle,
 ) -> anyhow::Result<(
     IdentityAttributesCredentialsInfo<P, C, AttributeType>,
     IdentityAttributesCredentialsRandomness<C>,
@@ -114,13 +115,14 @@ pub fn prove_identity_attributes<
         policy,
     };
 
-    // The challenge has domain separator "IdentityAttributes" followed by appending all
-    // values of the identity attributes to the ro, specifically appending the
+    // The label "IdentityAttributesCredentials" is appended to the transcript followed all
+    // values of the identity attributes, specifically appending the
     // IdentityAttributesCommitmentValues struct.
-    // This should make the individual parts of the proof non-reusable.
-    let mut ro = RandomOracle::domain("IdentityAttributes");
-    ro.append_message(b"identity_attribute_values", &id_attribute_values);
-    ro.append_message(b"global_context", &context.global_context);
+    // This should make the proof non-reusable.
+    // We should add the genesis hash also at some point
+    transcript.add_bytes(b"IdentityAttributesCredentials");
+    transcript.append_message(b"identity_attribute_values", &id_attribute_values);
+    transcript.append_message(b"global_context", &context.global_context);
 
     // We now produce all the proofs.
 
@@ -178,7 +180,7 @@ pub fn prove_identity_attributes<
     };
 
     let secret = (secret_sig, id_cred_pub_secrets);
-    let proof = match prove(&mut ro, &prover, secret, &mut csprng) {
+    let proof = match prove(transcript, &prover, secret, &mut csprng) {
         Some(x) => x,
         None => bail!("Cannot produce zero knowledge proof."),
     };
@@ -458,6 +460,7 @@ pub fn verify_identity_attributes<
     // in the identity attribute values.
     known_ars: &BTreeMap<ArIdentity, A>,
     id_attr_info: &IdentityAttributesCredentialsInfo<P, C, AttributeType>,
+    transcript: &mut RandomOracle,
 ) -> Result<(), AttributeCommitmentVerificationError> {
     if ip_info.ip_identity != id_attr_info.values.ip_identity {
         return Err(AttributeCommitmentVerificationError::Signature);
@@ -478,9 +481,9 @@ pub fn verify_identity_attributes<
     let on_chain_commitment_key = global_context.on_chain_commitment_key;
     let ip_verify_key = &ip_info.ip_verify_key;
     // Compute the challenge prefix by hashing the values.
-    let mut ro = RandomOracle::domain("IdentityAttributes");
-    ro.append_message(b"identity_attribute_values", &id_attr_info.values);
-    ro.append_message(b"global_context", &global_context);
+    transcript.add_bytes(b"IdentityAttributesCredentials");
+    transcript.append_message(b"identity_attribute_values", &id_attr_info.values);
+    transcript.append_message(b"global_context", &global_context);
 
     let commitments = &id_attr_info.proofs.commitments;
 
@@ -527,7 +530,7 @@ pub fn verify_identity_attributes<
         response,
     };
 
-    if !verify(&mut ro, &verifier, &proof) {
+    if !verify(transcript, &verifier, &proof) {
         return Err(AttributeCommitmentVerificationError::Proof);
     }
 
@@ -677,6 +680,7 @@ mod test {
     use crate::id::{identity_provider, test};
     use assert_matches::assert_matches;
     use std::collections::BTreeMap;
+    use crate::random_oracle::RandomOracle;
 
     struct IdentityObjectFixture {
         id_object: IdentityObjectV1<IpPairing, ArCurve, AttributeKind>,
@@ -746,19 +750,62 @@ mod test {
             _phantom: Default::default(),
         };
 
+        let mut transcript = RandomOracle::empty();
         let (id_attr_info, _) = prove_identity_attributes(
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
             policy,
+            &mut transcript,
         )
         .expect("prove");
 
+        let mut transcript = RandomOracle::empty();
         verify_identity_attributes(
             &id_object_fixture.global_ctx,
             &id_object_fixture.ip_info,
             &id_object_fixture.ars_infos,
             &id_attr_info,
+            &mut transcript,
+        )
+        .expect("verify");
+    }
+
+    /// Test that the verifier accepts a valid proof. Test variant with revealed attribute values
+    #[test]
+    pub fn test_identity_attributes_completeness_with_revealed_attributes() {
+        let id_object_fixture = identity_object_fixture();
+        let reveal = id_object_fixture
+            .id_object
+            .alist
+            .alist
+            .first_key_value()
+            .unwrap();
+
+        let policy = Policy {
+            valid_to: id_object_fixture.id_object.alist.valid_to,
+            created_at: id_object_fixture.id_object.alist.created_at,
+            policy_vec: [(*reveal.0, reveal.1.clone())].into_iter().collect(),
+            _phantom: Default::default(),
+        };
+
+        let mut transcript = RandomOracle::empty();
+        let (id_attr_info, _) = prove_identity_attributes(
+            ip_context(&id_object_fixture),
+            &id_object_fixture.id_object,
+            &id_object_fixture.id_use_data,
+            policy,
+            &mut transcript,
+        )
+        .expect("prove");
+
+        let mut transcript = RandomOracle::empty();
+        verify_identity_attributes(
+            &id_object_fixture.global_ctx,
+            &id_object_fixture.ip_info,
+            &id_object_fixture.ars_infos,
+            &id_attr_info,
+            &mut transcript,
         )
         .expect("verify");
     }
@@ -776,11 +823,13 @@ mod test {
             _phantom: Default::default(),
         };
 
+        let mut transcript = RandomOracle::empty();
         let (mut id_attr_info, _) = prove_identity_attributes(
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
             policy,
+            &mut transcript,
         )
         .expect("prove");
 
@@ -791,11 +840,13 @@ mod test {
             .1
             .plus_point(&ArCurve::one_point());
 
+        let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
             &id_object_fixture.ip_info,
             &id_object_fixture.ars_infos,
             &id_attr_info,
+            &mut transcript,
         );
 
         assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
@@ -813,21 +864,25 @@ mod test {
             _phantom: Default::default(),
         };
 
+        let mut transcript = RandomOracle::empty();
         let (mut id_attr_info, _) = prove_identity_attributes(
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
             policy,
+            &mut transcript,
         )
         .expect("prove");
 
         id_attr_info.values.ip_identity.0 += 1;
 
+        let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
             &id_object_fixture.ip_info,
             &id_object_fixture.ars_infos,
             &id_attr_info,
+            &mut  transcript,
         );
         assert_matches!(res, Err(AttributeCommitmentVerificationError::Signature));
     }
@@ -845,11 +900,13 @@ mod test {
             _phantom: Default::default(),
         };
 
+        let mut transcript = RandomOracle::empty();
         let (id_attr_info, _) = prove_identity_attributes(
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
             policy,
+            &mut transcript,
         )
         .expect("prove");
 
@@ -862,11 +919,13 @@ mod test {
             .cmm_id_cred_sec_sharing_coeff
             .pop();
 
+        let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
             &id_object_fixture.ip_info,
             &id_object_fixture.ars_infos,
             &id_attr_info_invalid,
+            &mut transcript,
         );
         assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
 
@@ -879,11 +938,13 @@ mod test {
             .proof_id_cred_pub
             .remove(&ar_to_remove);
 
+        let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
             &id_object_fixture.ip_info,
             &id_object_fixture.ars_infos,
             &id_attr_info_invalid,
+            &mut transcript,
         );
         assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
 
@@ -898,11 +959,13 @@ mod test {
             .unwrap();
         attr_cmm.0 = attr_cmm.0.plus_point(&ArCurve::one_point());
 
+        let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
             &id_object_fixture.ip_info,
             &id_object_fixture.ars_infos,
             &id_attr_info_invalid,
+            &mut transcript,
         );
         assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
     }
