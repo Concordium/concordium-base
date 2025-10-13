@@ -98,9 +98,12 @@ impl<A, R> Upward<A, R> {
     /// [`Known(v)`]: Upward::Known
     pub fn known_or_else<E, F>(self, error: F) -> Result<A, E>
     where
-        F: FnOnce() -> E,
+        F: FnOnce(R) -> E,
     {
-        Option::from(self).ok_or_else(error)
+        match self {
+            Upward::Unknown(residual) => Err(error(residual)),
+            Upward::Known(output) => Ok(output),
+        }
     }
 
     /// Returns `true` if the Upward is a [`Upward::Known`] and the value inside
