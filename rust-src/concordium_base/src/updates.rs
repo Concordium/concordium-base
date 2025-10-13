@@ -538,32 +538,6 @@ impl AuthorizationsV1 {
     }
 }
 
-/// Together with [`Authorizations`] this defines a type family allowing us to
-/// map [`ChainParameterVersion0`] and [`ChainParameterVersion1`] to the
-/// corresponding `Authorizations` version.
-pub trait AuthorizationsFamily {
-    type Output: std::fmt::Debug;
-}
-
-impl AuthorizationsFamily for ChainParameterVersion0 {
-    type Output = AuthorizationsV0;
-}
-
-impl AuthorizationsFamily for ChainParameterVersion1 {
-    type Output = AuthorizationsV1;
-}
-
-impl AuthorizationsFamily for ChainParameterVersion2 {
-    type Output = AuthorizationsV1;
-}
-
-impl AuthorizationsFamily for ChainParameterVersion3 {
-    type Output = AuthorizationsV1;
-}
-
-/// A mapping of chain parameter versions to authorization versions.
-pub type Authorizations<CPV> = <CPV as AuthorizationsFamily>::Output;
-
 #[derive(SerdeSerialize, SerdeDeserialize, common::Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 /// Parameters related to becoming a baker that apply to protocol versions 1-3.
@@ -754,7 +728,7 @@ pub enum UpdatePayload {
     #[serde(rename = "foundationAccount")]
     FoundationAccount(AccountAddress),
     #[serde(rename = "mintDistribution")]
-    MintDistribution(MintDistribution<ChainParameterVersion0>),
+    MintDistribution(MintDistributionV0),
     #[serde(rename = "transactionFeeDistribution")]
     TransactionFeeDistribution(TransactionFeeDistribution),
     #[serde(rename = "gASRewards")]
@@ -776,7 +750,7 @@ pub enum UpdatePayload {
     #[serde(rename = "timeParametersCPV1")]
     TimeParametersCPV1(TimeParameters),
     #[serde(rename = "mintDistributionCPV1")]
-    MintDistributionCPV1(MintDistribution<ChainParameterVersion1>),
+    MintDistributionCPV1(MintDistributionV1),
     #[serde(rename = "gASRewardsCPV2")]
     GASRewardsCPV2(GASRewardsV1),
     #[serde(rename = "TimeoutParametersCPV2")]

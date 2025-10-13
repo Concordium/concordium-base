@@ -1239,31 +1239,6 @@ impl Deserial for MintDistributionV1 {
     }
 }
 
-/// Trait used to define mapping from a type to a `MintDistribution` type.
-pub trait MintDistributionFamily {
-    type Output;
-}
-
-impl MintDistributionFamily for ChainParameterVersion0 {
-    type Output = MintDistributionV0;
-}
-
-impl MintDistributionFamily for ChainParameterVersion1 {
-    type Output = MintDistributionV1;
-}
-
-impl MintDistributionFamily for ChainParameterVersion2 {
-    type Output = MintDistributionV1;
-}
-
-impl MintDistributionFamily for ChainParameterVersion3 {
-    type Output = MintDistributionV1;
-}
-
-/// Type family mapping a `ChainParameterVersion` to its corresponding type for
-/// the `MintDistribution`.
-pub type MintDistribution<CPV> = <CPV as MintDistributionFamily>::Output;
-
 /// Trait used to define mapping from a type to a `GasRewards` type.
 pub trait GASRewardsFamily {
     type Output;
