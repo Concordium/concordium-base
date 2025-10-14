@@ -434,8 +434,12 @@ impl AuthorizationsV0 {
     }
 }
 
-// See [AuthorizationsV0::construct_update_signer] for documentation.
-fn construct_update_signer_worker<K>(
+/// Find key indices given a set of keys and an access structure.
+/// If any of the given `actual_keys` are not authorized in the access
+/// structure [`None`] will be returned.
+/// If there are duplicate keys among `actual_keys` this function also
+/// returns [`None`].
+pub fn construct_update_signer_worker<K>(
     keys: &[UpdatePublicKey],
     update_key_indices: &AccessStructure,
     actual_keys: impl IntoIterator<Item = K>,
@@ -954,7 +958,7 @@ pub trait UpdateSigner {
         -> UpdateInstructionSignature;
 }
 
-impl UpdateSigner for &BTreeMap<UpdateKeysIndex, UpdateKeyPair> {
+impl UpdateSigner for BTreeMap<UpdateKeysIndex, UpdateKeyPair> {
     fn sign_update_hash(
         &self,
         hash_to_sign: &hashes::UpdateSignHash,
@@ -967,7 +971,7 @@ impl UpdateSigner for &BTreeMap<UpdateKeysIndex, UpdateKeyPair> {
     }
 }
 
-impl UpdateSigner for &[(UpdateKeysIndex, UpdateKeyPair)] {
+impl UpdateSigner for [(UpdateKeysIndex, UpdateKeyPair)] {
     fn sign_update_hash(
         &self,
         hash_to_sign: &hashes::UpdateSignHash,
@@ -1031,7 +1035,7 @@ pub mod update {
 
     /// Construct an update instruction and sign it.
     pub fn update(
-        signer: impl UpdateSigner,
+        signer: &impl UpdateSigner,
         seq_number: UpdateSequenceNumber,
         effective_time: TransactionTime,
         timeout: TransactionTime,
