@@ -202,6 +202,15 @@ data TransactionSignaturesV1 = TransactionSignaturesV1
     }
     deriving (Show, Eq)
 
+instance S.Serialize TransactionSignaturesV1 where
+    put TransactionSignaturesV1{..} =
+        S.put tv1sSender <> S.put tv1sSponsor
+
+    get = S.label "transaction signatures v1" $ do
+        tv1sSender <- S.label "sender" S.get
+        tv1sSponsor <- S.label "sponsor" S.get
+        return $! TransactionSignaturesV1{..}
+
 -- | Data common to all v1 transaction types.
 --
 --  * @SPEC: <$DOCS/Transactions#transaction-header-v1>
