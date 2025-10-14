@@ -26,7 +26,7 @@ pub fn prove_identity_attributes<
     AttributeType: Clone + Attribute<C::Scalar>,
 >(
     context: IpContext<'_, P, C>,
-    id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
+    id_object: &(impl HasIdentityObjectFields<P, C, AttributeType> + ?Sized),
     id_object_use_data: &IdObjectUseData<P, C>,
     policy: Policy<C, AttributeType>,
     transcript: &mut RandomOracle,

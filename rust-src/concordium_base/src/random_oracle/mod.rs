@@ -12,7 +12,7 @@
 //! with the context used to produce the proof. Any verification of sub-proofs
 //! needs to be performed in the same order as when producing the proof.
 
-use crate::{common::*, curve_arithmetic::Curve};
+use crate::{common::*, curve_arithmetic::Curve, web3id::IsChallenge};
 use sha3::{Digest, Sha3_256};
 use std::io::Write;
 
@@ -110,6 +110,11 @@ impl RandomOracle {
     pub fn append_message<S: Serial, B: AsRef<[u8]>>(&mut self, label: B, message: &S) {
         self.add_bytes(label);
         self.add(message)
+    }
+
+    /// Append a challenge to the state of the random oracle.
+    pub fn append_challenge<Challenge: IsChallenge>(&mut self, challenge: &Challenge) {
+        challenge.append_to_transcript(self)
     }
 
     /// Append all items from an iterator to the random oracle. Equivalent to
