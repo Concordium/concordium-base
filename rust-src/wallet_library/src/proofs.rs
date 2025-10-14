@@ -38,7 +38,8 @@ impl Web3IdProofInput {
     /// Creates a web3Id proof.
     pub fn create_proof(
         self,
-    ) -> Result<Presentation<constants::ArCurve, Web3IdAttribute>, ProofError> {
+    ) -> Result<Presentation<constants::IpPairing, constants::ArCurve, Web3IdAttribute>, ProofError>
+    {
         self.request.prove(
             &self.global_context,
             self.commitment_inputs.iter().map(Into::into),
@@ -68,8 +69,10 @@ mod tests {
         let proof = request.create_proof();
         let data = serde_json::to_string_pretty(&proof?)?;
         assert!(
-            serde_json::from_str::<Presentation<constants::ArCurve, Web3IdAttribute>>(&data)
-                .is_ok(),
+            serde_json::from_str::<
+                Presentation<constants::IpPairing, constants::ArCurve, Web3IdAttribute>,
+            >(&data)
+            .is_ok(),
             "Cannot deserialize proof correctly."
         );
         Ok(())

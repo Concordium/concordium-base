@@ -161,6 +161,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AcceptableRequest<C, Attribu
                 }
                 Ok(())
             }
+            CredentialStatement::IdentityCredentials { .. } => todo!(),
         }
     }
 }
