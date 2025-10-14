@@ -769,6 +769,8 @@ mod test {
             &mut transcript,
         )
         .expect("verify");
+
+        println!("transcript log:\n {:#?}", transcript.log())
     }
 
     /// Test that the verifier accepts a valid proof. Test variant with revealed attribute values

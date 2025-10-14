@@ -14,12 +14,38 @@
 
 use crate::{common::*, curve_arithmetic::Curve};
 use sha3::{Digest, Sha3_256};
+use std::fmt::{Debug, Formatter};
 use std::io::Write;
 
 /// State of the random oracle, used to incrementally build up the output.
-#[repr(transparent)]
+#[cfg_attr(not(test), repr(transparent))]
 #[derive(Debug)]
-pub struct RandomOracle(Sha3_256);
+pub struct RandomOracle {
+    /// Hash of all input given to the oracle
+    hash: Sha3_256,
+    /// All operations performed on the oracle. Used for security analysis
+    #[cfg(test)]
+    log: Vec<RandomOracleLog>,
+}
+
+#[derive(Clone)]
+pub enum RandomOracleLog {
+    Bytes(Vec<u8>),
+}
+
+impl Debug for RandomOracleLog {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RandomOracleLog::Bytes(bytes) => {
+                if let Ok(string) = String::from_utf8(bytes.clone()) {
+                    f.write_str(&string)
+                } else {
+                    f.write_str("<bytes>")
+                }
+            }
+        }
+    }
+}
 
 /// Type of challenges computed from the random oracle.
 /// We use 32 byte output of SHA3-256
@@ -39,13 +65,17 @@ impl AsRef<[u8]> for Challenge {
 impl Write for RandomOracle {
     #[inline(always)]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0.update(buf);
+        self.hash.update(buf);
+        #[cfg(test)]
+        self.log.push(RandomOracleLog::Bytes(buf.to_vec()));
         Ok(buf.len())
     }
 
     #[inline(always)]
     fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
-        self.0.update(buf);
+        self.hash.update(buf);
+        #[cfg(test)]
+        self.log.push(RandomOracleLog::Bytes(buf.to_vec()));
         Ok(())
     }
 
@@ -67,7 +97,7 @@ impl Buffer for RandomOracle {
 
     // Compute the result in the given state, consuming the state.
     fn result(self) -> Self::Result {
-        self.0.finalize()
+        self.hash.finalize()
     }
 }
 
@@ -75,25 +105,37 @@ impl Eq for RandomOracle {}
 
 impl PartialEq for RandomOracle {
     fn eq(&self, other: &Self) -> bool {
-        self.0.clone().finalize() == other.0.clone().finalize()
+        self.hash.clone().finalize() == other.hash.clone().finalize()
     }
 }
 
 impl RandomOracle {
     /// Start with the initial empty state of the oracle.
     pub fn empty() -> Self {
-        RandomOracle(Sha3_256::new())
+        RandomOracle {
+            hash: Sha3_256::new(),
+            #[cfg(test)]
+            log: Default::default(),
+        }
     }
 
     /// Start with the initial domain string.
     pub fn domain<B: AsRef<[u8]>>(data: B) -> Self {
-        RandomOracle(Sha3_256::new().chain_update(data))
+        RandomOracle {
+            hash: Sha3_256::new().chain_update(data),
+            #[cfg(test)]
+            log: Default::default(),
+        }
     }
 
     /// Duplicate the random oracle, creating a fresh copy of it.
     /// Further updates are independent.
     pub fn split(&self) -> Self {
-        RandomOracle(self.0.clone())
+        RandomOracle {
+            hash: self.hash.clone(),
+            #[cfg(test)]
+            log: self.log.clone(),
+        }
     }
 
     /// Append the input to the state of the oracle.
@@ -102,7 +144,10 @@ impl RandomOracle {
     }
 
     pub fn add_bytes<B: AsRef<[u8]>>(&mut self, data: B) {
-        self.0.update(data)
+        self.hash.update(data.as_ref());
+        #[cfg(test)]
+        self.log
+            .push(RandomOracleLog::Bytes(data.as_ref().to_vec()));
     }
 
     /// Append the input to the state of the oracle, using `label` as domain
@@ -145,6 +190,11 @@ impl RandomOracle {
     pub fn challenge_scalar<C: Curve, B: AsRef<[u8]>>(&mut self, label: B) -> C::Scalar {
         self.add_bytes(label);
         self.split().result_to_scalar::<C>()
+    }
+
+    #[cfg(test)]
+    pub fn log(&self) -> &[RandomOracleLog] {
+        &self.log
     }
 }
 
