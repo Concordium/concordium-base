@@ -1,11 +1,24 @@
-//! This module implements the proof of knowledge of signature sigma protocol.
-//! This protocol allows a user to prove knowledge of a PS signature without
-//! revealing the original signature, or the message, but they have to reveal
-//! the blinded version of the signature, and commitments to the values that
-//! were signed. The protocol is a essentially `com-dlog-eq` from "Proof of
-//! Equality for Aggregated Discrete Logarithms and Commitments" Section 9.2.5,
-//! Bluepaper v1.2.5 where the blinded signature is the aggregated dlog (cf.
-//! "Proof of Knowledge of a Signature" Section 5.3.5, Bluepaper v1.2.5")
+//! This module implements the proof of knowledge of a PS (Pointcheval-Sanders) signature.
+//! The protocol allows a user to prove knowledge of a PS signature without
+//! revealing the signature, nor the message signed by the signature (unless chosen to be revealed).
+//! As part of the proof, the different parts of the message $\\{m_i\\}$ can either
+//! be proven known ($i \in K$), be proven equal to a commitment $c_i$ ($i \in C$), or revealed ($i \in R$).
+//!
+//! The proof is done as a sigma protocol, see "9.1 Abstract Treatment of Sigma Protocols".
+//! Using the notation from "5.3.5 Proof of Knowledge of a Signature with Public Values"
+//! and "9.2.3 Proof of Knowledge of Opening of Commitment", the homomorphism used is
+//! $$
+//!     \varphi: (r', \\{ m_i \\}\_{i \in K}, \\{ m_i, r_i \\}\_{i \in C} ) \mapsto
+//!        (\mathrm{e}(\hat{a}, \tilde{g}^{r'} \prod\_{i\in K \cup C} \tilde{Y}\_i^{m_i}), \\{ g^{m_i} h^{r_i} \\}\_{i \in C} )
+//! $$
+//!
+//! and we prove knowledge of a preimage of the "statement" $y$:
+//! $$
+//!     y = (\mathrm{e}(\hat{b}, \tilde{X}^{-1} \prod\_{i\in R} \tilde{Y}\_i^{-m_i} \tilde{g} ) , \\{ c_i \\}\_{i \in C})
+//! $$
+//!
+//! Notice that the input to $\varphi$ has a signature blinding component $r'$ and a component for each message part.
+//! The output has a signature component and a commitment component for each message part that is proven equal to a commitment.
 
 use super::common::*;
 use crate::{
@@ -19,40 +32,42 @@ use rand::*;
 
 /// How to handle a single part of the signed message
 #[derive(Clone)]
-pub enum MsgPartHandling<C: Curve> {
-    /// The message is proven known and equal to a commitment to the value
+pub enum PsSigMsg<C: Curve> {
+    /// The message is proven known and equal to the value in commitment $c_i$
     EqualToCommitment(Commitment<C>),
-    /// The value is revealed
+    /// The value/message part $m_i$ is revealed
     Revealed(Value<C>),
     /// The value is proven known
     Known,
 }
 
 // Serialization used to hash into the transcript
-impl<C: Curve> Serial for MsgPartHandling<C> {
+impl<C: Curve> Serial for PsSigMsg<C> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         match &self {
-            MsgPartHandling::EqualToCommitment(cmm) => {
+            PsSigMsg::EqualToCommitment(cmm) => {
                 out.put(&0u8);
                 out.put(cmm);
             }
-            MsgPartHandling::Revealed(value) => {
+            PsSigMsg::Revealed(value) => {
                 out.put(&1u8);
                 out.put(value);
             }
-            MsgPartHandling::Known => {
+            PsSigMsg::Known => {
                 out.put(&2u8);
             }
         }
     }
 }
 
-pub struct ComEqSig<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    /// The blinded signature
+/// Proof of knowledge of a PS (Pointcheval-Sanders) signature. See
+/// module documentation [`self`].
+pub struct PsSig<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    /// The blinded signature $(\hat{a}, \hat{b})$
     pub blinded_sig: BlindedSignature<P>,
     /// A list of how to handle each message in the signature.
     /// Length must be equal to the number of signed messages in the signature
-    pub msgs_handling: Vec<MsgPartHandling<C>>,
+    pub msgs: Vec<PsSigMsg<C>>,
     /// The Pointcheval-Sanders public key with which the signature was
     /// generated
     pub ps_pub_key: PsSigPublicKey<P>,
@@ -60,64 +75,72 @@ pub struct ComEqSig<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub comm_key: CommitmentKey<C>,
 }
 
-/// Random state used to calculate sigma protocol commitment and to calculate response later
-pub struct ComEqSigState<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    r_prime_rand: P::ScalarField,
-    msgs_rand: Vec<MsgPartSecret<C>>,
+/// Commit secret used to calculate sigma protocol commitment and to calculate response later
+pub struct PsSigState<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    /// Commitment secret for $r'$
+    cmm_sec_r_prime: P::ScalarField,
+    /// Commitment secret for each part of the message $\\{m_i\\}$
+    cmm_sec_msgs: Vec<MsgCommitSecret<C>>,
 }
+
+/// Commit secret in the sigma protocol
+type MsgCommitSecret<C> = MsgSecret<C>;
 
 /// How to handle a signed message
 #[derive(Debug, Clone)]
-pub enum MsgPartSecret<C: Curve> {
-    /// The message is proven known and equal to a commitment to the value
+pub enum MsgSecret<C: Curve> {
+    /// The value/message part $m_i$ is proven known and equal to a commitment to the value under the randomness $r_i$
     EqualToCommitment(Value<C>, Randomness<C>),
     /// The value is revealed
     Revealed,
-    /// The value is proven known
+    /// The value/message part $m_i$ is proven known
     Known(Value<C>),
 }
 
-impl<C: Curve> Serial for MsgPartSecret<C> {
+impl<C: Curve> Serial for MsgSecret<C> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         todo!()
     }
 }
 
-impl<C: Curve> Deserial for MsgPartSecret<C> {
+impl<C: Curve> Deserial for MsgSecret<C> {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         todo!()
     }
 }
 
-/// Secret values used in proof
-pub struct ComEqSigSecret<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+/// Witness used in proof, maps to the "statement" $y$ under $\varphi$
+pub struct PsSigSecret<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    /// Secret $r'$ value
     pub r_prime: Secret<P::ScalarField>,
-    pub msgs: Vec<MsgPartSecret<C>>,
+    /// Secret value for each message part
+    pub msgs: Vec<MsgSecret<C>>,
 }
+
+/// Response in the protocol
+type MsgResponse<C> = MsgSecret<C>;
 
 /// Response in sigma protocol
 #[derive(Clone, Debug, Serialize)]
 pub struct Response<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    /// The response that the prover knows $r'$ (see specification)
-    r_prime_resp: P::ScalarField,
-    /// List of responses $(res_m_i, res_R_i)$ that the user knows the messages
-    /// m_i and randomness R_i that combine to commitments and the public
-    /// randomized signature.
+    /// The response corresponding to $r'$
+    resp_r_prime: P::ScalarField,
+    /// The response corresponding to each part of the message
     #[size_length = 4]
-    msgs_resp: Vec<MsgPartSecret<C>>,
+    resp_msgs: Vec<MsgResponse<C>>,
 }
 
-impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P, C> {
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSig<P, C> {
     type CommitMessage = (P::TargetField, Vec<Commitment<C>>);
     type ProtocolChallenge = C::Scalar;
-    type ProverState = ComEqSigState<P, C>;
+    type ProverState = PsSigState<P, C>;
     type Response = Response<P, C>;
-    type SecretData = ComEqSigSecret<P, C>;
+    type SecretData = PsSigSecret<P, C>;
 
     #[inline]
     fn public(&self, ro: &mut RandomOracle) {
         ro.append_message(b"blinded_sig", &self.blinded_sig);
-        ro.extend_from(b"messages", self.msgs_handling.iter());
+        ro.extend_from(b"messages", self.msgs.iter());
         ro.append_message(b"ps_pub_key", &self.ps_pub_key);
         ro.append_message(b"comm_key", &self.comm_key)
     }
@@ -130,80 +153,74 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
         C::scalar_from_bytes(challenge)
     }
 
+    /// Compute commit secrets $\alpha$ and their image $a = \varphi(\alpha)$ under $\varphi$ (see module [`self`] for definition of $\varphi$).
     #[inline]
     fn compute_commit_message<R: Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
-        let g_tilda = self.ps_pub_key.g_tilda;
+        let g_tilde = self.ps_pub_key.g_tilda;
         let a_hat = self.blinded_sig.sig.0;
-        let _b_hat = self.blinded_sig.sig.1;
-        let _x_tilda = self.ps_pub_key.x_tilda;
         let y_tilda = |i| self.ps_pub_key.y_tildas[i];
         let cmm_key = self.comm_key;
 
-        if self.msgs_handling.len() > self.ps_pub_key.len() {
+        if self.msgs.len() > self.ps_pub_key.len() {
             return None;
         }
 
         let cmm_count = self
-            .msgs_handling
+            .msgs
             .iter()
-            .filter(|msg| matches!(msg, MsgPartHandling::EqualToCommitment(_)))
+            .filter(|msg| matches!(msg, PsSigMsg::EqualToCommitment(_)))
             .count();
 
-        // Random elements corresponding to the secrets (used for blinding when the .
-        let mut msgs_rand = Vec::with_capacity(self.msgs_handling.len());
-
         // randomness corresponding to the r'
-        let r_prime_rand = <P::G2 as Curve>::generate_non_zero_scalar(csprng);
+        let cmm_sec_r_prime = <P::G2 as Curve>::generate_non_zero_scalar(csprng);
+        // random elements corresponding to the message parts
+        let mut cmm_sec_msgs = Vec::with_capacity(self.msgs.len());
 
-        // Group element to pair with a_hat to obtain the commitment
-        // corresponding to v_2.
-        let mut v_2_curve = g_tilda.mul_by_scalar(&r_prime_rand);
+        // group element to pair with a_hat to obtain the commit message for the signature
+        let mut cmm_msg_signature_elm = g_tilde.mul_by_scalar(&cmm_sec_r_prime);
+        // commit messages for the value commitments
+        let mut cmm_msg_commitments = Vec::with_capacity(cmm_count);
 
-        let mut cmms = Vec::with_capacity(cmm_count);
-        for (i, msg_handling) in self.msgs_handling.iter().enumerate() {
-            match msg_handling {
-                MsgPartHandling::EqualToCommitment(_) => {
-                    // Random value.
-                    let m_i = Value::generate_non_zero(csprng);
+        for (i, msg) in self.msgs.iter().enumerate() {
+            match msg {
+                PsSigMsg::EqualToCommitment(_) => {
+                    let cmm_sec_m_i = Value::generate_non_zero(csprng);
 
-                    // A commitment to the value m_i, and a randomness
-                    let (c_i, r_i) = cmm_key.commit(&m_i, csprng);
-                    cmms.push(c_i);
+                    let (cmm_msg_c_i, cmm_sec_r_i) = cmm_key.commit(&cmm_sec_m_i, csprng);
+                    cmm_msg_commitments.push(cmm_msg_c_i);
 
-                    let y_exp_m_i = y_tilda(i).mul_by_scalar(&m_i);
-                    v_2_curve = v_2_curve.plus_point(&y_exp_m_i);
+                    let y_exp_m_i = y_tilda(i).mul_by_scalar(&cmm_sec_m_i);
+                    cmm_msg_signature_elm = cmm_msg_signature_elm.plus_point(&y_exp_m_i);
 
-                    // Save state for response
-                    msgs_rand.push(MsgPartSecret::EqualToCommitment(m_i, r_i));
+                    cmm_sec_msgs.push(MsgSecret::EqualToCommitment(cmm_sec_m_i, cmm_sec_r_i));
                 }
-                MsgPartHandling::Revealed(_) => {
-                    msgs_rand.push(MsgPartSecret::Revealed);
+                PsSigMsg::Revealed(_) => {
+                    cmm_sec_msgs.push(MsgSecret::Revealed);
                 }
-                MsgPartHandling::Known => {
-                    // Random value.
-                    let m_i = Value::generate_non_zero(csprng);
+                PsSigMsg::Known => {
+                    let cmm_sec_m_i = Value::generate_non_zero(csprng);
 
-                    let y_exp_m_i = y_tilda(i).mul_by_scalar(&m_i);
-                    v_2_curve = v_2_curve.plus_point(&y_exp_m_i);
+                    let y_exp_m_i = y_tilda(i).mul_by_scalar(&cmm_sec_m_i);
+                    cmm_msg_signature_elm = cmm_msg_signature_elm.plus_point(&y_exp_m_i);
 
-                    // Save state for response
-                    msgs_rand.push(MsgPartSecret::Known(m_i));
+                    cmm_sec_msgs.push(MsgSecret::Known(cmm_sec_m_i));
                 }
             }
         }
-        let v_2 = P::pair(&a_hat, &v_2_curve);
+        let cmm_msg_signature = P::pair(&a_hat, &cmm_msg_signature_elm);
         Some((
-            (v_2, cmms),
-            ComEqSigState {
-                r_prime_rand,
-                msgs_rand,
+            (cmm_msg_signature, cmm_msg_commitments),
+            PsSigState {
+                cmm_sec_r_prime,
+                cmm_sec_msgs,
             },
         ))
     }
 
+    /// Compute response as $\alpha - c x$ where $\alpha$: the commit secret, $c$: the challenge, $x$: the witness
     #[inline]
     fn compute_response(
         &self,
@@ -213,53 +230,59 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
     ) -> Option<Self::Response> {
         // If challange = 0 the proof is not going to be valid.
         // However this is an exceedingly unlikely case
-        let mut r_prime_resp = *challenge;
-        r_prime_resp.mul_assign(&secret.r_prime);
-        r_prime_resp.negate();
-        r_prime_resp.add_assign(&state.r_prime_rand);
+        let mut resp_r_prime = *challenge;
+        resp_r_prime.mul_assign(&secret.r_prime);
+        resp_r_prime.negate();
+        resp_r_prime.add_assign(&state.cmm_sec_r_prime);
 
-        let mut msgs_resp = Vec::with_capacity(self.msgs_handling.len());
-        for (msg_part_state, msg_part_secret) in state.msgs_rand.iter().zip(secret.msgs.iter()) {
-            match (msg_part_state, msg_part_secret) {
+        let mut resp_msgs = Vec::with_capacity(self.msgs.len());
+        for (cmm_sec_msg, witness_msg) in state.cmm_sec_msgs.iter().zip(secret.msgs.iter()) {
+            match (cmm_sec_msg, witness_msg) {
                 (
-                    MsgPartSecret::EqualToCommitment(m_i_rand, r_i_rand),
-                    MsgPartSecret::EqualToCommitment(m_i, r_i),
+                    MsgSecret::EqualToCommitment(cmm_sec_m_i, cmm_sec_r_i),
+                    MsgSecret::EqualToCommitment(m_i, r_i),
                 ) => {
-                    let mut m_i_resp = *challenge;
-                    m_i_resp.mul_assign(m_i);
-                    m_i_resp.negate();
-                    m_i_resp.add_assign(m_i_rand);
+                    let mut resp_m_i = *challenge;
+                    resp_m_i.mul_assign(m_i);
+                    resp_m_i.negate();
+                    resp_m_i.add_assign(cmm_sec_m_i);
 
-                    let mut r_i_resp = *challenge;
-                    r_i_resp.mul_assign(r_i);
-                    r_i_resp.negate();
-                    r_i_resp.add_assign(r_i_rand);
+                    let mut resp_r_i = *challenge;
+                    resp_r_i.mul_assign(r_i);
+                    resp_r_i.negate();
+                    resp_r_i.add_assign(cmm_sec_r_i);
 
-                    msgs_resp.push(MsgPartSecret::EqualToCommitment(
-                        Value::new(m_i_resp),
-                        Randomness::new(r_i_resp),
+                    resp_msgs.push(MsgSecret::EqualToCommitment(
+                        Value::new(resp_m_i),
+                        Randomness::new(resp_r_i),
                     ));
                 }
-                (MsgPartSecret::Revealed, MsgPartSecret::Revealed) => {
-                    msgs_resp.push(MsgPartSecret::Revealed);
+                (MsgSecret::Revealed, MsgSecret::Revealed) => {
+                    resp_msgs.push(MsgSecret::Revealed);
                 }
-                (MsgPartSecret::Known(m_i_rand), MsgPartSecret::Known(m_i)) => {
-                    let mut m_i_resp = *challenge;
-                    m_i_resp.mul_assign(m_i);
-                    m_i_resp.negate();
-                    m_i_resp.add_assign(m_i_rand);
+                (MsgSecret::Known(cmm_sec_m_i), MsgSecret::Known(m_i)) => {
+                    let mut resp_m_i = *challenge;
+                    resp_m_i.mul_assign(m_i);
+                    resp_m_i.negate();
+                    resp_m_i.add_assign(cmm_sec_m_i);
 
-                    msgs_resp.push(MsgPartSecret::Known(Value::new(m_i_resp)));
+                    resp_msgs.push(MsgSecret::Known(Value::new(resp_m_i)));
                 }
                 _ => return None,
             }
         }
         Some(Response {
-            r_prime_resp,
-            msgs_resp,
+            resp_r_prime,
+            resp_msgs,
         })
     }
 
+    /// Extract commit message as $a = y^c \varphi(z)$ where $c$: the challenge, $z$ the response.
+    /// Notice that the signature component of the commit message $a$ can be calculated as following (inserting $y$ and $\varphi$ from module [`self`] ):
+    /// $$
+    ///     \mathrm{e}(\hat{b}, \tilde{g}^c) \mathrm{e}(\hat{a}, \tilde{X}^{-c} \tilde{g}^{r\_z'} \prod\_{i\in R} \tilde{Y}\_i^{-c m_{z,i}} \prod\_{i\in K \cup C} \tilde{Y}\_i^{m_{z,i}})
+    /// $$
+    /// (using $z$ underscore to mark the response values)
     #[inline]
     fn extract_commit_message(
         &self,
@@ -273,83 +296,77 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
         let y_tilda = |i| self.ps_pub_key.y_tildas[i];
         let cmm_key = self.comm_key;
 
-        if self.msgs_handling.len() > self.ps_pub_key.len() {
+        if self.msgs.len() > self.ps_pub_key.len() {
             return None;
         }
 
         let cmm_count = self
-            .msgs_handling
+            .msgs
             .iter()
-            .filter(|msg| matches!(msg, MsgPartHandling::EqualToCommitment(_)))
+            .filter(|msg| matches!(msg, PsSigMsg::EqualToCommitment(_)))
             .count();
 
-        // storing values for multiexponentiation. gs is bases, es is powers.
-        let mut gs = Vec::with_capacity(self.msgs_handling.len() + 2);
-        let mut es = Vec::with_capacity(self.msgs_handling.len() + 2);
+        // values for multi exponentiation to calculate signature part of commit message. gs is bases, es is powers.
+        let mut cmm_msg_sig_gs = Vec::with_capacity(self.msgs.len() + 2);
+        let mut cmm_msg_sig_es = Vec::with_capacity(self.msgs.len() + 2);
+        // commit message for message part commitments
+        let mut cmm_msg_commitments = Vec::with_capacity(cmm_count);
 
-        gs.push(g_tilda);
-        es.push(response.r_prime_resp);
         let challenge_neg = {
             let mut x = *challenge;
             x.negate();
             x
         };
-        let mut cmms = Vec::with_capacity(cmm_count);
-        for (i, (msg_handling, msg_part_resp)) in self
-            .msgs_handling
-            .iter()
-            .zip(&response.msgs_resp)
-            .enumerate()
-        {
-            match (msg_handling, msg_part_resp) {
+
+        cmm_msg_sig_gs.push(g_tilda);
+        cmm_msg_sig_es.push(response.resp_r_prime);
+
+        cmm_msg_sig_gs.push(x_tilda);
+        cmm_msg_sig_es.push(challenge_neg);
+
+        for (i, (msg, resp_msg)) in self.msgs.iter().zip(&response.resp_msgs).enumerate() {
+            match (msg, resp_msg) {
                 (
-                    MsgPartHandling::EqualToCommitment(c_i),
-                    MsgPartSecret::EqualToCommitment(m_i_resp, r_i_resp),
+                    PsSigMsg::EqualToCommitment(c_i),
+                    MsgSecret::EqualToCommitment(resp_m_i, resp_r_i),
                 ) => {
-                    let bases = [c_i.0, cmm_key.g, cmm_key.h];
-                    let powers = [*challenge, **m_i_resp.value, **r_i_resp.randomness];
-                    let c = multiexp(&bases, &powers);
-                    cmms.push(Commitment(c));
-                    gs.push(y_tilda(i));
-                    es.push(**m_i_resp);
+                    let cmm_msg_c_i = multiexp(
+                        &[c_i.0, cmm_key.g, cmm_key.h],
+                        &[*challenge, **resp_m_i.value, **resp_r_i.randomness],
+                    );
+                    cmm_msg_commitments.push(Commitment(cmm_msg_c_i));
+
+                    cmm_msg_sig_gs.push(y_tilda(i));
+                    cmm_msg_sig_es.push(**resp_m_i);
                 }
-                (MsgPartHandling::Revealed(m_i), MsgPartSecret::Revealed) => {
-                    gs.push(y_tilda(i));
+                (PsSigMsg::Revealed(m_i), MsgSecret::Revealed) => {
+                    cmm_msg_sig_gs.push(y_tilda(i));
                     let mut exp = challenge_neg;
                     exp.mul_assign(m_i);
-                    es.push(exp);
+                    cmm_msg_sig_es.push(exp);
                 }
-                (MsgPartHandling::Known, MsgPartSecret::Known(m_i_resp)) => {
-                    gs.push(y_tilda(i));
-                    es.push(**m_i_resp);
+                (PsSigMsg::Known, MsgSecret::Known(resp_m_i)) => {
+                    cmm_msg_sig_gs.push(y_tilda(i));
+                    cmm_msg_sig_es.push(**resp_m_i);
                 }
                 _ => return None,
             }
         }
 
-        // finally add X_tilda and -challenge to the power (adjustment since X_tilda is not part of the commitment)
-        gs.push(x_tilda);
-        es.push(challenge_neg);
-
-        let v_2_curve = multiexp(&gs, &es);
-
-        // We have now computed a point `point` such that
-        // ```v_3^{-c} * v_1^R \prod u_i^w_i = e(a_hat, point)```
-        // If the proof is correct then the challenge was computed with
-        // v_2^c * v^3{-c} * ...
-        // where * is the multiplication in the target field (of which the G_T is a multiplicative subgroup).
+        let cmm_msg_sig_elm = multiexp(&cmm_msg_sig_gs, &cmm_msg_sig_es);
 
         // Combine the pairing computations to compute the product.
-        let v_2 = P::pairing_product(
+        let cmm_msg_sig = P::pairing_product(
             &b_hat,
             &g_tilda.mul_by_scalar(challenge),
             &a_hat,
-            &v_2_curve,
+            &cmm_msg_sig_elm,
         )?;
 
-        Some((v_2, cmms))
+        Some((cmm_msg_sig, cmm_msg_commitments))
     }
 
+    // todo ar valid data simplify/refactor
     #[cfg(test)]
     fn with_valid_data<R: Rng>(
         data_size: usize,
@@ -374,16 +391,16 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
             match csprng.gen_range(0..3) {
                 0 => {
                     let (c_j, r_j) = cmm_key.commit(&v_j, csprng);
-                    secrets.push(MsgPartSecret::EqualToCommitment(v_j, r_j));
-                    msgs_handling.push(MsgPartHandling::EqualToCommitment(c_j));
+                    secrets.push(MsgSecret::EqualToCommitment(v_j, r_j));
+                    msgs_handling.push(PsSigMsg::EqualToCommitment(c_j));
                 }
                 1 => {
-                    secrets.push(MsgPartSecret::Revealed);
-                    msgs_handling.push(MsgPartHandling::Revealed(v_j));
+                    secrets.push(MsgSecret::Revealed);
+                    msgs_handling.push(PsSigMsg::Revealed(v_j));
                 }
                 2 => {
-                    secrets.push(MsgPartSecret::Known(v_j));
-                    msgs_handling.push(MsgPartHandling::Known);
+                    secrets.push(MsgSecret::Known(v_j));
+                    msgs_handling.push(PsSigMsg::Known);
                 }
                 _ => unreachable!(),
             }
@@ -393,20 +410,22 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
             .sign_unknown_message(&unknown_message, csprng)
             .retrieve(&mask);
         let (blinded_sig, blind_rand) = sig.blind(csprng);
-        let ces = ComEqSig {
-            msgs_handling,
+        let ces = PsSig {
+            msgs: msgs_handling,
             ps_pub_key: ps_pk,
             comm_key: cmm_key,
             blinded_sig,
         };
 
-        let secret = ComEqSigSecret {
+        let secret = PsSigSecret {
             r_prime: blind_rand.1,
             msgs: secrets,
         };
         f(ces, secret, csprng)
     }
 }
+
+// todo ar check constant time stuff and calculations
 
 #[cfg(test)]
 mod tests {
@@ -426,7 +445,7 @@ mod tests {
     pub fn test_com_eq_sig_correctness() {
         let mut csprng = thread_rng();
         for i in 1..20 {
-            ComEqSig::<Bls12, G1>::with_valid_data(i, &mut csprng, |ces, secret, csprng| {
+            PsSig::<Bls12, G1>::with_valid_data(i, &mut csprng, |ces, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
                 let mut ro = RandomOracle::domain(challenge_prefix);
 
@@ -438,13 +457,14 @@ mod tests {
     }
 
     // todo ar more soundness tests?
+    // todo ar tests
 
     #[test]
     #[allow(non_snake_case)]
     pub fn test_com_eq_sig_soundness() {
         let mut csprng = thread_rng();
         for i in 1..20 {
-            ComEqSig::<Bls12, G1>::with_valid_data(i, &mut csprng, |ces, secret, csprng| {
+            PsSig::<Bls12, G1>::with_valid_data(i, &mut csprng, |ces, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
                 let ro = RandomOracle::domain(challenge_prefix);
 
@@ -469,17 +489,17 @@ mod tests {
                 }
 
                 {
-                    if !wrong_ces.msgs_handling.is_empty() {
-                        let idx = csprng.gen_range(0..wrong_ces.msgs_handling.len());
-                        let tmp = wrong_ces.msgs_handling[idx].clone();
-                        wrong_ces.msgs_handling[idx] = MsgPartHandling::EqualToCommitment(
+                    if !wrong_ces.msgs.is_empty() {
+                        let idx = csprng.gen_range(0..wrong_ces.msgs.len());
+                        let tmp = wrong_ces.msgs[idx].clone();
+                        wrong_ces.msgs[idx] = PsSigMsg::EqualToCommitment(
                             wrong_ces
                                 .comm_key
                                 .commit(&Value::<G1>::generate(csprng), csprng)
                                 .0,
                         );
                         assert!(!verify(&mut ro.split(), &wrong_ces, &proof));
-                        wrong_ces.msgs_handling[idx] = tmp;
+                        wrong_ces.msgs[idx] = tmp;
                     }
                 }
 
