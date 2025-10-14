@@ -81,15 +81,15 @@ pub struct PsSigState<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Commitment secret for $r'$
     cmm_sec_r_prime: P::ScalarField,
     /// Commitment secret for each part of the message $\\{m_i\\}$
-    cmm_sec_msgs: Vec<MsgCommitSecret<C>>,
+    cmm_sec_msgs: Vec<CommitSecretMsg<C>>,
 }
 
 /// Commit secret in the sigma protocol
-type MsgCommitSecret<C> = MsgSecret<C>;
+type CommitSecretMsg<C> = SecretMsg<C>;
 
 /// How to handle a signed message
 #[derive(Debug, Clone)]
-pub enum MsgSecret<C: Curve> {
+pub enum SecretMsg<C: Curve> {
     /// The value/message part $m_i$ is proven known and equal to a commitment to the value under the randomness $r_i$
     EqualToCommitment(Value<C>, Randomness<C>),
     /// The value is revealed
@@ -99,13 +99,13 @@ pub enum MsgSecret<C: Curve> {
 }
 
 // todo ar implement serial/deserial?
-impl<C: Curve> Serial for MsgSecret<C> {
+impl<C: Curve> Serial for SecretMsg<C> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         todo!()
     }
 }
 
-impl<C: Curve> Deserial for MsgSecret<C> {
+impl<C: Curve> Deserial for SecretMsg<C> {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         todo!()
     }
@@ -116,11 +116,11 @@ pub struct PsSigSecret<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Secret $r'$ value
     pub r_prime: Secret<P::ScalarField>,
     /// Secret value for each message part
-    pub msgs: Vec<MsgSecret<C>>,
+    pub msgs: Vec<SecretMsg<C>>,
 }
 
 /// Response in the protocol
-type MsgResponse<C> = MsgSecret<C>;
+type ResponseMsg<C> = SecretMsg<C>;
 
 /// Response in sigma protocol
 #[derive(Clone, Debug, Serialize)]
@@ -129,7 +129,7 @@ pub struct Response<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     resp_r_prime: P::ScalarField,
     /// The response corresponding to each part of the message
     #[size_length = 4]
-    resp_msgs: Vec<MsgResponse<C>>,
+    resp_msgs: Vec<ResponseMsg<C>>,
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSig<P, C> {
@@ -197,10 +197,10 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSig<P, C
                     let y_exp_m_i = y_tilda(i).mul_by_scalar(&cmm_sec_m_i);
                     cmm_msg_signature_elm = cmm_msg_signature_elm.plus_point(&y_exp_m_i);
 
-                    cmm_sec_msgs.push(MsgSecret::EqualToCommitment(cmm_sec_m_i, cmm_sec_r_i));
+                    cmm_sec_msgs.push(SecretMsg::EqualToCommitment(cmm_sec_m_i, cmm_sec_r_i));
                 }
                 PsSigMsg::Revealed(_) => {
-                    cmm_sec_msgs.push(MsgSecret::Revealed);
+                    cmm_sec_msgs.push(SecretMsg::Revealed);
                 }
                 PsSigMsg::Known => {
                     let cmm_sec_m_i = Value::generate_non_zero(csprng);
@@ -208,7 +208,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSig<P, C
                     let y_exp_m_i = y_tilda(i).mul_by_scalar(&cmm_sec_m_i);
                     cmm_msg_signature_elm = cmm_msg_signature_elm.plus_point(&y_exp_m_i);
 
-                    cmm_sec_msgs.push(MsgSecret::Known(cmm_sec_m_i));
+                    cmm_sec_msgs.push(SecretMsg::Known(cmm_sec_m_i));
                 }
             }
         }
@@ -241,8 +241,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSig<P, C
         for (cmm_sec_msg, witness_msg) in state.cmm_sec_msgs.iter().zip(secret.msgs.iter()) {
             match (cmm_sec_msg, witness_msg) {
                 (
-                    MsgSecret::EqualToCommitment(cmm_sec_m_i, cmm_sec_r_i),
-                    MsgSecret::EqualToCommitment(m_i, r_i),
+                    CommitSecretMsg::EqualToCommitment(cmm_sec_m_i, cmm_sec_r_i),
+                    SecretMsg::EqualToCommitment(m_i, r_i),
                 ) => {
                     let mut resp_m_i = *challenge;
                     resp_m_i.mul_assign(m_i);
@@ -254,21 +254,21 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSig<P, C
                     resp_r_i.negate();
                     resp_r_i.add_assign(cmm_sec_r_i);
 
-                    resp_msgs.push(MsgSecret::EqualToCommitment(
+                    resp_msgs.push(SecretMsg::EqualToCommitment(
                         Value::new(resp_m_i),
                         Randomness::new(resp_r_i),
                     ));
                 }
-                (MsgSecret::Revealed, MsgSecret::Revealed) => {
-                    resp_msgs.push(MsgSecret::Revealed);
+                (CommitSecretMsg::Revealed, SecretMsg::Revealed) => {
+                    resp_msgs.push(SecretMsg::Revealed);
                 }
-                (MsgSecret::Known(cmm_sec_m_i), MsgSecret::Known(m_i)) => {
+                (CommitSecretMsg::Known(cmm_sec_m_i), SecretMsg::Known(m_i)) => {
                     let mut resp_m_i = *challenge;
                     resp_m_i.mul_assign(m_i);
                     resp_m_i.negate();
                     resp_m_i.add_assign(cmm_sec_m_i);
 
-                    resp_msgs.push(MsgSecret::Known(Value::new(resp_m_i)));
+                    resp_msgs.push(SecretMsg::Known(Value::new(resp_m_i)));
                 }
                 _ => return None,
             }
@@ -330,7 +330,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSig<P, C
             match (msg, resp_msg) {
                 (
                     PsSigMsg::EqualToCommitment(c_i),
-                    MsgSecret::EqualToCommitment(resp_m_i, resp_r_i),
+                    ResponseMsg::EqualToCommitment(resp_m_i, resp_r_i),
                 ) => {
                     let cmm_msg_c_i = curve_arithmetic::multiexp(
                         &[c_i.0, cmm_key.g, cmm_key.h],
@@ -341,13 +341,13 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSig<P, C
                     cmm_msg_sig_gs.push(y_tilda(i));
                     cmm_msg_sig_es.push(**resp_m_i);
                 }
-                (PsSigMsg::Revealed(m_i), MsgSecret::Revealed) => {
+                (PsSigMsg::Revealed(m_i), ResponseMsg::Revealed) => {
                     cmm_msg_sig_gs.push(y_tilda(i));
                     let mut exp = challenge_neg;
                     exp.mul_assign(m_i);
                     cmm_msg_sig_es.push(exp);
                 }
-                (PsSigMsg::Known, MsgSecret::Known(resp_m_i)) => {
+                (PsSigMsg::Known, ResponseMsg::Known(resp_m_i)) => {
                     cmm_msg_sig_gs.push(y_tilda(i));
                     cmm_msg_sig_es.push(**resp_m_i);
                 }
@@ -393,15 +393,15 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSig<P, C
             match csprng.gen_range(0..3) {
                 0 => {
                     let (c_j, r_j) = cmm_key.commit(&v_j, csprng);
-                    secrets.push(MsgSecret::EqualToCommitment(v_j, r_j));
+                    secrets.push(SecretMsg::EqualToCommitment(v_j, r_j));
                     msgs_handling.push(PsSigMsg::EqualToCommitment(c_j));
                 }
                 1 => {
-                    secrets.push(MsgSecret::Revealed);
+                    secrets.push(SecretMsg::Revealed);
                     msgs_handling.push(PsSigMsg::Revealed(v_j));
                 }
                 2 => {
-                    secrets.push(MsgSecret::Known(v_j));
+                    secrets.push(SecretMsg::Known(v_j));
                     msgs_handling.push(PsSigMsg::Known);
                 }
                 _ => unreachable!(),
