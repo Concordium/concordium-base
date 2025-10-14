@@ -190,6 +190,60 @@ instance HashableTo TransactionHashV0 AccountTransaction where
 instance HashableTo TransactionSignHashV0 AccountTransaction where
     getHash = atrSignHash
 
+-- | The signatures for an 'AccountTransactionV1'.
+--
+--  * @SPEC: <$DOCS/Transactions#transaction-signatures-v1>
+data TransactionSignaturesV1 = TransactionSignaturesV1
+    { -- | The signatures for the sender account
+      tv1sSender :: TransactionSignature,
+      -- | The signatures for the sponsor account. These must be present if a sponsor
+      -- is specified for the transaction in the corresponding transaction header.
+      tv1sSponsor :: Maybe TransactionSignature
+    }
+    deriving (Show, Eq)
+
+-- | Data common to all v1 transaction types.
+--
+--  * @SPEC: <$DOCS/Transactions#transaction-header-v1>
+data TransactionHeaderV1 = TransactionHeaderV1
+    { -- | Sender account.
+      thv1Sender :: AccountAddress,
+      -- | Account nonce.
+      thv1Nonce :: !Nonce,
+      -- | Amount of energy dedicated for the execution of this transaction.
+      thv1EnergyAmount :: !Energy,
+      -- | Size of the payload in bytes.
+      thv1PayloadSize :: PayloadSize,
+      -- | Absolute expiration time after which transaction will not be executed
+      thv1Expiry :: TransactionExpiryTime,
+      -- | An optional sponsor account which pays the transaction fees for the
+      -- transtaction execution
+      thv1Sponsor :: Maybe AccountAddress
+    }
+    deriving (Show, Eq)
+
+-- | An 'AccountTransactionV1' is a transaction that originates from
+--  a specific account (the sender), and is paid for by either the sender
+--  or a sponsor account.
+--
+--  The representation includes a 'TransactionSignHash' which is
+--  the value that is signed. This is derived from the header and
+--  payload, and so does not form part of the serialization.
+--
+--  The payload is stored in serialized form. Deserializing the
+--  payload is considered part of the transaction execution.
+data AccountTransactionV1 = AccountTransactionV1
+    { -- | Signature
+      atrv1Signature :: !TransactionSignaturesV1,
+      -- | Header
+      atrv1Header :: !TransactionHeaderV1,
+      -- | Serialized payload
+      atrv1Payload :: !EncodedPayload,
+      -- | Hash used for signing
+      atrv1SignHash :: !TransactionSignHashV0
+    }
+    deriving (Eq, Show)
+
 -- | An 'AccountCreation' is a credential together with an expiry. It is a
 --  message that is included in a block, if valid, but it is not paid for
 --  directly by the sender.
