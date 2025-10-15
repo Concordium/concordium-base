@@ -33,7 +33,7 @@ use crate::{
 use rand::Rng;
 
 /// How to handle a single part of the signed message
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum PsSigMsg<C: Curve> {
     /// The message is proven known and equal to the value in commitment $c_i$
     EqualToCommitment(Commitment<C>),
@@ -74,7 +74,7 @@ pub struct PsSig<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// generated
     pub ps_pub_key: ps_sig::PublicKey<P>,
     /// A commitment key with which the commitments were generated.
-    pub comm_key: CommitmentKey<C>,
+    pub cmm_key: CommitmentKey<C>,
 }
 
 /// Commit secret used to calculate sigma protocol commitment and to calculate response later
@@ -145,7 +145,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSig<P, C
         ro.append_message(b"blinded_sig", &self.blinded_sig);
         ro.extend_from(b"messages", self.msgs.iter());
         ro.append_message(b"ps_pub_key", &self.ps_pub_key);
-        ro.append_message(b"comm_key", &self.comm_key)
+        ro.append_message(b"comm_key", &self.cmm_key)
     }
 
     #[inline]
@@ -165,7 +165,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSig<P, C
         let g_tilde = self.ps_pub_key.g_tilda;
         let a_hat = self.blinded_sig.sig.0;
         let y_tilde = |i| self.ps_pub_key.y_tildas[i];
-        let cmm_key = self.comm_key;
+        let cmm_key = self.cmm_key;
 
         if self.msgs.len() > self.ps_pub_key.len() {
             return None;
@@ -300,7 +300,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSig<P, C
         let b_hat = self.blinded_sig.sig.1;
         let x_tilde = self.ps_pub_key.x_tilda;
         let y_tilde = |i| self.ps_pub_key.y_tildas[i];
-        let cmm_key = self.comm_key;
+        let cmm_key = self.cmm_key;
 
         if self.msgs.len() > self.ps_pub_key.len() {
             return None;
@@ -395,16 +395,17 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSig<P, C
 
 #[cfg(test)]
 mod tests {
-    use ark_bls12_381::G1Projective;
-    use std::iter;
-    use assert_matches::assert_matches;
     use super::*;
+    use crate::id::constants::ArCurve;
     use crate::{
         curve_arithmetic::arkworks_instances::ArkGroup,
         ps_sig,
         ps_sig::{SecretKey as PsSigSecretKey, Signature},
         sigma_protocols,
     };
+    use ark_bls12_381::G1Projective;
+    use assert_matches::assert_matches;
+    use std::iter;
 
     type G1 = ArkGroup<G1Projective>;
     type Bls12 = ark_ec::models::bls12::Bls12<ark_bls12_381::Config>;
@@ -462,7 +463,7 @@ mod tests {
         let ps_sig = PsSig {
             msgs,
             ps_pub_key: ps_pk,
-            comm_key: cmm_key,
+            cmm_key: cmm_key,
             blinded_sig,
         };
 
@@ -471,6 +472,18 @@ mod tests {
             msgs: secret_msgs,
         };
         (ps_sig, secret)
+    }
+
+    fn value_add_one<C: Curve>(v: &Value<C>) -> Value<C> {
+        let mut value = Clone::clone(v.as_ref());
+        value.add_assign(&Field::one());
+        Value::new(value)
+    }
+
+    fn randomness_add_one<C: Curve>(v: &Randomness<C>) -> Randomness<C> {
+        let mut randomness = Clone::clone(v.as_ref());
+        randomness.add_assign(&Field::one());
+        Randomness::new(randomness)
     }
 
     /// Tests completeness for varying message lengths and varying ways of handling the message parts
@@ -490,7 +503,6 @@ mod tests {
 
             let (ps_sig, secret) = instance_with_secrets::<Bls12, G1>(&specs, &mut csprng);
 
-
             let mut ro = RandomOracle::empty();
             let proof =
                 sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
@@ -505,7 +517,6 @@ mod tests {
         let mut csprng = rand::thread_rng();
 
         let (ps_sig, secret) = instance_with_secrets::<Bls12, G1>(&[], &mut csprng);
-
 
         let mut ro = RandomOracle::empty();
         let proof = sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
@@ -573,20 +584,102 @@ mod tests {
         }
     }
 
+    /// Test commitment to something else than in the signature
     #[test]
-    pub fn test_ps_sig_soundness_commitments() {
+    pub fn test_ps_sig_soundness_commitment_incorrect() {
         let mut csprng = rand::thread_rng();
 
-        let (mut ps_sig, secret) =
+        let (mut ps_sig, mut secret) =
             instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::EqualToCommitment], &mut csprng);
 
-        assert_matches!(&mut ps_sig.msgs[0], PsSigMsg::EqualToCommitment(c) => {
+        let new_m = assert_matches!(&mut secret.msgs[0], SecretMsg::EqualToCommitment(m, _r) => {
+           value_add_one(m)
+        });
+        let (new_c, new_r) = ps_sig.cmm_key.commit(&new_m, &mut csprng);
 
+        assert_matches!(&mut ps_sig.msgs[0], PsSigMsg::EqualToCommitment(c) => {
+            *c = new_c
+        });
+        assert_matches!(&mut secret.msgs[0], SecretMsg::EqualToCommitment(v, r) => {
+            *v = new_m;
+            *r = new_r;
         });
 
         let mut ro = RandomOracle::empty();
         let proof = sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
             .expect("prove");
-        assert!(sigma_protocols::common::verify(&mut ro, &ps_sig, &proof));
+        assert!(!sigma_protocols::common::verify(&mut ro, &ps_sig, &proof));
+    }
+
+    /// Test commitment where message secret is incorrect
+    #[test]
+    pub fn test_ps_sig_soundness_commitment_message_secret_invalid() {
+        let mut csprng = rand::thread_rng();
+
+        let (ps_sig, mut secret) =
+            instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::EqualToCommitment], &mut csprng);
+
+        assert_matches!(&mut secret.msgs[0], SecretMsg::EqualToCommitment(m, _r) => {
+           *m = value_add_one(m);
+        });
+
+        let mut ro = RandomOracle::empty();
+        let proof = sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
+            .expect("prove");
+        assert!(!sigma_protocols::common::verify(&mut ro, &ps_sig, &proof));
+    }
+
+    /// Test commitment where randomness secret is incorrect
+    #[test]
+    pub fn test_ps_sig_soundness_commitment_randomness_secret_invalid() {
+        let mut csprng = rand::thread_rng();
+
+        let (ps_sig, mut secret) =
+            instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::EqualToCommitment], &mut csprng);
+
+        assert_matches!(&mut secret.msgs[0], SecretMsg::EqualToCommitment(_m, r) => {
+           *r = randomness_add_one(r);
+        });
+
+        let mut ro = RandomOracle::empty();
+        let proof = sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
+            .expect("prove");
+        assert!(!sigma_protocols::common::verify(&mut ro, &ps_sig, &proof));
+    }
+
+    /// Test revealed value that is something else than in the signature
+    #[test]
+    pub fn test_ps_sig_soundness_revealed_incorrect() {
+        let mut csprng = rand::thread_rng();
+
+        let (mut ps_sig, secret) =
+            instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::Revealed], &mut csprng);
+
+        assert_matches!(&mut ps_sig.msgs[0], PsSigMsg::Revealed(m) => {
+            *m = value_add_one(m);
+        });
+
+        let mut ro = RandomOracle::empty();
+        let proof = sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
+            .expect("prove");
+        assert!(!sigma_protocols::common::verify(&mut ro, &ps_sig, &proof));
+    }
+
+    /// Test known message where secret message is invalid
+    #[test]
+    pub fn test_ps_sig_soundness_known_invalid() {
+        let mut csprng = rand::thread_rng();
+
+        let (ps_sig, mut secret) =
+            instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::Known], &mut csprng);
+
+        assert_matches!(&mut secret.msgs[0], SecretMsg::Known(m) => {
+           *m = value_add_one(m);
+        });
+
+        let mut ro = RandomOracle::empty();
+        let proof = sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
+            .expect("prove");
+        assert!(!sigma_protocols::common::verify(&mut ro, &ps_sig, &proof));
     }
 }
