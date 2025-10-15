@@ -12,7 +12,7 @@
 //! with the context used to produce the proof. Any verification of sub-proofs
 //! needs to be performed in the same order as when producing the proof.
 
-use crate::{common::*, curve_arithmetic::Curve};
+use crate::{common::*, curve_arithmetic::Curve, web3id::IsChallenge};
 use sha3::{Digest, Sha3_256};
 use std::io::Write;
 
@@ -131,6 +131,11 @@ impl RandomOracle {
     /// mod field order.
     pub fn result_to_scalar<C: Curve>(self) -> C::Scalar {
         C::scalar_from_bytes(self.result())
+    }
+
+    /// Append a challenge to the state of the random oracle.
+    pub fn append_challenge<Challenge: IsChallenge>(&mut self, challenge: &Challenge) {
+        challenge.append_to_transcript(self)
     }
 
     /// Get a challenge from the current state, consuming the state.
