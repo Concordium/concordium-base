@@ -486,11 +486,11 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
 /// Convenient data structure to collect data related to a single AR
 pub struct SingleArData<'a, C: Curve> {
     pub ar: &'a ArInfo<C>,
-    share: Value<C>,
+    pub share: Value<C>,
     pub encrypted_share: Cipher<C>,
-    encryption_randomness: crate::elgamal::Randomness<C>,
+    pub encryption_randomness: crate::elgamal::Randomness<C>,
     pub cmm_to_share: Commitment<C>,
-    randomness_cmm_to_share: PedersenRandomness<C>,
+    pub randomness_cmm_to_share: PedersenRandomness<C>,
 }
 
 type SharingData<'a, C> = (
@@ -954,6 +954,7 @@ pub fn create_unsigned_credential<
     Ok((info, commitment_rands))
 }
 
+/// Compute proof of knowledge signature
 #[allow(clippy::too_many_arguments)]
 fn compute_pok_sig<
     P: Pairing,
@@ -1099,7 +1100,7 @@ fn compute_pok_sig<
 /// For the other values the verifier (the chain) will compute commitments with
 /// randomness 0 in order to verify knowledge of the signature.
 #[allow(clippy::too_many_arguments)]
-pub fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
+fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     commitment_key: &PedersenKey<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
     prf_key: &prf::SecretKey<C>,
