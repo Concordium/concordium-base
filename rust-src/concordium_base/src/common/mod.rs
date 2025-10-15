@@ -1,6 +1,7 @@
 //! Common types and operations used throughout the Concordium chain
 //! development.
 pub mod cbor;
+mod encoded;
 #[cfg(test)]
 mod helpers;
 mod impls;
@@ -8,6 +9,8 @@ mod serde_impls;
 mod serialize;
 pub mod types;
 mod version;
+
+pub use encoded::*;
 
 #[cfg(test)]
 pub use self::helpers::serialize_deserialize;
@@ -47,3 +50,4 @@ pub type size_t = usize;
 /// Module that provides a simple API for symmetric encryption in the output
 /// formats used by Concordium.
 pub mod encryption;
+pub mod upward;
