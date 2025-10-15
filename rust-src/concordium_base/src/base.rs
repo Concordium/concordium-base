@@ -516,11 +516,6 @@ impl Deserial for ProtocolVersion {
     }
 }
 
-pub struct ChainParameterVersion0;
-pub struct ChainParameterVersion1;
-pub struct ChainParameterVersion2;
-pub struct ChainParameterVersion3;
-
 /// Height of a block since chain genesis.
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
