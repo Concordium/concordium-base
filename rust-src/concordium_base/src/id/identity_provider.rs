@@ -591,6 +591,7 @@ pub fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     // - created_at and valid_to dates of the attribute list
     // - encoding of anonymity revokers.
     // - tags of the attribute list
+    // - max accounts
     // - attribute list elements
 
     let ar_encoded = match utils::encode_ars(ar_list) {

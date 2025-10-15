@@ -2703,15 +2703,12 @@ impl<C: Curve> HasAttributeRandomness<C> for SystemAttributeRandomness {
     }
 }
 
-/// The commitments produced by identity attribute commitments created from identity credential
+/// The commitments produced by identity attribute credentials created from identity credential
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
-pub struct IdentityAttributesCommitments<C: Curve> {
+pub struct IdentityAttributesCredentialsCommitments<C: Curve> {
     /// commitment to the prf key
     #[serde(rename = "cmmPrf")]
     pub cmm_prf: PedersenCommitment<C>,
-    /// commitment to credential counter
-    #[serde(rename = "cmmCredCounter")]
-    pub cmm_cred_counter: PedersenCommitment<C>,
     /// commitment to the max account number.
     #[serde(rename = "cmmMaxAccounts")]
     pub cmm_max_accounts: PedersenCommitment<C>,
@@ -2731,37 +2728,20 @@ pub struct IdentityAttributesCommitments<C: Curve> {
 }
 
 /// Randomness that is generated to commit to attributes when
-/// proving identity attribute commitments.
+/// proving identity attribute credentials.
 /// This randomness is needed later on if the user wishes to do
 /// something with those commitments, for example reveal the commited value, or
 /// prove a property of the value.
-#[derive(SerdeSerialize, SerdeDeserialize)]
-pub struct IdentityAttributesCommitmentRandomness<C: Curve> {
-    #[serde(rename = "idCredSecRand")]
-    /// Randomness of the commitment to idCredSec.
-    pub id_cred_sec_rand: PedersenRandomness<C>,
-    #[serde(rename = "prfRand")]
-    /// Randomness of the commitment to the PRF key.
-    pub prf_rand: PedersenRandomness<C>,
-    #[serde(rename = "credCounterRand")]
-    /// Randomness of the commitment to the credential nonce. This nonce is the
-    /// number that is used to ensure that only a limited number of credentials
-    /// can be created from a given identity object.
-    pub cred_counter_rand: PedersenRandomness<C>,
-    #[serde(rename = "maxAccountsRand")]
-    /// Randomness of the commitment to the maximum number of accounts the user
-    /// may create from the identity object.
-    pub max_accounts_rand: PedersenRandomness<C>,
-    #[serde(rename = "attributesRand")]
+pub struct IdentityAttributesCredentialsRandomness<C: Curve> {
     /// Randomness, if any, used to commit to user-chosen attributes, such as
     /// country of nationality.
-    pub attributes_rand: HashMap<AttributeTag, PedersenRandomness<C>>,
+    pub attributes_rand: BTreeMap<AttributeTag, PedersenRandomness<C>>,
 }
 
-/// This structure contains all proofs, which are required to prove identity attributes commitments created
+/// This structure contains all proofs, which are required to prove identity attributes credentials created
 /// from identity credential.
 #[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
-pub struct IdentityAttributesCommitmentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// (Blinded) Signature derived from the signature on the pre-identity
     /// object by the IP
     #[serde(
@@ -2776,7 +2756,7 @@ pub struct IdentityAttributesCommitmentProofs<P: Pairing, C: Curve<Scalar = P::S
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub commitments: IdentityAttributesCommitments<C>,
+    pub commitments: IdentityAttributesCredentialsCommitments<C>,
     /// Challenge used for all of the proofs.
     #[serde(
         rename = "challenge",
@@ -2802,36 +2782,11 @@ pub struct IdentityAttributesCommitmentProofs<P: Pairing, C: Curve<Scalar = P::S
         deserialize_with = "base16_decode"
     )]
     pub proof_ip_sig: com_eq_sig::Response<P, C>,
-    /// Proof that reg_id = prf_K(x). Also establishes that reg_id is computed
-    /// from the prf key signed by the identity provider.
-    #[serde(
-        rename = "proofRegId",
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub proof_reg_id: com_mult::Response<C>,
-    /// Proof that cred_counter is less than or equal to max_accounts
-    #[serde(
-        rename = "credCounterLessThanMaxAccounts",
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub cred_counter_less_than_max_accounts: RangeProof<C>,
 }
 
-/// Values (as opposed to proofs) in identity attribute commitments created from identity credential.
+/// Values (as opposed to proofs) in identity attribute credentials created from identity credential.
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
-pub struct IdentityAttributesCommitmentValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    /// Credential keys (i.e. account holder keys).
-    #[serde(rename = "credentialPublicKeys")]
-    pub cred_key_info: CredentialPublicKeys,
-    /// Credential registration id of the credential.
-    #[serde(
-        rename = "credId",
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub cred_id: CredId<C>,
+pub struct IdentityAttributesCredentialsValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Identity of the identity provider who signed the identity object from
     /// which this credential is derived.
     #[serde(rename = "ipIdentity")]
@@ -2851,18 +2806,18 @@ pub struct IdentityAttributesCommitmentValues<C: Curve, AttributeType: Attribute
     pub policy: Policy<C, AttributeType>,
 }
 
-/// Identity attributes commitments created from identity credential, and proofs that it is
+/// Identity attributes credentials created from identity credential, and proofs that it is
 /// well-formed.
 #[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
-pub struct IdentityAttributesCommitmentInfo<
+pub struct IdentityAttributesCredentialsInfo<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 > {
     #[serde(flatten)]
-    pub values: IdentityAttributesCommitmentValues<C, AttributeType>,
+    pub values: IdentityAttributesCredentialsValues<C, AttributeType>,
     #[serde(rename = "proofs")]
-    pub proofs: IdentityAttributesCommitmentProofs<P, C>,
+    pub proofs: IdentityAttributesCredentialsProofs<P, C>,
 }
 
 /// A request for recovering an identity
