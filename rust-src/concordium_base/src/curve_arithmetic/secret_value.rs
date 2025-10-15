@@ -4,6 +4,7 @@
 
 use crate::{common::*, curve_arithmetic::*};
 use rand::*;
+use std::fmt::Formatter;
 use std::{
     ops::{Deref, Drop},
     ptr,
@@ -17,9 +18,15 @@ use std::{
 /// it, so we cannot use it at the moment. Hence the temporary hack of 'T:
 /// Field'.
 #[repr(transparent)]
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(PartialEq, Eq, Serialize)]
 pub struct Secret<T: Field + Serialize> {
     secret: T,
+}
+
+impl<T: Field + Serialize> Debug for Secret<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("<Secret>")
+    }
 }
 
 impl<F: Field + Serialize> Secret<F> {

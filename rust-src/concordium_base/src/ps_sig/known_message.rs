@@ -1,14 +1,22 @@
 //! A known message
 
+use core::fmt;
 use rand::*;
+use std::fmt::{Debug, Formatter};
 
 use crate::{common::*, curve_arithmetic::*};
 
 /// A message to sign. The PS scheme allows signing both a known message, where
 /// the message is a vector of values to be signed, and also an unknown message,
 /// which is a single value constructed in a special way.
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub struct KnownMessage<C: Pairing>(#[size_length = 4] pub Vec<C::ScalarField>);
+
+impl<C: Pairing> Debug for KnownMessage<C> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("<KnownMessage>")
+    }
+}
 
 impl<C: Pairing> PartialEq for KnownMessage<C> {
     fn eq(&self, other: &Self) -> bool {
