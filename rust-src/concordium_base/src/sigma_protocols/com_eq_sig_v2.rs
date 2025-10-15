@@ -8,13 +8,13 @@
 //! Using the notation from "5.3.5 Proof of Knowledge of a Signature with Public Values"
 //! and "9.2.3 Proof of Knowledge of Opening of Commitment", the homomorphism used is
 //! $$
-//!     \varphi: (r', \\{ m_i \\}\_{i \in K}, \\{ m_i, r_i \\}\_{i \in C} ) \mapsto
-//!        (\mathrm{e}(\hat{a}, \tilde{g}^{r'} \prod\_{i\in K \cup C} \tilde{Y}\_i^{m_i}), \\{ g^{m_i} h^{r_i} \\}\_{i \in C} )
+//!     \varphi: \left(r', \\{ m_i \\}\_{i \in K}, \\{ m_i, r_i \\}\_{i \in C} \right) \mapsto
+//!        \left(e\left(\hat{a}, \tilde{g}^{r'} \prod\_{i\in K \cup C} \tilde{Y}\_i^{m_i}\right), \\{ g^{m_i} h^{r_i} \\}\_{i \in C} \right)
 //! $$
 //!
 //! and we prove knowledge of a preimage of the "statement" $y$:
 //! $$
-//!     y = (\mathrm{e}(\hat{b}, \tilde{X}^{-1} \prod\_{i\in R} \tilde{Y}\_i^{-m_i} \tilde{g} ) , \\{ c_i \\}\_{i \in C})
+//!     y = \left(e\left(\hat{b}, \tilde{X}^{-1} \prod\_{i\in R} \tilde{Y}\_i^{-m_i} \tilde{g} \right) , \\{ c_i \\}\_{i \in C}\right)
 //! $$
 //!
 //! Notice that the input to $\varphi$ has a signature blinding component $r'$ and a component for each message part.
@@ -282,7 +282,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSig<P, C
     /// Extract commit message as $a = y^c \varphi(z)$ where $c$: the challenge, $z$ the response.
     /// Notice that the signature component of the commit message $a$ can be calculated as following (inserting $y$ and $\varphi$ from module [`self`] ):
     /// $$
-    ///     \mathrm{e}(\hat{b}, \tilde{g}^c) \mathrm{e}(\hat{a}, \tilde{X}^{-c} \tilde{g}^{r\_z'} \prod\_{i\in R} \tilde{Y}\_i^{-c m_{z,i}} \prod\_{i\in K \cup C} \tilde{Y}\_i^{m_{z,i}})
+    ///     e\left(\hat{b}, \tilde{g}^c\right) e\left(\hat{a}, \tilde{X}^{-c} \tilde{g}^{r\_z'} \prod\_{i\in R} \tilde{Y}\_i^{-c m_{z,i}} \prod\_{i\in K \cup C} \tilde{Y}\_i^{m_{z,i}}\right)
     /// $$
     /// (using $z$ underscore to mark the response values)
     #[inline]
