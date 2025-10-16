@@ -1000,7 +1000,7 @@ impl UpdateSigner for [(UpdateKeysIndex, UpdateKeyPair)] {
     }
 }
 
-impl<T: UpdateSigner> UpdateSigner for &T {
+impl<T: UpdateSigner + ?Sized> UpdateSigner for &T {
     fn sign_update_hash(
         &self,
         hash_to_sign: &hashes::UpdateSignHash,
