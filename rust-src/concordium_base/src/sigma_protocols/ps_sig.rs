@@ -20,16 +20,18 @@
 //! Notice that the input to $\varphi$ has a signature blinding component $r'$ and a component for each message part.
 //! The output has a signature component and a commitment component for each message part that is proven equal to a commitment.
 
+use crate::common::{Buffer, Deserial, Get, ParseResult, Put, Serial};
 use crate::curve_arithmetic::{Curve, Field, Pairing, Secret};
 use crate::sigma_protocols::common::SigmaProtocol;
 use crate::{
-    common::*,
     curve_arithmetic,
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
     ps_sig,
     ps_sig::BlindedSignature,
     random_oracle::RandomOracle,
 };
+use byteorder::ReadBytesExt;
+use concordium_base_derive::Serialize;
 use rand::Rng;
 
 /// How to handle a single part of the signed message
@@ -47,15 +49,15 @@ pub enum PsSigMsg<C: Curve> {
 impl<C: Curve> Serial for PsSigMsg<C> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         match &self {
-            PsSigMsg::EqualToCommitment(cmm) => {
+            Self::EqualToCommitment(cmm) => {
                 out.put(&0u8);
                 out.put(cmm);
             }
-            PsSigMsg::Revealed(value) => {
+            Self::Revealed(value) => {
                 out.put(&1u8);
                 out.put(value);
             }
-            PsSigMsg::Known => {
+            Self::Known => {
                 out.put(&2u8);
             }
         }
@@ -89,7 +91,7 @@ pub struct PsSigState<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 type CommitSecretMsg<C> = SecretMsg<C>;
 
 /// How to handle a signed message
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SecretMsg<C: Curve> {
     /// The value/message part $m_i$ is proven known and equal to a commitment to the value under the randomness $r_i$
     EqualToCommitment(Value<C>, Randomness<C>),
@@ -99,16 +101,41 @@ pub enum SecretMsg<C: Curve> {
     Known(Value<C>),
 }
 
-// todo ar implement serial/deserial?
 impl<C: Curve> Serial for SecretMsg<C> {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        todo!()
+        match self {
+            Self::EqualToCommitment(m, cmm) => {
+                out.put(&0u8);
+                out.put(m);
+                out.put(cmm);
+            }
+            Self::Revealed => {
+                out.put(&1u8);
+            }
+            Self::Known(m) => {
+                out.put(&2u8);
+                out.put(m);
+            }
+        }
     }
 }
 
 impl<C: Curve> Deserial for SecretMsg<C> {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        todo!()
+        let tag: u8 = source.get()?;
+        Ok(match tag {
+            0 => {
+                let m = source.get()?;
+                let cmm = source.get()?;
+                Self::EqualToCommitment(m, cmm)
+            }
+            1 => Self::Revealed,
+            2 => {
+                let m = source.get()?;
+                Self::Known(m)
+            }
+            _ => anyhow::bail!("unsupported SecretMsg item type: {}", tag),
+        })
     }
 }
 
@@ -396,13 +423,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSig<P, C
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::id::constants::ArCurve;
-    use crate::{
-        curve_arithmetic::arkworks_instances::ArkGroup,
-        ps_sig,
-        ps_sig::{SecretKey as PsSigSecretKey, Signature},
-        sigma_protocols,
-    };
+    use crate::{common, curve_arithmetic::arkworks_instances::ArkGroup, ps_sig, sigma_protocols};
     use ark_bls12_381::G1Projective;
     use assert_matches::assert_matches;
     use std::iter;
@@ -472,18 +493,6 @@ mod tests {
             msgs: secret_msgs,
         };
         (ps_sig, secret)
-    }
-
-    fn value_add_one<C: Curve>(v: &Value<C>) -> Value<C> {
-        let mut value = Clone::clone(v.as_ref());
-        value.add_assign(&Field::one());
-        Value::new(value)
-    }
-
-    fn randomness_add_one<C: Curve>(v: &Randomness<C>) -> Randomness<C> {
-        let mut randomness = Clone::clone(v.as_ref());
-        randomness.add_assign(&Field::one());
-        Randomness::new(randomness)
     }
 
     /// Tests completeness for varying message lengths and varying ways of handling the message parts
@@ -679,5 +688,27 @@ mod tests {
         let proof = sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
             .expect("prove");
         assert!(!sigma_protocols::common::verify(&mut ro, &ps_sig, &proof));
+    }
+
+    /// The type `ResponseMsg` is part of the proof, and hence must be able to the serialized
+    /// and deserialized.
+    #[test]
+    pub fn test_response_msg() {
+        let mut csprng = rand::thread_rng();
+
+        let orig_msg = ResponseMsg::<G1>::EqualToCommitment(
+            Value::generate(&mut csprng),
+            Randomness::generate(&mut csprng),
+        );
+        let msg = common::serialize_deserialize(&orig_msg).unwrap();
+        assert_eq!(msg, orig_msg);
+
+        let orig_msg = ResponseMsg::<G1>::Revealed;
+        let msg = common::serialize_deserialize(&orig_msg).unwrap();
+        assert_eq!(msg, orig_msg);
+
+        let orig_msg = ResponseMsg::<G1>::Known(Value::generate(&mut csprng));
+        let msg = common::serialize_deserialize(&orig_msg).unwrap();
+        assert_eq!(msg, orig_msg);
     }
 }
