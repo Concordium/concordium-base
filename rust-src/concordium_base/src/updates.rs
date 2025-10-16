@@ -430,16 +430,32 @@ impl AuthorizationsV0 {
     where
         UpdatePublicKey: for<'a> From<&'a K>,
     {
-        construct_update_signer_worker(&self.keys, update_key_indices, actual_keys)
+        find_authorized_keys(&self.keys, update_key_indices, actual_keys)
     }
 }
 
-/// Find key indices given a set of keys and an access structure.
-/// If any of the given `actual_keys` are not authorized in the access
-/// structure [`None`] will be returned.
-/// If there are duplicate keys among `actual_keys` this function also
-/// returns [`None`].
-pub fn construct_update_signer_worker<K>(
+/// Constructs a mapping from authorized update key indices to the provided
+/// signing keys.
+///
+/// # Arguments
+///
+/// * `keys` - The list of update public keys. `update_key_indices` refers to
+///   indices in this list.
+/// * `update_key_indices` - The access structure specifying which key indices
+///   are authorized for the particular update.
+/// * `actual_keys` - An iterator of keys that will be used for signing an
+///   update.
+///
+/// # Returns
+///
+/// Returns `Some(BTreeMap<UpdateKeysIndex, K>)` if all provided `actual_keys`
+/// are present in `keys`, are authorized according to `update_key_indices`,
+/// and there are no duplicates. Returns `None` if any key is not authorized,
+/// not present in `keys`, or if there are duplicate keys.
+///
+/// If `K` is [`UpdateKeyPair`], the resulting `BTreeMap` implements
+/// [`UpdateSigner`] and can be used to sign update instructions.
+pub fn find_authorized_keys<K>(
     keys: &[UpdatePublicKey],
     update_key_indices: &AccessStructure,
     actual_keys: impl IntoIterator<Item = K>,
@@ -495,7 +511,7 @@ impl AuthorizationsV1 {
     where
         UpdatePublicKey: for<'a> From<&'a K>,
     {
-        construct_update_signer_worker(&self.v0.keys, update_key_indices, actual_keys)
+        find_authorized_keys(&self.v0.keys, update_key_indices, actual_keys)
     }
 }
 
@@ -984,6 +1000,15 @@ impl UpdateSigner for [(UpdateKeysIndex, UpdateKeyPair)] {
     }
 }
 
+impl<T: UpdateSigner> UpdateSigner for &T {
+    fn sign_update_hash(
+        &self,
+        hash_to_sign: &hashes::UpdateSignHash,
+    ) -> UpdateInstructionSignature {
+        (*self).sign_update_hash(hash_to_sign)
+    }
+}
+
 #[derive(Debug, Clone, Copy, common::Serialize)]
 /// A header common to all update instructions.
 pub struct UpdateHeader {
@@ -1035,7 +1060,7 @@ pub mod update {
 
     /// Construct an update instruction and sign it.
     pub fn update(
-        signer: &impl UpdateSigner,
+        signer: impl UpdateSigner,
         seq_number: UpdateSequenceNumber,
         effective_time: TransactionTime,
         timeout: TransactionTime,
