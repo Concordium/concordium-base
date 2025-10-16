@@ -134,7 +134,6 @@ impl RandomOracle {
     }
 
     /// Append a `web3id::Challenge` to the state of the random oracle.
-    ///
     /// Newly added challenge variants should use a tag/version, as well as labels for each struct field
     /// to ensure every part of the challenge is accounted for.
     /// Each challenge variant should contribute uniquely to the random oracle.

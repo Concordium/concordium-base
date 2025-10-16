@@ -656,6 +656,7 @@ pub struct GivenContext {
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, serde::Deserialize, serde::Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub enum ContextValue {
     Sha256(Sha256Challenge),
     BlockHash(BlockHash),
@@ -2181,6 +2182,226 @@ mod tests {
     fn test_mixed() -> anyhow::Result<()> {
         let mut rng = rand::thread_rng();
         let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
+        let params = GlobalContext::generate("Test".into());
+        let cred_id_exp = ArCurve::generate_scalar(&mut rng);
+        let cred_id = CredentialRegistrationID::from_exponent(&params, cred_id_exp);
+        let signer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
+        let issuer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
+        let contract_1 = ContractAddress::new(1337, 42);
+        let credential_statements = vec![
+            CredentialStatement::Web3Id {
+                ty: [
+                    "VerifiableCredential".into(),
+                    "ConcordiumVerifiableCredential".into(),
+                    "TestCredential".into(),
+                ]
+                .into_iter()
+                .collect(),
+                network: Network::Testnet,
+                contract: contract_1,
+                credential: CredentialHolderId::new(signer_1.verifying_key()),
+                statement: vec![
+                    AtomicStatement::AttributeInRange {
+                        statement: AttributeInRangeStatement {
+                            attribute_tag: 17.to_string(),
+                            lower: Web3IdAttribute::Numeric(80),
+                            upper: Web3IdAttribute::Numeric(1237),
+                            _phantom: PhantomData,
+                        },
+                    },
+                    AtomicStatement::AttributeInSet {
+                        statement: AttributeInSetStatement {
+                            attribute_tag: 23u8.to_string(),
+                            set: [
+                                Web3IdAttribute::String(AttributeKind("ff".into())),
+                                Web3IdAttribute::String(AttributeKind("aa".into())),
+                                Web3IdAttribute::String(AttributeKind("zz".into())),
+                            ]
+                            .into_iter()
+                            .collect(),
+                            _phantom: PhantomData,
+                        },
+                    },
+                ],
+            },
+            CredentialStatement::Account {
+                network: Network::Testnet,
+                cred_id,
+                statement: vec![
+                    AtomicStatement::AttributeInRange {
+                        statement: AttributeInRangeStatement {
+                            attribute_tag: 3.into(),
+                            lower: Web3IdAttribute::Numeric(80),
+                            upper: Web3IdAttribute::Numeric(1237),
+                            _phantom: PhantomData,
+                        },
+                    },
+                    AtomicStatement::AttributeNotInSet {
+                        statement: AttributeNotInSetStatement {
+                            attribute_tag: 1u8.into(),
+                            set: [
+                                Web3IdAttribute::String(AttributeKind("ff".into())),
+                                Web3IdAttribute::String(AttributeKind("aa".into())),
+                                Web3IdAttribute::String(AttributeKind("zz".into())),
+                            ]
+                            .into_iter()
+                            .collect(),
+                            _phantom: PhantomData,
+                        },
+                    },
+                ],
+            },
+        ];
+
+        let request = Request::<ArCurve, Web3IdAttribute> {
+            challenge,
+            credential_statements,
+        };
+        let mut values_1 = BTreeMap::new();
+        values_1.insert(17.to_string(), Web3IdAttribute::Numeric(137));
+        values_1.insert(
+            23.to_string(),
+            Web3IdAttribute::String(AttributeKind("ff".into())),
+        );
+        let mut randomness_1 = BTreeMap::new();
+        randomness_1.insert(
+            17.to_string(),
+            pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
+        );
+        randomness_1.insert(
+            23.to_string(),
+            pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
+        );
+        let signed_commitments_1 = SignedCommitments::from_secrets(
+            &params,
+            &values_1,
+            &randomness_1,
+            &CredentialHolderId::new(signer_1.verifying_key()),
+            &issuer_1,
+            contract_1,
+        )
+        .unwrap();
+        let secrets_1 = CommitmentInputs::Web3Issuer {
+            signer: &signer_1,
+            values: &values_1,
+            randomness: &randomness_1,
+            signature: signed_commitments_1.signature,
+        };
+
+        let mut values_2 = BTreeMap::new();
+        values_2.insert(3.into(), Web3IdAttribute::Numeric(137));
+        values_2.insert(
+            1.into(),
+            Web3IdAttribute::String(AttributeKind("xkcd".into())),
+        );
+        let mut randomness_2 = BTreeMap::new();
+        for tag in values_2.keys() {
+            randomness_2.insert(
+                *tag,
+                pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
+            );
+        }
+        let secrets_2 = CommitmentInputs::Account {
+            values: &values_2,
+            randomness: &randomness_2,
+            issuer: IpIdentity::from(17u32),
+        };
+        let attrs = [secrets_1, secrets_2];
+        let proof = request
+            .clone()
+            .prove(&params, attrs.into_iter())
+            .context("Cannot prove")?;
+
+        let commitments_2 = {
+            let key = params.on_chain_commitment_key;
+            let mut comms = BTreeMap::new();
+            for (tag, value) in randomness_2.iter() {
+                let _ = comms.insert(
+                    AttributeTag::from(*tag),
+                    key.hide(
+                        &pedersen_commitment::Value::<ArCurve>::new(
+                            values_2.get(tag).unwrap().to_field_element(),
+                        ),
+                        value,
+                    ),
+                );
+            }
+            comms
+        };
+
+        let public = vec![
+            CredentialsInputs::Web3 {
+                issuer_pk: issuer_1.verifying_key().into(),
+            },
+            CredentialsInputs::Account {
+                commitments: commitments_2,
+            },
+        ];
+        anyhow::ensure!(
+            proof
+                .verify(&params, public.iter())
+                .context("Verification of mixed presentation failed.")?
+                == request,
+            "Proof verification failed."
+        );
+
+        let data = serde_json::to_string_pretty(&proof)?;
+        assert!(
+            serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok(),
+            "Cannot deserialize proof correctly."
+        );
+
+        let data = serde_json::to_string_pretty(&request)?;
+        assert_eq!(
+            serde_json::from_str::<Request<ArCurve, Web3IdAttribute>>(&data)?,
+            request,
+            "Cannot deserialize request correctly."
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    /// Test that constructing proofs for a mixed (both web3 and id2 credentials
+    /// involved) request works with a ContextChallenge in the sense that the proof verifies.
+    ///
+    /// JSON serialization of requests and presentations is also tested.
+    fn test_mixed_with_context_challenge() -> anyhow::Result<()> {
+        let mut rng = rand::thread_rng();
+        // Randomly generated nonce. It is important that the nonce is freshly generated by the backend
+        // for each request so that the presentation request anchor on-chain truely looks random.
+        let nonce_context = GivenContext {
+            label: "nonce".into(),
+            context: ContextValue::Sha256(Sha256Challenge::new(rng.gen())),
+        };
+        // Human readable string giving more context to the request.
+        let context_string_context = GivenContext {
+            label: "context_string".into(),
+            context: ContextValue::String("My great ZK application.".into()),
+        };
+        // The topic of the wallet connection as defined by `walletConnect`.
+        // The wallet or ID app use this value to check that the topic matches the current active connection.
+        let connection_id_context = GivenContext {
+            label: "connection_id".into(),
+            context: ContextValue::String(
+                "43eee2b1e5128c9a26c871b7aff2cfe448aee66c5a927d47116e8f0c30f452e1".into(),
+            ),
+        };
+        // Human readable string giving more context to the request.
+        let block_hash_context = GivenContext {
+            label: "block_hash".into(),
+            context: ContextValue::BlockHash(BlockHash::new(rng.gen())),
+        };
+        // The website URL that the wallet is connected to or a TLS certificate/fingerprint of the connected website.
+        let resource_id_context = GivenContext {
+            label: "resource_id".into(),
+            context: ContextValue::String("https://my-great-website.com".into()),
+        };
+        let challenge = Challenge::V1(ContextChallenge {
+            given: vec![nonce_context, context_string_context, connection_id_context],
+            requested: vec![block_hash_context, resource_id_context],
+        });
+
         let params = GlobalContext::generate("Test".into());
         let cred_id_exp = ArCurve::generate_scalar(&mut rng);
         let cred_id = CredentialRegistrationID::from_exponent(&params, cred_id_exp);

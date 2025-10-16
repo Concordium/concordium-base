@@ -1,15 +1,40 @@
 {
     "request": {
         "challenge": {
-            "given": {
-                "nonce": "6879bdc6b5798f7bbeb0f47b6abd9a5c5b84bf594b63e64af5a5df0f239299e9",
-                "context_string": "beefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef",
-                "connection_id": "beefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef"
-            },
-            "requested": {
-                "block_hash": "6879bdc6b5798f7bbeb0f47b6abd9a5c5b84bf594b63e64af5a5df0f239299e9",
-                "resource_id": "beefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef"
-            }
+            "given": [
+                {
+                    "label": "nonce",
+                    "context": {
+                        "sha256": "6879bdc6b5798f7bbeb0f47b6abd9a5c5b84bf594b63e64af5a5df0f239299e9"
+                    }
+                },
+                {
+                    "label": "contextString",
+                    "context": {
+                        "string": "My great ZK application."
+                    }
+                },
+                {
+                    "label": "connectionId",
+                    "context": {
+                        "string": "43eee2b1e5128c9a26c871b7aff2cfe448aee66c5a927d47116e8f0c30f452e1"
+                    }
+                }
+            ],
+            "requested": [
+                {
+                    "label": "blockHash",
+                    "context": {
+                        "blockHash": "6879bdc6b5798f7bbeb0f47b6abd9a5c5b84bf594b63e64af5a5df0f239299e9"
+                    }
+                },
+                {
+                    "label": "resourceId",
+                    "context": {
+                        "string": "https://my-great-website.com"
+                    }
+                }
+            ]
         },
         "credentialStatements": [
             {
