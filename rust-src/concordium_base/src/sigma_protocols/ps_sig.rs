@@ -484,7 +484,7 @@ mod tests {
         let ps_sig = PsSig {
             msgs,
             ps_pub_key: ps_pk,
-            cmm_key: cmm_key,
+            cmm_key,
             blinded_sig,
         };
 
