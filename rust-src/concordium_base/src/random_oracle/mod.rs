@@ -12,7 +12,7 @@
 //! with the context used to produce the proof. Any verification of sub-proofs
 //! needs to be performed in the same order as when producing the proof.
 
-use crate::{common::*, curve_arithmetic::Curve, web3id::IsChallenge};
+use crate::{common::*, curve_arithmetic::Curve, web3id};
 use sha3::{Digest, Sha3_256};
 use std::io::Write;
 
@@ -133,9 +133,33 @@ impl RandomOracle {
         C::scalar_from_bytes(self.result())
     }
 
-    /// Append a challenge to the state of the random oracle.
-    pub fn append_challenge<Challenge: IsChallenge>(&mut self, challenge: &Challenge) {
-        challenge.append_to_transcript(self)
+    /// Append a `web3id::Challenge` to the state of the random oracle.
+    ///
+    /// Newly added challenge variants should use a tag/version, as well as labels for each struct field
+    /// to ensure every part of the challenge is accounted for.
+    /// Each challenge variant should contribute uniquely to the random oracle.
+    pub fn append_challenge(&mut self, challenge: &web3id::Challenge) {
+        match challenge {
+            web3id::Challenge::Sha256(hash_bytes) => {
+                // No tag/version `V0` is added to be backward compatible with old proofs and requests.
+                self.add_bytes(hash_bytes);
+            }
+            web3id::Challenge::V1(context) => {
+                // An empty sha256 hash is prepended to ensure this output
+                // is different to any `Sha256` challenge.
+                let separator = [0u8; 32];
+                self.add_bytes(separator);
+                // Add tag/version `V1` to the transcript.
+                self.add_bytes(b"V1");
+                self.add_bytes(b"given");
+                self.append_message(b"nonce", &context.given.nonce);
+                self.append_message(b"contextString", &context.given.context_string);
+                self.append_message(b"connectionID", &context.given.connection_id);
+                self.add_bytes(b"requested");
+                self.append_message(b"blockHash", &context.requested.block_hash);
+                self.append_message(b"resourceID", &context.requested.resource_id);
+            }
+        }
     }
 
     /// Get a challenge from the current state, consuming the state.

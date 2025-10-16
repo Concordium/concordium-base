@@ -2,7 +2,7 @@
 mod tests {
     use crate::id::types::Attribute;
     use crate::web3id::{
-        CommitmentInputs, CredentialStatement, CredentialsInputs, Presentation, Request,
+        Challenge, CommitmentInputs, CredentialStatement, CredentialsInputs, Presentation, Request,
         Sha256Challenge,
     };
     use crate::{
@@ -169,7 +169,7 @@ mod tests {
         let commitment_inputs = [secrets];
 
         // Now generate the proofs with regards to the account credential attribute statements.
-        let challenge = Sha256Challenge::new(rng.gen());
+        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
 
         let cred_id = CredentialRegistrationID::new(cdi.values.cred_id);
 
@@ -186,7 +186,7 @@ mod tests {
             }],
         }];
 
-        let request = Request::<Sha256Challenge, ArCurve, Web3IdAttribute> {
+        let request = Request::<ArCurve, Web3IdAttribute> {
             challenge,
             credential_statements,
         };
@@ -233,14 +233,13 @@ mod tests {
 
         let data = serde_json::to_string_pretty(&proof)?;
         assert!(
-            serde_json::from_str::<Presentation<Sha256Challenge, ArCurve, Web3IdAttribute>>(&data)
-                .is_ok(),
+            serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok(),
             "Cannot deserialize proof correctly."
         );
 
         let data = serde_json::to_string_pretty(&request)?;
         assert_eq!(
-            serde_json::from_str::<Request<Sha256Challenge, ArCurve, Web3IdAttribute>>(&data)?,
+            serde_json::from_str::<Request<ArCurve, Web3IdAttribute>>(&data)?,
             request,
             "Cannot deserialize request correctly."
         );

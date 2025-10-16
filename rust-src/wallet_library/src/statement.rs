@@ -3,7 +3,7 @@ use concordium_base::{
     common::Serialize,
     curve_arithmetic::Curve,
     id::{id_proof_types::AtomicStatement, types::*},
-    web3id::{CredentialStatement, IsChallenge, Request},
+    web3id::{CredentialStatement, Request},
 };
 use std::{
     collections::{BTreeMap, HashSet},
@@ -90,8 +90,8 @@ pub enum RequestCheckError {
     IllegalSetTag(String),
 }
 
-impl<Challenge: IsChallenge, C: Curve, AttributeType: Attribute<C::Scalar>>
-    AcceptableRequest<C, AttributeType> for Request<Challenge, C, AttributeType>
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> AcceptableRequest<C, AttributeType>
+    for Request<C, AttributeType>
 {
     fn acceptable_request(
         &self,
