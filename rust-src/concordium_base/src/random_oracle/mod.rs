@@ -152,12 +152,17 @@ impl RandomOracle {
                 // Add tag/version `V1` to the transcript.
                 self.add_bytes(b"V1");
                 self.add_bytes(b"given");
-                self.append_message(b"nonce", &context.given.nonce);
-                self.append_message(b"contextString", &context.given.context_string);
-                self.append_message(b"connectionID", &context.given.connection_id);
+                self.add(&(context.given.len() as u64));
+                for item in &context.given {
+                    self.add(&item.label);
+                    self.add(&item.context);
+                }
                 self.add_bytes(b"requested");
-                self.append_message(b"blockHash", &context.requested.block_hash);
-                self.append_message(b"resourceID", &context.requested.resource_id);
+                self.add(&(context.requested.len() as u64));
+                for item in &context.requested {
+                    self.add(&item.label);
+                    self.add(&item.context);
+                }
             }
         }
     }
