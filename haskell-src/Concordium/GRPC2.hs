@@ -287,6 +287,7 @@ instance ToProto ProtocolVersion where
     toProto P7 = Proto.PROTOCOL_VERSION_7
     toProto P8 = Proto.PROTOCOL_VERSION_8
     toProto P9 = Proto.PROTOCOL_VERSION_9
+    toProto P10 = Proto.PROTOCOL_VERSION_10
 
 instance ToProto QueryTypes.NextAccountNonce where
     type Output QueryTypes.NextAccountNonce = Proto.NextAccountSequenceNumber
