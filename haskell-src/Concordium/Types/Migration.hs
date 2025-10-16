@@ -46,6 +46,8 @@ migrateAuthorizations (StateMigrationParametersP8ToP9 migration) Authorizations{
         }
   where
     P9.ProtocolUpdateData{..} = P9.migrationProtocolUpdateData migration
+-- TODO (COR-2012) update when authorization structures are added in P10
+migrateAuthorizations StateMigrationParametersP9ToP10{} auths = auths
 
 -- | Apply a state migration to an 'UpdateKeysCollection' structure.
 --
@@ -76,6 +78,7 @@ migrateMintDistribution StateMigrationParametersP5ToP6{} mint = mint
 migrateMintDistribution StateMigrationParametersP6ToP7{} mint = mint
 migrateMintDistribution StateMigrationParametersP7ToP8{} mint = mint
 migrateMintDistribution StateMigrationParametersP8ToP9{} mint = mint
+migrateMintDistribution StateMigrationParametersP9ToP10{} mint = mint
 
 -- | Apply a state migration to a 'PoolParameters' structure.
 --
@@ -95,6 +98,7 @@ migratePoolParameters StateMigrationParametersP5ToP6{} poolParams = poolParams
 migratePoolParameters StateMigrationParametersP6ToP7{} poolParams = poolParams
 migratePoolParameters StateMigrationParametersP7ToP8{} poolParams = poolParams
 migratePoolParameters StateMigrationParametersP8ToP9{} poolParams = poolParams
+migratePoolParameters StateMigrationParametersP9ToP10{} poolParams = poolParams
 
 -- | Apply a state migration to a 'GASRewards' structure.
 --
@@ -114,6 +118,7 @@ migrateGASRewards StateMigrationParametersP5ToP6{} GASRewards{..} = GASRewards{_
 migrateGASRewards StateMigrationParametersP6ToP7{} gr = gr
 migrateGASRewards StateMigrationParametersP7ToP8{} gr = gr
 migrateGASRewards StateMigrationParametersP8ToP9{} gr = gr
+migrateGASRewards StateMigrationParametersP9ToP10{} gr = gr
 
 -- | Apply a state migration to a 'ChainParameters' structure.
 --
@@ -196,6 +201,7 @@ migrateChainParameters StateMigrationParametersP8ToP9{} ChainParameters{..} =
         }
   where
     RewardParameters{..} = _cpRewardParameters
+migrateChainParameters StateMigrationParametersP9ToP10{} cps = cps
 
 -- | Migrate time of the effective change from V0 to V1 accounts. Currently this
 --  translates times relative to genesis to times relative to the unix epoch.
@@ -226,3 +232,4 @@ migrateStakePendingChange StateMigrationParametersP5ToP6{} = id
 migrateStakePendingChange StateMigrationParametersP6ToP7{} = const NoChange
 migrateStakePendingChange StateMigrationParametersP7ToP8{} = const NoChange
 migrateStakePendingChange StateMigrationParametersP8ToP9{} = const NoChange
+migrateStakePendingChange StateMigrationParametersP9ToP10{} = const NoChange
