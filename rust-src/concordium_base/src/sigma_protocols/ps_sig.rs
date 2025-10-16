@@ -592,9 +592,7 @@ mod tests {
         let (mut ps_sig, mut secret) =
             instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::EqualToCommitment], &mut csprng);
 
-        let new_m = assert_matches!(&mut secret.msgs[0], SecretMsg::EqualToCommitment(m, _r) => {
-           value_add_one(m)
-        });
+        let new_m = Value::generate(&mut csprng);
         let (new_c, new_r) = ps_sig.cmm_key.commit(&new_m, &mut csprng);
 
         assert_matches!(&mut ps_sig.msgs[0], PsSigMsg::EqualToCommitment(c) => {
@@ -620,7 +618,7 @@ mod tests {
             instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::EqualToCommitment], &mut csprng);
 
         assert_matches!(&mut secret.msgs[0], SecretMsg::EqualToCommitment(m, _r) => {
-           *m = value_add_one(m);
+           *m = Value::generate(&mut csprng);
         });
 
         let mut ro = RandomOracle::empty();
@@ -638,7 +636,7 @@ mod tests {
             instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::EqualToCommitment], &mut csprng);
 
         assert_matches!(&mut secret.msgs[0], SecretMsg::EqualToCommitment(_m, r) => {
-           *r = randomness_add_one(r);
+           *r = Randomness::generate(&mut csprng)
         });
 
         let mut ro = RandomOracle::empty();
@@ -656,7 +654,7 @@ mod tests {
             instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::Revealed], &mut csprng);
 
         assert_matches!(&mut ps_sig.msgs[0], PsSigMsg::Revealed(m) => {
-            *m = value_add_one(m);
+            *m = Value::generate(&mut csprng);
         });
 
         let mut ro = RandomOracle::empty();
@@ -674,7 +672,7 @@ mod tests {
             instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::Known], &mut csprng);
 
         assert_matches!(&mut secret.msgs[0], SecretMsg::Known(m) => {
-           *m = value_add_one(m);
+           *m = Value::generate(&mut csprng);
         });
 
         let mut ro = RandomOracle::empty();
