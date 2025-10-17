@@ -2,6 +2,7 @@
 //! implementations.
 use super::secret_sharing::Threshold;
 pub use crate::common::types::{AccountAddress, ACCOUNT_ADDRESS_SIZE};
+use crate::sigma_protocols::ps_sig_known;
 use crate::{
     bulletproofs::{range_proof::RangeProof, utils::Generators},
     common::{
@@ -1405,7 +1406,7 @@ pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
 }
 
 /// Describes the time period for which a credential is valid
-#[derive(Debug, PartialEq, Eq, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 pub struct CredentialValidity {
     /// When credential is valid until
     #[serde(rename = "validTo")]
@@ -1414,7 +1415,6 @@ pub struct CredentialValidity {
     #[serde(rename = "createdAt")]
     pub created_at: YearMonth,
 }
-
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for Policy<C, AttributeType> {
     fn serial<B: Buffer>(&self, out: &mut B) {
@@ -2780,7 +2780,7 @@ pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub proof_ip_sig: com_eq_sig::Response<P, C>,
+    pub proof_ip_sig: ps_sig_known::Response<P, C>,
 }
 
 /// Attribute value as represented in the identity attribute credential values. An attribute value has ither been committed to,
@@ -2790,9 +2790,47 @@ pub enum IdentityAttribute<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// The attribute value has been committed to, with the given commitment
     Committed(PedersenCommitment<C>),
     /// The attribute value has been revealed and has given value
-    Revealed(Value<C>),
+    Revealed(AttributeType),
     /// The attribute value is known
     Known,
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for IdentityAttribute<C, AttributeType> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            Self::Committed(cmm) => {
+                out.put(&0u8);
+                out.put(cmm);
+            }
+            Self::Revealed(value) => {
+                out.put(&1u8);
+                out.put(value);
+            }
+            Self::Known => {
+                out.put(&2u8);
+            }
+        }
+    }
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial
+    for IdentityAttribute<C, AttributeType>
+{
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let tag: u8 = source.get()?;
+        Ok(match tag {
+            0 => {
+                let cmm = source.get()?;
+                Self::Committed(cmm)
+            }
+            1 => {
+                let attr = source.get()?;
+                Self::Revealed(attr)
+            }
+            2 => Self::Known,
+            _ => bail!("unsupported IdentityAttribute item type: {}", tag),
+        })
+    }
 }
 
 /// Values (as opposed to proofs) in identity attribute credentials created from identity credential.

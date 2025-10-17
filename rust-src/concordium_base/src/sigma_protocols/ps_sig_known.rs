@@ -734,7 +734,7 @@ mod tests {
     pub fn test_ps_sig_soundness_commitment_changed() {
         let mut csprng = rand::thread_rng();
 
-        let (mut ps_sig, mut secret) = instance_with_secrets::<Bls12, G1>(
+        let (mut ps_sig, secret) = instance_with_secrets::<Bls12, G1>(
             &[InstanceSpecMsg::EqualToCommitment],
             0,
             &mut csprng,
@@ -765,7 +765,7 @@ mod tests {
             &mut csprng,
         );
 
-        let mut ro = RandomOracle::empty();
+        let ro = RandomOracle::empty();
         let mut proof =
             sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
                 .expect("prove");
@@ -791,10 +791,9 @@ mod tests {
             &mut csprng,
         );
 
-        let mut ro = RandomOracle::empty();
-        let mut proof =
-            sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
-                .expect("prove");
+        let ro = RandomOracle::empty();
+        let proof = sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
+            .expect("prove");
 
         ps_sig
             .msgs
@@ -843,7 +842,7 @@ mod tests {
             .msgs
             .push(PsSigSecretMsg::Known(Value::generate(&mut csprng)));
 
-        let mut ro = RandomOracle::empty();
+        let ro = RandomOracle::empty();
         assert!(
             sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng).is_none()
         );
@@ -858,7 +857,7 @@ mod tests {
         let (mut ps_sig, secret) =
             instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::Known], 0, &mut csprng);
 
-        let mut ro = RandomOracle::empty();
+        let ro = RandomOracle::empty();
         let proof = sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
             .expect("prove");
 
