@@ -4,22 +4,16 @@
 use super::{account_holder, secret_sharing::*, types::*, utils};
 use crate::id::constants::AttributeKind;
 use crate::pedersen_commitment::{CommitmentKey, Randomness};
-use crate::{
-    curve_arithmetic::{Curve, Pairing},
-    dodis_yampolskiy_prf as prf,
-    pedersen_commitment::{
-        Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
-    },
-    random_oracle::RandomOracle,
-    sigma_protocols::{com_enc_eq, com_eq_sig, common::*},
-};
+use crate::{curve_arithmetic::{Curve, Pairing}, dodis_yampolskiy_prf as prf, pedersen_commitment::{
+    Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
+}, ps_sig, random_oracle::RandomOracle, sigma_protocols::{com_enc_eq, com_eq_sig, common::*}};
 use anyhow::{bail, ensure, Context};
 use core::fmt;
 use core::fmt::Display;
 use either::Either;
 use rand::*;
 use std::collections::{btree_map::BTreeMap, BTreeSet};
-use crate::sigma_protocols::ps_sig;
+use crate::sigma_protocols::{ps_sig, ps_sig_known};
 
 /// How to handle an identity credential attribute
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -245,9 +239,9 @@ fn compute_pok_sig<
     alist: &AttributeList<C::Scalar, AttributeType>,
     threshold: Threshold,
     ar_list: &BTreeSet<ArIdentity>,
-    ip_pub_key: &crate::ps_sig::PublicKey<P>,
-    blinded_sig: &crate::ps_sig::BlindedSignature<P>,
-    blind_rand: crate::ps_sig::BlindingRandomness<P>,
+    ip_pub_key: &ps_sig::PublicKey<P>,
+    blinded_sig: &ps_sig::BlindedSignature<P>,
+    blind_rand: ps_sig::BlindingRandomness<P>,
 ) -> anyhow::Result<(com_eq_sig::ComEqSig<P, C>, com_eq_sig::ComEqSigSecret<P, C>)> {
     let att_vec = &alist.alist;
     // number of user chosen attributes (+4 is for tags, valid_to, created_at,
@@ -264,19 +258,6 @@ fn compute_pok_sig<
                                     // so the total number of commitments is as follows
     let num_total_commitments = num_total_attributes + num_ars + 1;
 
-    let y_tildas = &ip_pub_key.y_tildas;
-
-    ensure!(
-        y_tildas.len() > att_vec.len() + num_ars + 5,
-        "The PS key must be long enough to accommodate all the attributes"
-    );
-
-    ensure!(
-        y_tildas.len() >= num_total_attributes,
-        "Too many attributes {} >= {}",
-        y_tildas.len(),
-        num_total_attributes
-    );
 
 
 
@@ -359,11 +340,11 @@ fn compute_pok_sig<
         }
     }
 
-    let secret = ps_sig::PsSigSecret {
+    let secret = ps_sig_known::PsSigSecret {
         r_prime: blind_rand,
         msgs,
     };
-    let prover = ps_sig::PsSig {
+    let prover = ps_sig_known::PsSigKnown {
         blinded_sig: blinded_sig.clone(),
         msgs,
         ps_pub_key: ip_pub_key.clone(),
@@ -618,8 +599,8 @@ fn pok_sig_verifier<
     choice_ar_parameters: &BTreeSet<ArIdentity>,
     validity: &CredentialValidity,
     commitments: &IdentityAttributesCredentialsCommitments<C>,
-    ip_pub_key: &crate::ps_sig::PublicKey<P>,
-    blinded_sig: &crate::ps_sig::BlindedSignature<P>,
+    ip_pub_key: &ps_sig::PublicKey<P>,
+    blinded_sig: &ps_sig::BlindedSignature<P>,
 ) -> Option<com_eq_sig::ComEqSig<P, C>> {
     let ar_scalars = utils::encode_ars(choice_ar_parameters)?;
     // Capacity for id_cred_sec, cmm_prf, (threshold, valid_to, created_at), tags
