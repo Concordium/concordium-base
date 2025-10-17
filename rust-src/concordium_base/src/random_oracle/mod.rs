@@ -50,26 +50,46 @@
 //!
 //! If you iterate through any collection, add the length of the collection to the transcript.
 //! ```rust
+//! use concordium_base::random_oracle::RandomOracle;
+//!
+//! let mut transcript = RandomOracle::empty();
 //! let collection = vec![2,3,4];
-//! transcrip.add(&(collection.len() as u64));
+//! transcript.add(&(collection.len() as u64));
 //! for item in collection {
-//!     transcrip.add(item);
+//!     transcript.add(&item);
 //! }
 //! ```
 //!
 //! If you add a struct to the transcript use its type name as `separator` and use `append_message`
 //! with a **label** for each field as domain separation.
 //! ```rust
-//!     transcript.add_bytes(b"TypeWithVariableLengths");
-//!     transcript.append_message(b"given", example2.given);
-//!     transcript.append_message(b"received", example2.received);
+//! use concordium_base::random_oracle::RandomOracle;
+//!
+//! struct TypeWithVariableLengths {
+//!     given: String,
+//!     received: String,
+//! }
+//!
+//! let example = TypeWithVariableLengths {
+//!     given: "received".to_string(),
+//!     received: "".to_string(),
+//! };
+//!
+//! let mut transcript = RandomOracle::empty();
+//! transcript.add_bytes(b"TypeWithVariableLengths");
+//! transcript.append_message(b"given", &example.given);
+//! transcript.append_message(b"received", &example.received);
 //! ```
 //!
 //! If you add an enum to the transcript add the `tag/version`
 //! to the transcript.
 //! ```rust
-//!     transcript.add_bytes(b"V1");
-//!     // Add the enum type to the transcript.
+//! use concordium_base::random_oracle::RandomOracle;
+//!
+//! let mut transcript = RandomOracle::empty();
+//! // Add tag/version `V1` of the enum variant to the transcript.
+//! transcript.add_bytes(b"V1");
+//! // Add the enum variant type to the transcript.
 //! ```
 use crate::{common::*, curve_arithmetic::Curve, web3id};
 use sha3::{Digest, Sha3_256};
@@ -207,7 +227,7 @@ impl RandomOracle {
                 // is different to any `Sha256` challenge.
                 let separator = [0u8; 32];
                 self.add_bytes(separator);
-                // Add tag/version `V1` to the transcript.
+                // Add tag/version `V1` to the random oracle.
                 self.add_bytes(b"V1");
                 self.add_bytes(b"ContextChallenge");
                 self.add_bytes(b"given");
