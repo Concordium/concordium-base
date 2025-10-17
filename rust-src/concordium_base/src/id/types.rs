@@ -1404,6 +1404,18 @@ pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub _phantom: std::marker::PhantomData<C>,
 }
 
+/// Describes the time period for which a credential is valid
+#[derive(Debug, PartialEq, Eq, Clone, SerdeSerialize, SerdeDeserialize)]
+pub struct CredentialValidity {
+    /// When credential is valid until
+    #[serde(rename = "validTo")]
+    pub valid_to: YearMonth,
+    /// When the credential was created
+    #[serde(rename = "createdAt")]
+    pub created_at: YearMonth,
+}
+
+
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for Policy<C, AttributeType> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         out.put(&self.valid_to);
@@ -2706,19 +2718,6 @@ impl<C: Curve> HasAttributeRandomness<C> for SystemAttributeRandomness {
 /// The commitments produced by identity attribute credentials created from identity credential
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 pub struct IdentityAttributesCredentialsCommitments<C: Curve> {
-    /// commitment to the prf key
-    #[serde(rename = "cmmPrf")]
-    pub cmm_prf: PedersenCommitment<C>,
-    /// commitment to the max account number.
-    #[serde(rename = "cmmMaxAccounts")]
-    pub cmm_max_accounts: PedersenCommitment<C>,
-    /// List of commitments to the attributes that are not revealed.
-    /// For the purposes of checking signatures, the commitments to those
-    /// that are revealed as part of the policy are going to be computed by the
-    /// verifier.
-    #[map_size_length = 2]
-    #[serde(rename = "cmmAttributes")]
-    pub cmm_attributes: BTreeMap<AttributeTag, PedersenCommitment<C>>,
     /// commitments to the coefficients of the polynomial
     /// used to share id_cred_sec
     /// S + b1 X + b2 X^2...
@@ -2784,6 +2783,18 @@ pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::
     pub proof_ip_sig: com_eq_sig::Response<P, C>,
 }
 
+/// Attribute value as represented in the identity attribute credential values. An attribute value has ither been committed to,
+/// revealed, or just proven known.
+#[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone)]
+pub enum IdentityAttribute<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// The attribute value has been committed to, with the given commitment
+    Committed(PedersenCommitment<C>),
+    /// The attribute value has been revealed and has given value
+    Revealed(Value<C>),
+    /// The attribute value is known
+    Known,
+}
+
 /// Values (as opposed to proofs) in identity attribute credentials created from identity credential.
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
 pub struct IdentityAttributesCredentialsValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
@@ -2801,9 +2812,13 @@ pub struct IdentityAttributesCredentialsValues<C: Curve, AttributeType: Attribut
     #[map_size_length = 2]
     #[serde(rename = "arData", deserialize_with = "deserialize_ar_data")]
     pub ar_data: BTreeMap<ArIdentity, ChainArData<C>>,
+    /// The attributes that are part of the identity credentials
+    #[map_size_length = 2]
+    #[serde(rename = "attributes")]
+    pub attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
     /// Policy of this credential object.
-    #[serde(rename = "policy")]
-    pub policy: Policy<C, AttributeType>,
+    #[serde(rename = "validity")]
+    pub validity: CredentialValidity,
 }
 
 /// Identity attributes credentials created from identity credential, and proofs that it is

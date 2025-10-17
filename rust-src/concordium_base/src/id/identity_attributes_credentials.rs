@@ -2,6 +2,7 @@
 //! extent equivalent to account credentials deployed on chain, but there is no on-chain account credentials involved.
 
 use super::{account_holder, secret_sharing::*, types::*, utils};
+use crate::id::constants::AttributeKind;
 use crate::pedersen_commitment::{CommitmentKey, Randomness};
 use crate::{
     curve_arithmetic::{Curve, Pairing},
@@ -12,14 +13,27 @@ use crate::{
     random_oracle::RandomOracle,
     sigma_protocols::{com_enc_eq, com_eq_sig, common::*},
 };
-use anyhow::{bail, ensure};
+use anyhow::{bail, ensure, Context};
 use core::fmt;
 use core::fmt::Display;
 use either::Either;
 use rand::*;
 use std::collections::{btree_map::BTreeMap, BTreeSet};
+use crate::sigma_protocols::ps_sig;
 
-/// Construct proof for attribute credentials from identity credential
+/// How to handle an identity credential attribute
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum IdentityAttributeHandling {
+    /// The attribute value should be committed to (value will be verified by the proof)
+    Commit,
+    /// The attribute value should be revealed (value will be verified by the proof)
+    Reveal,
+    /// The attribute value should be proven known
+    Known,
+}
+
+/// Construct proof for attribute credentials from identity credential. The map `attributes_handling`
+/// must specify how to handle each attribute in the identity credentials `id_object`.
 pub fn prove_identity_attributes<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -28,7 +42,7 @@ pub fn prove_identity_attributes<
     context: IpContext<'_, P, C>,
     id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
     id_object_use_data: &IdObjectUseData<P, C>,
-    policy: Policy<C, AttributeType>,
+    attributes_handling: &BTreeMap<AttributeTag, IdentityAttributeHandling>,
     transcript: &mut RandomOracle,
 ) -> anyhow::Result<(
     IdentityAttributesCredentialsInfo<P, C, AttributeType>,
@@ -100,19 +114,24 @@ pub fn prove_identity_attributes<
     let (commitments, commitment_rands) = compute_commitments(
         &context.global_context.on_chain_commitment_key,
         alist,
-        prf_key,
         &cmm_id_cred_sec_sharing_coeff,
         cmm_coeff_randomness,
-        &policy,
+        attributes_handling,
         &mut csprng,
     )?;
+
+    let validity = CredentialValidity {
+        valid_to: id_object.get_attribute_list().valid_to,
+        created_at: id_object.get_attribute_list().created_at,
+    };
 
     // We have all the values now.
     let id_attribute_values = IdentityAttributesCredentialsValues {
         threshold: prio.choice_ar_parameters.threshold,
         ar_data,
         ip_identity: context.ip_info.ip_identity,
-        policy,
+        validity,
+        attributes: commitments.attributes.clone(), // todo ar
     };
 
     // The label "IdentityAttributesCredentials" is appended to the transcript followed all
@@ -185,6 +204,14 @@ pub fn prove_identity_attributes<
         None => bail!("Cannot produce zero knowledge proof."),
     };
 
+    let commitments = IdentityAttributesCredentialsCommitments {
+        cmm_id_cred_sec_sharing_coeff: commitments.cmm_id_cred_sec_sharing_coeff,
+    };
+
+    let cmm_rand = IdentityAttributesCredentialsRandomness {
+        attributes_rand: commitment_rands.attributes_rand,
+    };
+
     let id_proofs = IdentityAttributesCredentialsProofs {
         sig: blinded_sig,
         commitments,
@@ -201,10 +228,6 @@ pub fn prove_identity_attributes<
         proofs: id_proofs,
     };
 
-    let cmm_rand = IdentityAttributesCredentialsRandomness {
-        attributes_rand: commitment_rands.attributes_rand,
-    };
-
     Ok((info, cmm_rand))
 }
 
@@ -215,7 +238,7 @@ fn compute_pok_sig<
     AttributeType: Attribute<C::Scalar>,
 >(
     commitment_key: &PedersenKey<C>,
-    commitments: &IdentityAttributesCredentialsCommitments<C>,
+    commitments: &Commitments<C, AttributeType>,
     commitment_rands: &CommitmentRandomness<C>,
     id_cred_sec: &Value<C>,
     prf_key: &prf::SecretKey<C>,
@@ -255,16 +278,18 @@ fn compute_pok_sig<
         num_total_attributes
     );
 
-    let mut gxs = Vec::with_capacity(num_total_commitments);
 
+
+    let mut msgs =
     let mut secrets = Vec::with_capacity(num_total_commitments);
+
     secrets.push((
         id_cred_sec.clone(),
         commitment_rands.id_cred_sec_rand.clone(),
     ));
-    gxs.push(y_tildas[0]);
+
     secrets.push((prf_key.to_value(), commitment_rands.prf_rand.clone()));
-    gxs.push(y_tildas[1]);
+
 
     let public_vals =
         utils::encode_public_credential_values(alist.created_at, alist.valid_to, threshold)?;
@@ -272,11 +297,11 @@ fn compute_pok_sig<
     // commitment randomness (0) for the public parameters.
     let zero = PedersenRandomness::<C>::zero();
     secrets.push((Value::new(public_vals), zero.clone()));
-    gxs.push(y_tildas[2]);
+
     for i in 3..num_ars + 3 {
         // the encoded id revoker are commited with randomness 0.
         secrets.push((Value::new(ar_scalars[i - 3]), zero.clone()));
-        gxs.push(y_tildas[i]);
+
     }
 
     let att_rands = &commitment_rands.attributes_rand;
@@ -289,9 +314,9 @@ fn compute_pok_sig<
         commitment_key.hide(&max_accounts_val, &commitment_rands.max_accounts_rand);
 
     secrets.push((Value::new(tags_val), zero.clone()));
-    gxs.push(y_tildas[num_ars + 3]);
+
     secrets.push((max_accounts_val, commitment_rands.max_accounts_rand.clone()));
-    gxs.push(y_tildas[num_ars + 4]);
+
 
     // NB: It is crucial here that we use a btreemap. This guarantees that
     // the att_vec.iter() iterator is ordered by keys.
@@ -303,7 +328,7 @@ fn compute_pok_sig<
             // which we should use
             att_rands.get(tag).cloned().unwrap_or_else(|| zero.clone()),
         ));
-        gxs.push(g);
+
     }
 
     let mut comm_vec = Vec::with_capacity(num_total_commitments);
@@ -334,28 +359,34 @@ fn compute_pok_sig<
         }
     }
 
-    let secret = com_eq_sig::ComEqSigSecret {
-        blind_rand,
-        values_and_rands: secrets,
+    let secret = ps_sig::PsSigSecret {
+        r_prime: blind_rand,
+        msgs,
     };
-    let prover = com_eq_sig::ComEqSig {
+    let prover = ps_sig::PsSig {
         blinded_sig: blinded_sig.clone(),
-        commitments: comm_vec,
+        msgs,
         ps_pub_key: ip_pub_key.clone(),
-        comm_key: *commitment_key,
+        cmm_key: *commitment_key,
     };
     Ok((prover, secret))
 }
 
-/// Randomness for commitments
+/// Commitments to values (internally used type)
+struct Commitments<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// commitments to the coefficients of the polynomial
+    /// used to share id_cred_sec
+    /// S + b1 X + b2 X^2...
+    /// where S is id_cred_sec
+    pub cmm_id_cred_sec_sharing_coeff: Vec<Commitment<C>>,
+    /// Commitments to attributes
+    pub attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
+}
+
+/// Randomness for commitments (internally used type)
 struct CommitmentRandomness<C: Curve> {
     /// Randomness of the commitment to idCredSec.
     id_cred_sec_rand: PedersenRandomness<C>,
-    /// Randomness of the commitment to the PRF key.
-    prf_rand: PedersenRandomness<C>,
-    /// Randomness of the commitment to the maximum number of accounts the user
-    /// may create from the identity object.
-    max_accounts_rand: PedersenRandomness<C>,
     /// Randomness, if any, used to commit to user-chosen attributes, such as
     /// country of nationality.
     attributes_rand: BTreeMap<AttributeTag, PedersenRandomness<C>>,
@@ -368,55 +399,46 @@ struct CommitmentRandomness<C: Curve> {
 fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     commitment_key: &PedersenKey<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
-    prf_key: &prf::SecretKey<C>,
     cmm_id_cred_sec_sharing_coeff: &[Commitment<C>],
     cmm_coeff_randomness: Vec<PedersenRandomness<C>>,
-    policy: &Policy<C, AttributeType>,
+    attributes_handling: &BTreeMap<AttributeTag, IdentityAttributeHandling>,
     csprng: &mut R,
-) -> anyhow::Result<(
-    IdentityAttributesCredentialsCommitments<C>,
-    CommitmentRandomness<C>,
-)> {
+) -> anyhow::Result<(Commitments<C, AttributeType>, CommitmentRandomness<C>)> {
     let id_cred_sec_rand = if let Some(v) = cmm_coeff_randomness.first() {
         v.clone()
     } else {
         bail!("Commitment randomness is an empty vector.");
     };
 
-    let (cmm_prf, prf_rand) = commitment_key.commit(&prf_key, csprng);
-
-    let max_accounts = Value::<C>::new(C::scalar_from_u64(u64::from(alist.max_accounts)));
-    let (cmm_max_accounts, max_accounts_rand) = commitment_key.commit(&max_accounts, csprng);
-    let att_vec = &alist.alist;
-    let n = att_vec.len();
-    // only commitments to attributes which are not revealed.
-    ensure!(
-        n >= policy.policy_vec.len(),
-        "Attribute list is shorter than the number of revealed items in the policy."
-    );
-    let mut cmm_attributes = BTreeMap::new();
+    let mut attributes = BTreeMap::new();
     let mut attributes_rand = BTreeMap::new();
-    for (&i, val) in att_vec.iter() {
-        // in case the value is openened there is no need to hide it.
-        // We can just commit with randomness 0.
-        if !policy.policy_vec.contains_key(&i) {
-            let value = Value::<C>::new(val.to_field_element());
-            let (cmm, attr_rand) = commitment_key.commit(&value, csprng);
-            cmm_attributes.insert(i, cmm);
-            attributes_rand.insert(i, attr_rand);
+    for (tag, value) in alist.alist.iter() {
+        match *attributes_handling
+            .get(tag)
+            .context("handling of tag not specified")?
+        {
+            IdentityAttributeHandling::Commit => {
+                let value = Value::<C>::new(value.to_field_element());
+                let (cmm, attr_rand) = commitment_key.commit(&value, csprng);
+                attributes.insert(*tag, IdentityAttribute::Committed(cmm));
+                attributes_rand.insert(*tag, attr_rand);
+            }
+            IdentityAttributeHandling::Reveal => {
+                attributes.insert(*tag, IdentityAttribute::Revealed(*value));
+            }
+            IdentityAttributeHandling::Known => {
+                attributes.insert(*tag, IdentityAttribute::Known);
+            }
         }
     }
-    let id_attr_cmms = IdentityAttributesCredentialsCommitments {
-        cmm_prf,
-        cmm_max_accounts,
-        cmm_attributes,
+
+    let id_attr_cmms = Commitments {
         cmm_id_cred_sec_sharing_coeff: cmm_id_cred_sec_sharing_coeff.to_owned(),
+        attributes,
     };
 
     let cmm_rand = CommitmentRandomness {
         id_cred_sec_rand,
-        prf_rand,
-        max_accounts_rand,
         attributes_rand,
     };
     Ok((id_attr_cmms, cmm_rand))
@@ -496,7 +518,7 @@ pub fn verify_identity_attributes<
             .keys()
             .copied()
             .collect::<BTreeSet<ArIdentity>>(),
-        &id_attr_info.values.policy,
+        &id_attr_info.values.validity,
         commitments,
         ip_verify_key,
         &id_attr_info.proofs.sig,
@@ -587,18 +609,17 @@ fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
 /// A none return value means we cannot construct a verifier, and consequently
 /// it should be interpreted as the signature being invalid.
 fn pok_sig_verifier<
-    'a,
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 >(
-    commitment_key: &'a CommitmentKey<C>,
+    commitment_key: &CommitmentKey<C>,
     threshold: Threshold,
     choice_ar_parameters: &BTreeSet<ArIdentity>,
-    policy: &'a Policy<C, AttributeType>,
-    commitments: &'a IdentityAttributesCredentialsCommitments<C>,
-    ip_pub_key: &'a crate::ps_sig::PublicKey<P>,
-    blinded_sig: &'a crate::ps_sig::BlindedSignature<P>,
+    validity: &CredentialValidity,
+    commitments: &IdentityAttributesCredentialsCommitments<C>,
+    ip_pub_key: &crate::ps_sig::PublicKey<P>,
+    blinded_sig: &crate::ps_sig::BlindedSignature<P>,
 ) -> Option<com_eq_sig::ComEqSig<P, C>> {
     let ar_scalars = utils::encode_ars(choice_ar_parameters)?;
     // Capacity for id_cred_sec, cmm_prf, (threshold, valid_to, created_at), tags
@@ -611,7 +632,7 @@ fn pok_sig_verifier<
     // compute commitments with randomness 0
     let zero = Randomness::zero();
     let public_params =
-        utils::encode_public_credential_values(policy.created_at, policy.valid_to, threshold)
+        utils::encode_public_credential_values(validity.created_at, validity.valid_to, threshold)
             .ok()?;
     // add commitment to public values with randomness 0
     comm_vec.push(commitment_key.hide_worker(&public_params, &zero));
