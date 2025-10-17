@@ -66,7 +66,7 @@ impl<C: Curve> Serial for PsSigMsg<C> {
 
 /// Proof of knowledge of a PS (Pointcheval-Sanders) signature. See
 /// module documentation [`self`].
-pub struct PsSig<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+pub struct PsSigKnown<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// The blinded signature $(\hat{a}, \hat{b})$
     pub blinded_sig: BlindedSignature<P>,
     /// A list of how to handle each message in the signature.
@@ -160,7 +160,7 @@ pub struct Response<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     resp_msgs: Vec<ResponseMsg<C>>,
 }
 
-impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSig<P, C> {
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown<P, C> {
     type CommitMessage = (P::TargetField, Vec<Commitment<C>>);
     type ProtocolChallenge = C::Scalar;
     type ProverState = PsSigState<P, C>;
@@ -443,7 +443,7 @@ mod tests {
     pub fn instance_with_secrets<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         msgs_spec: &[InstanceSpecMsg],
         prng: &mut impl Rng,
-    ) -> (PsSig<P, C>, PsSigSecret<P, C>) {
+    ) -> (PsSigKnown<P, C>, PsSigSecret<P, C>) {
         let ps_sk: ps_sig::SecretKey<P> = ps_sig::SecretKey::generate(msgs_spec.len(), prng);
         let ps_pk: ps_sig::PublicKey<P> = ps_sig::PublicKey::from(&ps_sk);
         let y = |i| ps_pk.ys[i];
@@ -482,7 +482,7 @@ mod tests {
             .sign_unknown_message(&unknown_message, prng)
             .retrieve(&signature_mask);
         let (blinded_sig, blind_rand) = signature.blind(prng);
-        let ps_sig = PsSig {
+        let ps_sig = PsSigKnown {
             msgs,
             ps_pub_key: ps_pk,
             cmm_key,
