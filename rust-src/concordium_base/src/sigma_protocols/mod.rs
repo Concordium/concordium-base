@@ -11,6 +11,7 @@ pub mod com_mult;
 pub mod common;
 pub mod dlog;
 pub mod enc_trans;
+pub mod ps_sig_known;
 pub mod vcom_eq;
 
 // the following two modules are only there for reference if we ever need them,
