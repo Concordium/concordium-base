@@ -1,8 +1,8 @@
 //! This module implements the proof of knowledge of a PS (Pointcheval-Sanders) signature.
 //! The protocol allows a user to prove knowledge of a PS signature without
-//! revealing the signature, nor the message signed by the signature (unless chosen to be revealed).
+//! revealing the signature, nor the message signed by the signature (unless chosen to be public).
 //! As part of the proof, the different parts of the message $\\{m_i\\}$ can either
-//! be proven known ($i \in K$), be proven equal to a commitment $c_i$ ($i \in C$), or revealed ($i \in R$).
+//! be proven known ($i \in K$), be proven equal to a commitment $c_i$ ($i \in C$), or proven equals to a public value ($i \in P$).
 //!
 //! The proof is done as a sigma protocol, see "9.1 Abstract Treatment of Sigma Protocols".
 //! Using the notation from "5.3.5 Proof of Knowledge of a Signature with Public Values"
@@ -14,7 +14,7 @@
 //!
 //! and we prove knowledge of a preimage of the "statement" $y$:
 //! $$
-//!     y = \left(e\left(\hat{b}, \tilde{X}^{-1} \prod\nolimits\_{i\in R} \tilde{Y}\_i^{-m_i} \tilde{g} \right) , \\{ c_i \\}\_{i \in C}\right)
+//!     y = \left(e\left(\hat{b}, \tilde{X}^{-1} \prod\nolimits\_{i\in P} \tilde{Y}\_i^{-m_i} \tilde{g} \right) , \\{ c_i \\}\_{i \in C}\right)
 //! $$
 //!
 //! Notice that the input to $\varphi$ has a signature blinding component $r'$ and a component for each message part.
@@ -39,8 +39,8 @@ use rand::Rng;
 pub enum PsSigMsg<C: Curve> {
     /// The message is proven known and equal to the value in commitment $c_i$
     EqualToCommitment(Commitment<C>),
-    /// The value/message part $m_i$ is revealed
-    Revealed(Value<C>),
+    /// The value/message part $m_i$ is public
+    Public(Value<C>),
     /// The value is proven known
     Known,
 }
@@ -53,7 +53,7 @@ impl<C: Curve> Serial for PsSigMsg<C> {
                 out.put(&0u8);
                 out.put(cmm);
             }
-            Self::Revealed(value) => {
+            Self::Public(value) => {
                 out.put(&1u8);
                 out.put(value);
             }
@@ -95,8 +95,8 @@ type CommitSecretMsg<C> = PsSigSecretMsg<C>;
 pub enum PsSigSecretMsg<C: Curve> {
     /// The value/message part $m_i$ is proven known and equal to a commitment to the value under the randomness $r_i$
     EqualToCommitment(Value<C>, Randomness<C>),
-    /// The value is revealed
-    Revealed,
+    /// The value is public
+    Public,
     /// The value/message part $m_i$ is proven known
     Known(Value<C>),
 }
@@ -109,7 +109,7 @@ impl<C: Curve> Serial for PsSigSecretMsg<C> {
                 out.put(m);
                 out.put(cmm);
             }
-            Self::Revealed => {
+            Self::Public => {
                 out.put(&1u8);
             }
             Self::Known(m) => {
@@ -129,7 +129,7 @@ impl<C: Curve> Deserial for PsSigSecretMsg<C> {
                 let cmm = source.get()?;
                 Self::EqualToCommitment(m, cmm)
             }
-            1 => Self::Revealed,
+            1 => Self::Public,
             2 => {
                 let m = source.get()?;
                 Self::Known(m)
@@ -228,8 +228,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
 
                     cmm_sec_msgs.push(PsSigSecretMsg::EqualToCommitment(cmm_sec_m_i, cmm_sec_r_i));
                 }
-                PsSigMsg::Revealed(_) => {
-                    cmm_sec_msgs.push(PsSigSecretMsg::Revealed);
+                PsSigMsg::Public(_) => {
+                    cmm_sec_msgs.push(PsSigSecretMsg::Public);
                 }
                 PsSigMsg::Known => {
                     let cmm_sec_m_i = Value::generate_non_zero(csprng);
@@ -288,8 +288,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                         Randomness::new(resp_r_i),
                     ));
                 }
-                (CommitSecretMsg::Revealed, PsSigSecretMsg::Revealed) => {
-                    resp_msgs.push(PsSigSecretMsg::Revealed);
+                (CommitSecretMsg::Public, PsSigSecretMsg::Public) => {
+                    resp_msgs.push(PsSigSecretMsg::Public);
                 }
                 (CommitSecretMsg::Known(cmm_sec_m_i), PsSigSecretMsg::Known(m_i)) => {
                     let mut resp_m_i = *challenge;
@@ -311,7 +311,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
     /// Extract commit message as $a = y^c \varphi(z)$ where $c$: the challenge, $z$ the response.
     /// Notice that the signature component of the commit message $a$ can be calculated as following (inserting $y$ and $\varphi$ from module [`self`] ):
     /// $$
-    ///     e\left(\hat{b}, \tilde{g}^c\right) e\left(\hat{a}, \tilde{X}^{-c} \tilde{g}^{r\_z'} \prod\nolimits\_{i\in R} \tilde{Y}\_i^{-c m_{z,i}} \prod\nolimits\_{i\in K \cup C} \tilde{Y}\_i^{m_{z,i}}\right)
+    ///     e\left(\hat{b}, \tilde{g}^c\right) e\left(\hat{a}, \tilde{X}^{-c} \tilde{g}^{r\_z'} \prod\nolimits\_{i\in P} \tilde{Y}\_i^{-c m_{z,i}} \prod\nolimits\_{i\in K \cup C} \tilde{Y}\_i^{m_{z,i}}\right)
     /// $$
     /// (using $z$ underscore to mark the response values)
     ///
@@ -379,7 +379,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                     cmm_msg_sig_gs.push(y_tilde(i)?);
                     cmm_msg_sig_es.push(**resp_m_i);
                 }
-                (PsSigMsg::Revealed(m_i), ResponseMsg::Revealed) => {
+                (PsSigMsg::Public(m_i), ResponseMsg::Public) => {
                     cmm_msg_sig_gs.push(y_tilde(i)?);
                     let mut exp = challenge_neg;
                     exp.mul_assign(m_i);
@@ -415,7 +415,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
         let msgs_spec: Vec<_> = (0..data_size)
             .map(|i| match i % 3 {
                 0 => tests::InstanceSpecMsg::EqualToCommitment,
-                1 => tests::InstanceSpecMsg::Revealed,
+                1 => tests::InstanceSpecMsg::Public,
                 2 => tests::InstanceSpecMsg::Known,
                 _ => unreachable!(),
             })
@@ -443,7 +443,7 @@ mod tests {
     #[derive(Debug, Clone, Copy)]
     pub enum InstanceSpecMsg {
         EqualToCommitment,
-        Revealed,
+        Public,
         Known,
     }
 
@@ -476,9 +476,9 @@ mod tests {
                     secret_msgs.push(PsSigSecretMsg::EqualToCommitment(m_i, r_j));
                     msgs.push(PsSigMsg::EqualToCommitment(c_j));
                 }
-                InstanceSpecMsg::Revealed => {
-                    secret_msgs.push(PsSigSecretMsg::Revealed);
-                    msgs.push(PsSigMsg::Revealed(m_i));
+                InstanceSpecMsg::Public => {
+                    secret_msgs.push(PsSigSecretMsg::Public);
+                    msgs.push(PsSigMsg::Public(m_i));
                 }
                 InstanceSpecMsg::Known => {
                     secret_msgs.push(PsSigSecretMsg::Known(m_i));
@@ -512,7 +512,7 @@ mod tests {
             let specs: Vec<_> = (0..msg_length)
                 .map(|i| match i % 3 {
                     0 => InstanceSpecMsg::EqualToCommitment,
-                    1 => InstanceSpecMsg::Revealed,
+                    1 => InstanceSpecMsg::Public,
                     2 => InstanceSpecMsg::Known,
                     _ => unreachable!(),
                 })
@@ -584,15 +584,15 @@ mod tests {
         }
     }
 
-    /// Test completeness only revealed message parts
+    /// Test completeness only public message parts
     #[test]
-    pub fn test_ps_sig_completeness_revealed() {
+    pub fn test_ps_sig_completeness_public() {
         let mut csprng = rand::thread_rng();
 
         for i in 1..=3 {
             let specs: Vec<_> = iter::repeat(())
                 .take(i)
-                .map(|_| InstanceSpecMsg::Revealed)
+                .map(|_| InstanceSpecMsg::Public)
                 .collect();
             let (ps_sig, secret) = instance_with_secrets::<Bls12, G1>(&specs, 0, &mut csprng);
 
@@ -674,15 +674,15 @@ mod tests {
         assert!(!sigma_protocols::common::verify(&mut ro, &ps_sig, &proof));
     }
 
-    /// Test revealed value that is something else than in the signature
+    /// Test public value that is something else than in the signature
     #[test]
-    pub fn test_ps_sig_soundness_revealed_incorrect() {
+    pub fn test_ps_sig_soundness_public_incorrect() {
         let mut csprng = rand::thread_rng();
 
         let (mut ps_sig, secret) =
-            instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::Revealed], 0, &mut csprng);
+            instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::Public], 0, &mut csprng);
 
-        assert_matches!(&mut ps_sig.msgs[0], PsSigMsg::Revealed(m) => {
+        assert_matches!(&mut ps_sig.msgs[0], PsSigMsg::Public(m) => {
             *m = Value::generate(&mut csprng);
         });
 
@@ -710,19 +710,19 @@ mod tests {
         assert!(!sigma_protocols::common::verify(&mut ro, &ps_sig, &proof));
     }
 
-    /// Test changing revealed value in a statement
+    /// Test changing public value in a statement
     #[test]
-    pub fn test_ps_sig_soundness_revealed_changed() {
+    pub fn test_ps_sig_soundness_public_changed() {
         let mut csprng = rand::thread_rng();
 
         let (mut ps_sig, secret) =
-            instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::Revealed], 0, &mut csprng);
+            instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::Public], 0, &mut csprng);
 
         let mut ro = RandomOracle::empty();
         let proof = sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
             .expect("prove");
 
-        assert_matches!(&mut ps_sig.msgs[0], PsSigMsg::Revealed(m) => {
+        assert_matches!(&mut ps_sig.msgs[0], PsSigMsg::Public(m) => {
             *m = Value::generate(&mut csprng);
         });
 
@@ -760,7 +760,7 @@ mod tests {
         let mut csprng = rand::thread_rng();
 
         let (mut ps_sig, secret) = instance_with_secrets::<Bls12, G1>(
-            &[InstanceSpecMsg::Known, InstanceSpecMsg::Revealed],
+            &[InstanceSpecMsg::Known, InstanceSpecMsg::Public],
             0,
             &mut csprng,
         );
@@ -786,7 +786,7 @@ mod tests {
         let mut csprng = rand::thread_rng();
 
         let (mut ps_sig, secret) = instance_with_secrets::<Bls12, G1>(
-            &[InstanceSpecMsg::Known, InstanceSpecMsg::Revealed],
+            &[InstanceSpecMsg::Known, InstanceSpecMsg::Public],
             5,
             &mut csprng,
         );
@@ -798,7 +798,7 @@ mod tests {
 
         ps_sig
             .msgs
-            .push(PsSigMsg::Revealed(Value::generate(&mut csprng)));
+            .push(PsSigMsg::Public(Value::generate(&mut csprng)));
 
         assert!(!sigma_protocols::common::verify(
             &mut ro.split(),
@@ -820,7 +820,7 @@ mod tests {
         let msg = common::serialize_deserialize(&orig_msg).unwrap();
         assert_eq!(msg, orig_msg);
 
-        let orig_msg = ResponseMsg::<G1>::Revealed;
+        let orig_msg = ResponseMsg::<G1>::Public;
         let msg = common::serialize_deserialize(&orig_msg).unwrap();
         assert_eq!(msg, orig_msg);
 
