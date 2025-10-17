@@ -1405,17 +1405,6 @@ pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub _phantom: std::marker::PhantomData<C>,
 }
 
-/// Describes the time period for which a credential is valid
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
-pub struct CredentialValidity {
-    /// When credential is valid until
-    #[serde(rename = "validTo")]
-    pub valid_to: YearMonth,
-    /// When the credential was created
-    #[serde(rename = "createdAt")]
-    pub created_at: YearMonth,
-}
-
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for Policy<C, AttributeType> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         out.put(&self.valid_to);
@@ -2781,6 +2770,17 @@ pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::
         deserialize_with = "base16_decode"
     )]
     pub proof_ip_sig: ps_sig_known::Response<P, C>,
+}
+
+/// Describes the time period for which a credential is valid
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+pub struct CredentialValidity {
+    /// When credential is valid until
+    #[serde(rename = "validTo")]
+    pub valid_to: YearMonth,
+    /// When the credential was created
+    #[serde(rename = "createdAt")]
+    pub created_at: YearMonth,
 }
 
 /// Attribute value as represented in the identity attribute credential values. An attribute value has ither been committed to,
