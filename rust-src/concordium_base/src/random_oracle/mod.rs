@@ -11,7 +11,52 @@
 //! The [`RandomOracle`] instance used to verify a proof needs to be initialised
 //! with the context used to produce the proof. Any verification of sub-proofs
 //! needs to be performed in the same order as when producing the proof.
-
+//!
+//! The [`RandomOracle`] instance should be used to append bytes to its internal state.
+//! After adding data, call [`crate::random_oracle::RandomOracle::get_challenge`] to consume/hash the bytes
+//! and produce a random challenge.
+//!
+//! # Caution: Variable-length types
+//! Special care is required when handling variable-length types such as
+//! `String`, `Vec`, `HashSet`, `HashMap`, or other collections.
+//! Naively appending the bytes can produce collisions. For example:
+//!
+//! ```rust
+//! struct TypeWithVariableLengths {
+//!     given: String,
+//!     received: String,
+//! }
+//!
+//! let example1 = TypeWithVariableLengths {
+//!     given: "received".to_string(),
+//!     received: "".to_string(),
+//! };
+//!
+//! let example2 = TypeWithVariableLengths {
+//!     given: "".to_string(),
+//!     received: "received".to_string(),
+//! };
+//! ```
+//!
+//! Appending the [`RandomOracle`] with each field label and value naively
+//! (meaning `hash("given" + "received" + "received")`) would produce
+//! the same hasing result for both examples. To avoid this:
+//!
+//! - Use `append_message` with a **label** for each field as domain separation in structs.
+//! - Serialize variable-length types with their length prepended.
+//!
+//! References for serialization:
+//! - [concordium_base_derive](https://github.com/Concordium/concordium-base/blob/main/rust-src/concordium_base_derive/src/lib.rs)
+//! - [serialize.rs](https://github.com/Concordium/concordium-base/blob/main/rust-src/concordium_base/src/common/serialize.rs)
+//!
+//! If you iterate through any collection, add the length of the collection to the transcript.
+//! ```rust
+//! transcrip.add(&(collection.len() as u64));
+//! for item in collection {
+//!     transcrip.add(item.label);
+//!     transcrip.add(item.value);
+//! }
+//! ```
 use crate::{common::*, curve_arithmetic::Curve, web3id};
 use sha3::{Digest, Sha3_256};
 use std::io::Write;
