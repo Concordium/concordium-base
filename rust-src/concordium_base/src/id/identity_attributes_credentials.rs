@@ -4,16 +4,24 @@
 use super::{account_holder, secret_sharing::*, types::*, utils};
 use crate::id::constants::AttributeKind;
 use crate::pedersen_commitment::{CommitmentKey, Randomness};
-use crate::{curve_arithmetic::{Curve, Pairing}, dodis_yampolskiy_prf as prf, pedersen_commitment::{
-    Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
-}, ps_sig, random_oracle::RandomOracle, sigma_protocols::{com_enc_eq, com_eq_sig, common::*}};
+use crate::sigma_protocols::ps_sig_known::{PsSigKnown, PsSigMsg, PsSigSecret, PsSigSecretMsg};
+use crate::sigma_protocols::{ps_sig, ps_sig_known};
+use crate::{
+    curve_arithmetic::{Curve, Pairing},
+    dodis_yampolskiy_prf as prf,
+    pedersen_commitment::{
+        Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
+    },
+    ps_sig,
+    random_oracle::RandomOracle,
+    sigma_protocols::{com_enc_eq, com_eq_sig, common::*},
+};
 use anyhow::{bail, ensure, Context};
 use core::fmt;
 use core::fmt::Display;
 use either::Either;
 use rand::*;
 use std::collections::{btree_map::BTreeMap, BTreeSet};
-use crate::sigma_protocols::{ps_sig, ps_sig_known};
 
 /// How to handle an identity credential attribute
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -243,61 +251,51 @@ fn compute_pok_sig<
     blinded_sig: &ps_sig::BlindedSignature<P>,
     blind_rand: ps_sig::BlindingRandomness<P>,
 ) -> anyhow::Result<(com_eq_sig::ComEqSig<P, C>, com_eq_sig::ComEqSigSecret<P, C>)> {
-    let att_vec = &alist.alist;
-    // number of user chosen attributes (+4 is for tags, valid_to, created_at,
-    // max_accounts)
-    let num_user_attributes = att_vec.len() + 4;
-    // To these there are always two attributes (idCredSec and prf key) added.
-    let num_total_attributes = num_user_attributes + 2;
     let ar_scalars = match utils::encode_ars(ar_list) {
         Some(x) => x,
         None => bail!("Cannot encode anonymity revokers."),
     };
-    let num_ars = ar_scalars.len(); // we commit to each anonymity revoker, with randomness 0
-                                    // and finally we also commit to the anonymity revocation threshold.
-                                    // so the total number of commitments is as follows
-    let num_total_commitments = num_total_attributes + num_ars + 1;
 
+    let msg_count = alist.alist.len() + ar_scalars.len() + 5;
 
+    let mut msgs = Vec::with_capacity(msg_count);
+    let mut secrets = Vec::with_capacity(msg_count);
 
-
-    let mut msgs =
-    let mut secrets = Vec::with_capacity(num_total_commitments);
-
-    secrets.push((
+    // For IdCredSec, we prove equal to a commitment in order to link the signature proof
+    // to the IdCredSec encryption parts proofs
+    msgs.push(PsSigMsg::EqualToCommitment(
+        commitments.cmm_id_cred_sec_sharing_coeff[0],
+    ));
+    secrets.push(PsSigSecretMsg::EqualToCommitment(
         id_cred_sec.clone(),
         commitment_rands.id_cred_sec_rand.clone(),
     ));
 
-    secrets.push((prf_key.to_value(), commitment_rands.prf_rand.clone()));
+    // The PRF we just prove knowledge of
+    msgs.push(PsSigMsg::Known);
+    secrets.push(PsSigSecretMsg::Known(prf_key.to_value()));
 
-
+    // Validity and threshold are "public" values
     let public_vals =
         utils::encode_public_credential_values(alist.created_at, alist.valid_to, threshold)?;
+    msgs.push(PsSigMsg::Revealed(Value::new(public_vals)));
+    secrets.push(PsSigSecretMsg::Revealed);
 
-    // commitment randomness (0) for the public parameters.
-    let zero = PedersenRandomness::<C>::zero();
-    secrets.push((Value::new(public_vals), zero.clone()));
-
-    for i in 3..num_ars + 3 {
-        // the encoded id revoker are commited with randomness 0.
-        secrets.push((Value::new(ar_scalars[i - 3]), zero.clone()));
-
+    // Validity and threshold are "public" values
+    for ar_scalar in ar_scalars {
+        msgs.push(PsSigMsg::Revealed(Value::new(ar_scalar)));
+        secrets.push(PsSigSecretMsg::Revealed);
     }
 
-    let att_rands = &commitment_rands.attributes_rand;
-
     let tags_val = utils::encode_tags(alist.alist.keys())?;
-    let tags_cmm = commitment_key.hide_worker(&tags_val, &zero);
+    msgs.push(PsSigMsg::Revealed(Value::new(tags_val)));
+    secrets.push(PsSigSecretMsg::Revealed);
 
-    let max_accounts_val = Value::new(C::scalar_from_u64(alist.max_accounts.into()));
-    let max_accounts_cmm =
-        commitment_key.hide(&max_accounts_val, &commitment_rands.max_accounts_rand);
+    let max_accounts_val = C::scalar_from_u64(alist.max_accounts.into());
+    msgs.push(PsSigMsg::Revealed(Value::new(max_accounts_val)));
+    secrets.push(PsSigSecretMsg::Revealed);
 
-    secrets.push((Value::new(tags_val), zero.clone()));
-
-    secrets.push((max_accounts_val, commitment_rands.max_accounts_rand.clone()));
-
+    let att_rands = &commitment_rands.attributes_rand;
 
     // NB: It is crucial here that we use a btreemap. This guarantees that
     // the att_vec.iter() iterator is ordered by keys.
@@ -309,24 +307,7 @@ fn compute_pok_sig<
             // which we should use
             att_rands.get(tag).cloned().unwrap_or_else(|| zero.clone()),
         ));
-
     }
-
-    let mut comm_vec = Vec::with_capacity(num_total_commitments);
-    let cmm_id_cred_sec = commitments.cmm_id_cred_sec_sharing_coeff[0];
-    comm_vec.push(cmm_id_cred_sec);
-    comm_vec.push(commitments.cmm_prf);
-
-    // add commitment to threshold with randomness 0
-    comm_vec.push(commitment_key.hide_worker(&public_vals, &zero));
-
-    // and all commitments to ARs with randomness 0
-    for ar in ar_scalars.iter() {
-        comm_vec.push(commitment_key.hide_worker(ar, &zero));
-    }
-
-    comm_vec.push(tags_cmm);
-    comm_vec.push(max_accounts_cmm);
 
     for (idx, v) in alist.alist.iter() {
         match commitments.cmm_attributes.get(idx) {
@@ -340,11 +321,11 @@ fn compute_pok_sig<
         }
     }
 
-    let secret = ps_sig_known::PsSigSecret {
+    let secret = PsSigSecret {
         r_prime: blind_rand,
         msgs,
     };
-    let prover = ps_sig_known::PsSigKnown {
+    let prover = PsSigKnown {
         blinded_sig: blinded_sig.clone(),
         msgs,
         ps_pub_key: ip_pub_key.clone(),
