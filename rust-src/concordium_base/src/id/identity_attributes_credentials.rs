@@ -305,7 +305,7 @@ fn compute_pok_sig<
             Some(IdentityAttributeHandling::Commit) => {
                 let (attr_cmm, attr_rand) = commitment_key.commit(&value, csprng);
                 msgs.push(PsSigMsg::EqualToCommitment(attr_cmm));
-                secrets.push(PsSigSecretMsg::Public);
+                secrets.push(PsSigSecretMsg::EqualToCommitment(value, attr_rand.clone()));
                 attributes.insert(*tag, IdentityAttribute::Committed(attr_cmm));
                 attribute_rand.insert(*tag, attr_rand);
             }
@@ -391,8 +391,7 @@ pub fn verify_identity_attributes<
     {
         return Err(AttributeCommitmentVerificationError::Ar);
     }
-    let on_chain_commitment_key = global_context.on_chain_commitment_key;
-    let ip_verify_key = &ip_info.ip_verify_key;
+
     // Compute the challenge prefix by hashing the values.
     transcript.add_bytes(b"IdentityAttributesCredentials");
     transcript.append_message(b"identity_attribute_values", &id_attr_info.values);
@@ -400,17 +399,15 @@ pub fn verify_identity_attributes<
 
     let commitments = &id_attr_info.proofs.commitments;
 
-    let verifier_sig = pok_sig_verifier(&on_chain_commitment_key, id_attr_info, ip_verify_key);
-    let verifier_sig = if let Some(v) = verifier_sig {
-        v
-    } else {
-        return Err(AttributeCommitmentVerificationError::Signature);
-    };
-
-    let response_sig = id_attr_info.proofs.proof_ip_sig.clone();
+    let verifier_sig = pok_sig_verifier(
+        &global_context.on_chain_commitment_key,
+        &ip_info.ip_verify_key,
+        id_attr_info,
+    )
+    .ok_or(AttributeCommitmentVerificationError::Signature)?;
 
     let (id_cred_pub_verifier, id_cred_pub_responses) = id_cred_pub_verifier(
-        &on_chain_commitment_key,
+        &global_context.on_chain_commitment_key,
         known_ars,
         &id_attr_info.values.ar_data,
         &commitments.cmm_id_cred_sec_sharing_coeff,
@@ -422,7 +419,7 @@ pub fn verify_identity_attributes<
         second: id_cred_pub_verifier,
     };
     let response = AndResponse {
-        r1: response_sig,
+        r1: id_attr_info.proofs.proof_ip_sig.clone(),
         r2: id_cred_pub_responses,
     };
     let proof = SigmaProof {
@@ -492,8 +489,8 @@ fn pok_sig_verifier<
     AttributeType: Attribute<C::Scalar>,
 >(
     commitment_key: &CommitmentKey<C>,
-    id_attr_info: &IdentityAttributesCredentialsInfo<P, C, AttributeType>,
     ip_pub_key: &ps_sig::PublicKey<P>,
+    id_attr_info: &IdentityAttributesCredentialsInfo<P, C, AttributeType>,
 ) -> Option<PsSigKnown<P, C>> {
     // The identity provider signature is on a message of:
     // - idcredsec (signed blindly)
@@ -517,7 +514,7 @@ fn pok_sig_verifier<
 
     let mut msgs = Vec::with_capacity(msg_count);
 
-    // For IdCredSec, we prove equal to a commitment in order to link the signature proof
+    // For IdCredSec, we verify equal to a commitment in order to link the signature proof
     // to the IdCredSec encryption parts proofs
     msgs.push(PsSigMsg::EqualToCommitment(
         *id_attr_info
@@ -527,7 +524,7 @@ fn pok_sig_verifier<
             .get(0)?,
     ));
 
-    // The PRF secret key we just prove knowledge of
+    // The PRF secret key we just verify knowledge of
     msgs.push(PsSigMsg::Known);
 
     // Validity and threshold are "public" values
@@ -548,7 +545,7 @@ fn pok_sig_verifier<
     let tags_val = utils::encode_tags(id_attr_info.values.attributes.keys()).ok()?;
     msgs.push(PsSigMsg::Public(Value::new(tags_val)));
 
-    // Max accounts is not public, we prove knowledge of it
+    // Max accounts is not public, we verify knowledge of it
     msgs.push(PsSigMsg::Known);
 
     // Iterate attributes in the same order as signed by the identity provider (tag order)
@@ -813,7 +810,7 @@ mod test {
             &id_object_fixture.global_ctx,
             &id_object_fixture.ip_info,
             &id_object_fixture.ars_infos,
-            gi & id_attr_info,
+             & id_attr_info,
             &mut transcript,
         );
 
