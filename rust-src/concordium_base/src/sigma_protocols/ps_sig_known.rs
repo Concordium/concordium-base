@@ -169,7 +169,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
 
     #[inline]
     fn public(&self, ro: &mut RandomOracle) {
-        ro.add_bytes(b"PsSig");
+        ro.add_bytes(b"PsSigKnown");
         ro.append_message(b"blinded_sig", &self.blinded_sig);
         ro.extend_from(b"messages", self.msgs.iter());
         ro.append_message(b"ps_pub_key", &self.ps_pub_key);
@@ -192,7 +192,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         let g_tilde = self.ps_pub_key.g_tilda;
         let a_hat = self.blinded_sig.sig.0;
-        let y_tilde = |i| self.ps_pub_key.y_tildas[i];
+        let y_tilde = |i| self.ps_pub_key.y_tildas.get(i).copied();
         let cmm_key = self.cmm_key;
 
         if self.msgs.len() > self.ps_pub_key.len() {
@@ -223,7 +223,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                     let (cmm_msg_c_i, cmm_sec_r_i) = cmm_key.commit(&cmm_sec_m_i, csprng);
                     cmm_msg_commitments.push(cmm_msg_c_i);
 
-                    let y_exp_m_i = y_tilde(i).mul_by_scalar(&cmm_sec_m_i);
+                    let y_exp_m_i = y_tilde(i)?.mul_by_scalar(&cmm_sec_m_i);
                     cmm_msg_signature_elm = cmm_msg_signature_elm.plus_point(&y_exp_m_i);
 
                     cmm_sec_msgs.push(SecretMsg::EqualToCommitment(cmm_sec_m_i, cmm_sec_r_i));
@@ -234,7 +234,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                 PsSigMsg::Known => {
                     let cmm_sec_m_i = Value::generate_non_zero(csprng);
 
-                    let y_exp_m_i = y_tilde(i).mul_by_scalar(&cmm_sec_m_i);
+                    let y_exp_m_i = y_tilde(i)?.mul_by_scalar(&cmm_sec_m_i);
                     cmm_msg_signature_elm = cmm_msg_signature_elm.plus_point(&y_exp_m_i);
 
                     cmm_sec_msgs.push(SecretMsg::Known(cmm_sec_m_i));
@@ -327,10 +327,16 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
         let a_hat = self.blinded_sig.sig.0;
         let b_hat = self.blinded_sig.sig.1;
         let x_tilde = self.ps_pub_key.x_tilda;
-        let y_tilde = |i| self.ps_pub_key.y_tildas[i];
+        let y_tilde = |i| self.ps_pub_key.y_tildas.get(i).copied();
         let cmm_key = self.cmm_key;
 
-        if self.msgs.len() > self.ps_pub_key.len() {
+        if self.msgs.len() > self.ps_pub_key.len()
+            || response.resp_msgs.len() > self.ps_pub_key.len()
+        {
+            return None;
+        }
+
+        if self.msgs.len() != response.resp_msgs.len() {
             return None;
         }
 
@@ -370,17 +376,17 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                     );
                     cmm_msg_commitments.push(Commitment(cmm_msg_c_i));
 
-                    cmm_msg_sig_gs.push(y_tilde(i));
+                    cmm_msg_sig_gs.push(y_tilde(i)?);
                     cmm_msg_sig_es.push(**resp_m_i);
                 }
                 (PsSigMsg::Revealed(m_i), ResponseMsg::Revealed) => {
-                    cmm_msg_sig_gs.push(y_tilde(i));
+                    cmm_msg_sig_gs.push(y_tilde(i)?);
                     let mut exp = challenge_neg;
                     exp.mul_assign(m_i);
                     cmm_msg_sig_es.push(exp);
                 }
                 (PsSigMsg::Known, ResponseMsg::Known(resp_m_i)) => {
-                    cmm_msg_sig_gs.push(y_tilde(i));
+                    cmm_msg_sig_gs.push(y_tilde(i)?);
                     cmm_msg_sig_es.push(**resp_m_i);
                 }
                 _ => return None,
@@ -415,7 +421,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
             })
             .collect();
 
-        let (ps_sig, secrets) = tests::instance_with_secrets(&msgs_spec, csprng);
+        let (ps_sig, secrets) = tests::instance_with_secrets(&msgs_spec, 0, csprng);
 
         f(ps_sig, secrets, csprng)
     }
@@ -427,6 +433,7 @@ mod tests {
     use crate::{common, curve_arithmetic::arkworks_instances::ArkGroup, ps_sig, sigma_protocols};
     use ark_bls12_381::G1Projective;
     use assert_matches::assert_matches;
+    use itertools::Itertools;
     use std::iter;
 
     type G1 = ArkGroup<G1Projective>;
@@ -442,9 +449,11 @@ mod tests {
 
     pub fn instance_with_secrets<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         msgs_spec: &[InstanceSpecMsg],
+        additional_key_length: usize,
         prng: &mut impl Rng,
     ) -> (PsSigKnown<P, C>, PsSigSecret<P, C>) {
-        let ps_sk: ps_sig::SecretKey<P> = ps_sig::SecretKey::generate(msgs_spec.len(), prng);
+        let ps_sk: ps_sig::SecretKey<P> =
+            ps_sig::SecretKey::generate(msgs_spec.len() + additional_key_length, prng);
         let ps_pk: ps_sig::PublicKey<P> = ps_sig::PublicKey::from(&ps_sk);
         let y = |i| ps_pk.ys[i];
         let cmm_key = CommitmentKey::generate(prng);
@@ -499,8 +508,8 @@ mod tests {
     /// Tests completeness for varying message lengths and varying ways of handling the message parts
     #[test]
     pub fn test_ps_sig_completeness() {
-        for length in 1..20 {
-            let specs: Vec<_> = (0..length)
+        for (msg_length, additional_key_length) in (1..20).cartesian_product([0, 5]) {
+            let specs: Vec<_> = (0..msg_length)
                 .map(|i| match i % 3 {
                     0 => InstanceSpecMsg::EqualToCommitment,
                     1 => InstanceSpecMsg::Revealed,
@@ -511,7 +520,8 @@ mod tests {
 
             let mut csprng = rand::thread_rng();
 
-            let (ps_sig, secret) = instance_with_secrets::<Bls12, G1>(&specs, &mut csprng);
+            let (ps_sig, secret) =
+                instance_with_secrets::<Bls12, G1>(&specs, additional_key_length, &mut csprng);
 
             let mut ro = RandomOracle::empty();
             let proof =
@@ -526,7 +536,7 @@ mod tests {
     pub fn test_ps_sig_completeness_empty() {
         let mut csprng = rand::thread_rng();
 
-        let (ps_sig, secret) = instance_with_secrets::<Bls12, G1>(&[], &mut csprng);
+        let (ps_sig, secret) = instance_with_secrets::<Bls12, G1>(&[], 0, &mut csprng);
 
         let mut ro = RandomOracle::empty();
         let proof = sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
@@ -544,7 +554,7 @@ mod tests {
                 .take(i)
                 .map(|_| InstanceSpecMsg::EqualToCommitment)
                 .collect();
-            let (ps_sig, secret) = instance_with_secrets::<Bls12, G1>(&specs, &mut csprng);
+            let (ps_sig, secret) = instance_with_secrets::<Bls12, G1>(&specs, 0, &mut csprng);
 
             let mut ro = RandomOracle::empty();
             let proof =
@@ -564,7 +574,7 @@ mod tests {
                 .take(i)
                 .map(|_| InstanceSpecMsg::Known)
                 .collect();
-            let (ps_sig, secret) = instance_with_secrets::<Bls12, G1>(&specs, &mut csprng);
+            let (ps_sig, secret) = instance_with_secrets::<Bls12, G1>(&specs, 0, &mut csprng);
 
             let mut ro = RandomOracle::empty();
             let proof =
@@ -584,7 +594,7 @@ mod tests {
                 .take(i)
                 .map(|_| InstanceSpecMsg::Revealed)
                 .collect();
-            let (ps_sig, secret) = instance_with_secrets::<Bls12, G1>(&specs, &mut csprng);
+            let (ps_sig, secret) = instance_with_secrets::<Bls12, G1>(&specs, 0, &mut csprng);
 
             let mut ro = RandomOracle::empty();
             let proof =
@@ -599,8 +609,11 @@ mod tests {
     pub fn test_ps_sig_soundness_commitment_incorrect() {
         let mut csprng = rand::thread_rng();
 
-        let (mut ps_sig, mut secret) =
-            instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::EqualToCommitment], &mut csprng);
+        let (mut ps_sig, mut secret) = instance_with_secrets::<Bls12, G1>(
+            &[InstanceSpecMsg::EqualToCommitment],
+            0,
+            &mut csprng,
+        );
 
         let new_m = Value::generate(&mut csprng);
         let (new_c, new_r) = ps_sig.cmm_key.commit(&new_m, &mut csprng);
@@ -624,8 +637,11 @@ mod tests {
     pub fn test_ps_sig_soundness_commitment_message_secret_invalid() {
         let mut csprng = rand::thread_rng();
 
-        let (ps_sig, mut secret) =
-            instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::EqualToCommitment], &mut csprng);
+        let (ps_sig, mut secret) = instance_with_secrets::<Bls12, G1>(
+            &[InstanceSpecMsg::EqualToCommitment],
+            0,
+            &mut csprng,
+        );
 
         assert_matches!(&mut secret.msgs[0], SecretMsg::EqualToCommitment(m, _r) => {
            *m = Value::generate(&mut csprng);
@@ -642,8 +658,11 @@ mod tests {
     pub fn test_ps_sig_soundness_commitment_randomness_secret_invalid() {
         let mut csprng = rand::thread_rng();
 
-        let (ps_sig, mut secret) =
-            instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::EqualToCommitment], &mut csprng);
+        let (ps_sig, mut secret) = instance_with_secrets::<Bls12, G1>(
+            &[InstanceSpecMsg::EqualToCommitment],
+            0,
+            &mut csprng,
+        );
 
         assert_matches!(&mut secret.msgs[0], SecretMsg::EqualToCommitment(_m, r) => {
            *r = Randomness::generate(&mut csprng)
@@ -661,7 +680,7 @@ mod tests {
         let mut csprng = rand::thread_rng();
 
         let (mut ps_sig, secret) =
-            instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::Revealed], &mut csprng);
+            instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::Revealed], 0, &mut csprng);
 
         assert_matches!(&mut ps_sig.msgs[0], PsSigMsg::Revealed(m) => {
             *m = Value::generate(&mut csprng);
@@ -679,7 +698,7 @@ mod tests {
         let mut csprng = rand::thread_rng();
 
         let (ps_sig, mut secret) =
-            instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::Known], &mut csprng);
+            instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::Known], 0, &mut csprng);
 
         assert_matches!(&mut secret.msgs[0], SecretMsg::Known(m) => {
            *m = Value::generate(&mut csprng);
@@ -689,6 +708,103 @@ mod tests {
         let proof = sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
             .expect("prove");
         assert!(!sigma_protocols::common::verify(&mut ro, &ps_sig, &proof));
+    }
+
+    /// Test changing revealed value in a statement
+    #[test]
+    pub fn test_ps_sig_soundness_revealed_changed() {
+        let mut csprng = rand::thread_rng();
+
+        let (mut ps_sig, secret) =
+            instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::Revealed], 0, &mut csprng);
+
+        let mut ro = RandomOracle::empty();
+        let proof = sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
+            .expect("prove");
+
+        assert_matches!(&mut ps_sig.msgs[0], PsSigMsg::Revealed(m) => {
+            *m = Value::generate(&mut csprng);
+        });
+
+        assert!(!sigma_protocols::common::verify(&mut ro, &ps_sig, &proof));
+    }
+
+    /// Test changing commitment in a statement
+    #[test]
+    pub fn test_ps_sig_soundness_commitment_changed() {
+        let mut csprng = rand::thread_rng();
+
+        let (mut ps_sig, mut secret) = instance_with_secrets::<Bls12, G1>(
+            &[InstanceSpecMsg::EqualToCommitment],
+            0,
+            &mut csprng,
+        );
+
+        let mut ro = RandomOracle::empty();
+        let proof = sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
+            .expect("prove");
+
+        let new_m: Value<G1> = Value::generate(&mut csprng);
+        let (new_c, _new_r) = ps_sig.cmm_key.commit(&new_m, &mut csprng);
+
+        assert_matches!(&mut ps_sig.msgs[0], PsSigMsg::EqualToCommitment(c) => {
+            *c = new_c;
+        });
+
+        assert!(!sigma_protocols::common::verify(&mut ro, &ps_sig, &proof));
+    }
+
+    /// Test removing msg from proven statement
+    #[test]
+    pub fn test_ps_sig_soundness_msg_removed() {
+        let mut csprng = rand::thread_rng();
+
+        let (mut ps_sig, secret) = instance_with_secrets::<Bls12, G1>(
+            &[InstanceSpecMsg::Known, InstanceSpecMsg::Revealed],
+            0,
+            &mut csprng,
+        );
+
+        let mut ro = RandomOracle::empty();
+        let mut proof =
+            sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
+                .expect("prove");
+
+        ps_sig.msgs.pop();
+        proof.response.resp_msgs.pop();
+
+        assert!(!sigma_protocols::common::verify(
+            &mut ro.split(),
+            &ps_sig,
+            &proof
+        ));
+    }
+
+    /// Test adding msg to proven statement
+    #[test]
+    pub fn test_ps_sig_soundness_msg_added() {
+        let mut csprng = rand::thread_rng();
+
+        let (mut ps_sig, secret) = instance_with_secrets::<Bls12, G1>(
+            &[InstanceSpecMsg::Known, InstanceSpecMsg::Revealed],
+            5,
+            &mut csprng,
+        );
+
+        let mut ro = RandomOracle::empty();
+        let mut proof =
+            sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
+                .expect("prove");
+
+        ps_sig
+            .msgs
+            .push(PsSigMsg::Revealed(Value::generate(&mut csprng)));
+
+        assert!(!sigma_protocols::common::verify(
+            &mut ro.split(),
+            &ps_sig,
+            &proof
+        ));
     }
 
     /// The type `ResponseMsg` is part of the proof, and hence must be able to the serialized
@@ -711,5 +827,47 @@ mod tests {
         let orig_msg = ResponseMsg::<G1>::Known(Value::generate(&mut csprng));
         let msg = common::serialize_deserialize(&orig_msg).unwrap();
         assert_eq!(msg, orig_msg);
+    }
+
+    /// Test case where we have more message parts than the PS key length.
+    /// Assert that we fail gracefully and don't panic
+    #[test]
+    pub fn test_prove_more_message_parts_than_key_length() {
+        let mut csprng = rand::thread_rng();
+
+        let (mut ps_sig, mut secret) =
+            instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::Known], 0, &mut csprng);
+
+        ps_sig.msgs.push(PsSigMsg::Known);
+        secret
+            .msgs
+            .push(SecretMsg::Known(Value::generate(&mut csprng)));
+
+        let mut ro = RandomOracle::empty();
+        assert!(
+            sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng).is_none()
+        );
+    }
+
+    /// Test case where we have more message parts than the PS key length.
+    /// Assert that we fail gracefully and don't panic
+    #[test]
+    pub fn test_verify_more_message_parts_than_key_length() {
+        let mut csprng = rand::thread_rng();
+
+        let (mut ps_sig, secret) =
+            instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::Known], 0, &mut csprng);
+
+        let mut ro = RandomOracle::empty();
+        let proof = sigma_protocols::common::prove(&mut ro.split(), &ps_sig, secret, &mut csprng)
+            .expect("prove");
+
+        ps_sig.msgs.push(PsSigMsg::Known);
+
+        assert!(!sigma_protocols::common::verify(
+            &mut ro.split(),
+            &ps_sig,
+            &proof
+        ));
     }
 }
