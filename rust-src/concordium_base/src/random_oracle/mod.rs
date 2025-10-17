@@ -40,9 +40,8 @@
 //!
 //! Appending the [`RandomOracle`] with each field label and value naively
 //! (meaning `hash("given" + "received" + "received")`) would produce
-//! the same hasing result for both examples. To avoid this:
+//! the same hashing result for both examples. To avoid this:
 //!
-//! - Use `append_message` with a **label** for each field as domain separation in structs.
 //! - Serialize variable-length types with their length prepended.
 //!
 //! References for serialization:
@@ -51,11 +50,26 @@
 //!
 //! If you iterate through any collection, add the length of the collection to the transcript.
 //! ```rust
+//! let collection = vec![2,3,4];
 //! transcrip.add(&(collection.len() as u64));
 //! for item in collection {
-//!     transcrip.add(item.label);
-//!     transcrip.add(item.value);
+//!     transcrip.add(item);
 //! }
+//! ```
+//!
+//! If you add a struct to the transcript use its type name as `separator` and use `append_message`
+//! with a **label** for each field as domain separation.
+//! ```rust
+//!     transcript.add_bytes(b"TypeWithVariableLengths");
+//!     transcript.append_message(b"given", example2.given);
+//!     transcript.append_message(b"received", example2.received);
+//! ```
+//!
+//! If you add an enum to the transcript add the `tag/version`
+//! to the transcript.
+//! ```rust
+//!     transcript.add_bytes(b"V1");
+//!     // Add the enum type to the transcript.
 //! ```
 use crate::{common::*, curve_arithmetic::Curve, web3id};
 use sha3::{Digest, Sha3_256};
@@ -195,17 +209,18 @@ impl RandomOracle {
                 self.add_bytes(separator);
                 // Add tag/version `V1` to the transcript.
                 self.add_bytes(b"V1");
+                self.add_bytes(b"ContextChallenge");
                 self.add_bytes(b"given");
                 self.add(&(context.given.len() as u64));
                 for item in &context.given {
-                    self.add(&item.label);
-                    self.add(&item.context);
+                    self.append_message(b"label", &item.label);
+                    self.append_message(b"context", &item.context);
                 }
                 self.add_bytes(b"requested");
                 self.add(&(context.requested.len() as u64));
                 for item in &context.requested {
-                    self.add(&item.label);
-                    self.add(&item.context);
+                    self.append_message(b"label", &item.label);
+                    self.append_message(b"context", &item.context);
                 }
             }
         }
