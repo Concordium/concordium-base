@@ -3,6 +3,7 @@ mod tests {
     use crate::id::types::Attribute;
     use crate::web3id::{
         Challenge, CommitmentInputs, CredentialStatement, CredentialsInputs, Presentation, Request,
+        Sha256Challenge,
     };
     use crate::{
         base::CredentialRegistrationID,
@@ -168,7 +169,7 @@ mod tests {
         let commitment_inputs = [secrets];
 
         // Now generate the proofs with regards to the account credential attribute statements.
-        let challenge = Challenge::new(rng.gen());
+        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
 
         let cred_id = CredentialRegistrationID::new(cdi.values.cred_id);
 

@@ -11,8 +11,87 @@
 //! The [`RandomOracle`] instance used to verify a proof needs to be initialised
 //! with the context used to produce the proof. Any verification of sub-proofs
 //! needs to be performed in the same order as when producing the proof.
-
-use crate::{common::*, curve_arithmetic::Curve};
+//!
+//! The [`RandomOracle`] instance should be used to append bytes to its internal state.
+//! After adding data, call [`crate::random_oracle::RandomOracle::get_challenge`] to consume/hash the bytes
+//! and produce a random challenge.
+//!
+//! # Caution: Variable-length types
+//! Special care is required when handling variable-length types such as
+//! `String`, `Vec`, `HashSet`, `HashMap`, or other collections.
+//! Naively appending the bytes can produce collisions. For example:
+//!
+//! ```rust
+//! struct TypeWithVariableLengths {
+//!     given: String,
+//!     received: String,
+//! }
+//!
+//! let example1 = TypeWithVariableLengths {
+//!     given: "received".to_string(),
+//!     received: "".to_string(),
+//! };
+//!
+//! let example2 = TypeWithVariableLengths {
+//!     given: "".to_string(),
+//!     received: "received".to_string(),
+//! };
+//! ```
+//!
+//! Appending the [`RandomOracle`] with each field label and value naively
+//! (meaning `hash("given" + "received" + "received")`) would produce
+//! the same hashing result for both examples. To avoid this:
+//!
+//! - Serialize variable-length types with their length prepended.
+//!
+//! References for serialization:
+//! - [concordium_base_derive](https://github.com/Concordium/concordium-base/blob/main/rust-src/concordium_base_derive/src/lib.rs)
+//! - [serialize.rs](https://github.com/Concordium/concordium-base/blob/main/rust-src/concordium_base/src/common/serialize.rs)
+//!
+//! If you iterate through any collection, add the length of the collection to the transcript.
+//! ```rust
+//! use concordium_base::random_oracle::RandomOracle;
+//!
+//! let mut transcript = RandomOracle::empty();
+//! let collection = vec![2,3,4];
+//! transcript.add(&(collection.len() as u64));
+//! for item in collection {
+//!     transcript.add(&item);
+//! }
+//! ```
+//!
+//! If you add a struct to the transcript use its type name as `separator` and use `append_message`
+//! with a **label** for each field as domain separation.
+//! ```rust
+//! use concordium_base::random_oracle::RandomOracle;
+//!
+//! struct TypeWithVariableLengths {
+//!     given: String,
+//!     received: String,
+//! }
+//!
+//! let example = TypeWithVariableLengths {
+//!     given: "received".to_string(),
+//!     received: "".to_string(),
+//! };
+//!
+//! let mut transcript = RandomOracle::empty();
+//! transcript.add_bytes(b"TypeWithVariableLengths");
+//! transcript.append_message(b"given", &example.given);
+//! transcript.append_message(b"received", &example.received);
+//! ```
+//!
+//! If you add an enum to the transcript add the `tag/version`
+//! to the transcript.
+//! ```rust
+//! use concordium_base::random_oracle::RandomOracle;
+//!
+//! let mut transcript = RandomOracle::empty();
+//! // Add tag/version `V1` of the enum variant to the transcript.
+//! transcript.add_bytes(b"V1");
+//! // Add the enum variant type to the transcript.
+//! ```
+use crate::{common::*, curve_arithmetic::Curve, web3id};
 use sha3::{Digest, Sha3_256};
 use std::io::Write;
 
@@ -131,6 +210,40 @@ impl RandomOracle {
     /// mod field order.
     pub fn result_to_scalar<C: Curve>(self) -> C::Scalar {
         C::scalar_from_bytes(self.result())
+    }
+
+    /// Append a `web3id::Challenge` to the state of the random oracle.
+    /// Newly added challenge variants should use a tag/version, as well as labels for each struct field
+    /// to ensure every part of the challenge is accounted for.
+    /// Each challenge variant should contribute uniquely to the random oracle.
+    pub fn append_challenge(&mut self, challenge: &web3id::Challenge) {
+        match challenge {
+            web3id::Challenge::Sha256(hash_bytes) => {
+                // No tag/version `V0` is added to be backward compatible with old proofs and requests.
+                self.add_bytes(hash_bytes);
+            }
+            web3id::Challenge::V1(context) => {
+                // An empty sha256 hash is prepended to ensure this output
+                // is different to any `Sha256` challenge.
+                let separator = [0u8; 32];
+                self.add_bytes(separator);
+                // Add tag/version `V1` to the random oracle.
+                self.add_bytes(b"V1");
+                self.add_bytes(b"ContextChallenge");
+                self.add_bytes(b"given");
+                self.add(&(context.given.len() as u64));
+                for item in &context.given {
+                    self.append_message(b"label", &item.label);
+                    self.append_message(b"context", &item.context);
+                }
+                self.add_bytes(b"requested");
+                self.add(&(context.requested.len() as u64));
+                for item in &context.requested {
+                    self.append_message(b"label", &item.label);
+                    self.append_message(b"context", &item.context);
+                }
+            }
+        }
     }
 
     /// Get a challenge from the current state, consuming the state.
