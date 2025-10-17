@@ -88,11 +88,11 @@ pub struct PsSigState<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 }
 
 /// Commit secret in the sigma protocol
-type CommitSecretMsg<C> = SecretMsg<C>;
+type CommitSecretMsg<C> = PsSigSecretMsg<C>;
 
 /// How to handle a signed message
 #[derive(Debug, Clone, PartialEq)]
-pub enum SecretMsg<C: Curve> {
+pub enum PsSigSecretMsg<C: Curve> {
     /// The value/message part $m_i$ is proven known and equal to a commitment to the value under the randomness $r_i$
     EqualToCommitment(Value<C>, Randomness<C>),
     /// The value is revealed
@@ -101,7 +101,7 @@ pub enum SecretMsg<C: Curve> {
     Known(Value<C>),
 }
 
-impl<C: Curve> Serial for SecretMsg<C> {
+impl<C: Curve> Serial for PsSigSecretMsg<C> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         match self {
             Self::EqualToCommitment(m, cmm) => {
@@ -120,7 +120,7 @@ impl<C: Curve> Serial for SecretMsg<C> {
     }
 }
 
-impl<C: Curve> Deserial for SecretMsg<C> {
+impl<C: Curve> Deserial for PsSigSecretMsg<C> {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let tag: u8 = source.get()?;
         Ok(match tag {
@@ -144,11 +144,11 @@ pub struct PsSigSecret<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Secret $r'$ value
     pub r_prime: Secret<P::ScalarField>,
     /// Secret value for each message part
-    pub msgs: Vec<SecretMsg<C>>,
+    pub msgs: Vec<PsSigSecretMsg<C>>,
 }
 
 /// Response in the protocol
-type ResponseMsg<C> = SecretMsg<C>;
+type ResponseMsg<C> = PsSigSecretMsg<C>;
 
 /// Response in sigma protocol
 #[derive(Clone, Debug, Serialize)]
@@ -226,10 +226,10 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                     let y_exp_m_i = y_tilde(i)?.mul_by_scalar(&cmm_sec_m_i);
                     cmm_msg_signature_elm = cmm_msg_signature_elm.plus_point(&y_exp_m_i);
 
-                    cmm_sec_msgs.push(SecretMsg::EqualToCommitment(cmm_sec_m_i, cmm_sec_r_i));
+                    cmm_sec_msgs.push(PsSigSecretMsg::EqualToCommitment(cmm_sec_m_i, cmm_sec_r_i));
                 }
                 PsSigMsg::Revealed(_) => {
-                    cmm_sec_msgs.push(SecretMsg::Revealed);
+                    cmm_sec_msgs.push(PsSigSecretMsg::Revealed);
                 }
                 PsSigMsg::Known => {
                     let cmm_sec_m_i = Value::generate_non_zero(csprng);
@@ -237,7 +237,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                     let y_exp_m_i = y_tilde(i)?.mul_by_scalar(&cmm_sec_m_i);
                     cmm_msg_signature_elm = cmm_msg_signature_elm.plus_point(&y_exp_m_i);
 
-                    cmm_sec_msgs.push(SecretMsg::Known(cmm_sec_m_i));
+                    cmm_sec_msgs.push(PsSigSecretMsg::Known(cmm_sec_m_i));
                 }
             }
         }
@@ -271,7 +271,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
             match (cmm_sec_msg, witness_msg) {
                 (
                     CommitSecretMsg::EqualToCommitment(cmm_sec_m_i, cmm_sec_r_i),
-                    SecretMsg::EqualToCommitment(m_i, r_i),
+                    PsSigSecretMsg::EqualToCommitment(m_i, r_i),
                 ) => {
                     let mut resp_m_i = *challenge;
                     resp_m_i.mul_assign(m_i);
@@ -283,21 +283,21 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                     resp_r_i.negate();
                     resp_r_i.add_assign(cmm_sec_r_i);
 
-                    resp_msgs.push(SecretMsg::EqualToCommitment(
+                    resp_msgs.push(PsSigSecretMsg::EqualToCommitment(
                         Value::new(resp_m_i),
                         Randomness::new(resp_r_i),
                     ));
                 }
-                (CommitSecretMsg::Revealed, SecretMsg::Revealed) => {
-                    resp_msgs.push(SecretMsg::Revealed);
+                (CommitSecretMsg::Revealed, PsSigSecretMsg::Revealed) => {
+                    resp_msgs.push(PsSigSecretMsg::Revealed);
                 }
-                (CommitSecretMsg::Known(cmm_sec_m_i), SecretMsg::Known(m_i)) => {
+                (CommitSecretMsg::Known(cmm_sec_m_i), PsSigSecretMsg::Known(m_i)) => {
                     let mut resp_m_i = *challenge;
                     resp_m_i.mul_assign(m_i);
                     resp_m_i.negate();
                     resp_m_i.add_assign(cmm_sec_m_i);
 
-                    resp_msgs.push(SecretMsg::Known(Value::new(resp_m_i)));
+                    resp_msgs.push(PsSigSecretMsg::Known(Value::new(resp_m_i)));
                 }
                 _ => return None,
             }
@@ -473,15 +473,15 @@ mod tests {
             match msg_spec {
                 InstanceSpecMsg::EqualToCommitment => {
                     let (c_j, r_j) = cmm_key.commit(&m_i, prng);
-                    secret_msgs.push(SecretMsg::EqualToCommitment(m_i, r_j));
+                    secret_msgs.push(PsSigSecretMsg::EqualToCommitment(m_i, r_j));
                     msgs.push(PsSigMsg::EqualToCommitment(c_j));
                 }
                 InstanceSpecMsg::Revealed => {
-                    secret_msgs.push(SecretMsg::Revealed);
+                    secret_msgs.push(PsSigSecretMsg::Revealed);
                     msgs.push(PsSigMsg::Revealed(m_i));
                 }
                 InstanceSpecMsg::Known => {
-                    secret_msgs.push(SecretMsg::Known(m_i));
+                    secret_msgs.push(PsSigSecretMsg::Known(m_i));
                     msgs.push(PsSigMsg::Known);
                 }
             }
@@ -621,7 +621,7 @@ mod tests {
         assert_matches!(&mut ps_sig.msgs[0], PsSigMsg::EqualToCommitment(c) => {
             *c = new_c
         });
-        assert_matches!(&mut secret.msgs[0], SecretMsg::EqualToCommitment(v, r) => {
+        assert_matches!(&mut secret.msgs[0], PsSigSecretMsg::EqualToCommitment(v, r) => {
             *v = new_m;
             *r = new_r;
         });
@@ -643,7 +643,7 @@ mod tests {
             &mut csprng,
         );
 
-        assert_matches!(&mut secret.msgs[0], SecretMsg::EqualToCommitment(m, _r) => {
+        assert_matches!(&mut secret.msgs[0], PsSigSecretMsg::EqualToCommitment(m, _r) => {
            *m = Value::generate(&mut csprng);
         });
 
@@ -664,7 +664,7 @@ mod tests {
             &mut csprng,
         );
 
-        assert_matches!(&mut secret.msgs[0], SecretMsg::EqualToCommitment(_m, r) => {
+        assert_matches!(&mut secret.msgs[0], PsSigSecretMsg::EqualToCommitment(_m, r) => {
            *r = Randomness::generate(&mut csprng)
         });
 
@@ -700,7 +700,7 @@ mod tests {
         let (ps_sig, mut secret) =
             instance_with_secrets::<Bls12, G1>(&[InstanceSpecMsg::Known], 0, &mut csprng);
 
-        assert_matches!(&mut secret.msgs[0], SecretMsg::Known(m) => {
+        assert_matches!(&mut secret.msgs[0], PsSigSecretMsg::Known(m) => {
            *m = Value::generate(&mut csprng);
         });
 
@@ -841,7 +841,7 @@ mod tests {
         ps_sig.msgs.push(PsSigMsg::Known);
         secret
             .msgs
-            .push(SecretMsg::Known(Value::generate(&mut csprng)));
+            .push(PsSigSecretMsg::Known(Value::generate(&mut csprng)));
 
         let mut ro = RandomOracle::empty();
         assert!(
