@@ -1,12 +1,11 @@
 //! Functionality to prove and verify identity attribute credentials based on identity credentials. These are to a large
 //! extent equivalent to account credentials deployed on chain, but there is no on-chain account credentials involved.
 
-use super::{account_holder, secret_sharing::*, types::*, utils};
+use super::{account_holder, types::*, utils};
 use crate::pedersen_commitment::{CommitmentKey, Randomness};
 use crate::sigma_protocols::ps_sig_known::{PsSigKnown, PsSigMsg, PsSigSecret, PsSigSecretMsg};
 use crate::{
     curve_arithmetic::{Curve, Pairing},
-    dodis_yampolskiy_prf as prf,
     pedersen_commitment::{
         Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
     },
@@ -14,7 +13,7 @@ use crate::{
     random_oracle::RandomOracle,
     sigma_protocols::{com_enc_eq, common::*},
 };
-use anyhow::{bail, Context};
+use anyhow::Context;
 use core::fmt;
 use core::fmt::Display;
 use rand::*;
@@ -48,45 +47,36 @@ pub fn prove_identity_attributes<
 )> {
     let mut csprng = thread_rng();
 
-    let (ip_sig, prio, alist) = (
-        id_object.get_signature(),
-        id_object.get_common_pio_fields(),
-        id_object.get_attribute_list(),
-    );
-    let sig_retrieval_rand = &id_object_use_data.randomness;
-    let aci = &id_object_use_data.aci;
-
-    let prf_key = &aci.prf_key;
-    let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
-
-    // Check that all the chosen identity providers (in the pre-identity object) are
-    // available in the given context, and remove the ones that are not.
-    let chosen_ars = {
-        let mut chosen_ars = BTreeMap::new();
-        for ar_id in prio.choice_ar_parameters.ar_identities.iter() {
-            if let Some(info) = context.ars_infos.get(ar_id) {
-                let _ = chosen_ars.insert(*ar_id, info.clone()); // since we are
-                                                                 // iterating over
-                                                                 // a set, this
-                                                                 // will always
-                                                                 // be Some
-            } else {
-                bail!("Cannot find anonymity revoker {} in the context.", ar_id)
-            }
+    // Lookup keys for the anonymity revokers
+    let ars = {
+        let mut ars = BTreeMap::new();
+        for ar_id in id_object
+            .get_common_pio_fields()
+            .choice_ar_parameters
+            .ar_identities
+            .iter()
+        {
+            let info = context.ars_infos.get(ar_id).with_context(|| {
+                format!("cannot find anonymity revoker {} in the context", ar_id)
+            })?;
+            ars.insert(*ar_id, info.clone());
         }
-        chosen_ars
+        ars
     };
 
-    // sharing data for id cred sec
-    let (id_cred_data, cmm_id_cred_sec_sharing_coeff, cmm_coeff_randomness) =
+    // Compute sharing data for id cred sec
+    let (id_cred_data, cmm_id_cred_sec_sharing_coeff, cmm_rand_id_cred_sec_sharing_coeff) =
         account_holder::compute_sharing_data(
-            id_cred_sec,
-            &chosen_ars,
-            prio.choice_ar_parameters.threshold,
+            &id_object_use_data.aci.cred_holder_info.id_cred.id_cred_sec,
+            &ars,
+            id_object
+                .get_common_pio_fields()
+                .choice_ar_parameters
+                .threshold,
             &context.global_context.on_chain_commitment_key,
         );
 
-    // filling ar data
+    // Create ar data map
     let ar_data = id_cred_data
         .iter()
         .map(|item| {
@@ -99,20 +89,11 @@ pub fn prove_identity_attributes<
         })
         .collect::<BTreeMap<_, _>>();
 
-    let ip_pub_key = &context.ip_info.ip_verify_key;
-
-    // retrieve the signature on the underlying idcredsec + prf_key + attribute_list
-    let retrieved_sig = ip_sig.retrieve(sig_retrieval_rand);
-
-    // and then we blind the signature to disassociate it from the message.
-    // only the second part is used (as per the protocol)
-    let (blinded_sig, blind_rand) = retrieved_sig.blind(&mut csprng);
-
     let mut id_cred_pub_share_numbers = Vec::with_capacity(id_cred_data.len());
     let mut id_cred_pub_provers = Vec::with_capacity(id_cred_data.len());
     let mut id_cred_pub_secrets = Vec::with_capacity(id_cred_data.len());
 
-    // create provers for knowledge of id_cred_sec.
+    // Create provers for correct encryption of IdCredSec
     for item in id_cred_data.iter() {
         let secret = com_enc_eq::ComEncEqSecret {
             value: item.share.clone(),
@@ -133,28 +114,24 @@ pub fn prove_identity_attributes<
         id_cred_pub_secrets.push(secret);
     }
 
-    let choice_ar_handles = ar_data.keys().copied().collect::<BTreeSet<_>>();
+    let cmm_id_cred_sec = *cmm_id_cred_sec_sharing_coeff
+        .get(0)
+        .context("id cred sharing commitment")?;
+    let cmm_rand_id_cred_sec = cmm_rand_id_cred_sec_sharing_coeff
+        .get(0)
+        .context("id cred sharing commitment randomness")?
+        .clone();
 
     // Proof of knowledge of the signature of the identity provider.
-    let (attributes, attributes_rand, prover_sig, secret_sig) = compute_pok_sig(
+    let (prover_sig, secret_sig, sig_pok_output) = compute_pok_sig(
         &mut csprng,
-        *cmm_id_cred_sec_sharing_coeff
-            .get(0)
-            .context("id cred sharing commitment")?,
-        cmm_coeff_randomness
-            .get(0)
-            .context("id cred sharing commitment randomness")?
-            .clone(),
         &context.global_context.on_chain_commitment_key,
+        &context.ip_info.ip_verify_key,
+        id_object,
+        id_object_use_data,
         attributes_handling,
-        id_cred_sec,
-        prf_key,
-        alist,
-        prio.choice_ar_parameters.threshold,
-        &choice_ar_handles,
-        ip_pub_key,
-        &blinded_sig,
-        blind_rand,
+        cmm_id_cred_sec,
+        cmm_rand_id_cred_sec,
     )?;
 
     let prover = AndAdapter {
@@ -175,14 +152,19 @@ pub fn prove_identity_attributes<
         cmm_id_cred_sec_sharing_coeff: cmm_id_cred_sec_sharing_coeff.to_owned(),
     };
 
-    let cmm_rand = IdentityAttributesCredentialsRandomness { attributes_rand };
+    let cmm_rand = IdentityAttributesCredentialsRandomness {
+        attributes_rand: sig_pok_output.attribute_cmm_rand,
+    };
 
     let id_attribute_values = IdentityAttributesCredentialsValues {
-        threshold: prio.choice_ar_parameters.threshold,
+        threshold: id_object
+            .get_common_pio_fields()
+            .choice_ar_parameters
+            .threshold,
         ar_data,
         ip_identity: context.ip_info.ip_identity,
         validity,
-        attributes,
+        attributes: sig_pok_output.attributes,
     };
 
     // The label "IdentityAttributesCredentials" is appended to the transcript followed all
@@ -194,13 +176,11 @@ pub fn prove_identity_attributes<
     transcript.append_message(b"identity_attribute_values", &id_attribute_values);
     transcript.append_message(b"global_context", &context.global_context);
 
-    let proof = match prove(transcript, &prover, secret, &mut csprng) {
-        Some(x) => x,
-        None => bail!("Cannot produce zero knowledge proof."),
-    };
+    let proof = prove(transcript, &prover, secret, &mut csprng)
+        .context("cannot produce zero knowledge proof")?;
 
     let id_proofs = IdentityAttributesCredentialsProofs {
-        sig: blinded_sig,
+        sig: sig_pok_output.blinded_sig,
         commitments,
         challenge: proof.challenge,
         proof_id_cred_pub: id_cred_pub_share_numbers
@@ -218,30 +198,34 @@ pub fn prove_identity_attributes<
     Ok((info, cmm_rand))
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Data we need output as side effect from the signature proof of knowledge
+struct SignaturePokOutput<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
+    attribute_cmm_rand: BTreeMap<AttributeTag, PedersenRandomness<C>>,
+    blinded_sig: ps_sig::BlindedSignature<P>,
+}
+
 fn compute_pok_sig<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 >(
     csprng: &mut impl Rng,
+    commitment_key: &PedersenKey<C>,
+    ip_pub_key: &ps_sig::PublicKey<P>,
+    id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
+    id_object_use_data: &IdObjectUseData<P, C>,
+    attributes_handling: &BTreeMap<AttributeTag, IdentityAttributeHandling>,
     cmm_id_cred_sec: Commitment<C>,
     cmm_rand_id_cred_sec: Randomness<C>,
-    commitment_key: &PedersenKey<C>,
-    attributes_handling: &BTreeMap<AttributeTag, IdentityAttributeHandling>,
-    id_cred_sec: &Value<C>,
-    prf_key: &prf::SecretKey<C>,
-    alist: &AttributeList<C::Scalar, AttributeType>,
-    threshold: Threshold,
-    ar_list: &BTreeSet<ArIdentity>,
-    ip_pub_key: &ps_sig::PublicKey<P>,
-    blinded_sig: &ps_sig::BlindedSignature<P>,
-    blind_rand: ps_sig::BlindingRandomness<P>,
 ) -> anyhow::Result<(
-    BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
-    BTreeMap<AttributeTag, PedersenRandomness<C>>,
     PsSigKnown<P, C>,
     PsSigSecret<P, C>,
+    SignaturePokOutput<P, C, AttributeType>,
 )> {
     // The identity provider signature is on a message of:
     // - idcredsec (signed blindly)
@@ -252,11 +236,15 @@ fn compute_pok_sig<
     // - max accounts
     // - attribute values
 
-    let ar_scalars = match utils::encode_ars(ar_list) {
-        Some(x) => x,
-        None => bail!("Cannot encode anonymity revokers."),
-    };
+    let ar_scalars = utils::encode_ars(
+        &id_object
+            .get_common_pio_fields()
+            .choice_ar_parameters
+            .ar_identities,
+    )
+    .context("cannot encode anonymity revokers")?;
 
+    let alist = id_object.get_attribute_list();
     let msg_count = alist.alist.len() + ar_scalars.len() + 5;
 
     let mut msgs = Vec::with_capacity(msg_count);
@@ -266,17 +254,30 @@ fn compute_pok_sig<
     // to the IdCredSec encryption parts proofs
     msgs.push(PsSigMsg::EqualToCommitment(cmm_id_cred_sec));
     secrets.push(PsSigSecretMsg::EqualToCommitment(
-        id_cred_sec.clone(),
+        id_object_use_data
+            .aci
+            .cred_holder_info
+            .id_cred
+            .id_cred_sec
+            .clone(),
         cmm_rand_id_cred_sec,
     ));
 
     // The PRF secret key we just prove knowledge of
     msgs.push(PsSigMsg::Known);
-    secrets.push(PsSigSecretMsg::Known(prf_key.to_value()));
+    secrets.push(PsSigSecretMsg::Known(
+        id_object_use_data.aci.prf_key.to_value(),
+    ));
 
     // Validity and threshold are "public" values
-    let public_vals =
-        utils::encode_public_credential_values(alist.created_at, alist.valid_to, threshold)?;
+    let public_vals = utils::encode_public_credential_values(
+        alist.created_at,
+        alist.valid_to,
+        id_object
+            .get_common_pio_fields()
+            .choice_ar_parameters
+            .threshold,
+    )?;
     msgs.push(PsSigMsg::Public(Value::new(public_vals)));
     secrets.push(PsSigSecretMsg::Public);
 
@@ -322,6 +323,15 @@ fn compute_pok_sig<
         }
     }
 
+    // Prepare a fresh blinded signature for the proof.
+    // retrieve the signature on the underlying idcredsec + prf_key + attribute_list
+    let retrieved_sig = id_object
+        .get_signature()
+        .retrieve(&id_object_use_data.randomness);
+    // and then we blind the signature to disassociate it from the message.
+    // only the second part is used (as per the protocol)
+    let (blinded_sig, blind_rand) = retrieved_sig.blind(csprng);
+
     let secret = PsSigSecret {
         r_prime: blind_rand.1,
         msgs: secrets,
@@ -332,7 +342,14 @@ fn compute_pok_sig<
         ps_pub_key: ip_pub_key.clone(),
         cmm_key: *commitment_key,
     };
-    Ok((attributes, attribute_rand, prover, secret))
+
+    let output = SignaturePokOutput {
+        attributes,
+        attribute_cmm_rand: attribute_rand,
+        blinded_sig,
+    };
+
+    Ok((prover, secret, output))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -810,7 +827,7 @@ mod test {
             &id_object_fixture.global_ctx,
             &id_object_fixture.ip_info,
             &id_object_fixture.ars_infos,
-             & id_attr_info,
+            &id_attr_info,
             &mut transcript,
         );
 
