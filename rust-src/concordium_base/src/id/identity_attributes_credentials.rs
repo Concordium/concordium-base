@@ -685,6 +685,8 @@ mod test {
 
     // todo ar tests
 
+    // todo ar test specify handling of attributes not in credentials
+
     /// Test that the verifier accepts a valid proof
     #[test]
     pub fn test_identity_attributes_completeness_commit() {
