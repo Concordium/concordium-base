@@ -24,7 +24,7 @@ use std::{collections::BTreeMap, convert::TryFrom};
 
 type ExampleAttribute = AttributeKind;
 
-type ExampleAttributeList = AttributeList<BaseField, ExampleAttribute>;
+pub type ExampleAttributeList = AttributeList<BaseField, ExampleAttribute>;
 
 pub const EXPIRY: TransactionTime = TransactionTime {
     seconds: 111111111111111111,
