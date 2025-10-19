@@ -16,42 +16,122 @@
 //! After adding data, call [`crate::random_oracle::RandomOracle::get_challenge`] to consume/hash the bytes
 //! and produce a random challenge.
 //!
-//! # Caution: Variable-length types
-//! Special care is required when handling variable-length types such as
-//! `String`, `Vec`, `HashSet`, `HashMap`, or other collections.
-//! Naively appending the bytes can produce collisions. For example:
+//! # Caution: Type/Field ambiguity without domain separation
+//! Special care is required when adding bytes to domain separate them with labels.
+//! Naively appending just bytes (without separation) can produce collisions of different types.
+//! For example:
 //!
-//! ```rust
-//! struct TypeWithVariableLengths {
-//!     given: String,
-//!     received: String,
+//! ```
+//! struct Type1 {
+//!     field_1: u8,
+//!     field_2: u8,
 //! }
 //!
-//! let example1 = TypeWithVariableLengths {
-//!     given: "received".to_string(),
-//!     received: "".to_string(),
+//! struct Type2 {
+//!     field_1: u8,
+//!     field_2: u8,
+//! }
+//!
+//! let example1 = Type1 {
+//!     field_1: 1u8,
+//!     field_2: 2u8,
 //! };
 //!
-//! let example2 = TypeWithVariableLengths {
-//!     given: "".to_string(),
-//!     received: "received".to_string(),
+//! let example2 = Type2 {
+//!     field_1: 1u8,
+//!     field_2: 2u8,
+//! };
+//! ```
+//!
+//! Appending the [`RandomOracle`] with either of above types by just adding each type's field values naively
+//! (meaning `hash([1u8, 2u8]`) would produce the same hashing result for both examples. To avoid this, the
+//! recommendation is to add the type name and its field names as labels for domain separation.
+//!
+//! # Example: Adding struct data
+//!
+//! If you add a struct to the transcript use its type name as separator and use `append_message`
+//! with a **label** for each field as domain separation.
+//!
+//! ```
+//! # use concordium_base::random_oracle::RandomOracle;
+//! struct Type {
+//!     field_1: u8,
+//!     field_2: u8,
+//! }
+//!
+//! let example = Type {
+//!     field_1: 1u8,
+//!     field_2: 2u8,
+//! };
+//!
+//! let mut transcript = RandomOracle::empty();
+//! transcript.add_bytes(b"Type");
+//! transcript.append_message(b"field_1", &example.field_1);
+//! transcript.append_message(b"field_2", &example.field_2);
+//!```
+//!
+//! # Caution: Ambigious variable-length data
+//! Special care is required when handling variable-length types such as
+//! `String`, `Vec`, `BTreeSet`, `BTreeMap`, or other collections.
+//! Naively appending the bytes (without including the length of the collection) can produce collisions.
+//! For example:
+//!
+//! ```
+//! struct Type {
+//!     field_1: String,
+//!     field_2: String,
+//! }
+//!
+//! let example1 = Type {
+//!     field_1: "field_2".to_string(),
+//!     field_2: "".to_string(),
+//! };
+//!
+//! let example2 = Type {
+//!     field_1: "".to_string(),
+//!     field_2: "field_2".to_string(),
 //! };
 //! ```
 //!
 //! Appending the [`RandomOracle`] with each field label and value naively
-//! (meaning `hash("given" + "received" + "received")`) would produce
-//! the same hashing result for both examples. To avoid this:
+//! (meaning `hash("field_1" + "field_2" + "field_2")`) would produce
+//! the same hashing result for both examples. To avoid this,
+//! prepend the length of the variable-length data.
 //!
-//! - Serialize variable-length types with their length prepended.
+//! Note: The serialization implementation of a variable-length type already
+//! prepends the length of the data which is why it is used to add data to the transcript.
 //!
-//! References for serialization:
-//! - [concordium_base_derive](https://github.com/Concordium/concordium-base/blob/main/rust-src/concordium_base_derive/src/lib.rs)
+//! References for serialization implementations:
+//! - [`concordium_base_derive::Serial`]
 //! - [serialize.rs](https://github.com/Concordium/concordium-base/blob/main/rust-src/concordium_base/src/common/serialize.rs)
 //!
-//! If you iterate through any collection, add the length of the collection to the transcript.
-//! ```rust
-//! use concordium_base::random_oracle::RandomOracle;
+//! # Example: Adding struct data with variable-length data
 //!
+//! ```
+//! # use concordium_base::random_oracle::RandomOracle;
+//! struct Type {
+//!     field_1: String,
+//!     field_2: String,
+//! }
+//!
+//! let example = Type {
+//!     field_1: "abc".to_string(),
+//!     field_2: "def".to_string(),
+//! };
+//!
+//! let mut transcript = RandomOracle::empty();
+//! transcript.add_bytes(b"Type");
+//! // The serialization implementation of the `String` type prepends the lenght of the field values.
+//! transcript.append_message(b"field_1", &example.field_1);
+//! transcript.append_message(b"field_2", &example.field_2);
+//! ```
+//!
+//! # Example: Adding data in loops
+//!
+//! If you manually iterate through any collection, add the length of the collection to the transcript.
+//!
+//! ```
+//! # use concordium_base::random_oracle::RandomOracle;
 //! let mut transcript = RandomOracle::empty();
 //! let collection = vec![2,3,4];
 //! transcript.add(&(collection.len() as u64));
@@ -60,38 +140,28 @@
 //! }
 //! ```
 //!
-//! If you add a struct to the transcript use its type name as `separator` and use `append_message`
-//! with a **label** for each field as domain separation.
-//! ```rust
-//! use concordium_base::random_oracle::RandomOracle;
+//! # Example: Adding data with different variants
 //!
-//! struct TypeWithVariableLengths {
-//!     given: String,
-//!     received: String,
+//! If you add an enum manually to the transcript add the tag/version
+//! to the transcript.
+//!
+//! ```
+//! # use concordium_base::random_oracle::RandomOracle;
+//! enum Enum {
+//!     Variant_0
 //! }
 //!
-//! let example = TypeWithVariableLengths {
-//!     given: "received".to_string(),
-//!     received: "".to_string(),
-//! };
-//!
 //! let mut transcript = RandomOracle::empty();
-//! transcript.add_bytes(b"TypeWithVariableLengths");
-//! transcript.append_message(b"given", &example.given);
-//! transcript.append_message(b"received", &example.received);
-//! ```
 //!
-//! If you add an enum to the transcript add the `tag/version`
-//! to the transcript.
-//! ```rust
-//! use concordium_base::random_oracle::RandomOracle;
+//! // --- Option 1: Numeric tag ---
+//! transcript.add_bytes(b"Enum");
+//! transcript.add_bytes(&[0u8]); // Variant0
 //!
-//! let mut transcript = RandomOracle::empty();
-//! // Add tag/version `V1` of the enum variant to the transcript.
-//! transcript.add_bytes(b"V1");
-//! // Add the enum variant type to the transcript.
+//! // --- Option 2: String tag / version ---
+//! transcript.add_bytes(b"Enum");
+//! transcript.add_bytes(b"V0"); // Variant0
 //! ```
-use crate::{common::*, curve_arithmetic::Curve, web3id};
+use crate::{common::*, curve_arithmetic::Curve};
 use sha3::{Digest, Sha3_256};
 use std::io::Write;
 
@@ -210,40 +280,6 @@ impl RandomOracle {
     /// mod field order.
     pub fn result_to_scalar<C: Curve>(self) -> C::Scalar {
         C::scalar_from_bytes(self.result())
-    }
-
-    /// Append a `web3id::Challenge` to the state of the random oracle.
-    /// Newly added challenge variants should use a tag/version, as well as labels for each struct field
-    /// to ensure every part of the challenge is accounted for.
-    /// Each challenge variant should contribute uniquely to the random oracle.
-    pub fn append_challenge(&mut self, challenge: &web3id::Challenge) {
-        match challenge {
-            web3id::Challenge::Sha256(hash_bytes) => {
-                // No tag/version `V0` is added to be backward compatible with old proofs and requests.
-                self.add_bytes(hash_bytes);
-            }
-            web3id::Challenge::V1(context) => {
-                // An empty sha256 hash is prepended to ensure this output
-                // is different to any `Sha256` challenge.
-                let separator = [0u8; 32];
-                self.add_bytes(separator);
-                // Add tag/version `V1` to the random oracle.
-                self.add_bytes(b"V1");
-                self.add_bytes(b"ContextChallenge");
-                self.add_bytes(b"given");
-                self.add(&(context.given.len() as u64));
-                for item in &context.given {
-                    self.append_message(b"label", &item.label);
-                    self.append_message(b"context", &item.context);
-                }
-                self.add_bytes(b"requested");
-                self.add(&(context.requested.len() as u64));
-                for item in &context.requested {
-                    self.append_message(b"label", &item.label);
-                    self.append_message(b"context", &item.context);
-                }
-            }
-        }
     }
 
     /// Get a challenge from the current state, consuming the state.

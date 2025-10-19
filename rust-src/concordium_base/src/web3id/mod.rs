@@ -916,6 +916,40 @@ pub enum PresentationVerificationError {
     InvalidCredential,
 }
 
+/// Append a `web3id::Challenge` to the state of the random oracle.
+/// Newly added challenge variants should use a tag/version, as well as labels for each struct field
+/// to ensure every part of the challenge is accounted for.
+/// Each challenge variant should contribute uniquely to the random oracle.
+pub fn append_challenge(transcript: &mut RandomOracle, challenge: &Challenge) {
+    match challenge {
+        Challenge::Sha256(hash_bytes) => {
+            // No tag/version `V0` is added to be backward compatible with old proofs and requests.
+            transcript.add_bytes(hash_bytes);
+        }
+        Challenge::V1(context) => {
+            // An empty sha256 hash is prepended to ensure this output
+            // is different to any `Sha256` challenge.
+            let separator = [0u8; 32];
+            transcript.add_bytes(separator);
+            // Add tag/version `V1` to the random oracle.
+            transcript.add_bytes(b"V1");
+            transcript.add_bytes(b"ContextChallenge");
+            transcript.add_bytes(b"given");
+            transcript.add(&(context.given.len() as u64));
+            for item in &context.given {
+                transcript.append_message(b"label", &item.label);
+                transcript.append_message(b"context", &item.context);
+            }
+            transcript.add_bytes(b"requested");
+            transcript.add(&(context.requested.len() as u64));
+            for item in &context.requested {
+                transcript.append_message(b"label", &item.label);
+                transcript.append_message(b"context", &item.context);
+            }
+        }
+    }
+}
+
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeType> {
     /// Get an iterator over the metadata for each of the verifiable credentials
     /// in the order they appear in the presentation.
@@ -938,7 +972,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
         public: impl ExactSizeIterator<Item = &'a CredentialsInputs<C>>,
     ) -> Result<Request<C, AttributeType>, PresentationVerificationError> {
         let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
-        transcript.append_challenge(&self.presentation_context);
+        append_challenge(&mut transcript, &self.presentation_context);
         transcript.append_message(b"ctx", &params);
 
         let mut request = Request {
@@ -1703,7 +1737,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
     {
         let mut proofs = Vec::with_capacity(attrs.len());
         let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
-        transcript.append_challenge(&self.challenge);
+        append_challenge(&mut transcript, &self.challenge);
         transcript.append_message(b"ctx", &params);
         let mut csprng = rand::thread_rng();
         if self.credential_statements.len() != attrs.len() {
