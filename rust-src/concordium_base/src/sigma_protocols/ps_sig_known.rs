@@ -434,11 +434,13 @@ mod tests {
     use ark_bls12_381::G1Projective;
     use assert_matches::assert_matches;
     use itertools::Itertools;
+    use rand::SeedableRng;
     use std::iter;
 
     type G1 = ArkGroup<G1Projective>;
     type Bls12 = ark_ec::models::bls12::Bls12<ark_bls12_381::Config>;
     use crate::ps_sig::{SigRetrievalRandomness, UnknownMessage};
+    use crate::sigma_protocols::common::SigmaProof;
 
     #[derive(Debug, Clone, Copy)]
     pub enum InstanceSpecMsg {
@@ -807,10 +809,66 @@ mod tests {
         ));
     }
 
+    /// Test that we can verify proofs created by previous versions of the protocol.
+    /// This test protects from changes that introduces braking changes.
+    ///
+    /// The test uses a serialization of a previously created proof.
+    #[test]
+    pub fn test_ps_sig_stable() {
+        fn seed0() -> impl Rng {
+            rand::rngs::StdRng::seed_from_u64(0)
+        }
+
+        let ps_sk: ps_sig::SecretKey<Bls12> = ps_sig::SecretKey::generate(10, &mut seed0());
+        let ps_pk: ps_sig::PublicKey<Bls12> = ps_sig::PublicKey::from(&ps_sk);
+        let cmm_key: CommitmentKey<G1> = CommitmentKey::generate(&mut seed0());
+
+        let signature_mask = SigRetrievalRandomness::generate_non_zero(&mut seed0());
+        let mut comm_to_signer: G1 = ps_pk.g.mul_by_scalar(&signature_mask);
+
+        let mut msgs = Vec::new();
+
+        let m_0: Value<G1> = Value::new(G1::scalar_from_u64(42));
+        comm_to_signer = comm_to_signer.plus_point(&ps_pk.ys[0].mul_by_scalar(&m_0));
+        let r_0 = Randomness::new(G1::scalar_from_u64(10));
+        let c_0 = cmm_key.hide(&m_0, &r_0);
+        msgs.push(PsSigMsg::EqualToCommitment(c_0));
+
+        let m_1: Value<G1> = Value::new(G1::scalar_from_u64(42));
+        comm_to_signer = comm_to_signer.plus_point(&ps_pk.ys[1].mul_by_scalar(&m_1));
+        msgs.push(PsSigMsg::Public(m_1));
+
+        let m_2: Value<G1> = Value::new(G1::scalar_from_u64(42));
+        comm_to_signer = comm_to_signer.plus_point(&ps_pk.ys[2].mul_by_scalar(&m_2));
+        msgs.push(PsSigMsg::Known);
+
+        let unknown_message = UnknownMessage(comm_to_signer);
+        let signature = ps_sk
+            .sign_unknown_message(&unknown_message, &mut seed0())
+            .retrieve(&signature_mask);
+        let (blinded_sig, blind_rand) = signature.blind(&mut seed0());
+
+        let ps_sig = PsSigKnown {
+            msgs,
+            ps_pub_key: ps_pk,
+            cmm_key,
+            blinded_sig,
+        };
+
+        let proof_bytes_hex = "6aea07afb4049c5ca500157fba4df9444f7605eb041913a0e625f5f96c4e92584aadeb7c2a4d151f903e8c4bf91da6e3dc73464fe0e096a09f8576d14e6d07020000000300183be4c51cbba430dc02aaaf1a011e7bf397e854119571ba096be52e56abfd411943057b83218dbb3364bb3e28235259ec7337bf08ab9ca0869bc23de8ece97e0102560705f85e1741e403007fcb7987e0aca7255255c8fe2f2b8ec80a494fde8815";
+        let mut proof_bytes = hex::decode(&proof_bytes_hex).unwrap();
+        let proof: SigmaProof<Response<Bls12, G1>> =
+            common::from_bytes(&mut proof_bytes.as_slice()).expect("deserialize");
+        assert_eq!(proof.response.resp_msgs.len(), 3);
+
+        let mut ro = RandomOracle::empty();
+        assert!(sigma_protocols::common::verify(&mut ro, &ps_sig, &proof));
+    }
+
     /// The type `ResponseMsg` is part of the proof, and hence must be able to the serialized
     /// and deserialized.
     #[test]
-    pub fn test_response_msg() {
+    pub fn test_serialize_response_msg() {
         let mut csprng = rand::thread_rng();
 
         let orig_msg = ResponseMsg::<G1>::EqualToCommitment(
@@ -832,7 +890,7 @@ mod tests {
     /// Test case where we have more message parts than the PS key length.
     /// Assert that we fail gracefully and don't panic
     #[test]
-    pub fn test_prove_more_message_parts_than_key_length() {
+    pub fn test_more_message_parts_than_key_length_prover() {
         let mut csprng = rand::thread_rng();
 
         let (mut ps_sig, mut secret) =
@@ -852,7 +910,7 @@ mod tests {
     /// Test case where we have more message parts than the PS key length.
     /// Assert that we fail gracefully and don't panic
     #[test]
-    pub fn test_verify_more_message_parts_than_key_length() {
+    pub fn test_more_message_parts_than_key_length_verifier() {
         let mut csprng = rand::thread_rng();
 
         let (mut ps_sig, secret) =
