@@ -825,7 +825,7 @@ mod test {
     /// Test `<Cursor<&mut Vec<u8>> as CursorExt>::advance` for empty `Vec`
     #[test]
     fn test_vec_cursor_advance_empty() {
-        /// Test empty vec
+        // Test empty vec
         let mut vec = Vec::new();
         let mut cursor = Cursor::new(&mut vec);
 
@@ -855,7 +855,7 @@ mod test {
     /// existing content
     #[test]
     fn test_vec_cursor_advance_non_empty() {
-        /// Test empty vec
+        // Test empty vec
         let mut vec = vec![11, 12, 13];
         let mut cursor = Cursor::new(&mut vec);
 

@@ -954,6 +954,7 @@ pub fn create_unsigned_credential<
     Ok((info, commitment_rands))
 }
 
+/// Compute proof of knowledge signature
 #[allow(clippy::too_many_arguments)]
 fn compute_pok_sig<
     P: Pairing,
