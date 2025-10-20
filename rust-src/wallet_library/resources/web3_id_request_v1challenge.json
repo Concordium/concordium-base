@@ -4,35 +4,25 @@
             "given": [
                 {
                     "label": "nonce",
-                    "context": {
-                        "sha256": "6879bdc6b5798f7bbeb0f47b6abd9a5c5b84bf594b63e64af5a5df0f239299e9"
-                    }
+                    "context": "6879bdc6b5798f7bbeb0f47b6abd9a5c5b84bf594b63e64af5a5df0f239299e9"
                 },
                 {
                     "label": "contextString",
-                    "context": {
-                        "string": "My great ZK application."
-                    }
+                    "context": "My great ZK application."
                 },
                 {
                     "label": "connectionId",
-                    "context": {
-                        "string": "43eee2b1e5128c9a26c871b7aff2cfe448aee66c5a927d47116e8f0c30f452e1"
-                    }
+                    "context": "43eee2b1e5128c9a26c871b7aff2cfe448aee66c5a927d47116e8f0c30f452e1"
                 }
             ],
             "requested": [
                 {
                     "label": "blockHash",
-                    "context": {
-                        "blockHash": "6879bdc6b5798f7bbeb0f47b6abd9a5c5b84bf594b63e64af5a5df0f239299e9"
-                    }
+                    "context": "6879bdc6b5798f7bbeb0f47b6abd9a5c5b84bf594b63e64af5a5df0f239299e9"
                 },
                 {
                     "label": "resourceId",
-                    "context": {
-                        "string": "https://my-great-website.com"
-                    }
+                    "context": "https://my-great-website.com"
                 }
             ]
         },

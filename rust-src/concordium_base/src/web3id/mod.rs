@@ -11,7 +11,6 @@ mod test;
 
 // TODO:
 // - Documentation.
-use crate::hashes::BlockHash;
 use crate::{
     base::CredentialRegistrationID,
     cis4_types::IssuerKey,
@@ -630,6 +629,7 @@ pub type Sha256Challenge = HashBytes<Web3IdChallengeMarker>;
     serde::Deserialize,
     serde::Serialize,
     crate::common::Serial,
+    crate::common::Deserial,
     Debug,
 )]
 pub struct ContextChallenge {
@@ -648,41 +648,12 @@ pub struct ContextChallenge {
     serde::Deserialize,
     serde::Serialize,
     crate::common::Serial,
+    crate::common::Deserial,
     Debug,
 )]
 pub struct GivenContext {
     pub label: String,
-    pub context: ContextValue,
-}
-
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, serde::Deserialize, serde::Serialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub enum ContextValue {
-    Sha256(Sha256Challenge),
-    BlockHash(BlockHash),
-    String(String),
-}
-
-impl crate::common::Serial for ContextValue {
-    fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
-        match self {
-            ContextValue::Sha256(sha256) => {
-                // Serialize the tag first.
-                0u8.serial(out);
-                sha256.serial(out)
-            }
-            ContextValue::BlockHash(block_hash) => {
-                // Serialize the tag first.
-                1u8.serial(out);
-                block_hash.serial(out)
-            }
-            ContextValue::String(string) => {
-                // Serialize the tag first.
-                2u8.serial(out);
-                string.serial(out)
-            }
-        }
-    }
+    pub context: String,
 }
 
 /// A challenge that can be added to the proof transcript.
@@ -695,17 +666,36 @@ pub enum Challenge {
     V1(ContextChallenge),
 }
 
-impl crate::common::Serial for Challenge {
-    fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
-        match self {
-            Challenge::Sha256(hash_bytes) => {
-                // No tag is added to be backward compatible with old proofs and requests.
-                hash_bytes.serial(out)
+/// Append a `web3id::Challenge` to the state of the random oracle.
+/// Newly added challenge variants should use a tag/version, as well as labels for each struct field
+/// to ensure every part of the challenge is accounted for.
+/// Each challenge variant should contribute uniquely to the random oracle.
+fn append_challenge(transcript: &mut RandomOracle, challenge: &Challenge) {
+    transcript.add_bytes(b"Challenge");
+    match challenge {
+        Challenge::Sha256(hash_bytes) => {
+            // No tag/version `V0` is added to be backward compatible with old proofs and requests.
+            transcript.add_bytes(hash_bytes);
+        }
+        Challenge::V1(context) => {
+            // An empty sha256 hash is prepended to ensure this output
+            // is different to any `Sha256` challenge.
+            let separator = [0u8; 32];
+            transcript.add_bytes(separator);
+            // Add tag/version `V1` to the random oracle.
+            transcript.add_bytes(b"V1");
+            transcript.add_bytes(b"ContextChallenge");
+            transcript.add_bytes(b"given");
+            transcript.add(&(context.given.len() as u64));
+            for item in &context.given {
+                transcript.append_message(b"label", &item.label);
+                transcript.append_message(b"context", &item.context);
             }
-            Challenge::V1(context_info) => {
-                // Serialize the version/tag first.
-                1u8.serial(out);
-                context_info.serial(out)
+            transcript.add_bytes(b"requested");
+            transcript.add(&(context.requested.len() as u64));
+            for item in &context.requested {
+                transcript.append_message(b"label", &item.label);
+                transcript.append_message(b"context", &item.context);
             }
         }
     }
@@ -916,40 +906,6 @@ pub enum PresentationVerificationError {
     InvalidCredential,
 }
 
-/// Append a `web3id::Challenge` to the state of the random oracle.
-/// Newly added challenge variants should use a tag/version, as well as labels for each struct field
-/// to ensure every part of the challenge is accounted for.
-/// Each challenge variant should contribute uniquely to the random oracle.
-pub fn append_challenge(transcript: &mut RandomOracle, challenge: &Challenge) {
-    match challenge {
-        Challenge::Sha256(hash_bytes) => {
-            // No tag/version `V0` is added to be backward compatible with old proofs and requests.
-            transcript.add_bytes(hash_bytes);
-        }
-        Challenge::V1(context) => {
-            // An empty sha256 hash is prepended to ensure this output
-            // is different to any `Sha256` challenge.
-            let separator = [0u8; 32];
-            transcript.add_bytes(separator);
-            // Add tag/version `V1` to the random oracle.
-            transcript.add_bytes(b"V1");
-            transcript.add_bytes(b"ContextChallenge");
-            transcript.add_bytes(b"given");
-            transcript.add(&(context.given.len() as u64));
-            for item in &context.given {
-                transcript.append_message(b"label", &item.label);
-                transcript.append_message(b"context", &item.context);
-            }
-            transcript.add_bytes(b"requested");
-            transcript.add(&(context.requested.len() as u64));
-            for item in &context.requested {
-                transcript.append_message(b"label", &item.label);
-                transcript.append_message(b"context", &item.context);
-            }
-        }
-    }
-}
-
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeType> {
     /// Get an iterator over the metadata for each of the verifiable credentials
     /// in the order they appear in the presentation.
@@ -1018,7 +974,18 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
     for Presentation<C, AttributeType>
 {
     fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
-        self.presentation_context.serial(out);
+        match &self.presentation_context {
+            Challenge::Sha256(hash_bytes) => {
+                // To stay backward compatible with older Sha256 challenges (proofs generated by older wallets),
+                // don't add the version/tag of the `Challenge` enum.
+                hash_bytes.serial(out)
+            }
+            Challenge::V1(context_info) => {
+                // Serialize the version/tag first.
+                1u8.serial(out);
+                context_info.serial(out)
+            }
+        }
         self.verifiable_credential.serial(out);
         self.linking_proof.serial(out);
     }
@@ -1717,7 +1684,18 @@ fn linking_proof_message_to_sign<C: Curve, AttributeType: Attribute<C::Scalar>>(
     use sha2::Digest;
     // hash the context and proof.
     let mut out = sha2::Sha512::new();
-    challenge.serial(&mut out);
+    match &challenge {
+        Challenge::Sha256(hash_bytes) => {
+            // To stay backward compatible with older Sha256 challenges (proofs generated by older wallets),
+            // don't add the version/tag of the `Challenge` enum.
+            hash_bytes.serial(&mut out)
+        }
+        Challenge::V1(context_info) => {
+            // Serialize the version/tag first.
+            1u8.serial(&mut out);
+            context_info.serial(&mut out)
+        }
+    }
     proofs.serial(&mut out);
     let mut msg = LINKING_DOMAIN_STRING.to_vec();
     msg.extend_from_slice(&out.finalize());
@@ -1985,6 +1963,7 @@ impl Attribute<<ArCurve as Curve>::Scalar> for Web3IdAttribute {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hashes::BlockHash;
     use crate::id::id_proof_types::{
         AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
     };
@@ -2406,30 +2385,28 @@ mod tests {
         // for each request so that the presentation request anchor on-chain truely looks random.
         let nonce_context = GivenContext {
             label: "nonce".into(),
-            context: ContextValue::Sha256(Sha256Challenge::new(rng.gen())),
+            context: Sha256Challenge::new(rng.gen()).into(),
         };
         // Human readable string giving more context to the request.
         let context_string_context = GivenContext {
             label: "context_string".into(),
-            context: ContextValue::String("My great ZK application.".into()),
+            context: "My great ZK application.".into(),
         };
         // The topic of the wallet connection as defined by `walletConnect`.
         // The wallet or ID app use this value to check that the topic matches the current active connection.
         let connection_id_context = GivenContext {
             label: "connection_id".into(),
-            context: ContextValue::String(
-                "43eee2b1e5128c9a26c871b7aff2cfe448aee66c5a927d47116e8f0c30f452e1".into(),
-            ),
+            context: "43eee2b1e5128c9a26c871b7aff2cfe448aee66c5a927d47116e8f0c30f452e1".into(),
         };
         // Human readable string giving more context to the request.
         let block_hash_context = GivenContext {
             label: "block_hash".into(),
-            context: ContextValue::BlockHash(BlockHash::new(rng.gen())),
+            context: BlockHash::new(rng.gen()).into(),
         };
         // The website URL that the wallet is connected to or a TLS certificate/fingerprint of the connected website.
         let resource_id_context = GivenContext {
             label: "resource_id".into(),
-            context: ContextValue::String("https://my-great-website.com".into()),
+            context: "https://my-great-website.com".into(),
         };
         let challenge = Challenge::V1(ContextChallenge {
             given: vec![nonce_context, context_string_context, connection_id_context],
