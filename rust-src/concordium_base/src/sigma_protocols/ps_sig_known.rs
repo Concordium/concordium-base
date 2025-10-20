@@ -259,7 +259,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
     ) -> Option<Self::Response> {
-        // If challange = 0 the proof is not going to be valid.
+        // If challenge = 0 the proof is not going to be valid.
         // However this is an exceedingly unlikely case
         let mut resp_r_prime = *challenge;
         resp_r_prime.mul_assign(&secret.r_prime);
