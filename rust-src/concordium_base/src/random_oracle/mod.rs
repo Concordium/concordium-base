@@ -231,30 +231,48 @@ impl PartialEq for RandomOracle {
 /// does not label types or fields in the nested data.
 pub trait StructuredDigest: Buffer {
     /// Add raw message bytes to the state of the oracle.
-    fn add_bytes<B: AsRef<[u8]>>(&mut self, data: B);
+    fn add_bytes(&mut self, data: impl AsRef<[u8]>);
 
     /// Append the given data as the message bytes produced by its [`Serial`] implementation to the state of the oracle.
     /// The given label as appended first as domain separation.
-    fn append_message<S: Serial, B: AsRef<[u8]>>(&mut self, label: B, data: &S) {
+    fn append_message(&mut self, label: impl AsRef<[u8]>, data: &impl Serial) {
         self.add_bytes(label);
         self.put(data)
+    }
+
+    /// Append the items in the given iterator using the `append_item` closure to the state of the oracle.
+    /// The given label as appended first as domain separation followed by the number of items.
+    fn append_each<T, B: IntoIterator<Item = T>>(
+        &mut self,
+        label: impl AsRef<[u8]>,
+        items: B,
+        mut append_item: impl FnMut(&mut Self, T),
+    ) where
+        B::IntoIter: ExactSizeIterator,
+    {
+        let items = items.into_iter();
+        self.add_bytes(label);
+        self.put(&(items.len() as u64));
+        for item in items {
+            append_item(self, item);
+        }
     }
 }
 
 impl StructuredDigest for RandomOracle {
-    fn add_bytes<B: AsRef<[u8]>>(&mut self, data: B) {
+    fn add_bytes(&mut self, data: impl AsRef<[u8]>) {
         self.0.update(data)
     }
 }
 
 impl StructuredDigest for sha2::Sha256 {
-    fn add_bytes<B: AsRef<[u8]>>(&mut self, data: B) {
+    fn add_bytes(&mut self, data: impl AsRef<[u8]>) {
         self.update(data)
     }
 }
 
 impl StructuredDigest for sha2::Sha512 {
-    fn add_bytes<B: AsRef<[u8]>>(&mut self, data: B) {
+    fn add_bytes(&mut self, data: impl AsRef<[u8]>) {
         self.update(data)
     }
 }
@@ -280,7 +298,7 @@ impl RandomOracle {
     /// repeatedly calling append in sequence.
     /// Returns the new state of the random oracle, consuming the initial state.
     #[deprecated(
-        note = "Use the labelled version RandomOracle::append_messages instead. Do not change existing provers/verifiers since it will break compatability with existing proofs."
+        note = "Use the labelled version RandomOracle::append_message instead. Do not change existing provers/verifiers since it will break compatability with existing proofs."
     )]
     pub fn extend_from<'a, I, S, B: AsRef<[u8]>>(&mut self, label: B, iter: I)
     where
@@ -382,7 +400,7 @@ mod tests {
     #[test]
     pub fn test_add_bytes_stable() {
         let mut ro = RandomOracle::empty();
-        ro.add_bytes([0x1, 0x2, 0x3]);
+        ro.add_bytes([1u8, 2, 3]);
 
         let challenge_hex = hex::encode(ro.get_challenge());
         assert_eq!(
@@ -396,7 +414,23 @@ mod tests {
     #[test]
     pub fn test_append_message_stable() {
         let mut ro = RandomOracle::empty();
-        ro.append_message(b"Label1", &vec![1, 2, 3]);
+        ro.append_message(b"Label1", &vec![1u8, 2, 3]);
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "891fd1754242e364a9eca7a15133403f3293ad330ce295cca0dd8347b94df7a8"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`StructuredDigest::append_message`]
+    #[test]
+    pub fn test_append_each_stable() {
+        let mut ro = RandomOracle::empty();
+        ro.append_each(b"Label1", &vec![1u8, 2, 3], |ro, item| {
+            ro.append_message("Item", item)
+        });
 
         let challenge_hex = hex::encode(ro.get_challenge());
         assert_eq!(

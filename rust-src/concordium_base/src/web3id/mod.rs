@@ -674,7 +674,10 @@ fn append_challenge(digest: &mut impl StructuredDigest, challenge: &Challenge) {
             digest.add_bytes(b"V1");
             digest.add_bytes(b"Context");
             digest.append_message(b"given", &context.given);
-            digest.append_message(b"requested", &context.requested);
+            digest.append_each(b"requested", &context.requested, |digest, item| {
+                digest.append_message(b"label", &item.label);
+                digest.append_message(b"context", &item.context);
+            });
         }
     }
 }
