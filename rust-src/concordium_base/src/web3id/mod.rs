@@ -1641,7 +1641,7 @@ fn linking_proof_message_to_sign<C: Curve, AttributeType: Attribute<C::Scalar>>(
     use sha2::Digest;
     // hash the context and proof.
     let mut out = sha2::Sha512::new();
-    append_challenge(&mut out, &challenge);
+    append_challenge(&mut out, challenge);
     proofs.serial(&mut out);
     let mut msg = LINKING_DOMAIN_STRING.to_vec();
     msg.extend_from_slice(&out.finalize());

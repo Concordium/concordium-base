@@ -206,7 +206,6 @@ impl Write for RandomOracle {
 /// This implementation allows the use of a random oracle without intermediate
 /// allocations of byte buffers.
 impl Buffer for RandomOracle {
-    // todo ar remove?
     type Result = sha3::digest::Output<Sha3_256>;
 
     #[inline(always)]
@@ -298,7 +297,9 @@ impl RandomOracle {
     /// Append all items from an iterator to the random oracle. Equivalent to
     /// repeatedly calling append in sequence.
     /// Returns the new state of the random oracle, consuming the initial state.
-    #[deprecated(note = "Use the labelled version RandomOracle::append_messages instead")]
+    #[deprecated(
+        note = "Use the labelled version RandomOracle::append_messages instead. Do not change existing provers/verifiers since it will break compatability with existing proofs."
+    )]
     pub fn extend_from<'a, I, S, B: AsRef<[u8]>>(&mut self, label: B, iter: I)
     where
         S: Serial + 'a,
