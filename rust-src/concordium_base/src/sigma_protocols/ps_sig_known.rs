@@ -22,6 +22,7 @@
 
 use crate::common::{Buffer, Deserial, Get, ParseResult, Put, Serial};
 use crate::curve_arithmetic::{Curve, Field, Pairing, Secret};
+use crate::random_oracle::StructuredDigest;
 use crate::sigma_protocols::common::SigmaProtocol;
 use crate::{
     curve_arithmetic,
@@ -172,7 +173,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
         ro.add_bytes(b"PsSigKnown");
         // public input to statement:
         ro.append_message(b"blinded_sig", &self.blinded_sig);
-        ro.extend_from(b"messages", self.msgs.iter());
+        ro.append_messages(b"messages", &self.msgs);
         // implicit public values
         ro.append_message(b"ps_pub_key", &self.ps_pub_key);
         ro.append_message(b"comm_key", &self.cmm_key)

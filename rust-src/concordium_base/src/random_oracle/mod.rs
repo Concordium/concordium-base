@@ -1,6 +1,8 @@
 //! This module provides the random oracle replacement function needed in the
 //! sigma protocols, bulletproofs, and any other constructions. It is based on
-//! SHA3.
+//! SHA3. It is used in non-interactive proofs and plays the same role as a random
+//! oracle would play in the corresponding interactive protocol (via
+//! Fiat–Shamir transformation).
 //!
 //! # Using the random oracle replacement
 //! [`RandomOracle`] instances should be initialized with at domain-separation
@@ -13,7 +15,7 @@
 //! needs to be performed in the same order as when producing the proof.
 //!
 //! The [`RandomOracle`] instance should be used to append bytes to its internal state.
-//! After adding data, call [`crate::random_oracle::RandomOracle::get_challenge`] to consume/hash the bytes
+//! After adding data, call [`RandomOracle::get_challenge`] to consume/hash the bytes
 //! and produce a random challenge.
 //!
 //! # Caution: Type/Field ambiguity without domain separation
@@ -103,7 +105,7 @@
 //!
 //! References for serialization implementations:
 //! - [`concordium_base_derive::Serial`]
-//! - [serialize.rs](https://github.com/Concordium/concordium-base/blob/main/rust-src/concordium_base/src/common/serialize.rs)
+//! - [`serialize`](crate::common::serialize)
 //!
 //! # Example: Adding struct data with variable-length data
 //!
@@ -207,6 +209,7 @@ impl Write for RandomOracle {
 /// This implementation allows the use of a random oracle without intermediate
 /// allocations of byte buffers.
 impl Buffer for RandomOracle {
+    // todo ar remove?
     type Result = sha3::digest::Output<Sha3_256>;
 
     #[inline(always)]
@@ -228,6 +231,55 @@ impl PartialEq for RandomOracle {
     }
 }
 
+/// Trait for digesting messages that encourages encoding the data structure into
+/// the message bytes. This is done e.g. by applying length prefixes for variable-length data.
+/// And by labelling types, variants and fields for domain separation. Both are done to prevent malleability
+/// in the proofs where the oracle is used.
+///
+/// Using [`Serial`] is one of the approaches to correctly produce the message
+/// bytes for variable-length types (including enums), since the corresponding [`Deserial`](crate::common::Deserial)
+/// implementation guarantees the message bytes are unique for the data. Notice that using [`Serial`]
+/// does not label types or fields in the nested data.
+pub trait StructuredDigest: Buffer {
+    /// Add raw message bytes to the state of the oracle.
+    fn add_bytes<B: AsRef<[u8]>>(&mut self, data: B);
+
+    /// Append the given data as the message bytes produced by its [`Serial`] implementation to the state of the oracle.
+    /// The given `label` as appended first as domain separation.
+    fn append_message<S: Serial, B: AsRef<[u8]>>(&mut self, label: B, data: &S) {
+        self.add_bytes(label);
+        self.put(data)
+    }
+
+    /// Append the given data items as the message bytes produced by their [`Serial`] implementation to the state of the oracle.
+    /// The given `label` as appended first as domain separation together with the number of items.
+    fn append_messages<S: Serial, B: AsRef<[u8]>>(&mut self, label: B, data: &[S]) {
+        self.add_bytes(label);
+        self.put(&(data.len() as u64)); // convert to u64 to ensure platform independence
+        for data in data {
+            self.put(data)
+        }
+    }
+}
+
+impl StructuredDigest for RandomOracle {
+    fn add_bytes<B: AsRef<[u8]>>(&mut self, data: B) {
+        self.0.update(data)
+    }
+}
+
+impl StructuredDigest for sha2::Sha256 {
+    fn add_bytes<B: AsRef<[u8]>>(&mut self, data: B) {
+        self.update(data)
+    }
+}
+
+impl StructuredDigest for sha2::Sha512 {
+    fn add_bytes<B: AsRef<[u8]>>(&mut self, data: B) {
+        self.update(data)
+    }
+}
+
 impl RandomOracle {
     /// Start with the initial empty state of the oracle.
     pub fn empty() -> Self {
@@ -245,25 +297,10 @@ impl RandomOracle {
         RandomOracle(self.0.clone())
     }
 
-    /// Append the input to the state of the oracle.
-    pub fn add<B: Serial>(&mut self, data: &B) {
-        self.put(data)
-    }
-
-    pub fn add_bytes<B: AsRef<[u8]>>(&mut self, data: B) {
-        self.0.update(data)
-    }
-
-    /// Append the input to the state of the oracle, using `label` as domain
-    /// separation.
-    pub fn append_message<S: Serial, B: AsRef<[u8]>>(&mut self, label: B, message: &S) {
-        self.add_bytes(label);
-        self.add(message)
-    }
-
     /// Append all items from an iterator to the random oracle. Equivalent to
     /// repeatedly calling append in sequence.
     /// Returns the new state of the random oracle, consuming the initial state.
+    #[deprecated(note = "Use the labelled version RandomOracle::append_messages instead")]
     pub fn extend_from<'a, I, S, B: AsRef<[u8]>>(&mut self, label: B, iter: I)
     where
         S: Serial + 'a,
@@ -271,7 +308,7 @@ impl RandomOracle {
     {
         self.add_bytes(label);
         for i in iter.into_iter() {
-            self.add(i)
+            self.put(i)
         }
     }
 
@@ -313,7 +350,7 @@ mod tests {
             }
             let mut s1 = RandomOracle::empty();
             for x in v1.iter() {
-                s1.add(x);
+                s1.put(x);
             }
             let mut s2 = RandomOracle::empty();
             s2.extend_from(b"", v1.iter());
@@ -331,11 +368,11 @@ mod tests {
         let mut csprng = thread_rng();
         for _ in 0..1000 {
             let mut s1 = RandomOracle::empty();
-            s1.add(&v1);
+            s1.put(&v1);
             let mut s2 = s1.split();
             for v in v1.iter_mut() {
                 *v = csprng.gen::<u8>();
-                s1.add(v);
+                s1.put(v);
             }
             let res1 = s1.result();
             let ref_res1: &[u8] = res1.as_ref();
@@ -344,5 +381,60 @@ mod tests {
             let ref_res2: &[u8] = res2.as_ref();
             assert_eq!(ref_res1, ref_res2);
         }
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`RandomOracle::domain`]
+    #[test]
+    pub fn test_domain_stable() {
+        let ro = RandomOracle::domain("Domain1");
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "b6dbfe8bfbc515d92bcc322b1e98291a45536f81f6eca2411d8dae54766666f1"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`StructuredDigest::add_bytes`]
+    #[test]
+    pub fn test_add_bytes_stable() {
+        let mut ro = RandomOracle::empty();
+        ro.add_bytes([0x1, 0x2, 0x3]);
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "fd1780a6fc9ee0dab26ceb4b3941ab03e66ccd970d1db91612c66df4515b0a0a"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`StructuredDigest::append_message`]
+    #[test]
+    pub fn test_append_message_stable() {
+        let mut ro = RandomOracle::empty();
+        ro.append_message(b"Label1", &vec![1, 2, 3]);
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "544c5dc5dbde3b40f86935b5dc8556dc42d2fef240c902f0b627ce2541c4b0a6"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`StructuredDigest::append_messages`]
+    #[test]
+    pub fn test_append_messages_stable() {
+        let mut ro = RandomOracle::empty();
+        ro.append_messages(b"Label1", &[1u8, 2u8, 3u8]);
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "3756eec6f9241f9a1cd8b401f54679cf9be2e057365728336221b1871ff666fb"
+        );
     }
 }
