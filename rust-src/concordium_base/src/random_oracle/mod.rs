@@ -105,7 +105,7 @@
 //! prepends the length of the data and can be used to add data to the transcript.
 //! See [`Serial`](trait@crate::common::Serial) trait and [`Serial`](macro@crate::common::Serial) macro.
 //!
-//! # Example: Adding data of variable-length
+//! # Example: Adding data of variable-length using `Serial`
 //!
 //! Serialization of variable-length primitives like `String` will prepend the length.
 //!
@@ -118,7 +118,7 @@
 //! transcript.append_message(b"String", &string);
 //! ```
 //!
-//! # Example: Adding collections of data
+//! # Example: Adding collections of data using `Serial`
 //!
 //! Serialization of collections like `Vec` will prepend the size of the collection.
 //!
@@ -128,6 +128,35 @@
 //! let mut transcript = RandomOracle::empty();
 //! let collection = vec![2,3,4];
 //! transcript.append_message(b"Collection", &collection);
+//! ```
+//!
+//! # Example: Adding variable number of items
+//!
+//! Digesting a variable number of items without relying on `Serial` implementation on the items
+//!
+//! ```
+//! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
+//!
+//! struct Type {
+//!     field_1: String,
+//!     field_2: String,
+//! }
+//!
+//! let vec = vec![
+//!     Type {
+//!         field_1: "abc".to_string(),
+//!         field_2: "efg".to_string(),
+//!     },
+//!     Type {
+//!         field_1: "hij".to_string(),
+//!         field_2: "klm".to_string(),
+//!     },
+//! ];
+//! let mut transcript = RandomOracle::empty();
+//! transcript.append_each(b"Collection", &vec, |transcript, item| {
+//!     transcript.append_message(b"Field1", &item.field_1);
+//!     transcript.append_message(b"Field2", &item.field_2);
+//! });
 //! ```
 //!
 //! # Example: Adding data with different variants
