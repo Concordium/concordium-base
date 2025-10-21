@@ -671,12 +671,12 @@ fn append_challenge(digest: &mut impl StructuredDigest, challenge: &Challenge) {
             // is different to any `Sha256` challenge.
             digest.add_bytes([0u8; 32]);
             // Add tag/version `V1` to the random oracle.
-            digest.add_bytes(b"V1");
-            digest.add_bytes(b"Context");
-            digest.append_message(b"given", &context.given);
-            digest.append_each(b"requested", &context.requested, |digest, item| {
-                digest.append_message(b"label", &item.label);
-                digest.append_message(b"context", &item.context);
+            digest.add_bytes("V1");
+            digest.add_bytes("Context");
+            digest.append_message("given", &context.given);
+            digest.append_each("requested", &context.requested, |digest, item| {
+                digest.append_message("label", &item.label);
+                digest.append_message("context", &item.context);
             });
         }
     }

@@ -259,21 +259,24 @@ impl PartialEq for RandomOracle {
 /// implementation guarantees the message bytes are unique for the data. Notice that using [`Serial`]
 /// does not label types or fields in the nested data.
 pub trait StructuredDigest: Buffer {
-    /// Add raw message bytes to the state of the oracle.
+    /// Add raw message bytes to the state of the oracle. Should primarily be used to
+    /// append labels.
     fn add_bytes(&mut self, data: impl AsRef<[u8]>);
 
     /// Append the given data as the message bytes produced by its [`Serial`] implementation to the state of the oracle.
-    /// The given label as appended first as domain separation.
+    /// The given label is appended first as domain separation. Notice that a slice, `Vec` and several other collections of
+    /// items implementing [`Serial`] itself implements [`Serial`]. When serializing variable-length
+    /// types or collection types, the length or size will be prepended in the serialization.
     fn append_message(&mut self, label: impl AsRef<[u8]>, data: &impl Serial) {
         self.add_bytes(label);
         self.put(data)
     }
 
     /// Append the items in the given iterator using the `append_item` closure to the state of the oracle.
-    /// The given label as appended first as domain separation followed by the number of items.
+    /// The given label is appended first as domain separation followed by the length of the iterator.
     fn append_each<T, B: IntoIterator<Item = T>>(
         &mut self,
-        label: impl AsRef<[u8]>,
+        label: &str,
         items: B,
         mut append_item: impl FnMut(&mut Self, T),
     ) where
@@ -443,7 +446,7 @@ mod tests {
     #[test]
     pub fn test_append_message_stable() {
         let mut ro = RandomOracle::empty();
-        ro.append_message(b"Label1", &vec![1u8, 2, 3]);
+        ro.append_message("Label1", &vec![1u8, 2, 3]);
 
         let challenge_hex = hex::encode(ro.get_challenge());
         assert_eq!(
@@ -457,7 +460,7 @@ mod tests {
     #[test]
     pub fn test_append_each_stable() {
         let mut ro = RandomOracle::empty();
-        ro.append_each(b"Label1", &vec![1u8, 2, 3], |ro, item| {
+        ro.append_each("Label1", &vec![1u8, 2, 3], |ro, item| {
             ro.append_message("Item", item)
         });
 
