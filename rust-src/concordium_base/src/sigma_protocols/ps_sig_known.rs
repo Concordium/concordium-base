@@ -828,20 +828,23 @@ mod tests {
         let mut comm_to_signer: G1 = ps_pk.g.mul_by_scalar(&signature_mask);
 
         let mut msgs = Vec::new();
-
+        let mut secrets = Vec::new();
         let m_0: Value<G1> = Value::new(G1::scalar_from_u64(42));
         comm_to_signer = comm_to_signer.plus_point(&ps_pk.ys[0].mul_by_scalar(&m_0));
         let r_0 = Randomness::new(G1::scalar_from_u64(10));
         let c_0 = cmm_key.hide(&m_0, &r_0);
         msgs.push(PsSigMsg::EqualToCommitment(c_0));
+        secrets.push(PsSigWitnessMsg::EqualToCommitment(m_0, r_0));
 
         let m_1: Value<G1> = Value::new(G1::scalar_from_u64(42));
         comm_to_signer = comm_to_signer.plus_point(&ps_pk.ys[1].mul_by_scalar(&m_1));
         msgs.push(PsSigMsg::Public(m_1));
+        secrets.push(PsSigWitnessMsg::Public);
 
         let m_2: Value<G1> = Value::new(G1::scalar_from_u64(42));
         comm_to_signer = comm_to_signer.plus_point(&ps_pk.ys[2].mul_by_scalar(&m_2));
         msgs.push(PsSigMsg::Known);
+        secrets.push(PsSigWitnessMsg::Known(m_2));
 
         let unknown_message = UnknownMessage(comm_to_signer);
         let signature = ps_sk
@@ -856,7 +859,18 @@ mod tests {
             blinded_sig,
         };
 
-        let proof_bytes_hex = "6aea07afb4049c5ca500157fba4df9444f7605eb041913a0e625f5f96c4e92584aadeb7c2a4d151f903e8c4bf91da6e3dc73464fe0e096a09f8576d14e6d07020000000300183be4c51cbba430dc02aaaf1a011e7bf397e854119571ba096be52e56abfd411943057b83218dbb3364bb3e28235259ec7337bf08ab9ca0869bc23de8ece97e0102560705f85e1741e403007fcb7987e0aca7255255c8fe2f2b8ec80a494fde8815";
+        let witness = PsSigWitness {
+            r_prime: _blind_rand.1,
+            msgs: secrets,
+        };
+
+        let mut ro = RandomOracle::empty();
+        let proof = sigma_protocols::common::prove(&mut ro, &ps_sig, witness,  &mut seed0()).expect("prove");
+
+        let proof_bytes_hex = "25207d6ee28196c6e9323be3984ce3be8c891fa0a33c2d830431055621c5500e29028a7a91da2f8b0b54836484d507f09a0d319944058c759d75513c30d992b700000003006b33753485415971000b4a8d46d46e55f7fb2bcea3561e83a6535bafed712c900be4bb1cc0e3a14821257f030b7cb9edd5919f0c1f2f49f562d2de756e58d02f01023510ef149cff79dbf3cf47a19cb9588157caf1cd5ac07ff62baf80cbe6a3b763";
+
+        assert_eq!(hex::encode(common::to_bytes(&proof)), proof_bytes_hex);
+
         let proof_bytes = hex::decode(&proof_bytes_hex).unwrap();
         let proof: SigmaProof<Response<Bls12, G1>> =
             common::from_bytes(&mut proof_bytes.as_slice()).expect("deserialize");
