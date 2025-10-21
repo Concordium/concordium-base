@@ -2,7 +2,7 @@
 //! The protocol allows a user to prove knowledge of a PS signature without
 //! revealing the signature, nor the message signed by the signature (unless chosen to be public).
 //! As part of the proof, the different parts of the message $\\{m_i\\}$ can either
-//! be proven known ($i \in K$), be proven equal to a commitment $c_i$ ($i \in C$), or proven equals to a public value ($i \in P$).
+//! be proven known ($i \in K$), be proven equal to a value in a commitment $C_i$ ($i \in C$), or proven equal to a public value ($i \in P$).
 //!
 //! The proof is done as a sigma protocol, see "9.1 Abstract Treatment of Sigma Protocols".
 //! Using the notation from "5.3.5 Proof of Knowledge of a Signature with Public Values"
@@ -14,7 +14,7 @@
 //!
 //! where $(\hat{a}, \hat{b})$ is the signature blinded by $r'$. And we prove knowledge of a preimage of the "statement" $\boldsymbol{y}$:
 //! $$
-//!     \boldsymbol{y} = \left(e\left(\hat{b}, \tilde{X}^{-1} \prod\nolimits\_{i\in P} \tilde{Y}\_i^{-m_i} \tilde{g} \right) , \\{ c_i \\}\_{i \in C}\right)
+//!     \boldsymbol{y} = \left(e\left(\hat{b}, \tilde{X}^{-1} \prod\nolimits\_{i\in P} \tilde{Y}\_i^{-m_i} \tilde{g} \right) , \\{ C_i \\}\_{i \in C}\right)
 //! $$
 //!
 //! Notice that the input to $\varphi$ has a signature blinding component $r'$ and a component for each message part.
@@ -37,7 +37,7 @@ use rand::Rng;
 /// How to handle a single part of the signed message
 #[derive(Debug, Clone)]
 pub enum PsSigMsg<C: Curve> {
-    /// The message is proven known and equal to the value in commitment $c_i$
+    /// The message is proven known and equal to the value in commitment $C_i$
     EqualToCommitment(Commitment<C>),
     /// The value/message part $m_i$ is public
     Public(Value<C>),
@@ -737,7 +737,7 @@ mod tests {
     pub fn test_ps_sig_soundness_commitment_changed() {
         let mut csprng = rand::thread_rng();
 
-        let (mut ps_sig, mut witness) = instance_with_witness::<Bls12, G1>(
+        let (mut ps_sig, witness) = instance_with_witness::<Bls12, G1>(
             &[InstanceSpecMsg::EqualToCommitment],
             0,
             &mut csprng,
@@ -768,7 +768,7 @@ mod tests {
             &mut csprng,
         );
 
-        let mut ro = RandomOracle::empty();
+        let ro = RandomOracle::empty();
         let mut proof =
             sigma_protocols::common::prove(&mut ro.split(), &ps_sig, witness, &mut csprng)
                 .expect("prove");
@@ -794,10 +794,9 @@ mod tests {
             &mut csprng,
         );
 
-        let mut ro = RandomOracle::empty();
-        let mut proof =
-            sigma_protocols::common::prove(&mut ro.split(), &ps_sig, witness, &mut csprng)
-                .expect("prove");
+        let ro = RandomOracle::empty();
+        let proof = sigma_protocols::common::prove(&mut ro.split(), &ps_sig, witness, &mut csprng)
+            .expect("prove");
 
         ps_sig
             .msgs
@@ -847,7 +846,7 @@ mod tests {
         let signature = ps_sk
             .sign_unknown_message(&unknown_message, &mut seed0())
             .retrieve(&signature_mask);
-        let (blinded_sig, blind_rand) = signature.blind(&mut seed0());
+        let (blinded_sig, _blind_rand) = signature.blind(&mut seed0());
 
         let ps_sig = PsSigKnown {
             msgs,
@@ -857,7 +856,7 @@ mod tests {
         };
 
         let proof_bytes_hex = "6aea07afb4049c5ca500157fba4df9444f7605eb041913a0e625f5f96c4e92584aadeb7c2a4d151f903e8c4bf91da6e3dc73464fe0e096a09f8576d14e6d07020000000300183be4c51cbba430dc02aaaf1a011e7bf397e854119571ba096be52e56abfd411943057b83218dbb3364bb3e28235259ec7337bf08ab9ca0869bc23de8ece97e0102560705f85e1741e403007fcb7987e0aca7255255c8fe2f2b8ec80a494fde8815";
-        let mut proof_bytes = hex::decode(&proof_bytes_hex).unwrap();
+        let proof_bytes = hex::decode(&proof_bytes_hex).unwrap();
         let proof: SigmaProof<Response<Bls12, G1>> =
             common::from_bytes(&mut proof_bytes.as_slice()).expect("deserialize");
         assert_eq!(proof.response.resp_msgs.len(), 3);
@@ -902,7 +901,7 @@ mod tests {
             .msgs
             .push(PsSigWitnessMsg::Known(Value::generate(&mut csprng)));
 
-        let mut ro = RandomOracle::empty();
+        let ro = RandomOracle::empty();
         assert!(
             sigma_protocols::common::prove(&mut ro.split(), &ps_sig, witness, &mut csprng)
                 .is_none()
@@ -918,7 +917,7 @@ mod tests {
         let (mut ps_sig, witness) =
             instance_with_witness::<Bls12, G1>(&[InstanceSpecMsg::Known], 0, &mut csprng);
 
-        let mut ro = RandomOracle::empty();
+        let ro = RandomOracle::empty();
         let proof = sigma_protocols::common::prove(&mut ro.split(), &ps_sig, witness, &mut csprng)
             .expect("prove");
 
