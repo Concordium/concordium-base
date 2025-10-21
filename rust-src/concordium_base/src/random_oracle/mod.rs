@@ -107,18 +107,10 @@
 //!
 //! # Example: Adding data of variable-length
 //!
+//! Serialization of variable-length primitives like `String` will prepend the length.
+//!
 //! ```
 //! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
-//!
-//! struct Type {
-//!     field_1: String,
-//!     field_2: String,
-//! }
-//!
-//! let example = Type {
-//!     field_1: "abc".to_string(),
-//!     field_2: "def".to_string(),
-//! };
 //!
 //! let mut transcript = RandomOracle::empty();
 //! let string = "abc".to_string();
@@ -126,7 +118,9 @@
 //! transcript.append_message(b"String", &string);
 //! ```
 //!
-//! # Example: Adding lists of data
+//! # Example: Adding collections of data
+//!
+//! Serialization of collections like `Vec` will prepend the size of the collection.
 //!
 //! ```
 //! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
@@ -138,26 +132,26 @@
 //!
 //! # Example: Adding data with different variants
 //!
-//! If you add an enum manually to the transcript add the tag/version
-//! to the transcript.
+//! If you add an enum manually to the transcript add the variant name
+//! to the transcript followed by the variant data.
 //!
 //! ```
 //! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
 //!
 //! enum Enum {
-//!     Variant_0
+//!     Variant_0,
+//!     Variant_1
 //! }
 //!
 //! let mut transcript = RandomOracle::empty();
 //!
-//! // --- Option 1: Numeric tag ---
 //! transcript.add_bytes(b"Enum");
-//! transcript.add_bytes(&[0u8]); // Variant0
-//!
-//! // --- Option 2: String tag / version ---
-//! transcript.add_bytes(b"Enum");
-//! transcript.add_bytes(b"V0"); // Variant0
+//! transcript.add_bytes(b"Variant_0");
+//! // add data from Variant_0
 //! ```
+//!
+//! If you serialize an enum that implements [`Serial`],
+//! the variant discriminator should be serialized (check the [`Serial`] of the enum)
 use crate::{common::*, curve_arithmetic::Curve};
 use sha3::{Digest, Sha3_256};
 use std::io::Write;
