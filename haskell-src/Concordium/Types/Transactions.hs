@@ -238,13 +238,13 @@ transactionHeaderV0 TransactionHeaderV1{..} =
 
 instance S.Serialize TransactionHeaderV1 where
     put TransactionHeaderV1{..} =
-        let bitmap = S.put (bitFor 0 thv1Sponsor :: Word16)
+        let bitmap = S.putWord16be $ bitFor 0 thv1Sponsor
             v0header = S.put thv1Sender <> S.put thv1Nonce <> S.put thv1EnergyAmount <> S.put thv1PayloadSize <> S.put thv1Expiry
             optionals = maybe mempty S.put thv1Sponsor
         in  bitmap <> v0header <> optionals
 
     get = S.label "transaction header v1" $ do
-        (bitmap :: Word16) <- S.label "bitmap" S.get
+        bitmap <- S.label "bitmap" S.getWord16be
         thv1Sender <- S.label "sender" S.get
         thv1Nonce <- S.label "nonce" S.get
         thv1EnergyAmount <- S.label "energy amount" S.get
