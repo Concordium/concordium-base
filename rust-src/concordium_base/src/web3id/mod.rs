@@ -673,8 +673,8 @@ fn append_challenge(digest: &mut impl StructuredDigest, challenge: &Challenge) {
             // Add tag/version `V1` to the random oracle.
             digest.add_bytes(b"V1");
             digest.add_bytes(b"Context");
-            digest.append_messages(b"given", &context.given);
-            digest.append_messages(b"requested", &context.requested);
+            digest.append_message(b"given", &context.given);
+            digest.append_message(b"requested", &context.requested);
         }
     }
 }

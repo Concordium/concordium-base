@@ -55,7 +55,8 @@
 //! with a **label** for each field as domain separation.
 //!
 //! ```
-//! # use concordium_base::random_oracle::RandomOracle;
+//! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
+//!
 //! struct Type {
 //!     field_1: u8,
 //!     field_2: u8,
@@ -72,7 +73,7 @@
 //! transcript.append_message(b"field_2", &example.field_2);
 //!```
 //!
-//! # Caution: Ambigious variable-length data
+//! # Caution: Ambiguous variable-length data
 //! Special care is required when handling variable-length types such as
 //! `String`, `Vec`, `BTreeSet`, `BTreeMap`, or other collections.
 //! Naively appending the bytes (without including the length of the collection) can produce collisions.
@@ -100,14 +101,15 @@
 //! the same hashing result for both examples. To avoid this,
 //! prepend the length of the variable-length data.
 //!
-//! Note: The serialization implementation of a variable-length type already
-//! prepends the length of the data which is why it is used to add data to the transcript.
+//! The serialization implementation of a variable-length type already
+//! prepends the length of the data and can be used to add data to the transcript.
 //! See [`Serial`](trait@crate::common::Serial) trait and [`Serial`](macro@crate::common::Serial) macro.
 //!
-//! # Example: Adding struct data with variable-length data
+//! # Example: Adding data of variable-length
 //!
 //! ```
-//! # use concordium_base::random_oracle::RandomOracle;
+//! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
+//!
 //! struct Type {
 //!     field_1: String,
 //!     field_2: String,
@@ -119,24 +121,19 @@
 //! };
 //!
 //! let mut transcript = RandomOracle::empty();
-//! transcript.add_bytes(b"Type");
-//! // The serialization implementation of the `String` type prepends the lenght of the field values.
-//! transcript.append_message(b"field_1", &example.field_1);
-//! transcript.append_message(b"field_2", &example.field_2);
+//! let string = "abc".to_string();
+//! // The serialization implementation of the `String` type prepends the length of the field values.
+//! transcript.append_message(b"String", &string);
 //! ```
 //!
-//! # Example: Adding data in loops
-//!
-//! If you manually iterate through any collection, add the length of the collection to the transcript.
+//! # Example: Adding lists of data
 //!
 //! ```
-//! # use concordium_base::random_oracle::RandomOracle;
+//! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
+//!
 //! let mut transcript = RandomOracle::empty();
 //! let collection = vec![2,3,4];
-//! transcript.add(&(collection.len() as u64));
-//! for item in collection {
-//!     transcript.add(&item);
-//! }
+//! transcript.append_message(b"Collection", &collection);
 //! ```
 //!
 //! # Example: Adding data with different variants
@@ -145,7 +142,8 @@
 //! to the transcript.
 //!
 //! ```
-//! # use concordium_base::random_oracle::RandomOracle;
+//! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
+//!
 //! enum Enum {
 //!     Variant_0
 //! }
@@ -246,16 +244,6 @@ pub trait StructuredDigest: Buffer {
     fn append_message<S: Serial, B: AsRef<[u8]>>(&mut self, label: B, data: &S) {
         self.add_bytes(label);
         self.put(data)
-    }
-
-    /// Append the given data items as the message bytes produced by their [`Serial`] implementation to the state of the oracle.
-    /// The given label as appended first as domain separation together with the number of items.
-    fn append_messages<S: Serial, B: AsRef<[u8]>>(&mut self, label: B, data: &[S]) {
-        self.add_bytes(label);
-        self.put(&(data.len() as u64)); // convert to u64 to ensure platform independence
-        for data in data {
-            self.put(data)
-        }
     }
 }
 
@@ -420,20 +408,6 @@ mod tests {
         assert_eq!(
             challenge_hex,
             "544c5dc5dbde3b40f86935b5dc8556dc42d2fef240c902f0b627ce2541c4b0a6"
-        );
-    }
-
-    /// Test that we don't accidentally change the digest produced
-    /// by [`StructuredDigest::append_messages`]
-    #[test]
-    pub fn test_append_messages_stable() {
-        let mut ro = RandomOracle::empty();
-        ro.append_messages(b"Label1", &[1u8, 2u8, 3u8]);
-
-        let challenge_hex = hex::encode(ro.get_challenge());
-        assert_eq!(
-            challenge_hex,
-            "3756eec6f9241f9a1cd8b401f54679cf9be2e057365728336221b1871ff666fb"
         );
     }
 }

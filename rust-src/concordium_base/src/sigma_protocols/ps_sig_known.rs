@@ -173,7 +173,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
         ro.add_bytes(b"PsSigKnown");
         // public input to statement:
         ro.append_message(b"blinded_sig", &self.blinded_sig);
-        ro.append_messages(b"messages", &self.msgs);
+        ro.append_message(b"messages", &self.msgs);
         // implicit public values
         ro.append_message(b"ps_pub_key", &self.ps_pub_key);
         ro.append_message(b"comm_key", &self.cmm_key)
