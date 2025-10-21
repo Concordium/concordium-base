@@ -102,10 +102,7 @@
 //!
 //! Note: The serialization implementation of a variable-length type already
 //! prepends the length of the data which is why it is used to add data to the transcript.
-//!
-//! References for serialization implementations:
-//! - [`concordium_base_derive::Serial`]
-//! - [`serialize`](crate::common::serialize)
+//! See [`Serial`](trait@crate::common::Serial) trait and [`Serial`](macro@crate::common::Serial) macro.
 //!
 //! # Example: Adding struct data with variable-length data
 //!
@@ -167,7 +164,7 @@ use crate::{common::*, curve_arithmetic::Curve};
 use sha3::{Digest, Sha3_256};
 use std::io::Write;
 
-/// State of the random oracle, used to incrementally build up the output.
+/// State of the random oracle, used to incrementally build up the output. See [`random_oracle`](self).
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct RandomOracle(Sha3_256);
@@ -231,13 +228,14 @@ impl PartialEq for RandomOracle {
     }
 }
 
-/// Trait for digesting messages that encourages encoding the data structure into
-/// the message bytes. This is done e.g. by applying length prefixes for variable-length data.
-/// And by labelling types, variants and fields for domain separation. Both are done to prevent malleability
+/// Trait for digesting messages that encourages encoding the structure of the data into
+/// the message bytes. This is done e.g. by applying length prefixes for variable-length data and
+/// prefixing variants with a discriminator.
+/// And by labelling types and fields for domain separation. Both are done to prevent malleability
 /// in the proofs where the oracle is used.
 ///
 /// Using [`Serial`] is one of the approaches to correctly produce the message
-/// bytes for variable-length types (including enums), since the corresponding [`Deserial`](crate::common::Deserial)
+/// bytes for variable-length types (including enums), since the corresponding [`Deserial`]
 /// implementation guarantees the message bytes are unique for the data. Notice that using [`Serial`]
 /// does not label types or fields in the nested data.
 pub trait StructuredDigest: Buffer {
@@ -245,14 +243,14 @@ pub trait StructuredDigest: Buffer {
     fn add_bytes<B: AsRef<[u8]>>(&mut self, data: B);
 
     /// Append the given data as the message bytes produced by its [`Serial`] implementation to the state of the oracle.
-    /// The given `label` as appended first as domain separation.
+    /// The given label as appended first as domain separation.
     fn append_message<S: Serial, B: AsRef<[u8]>>(&mut self, label: B, data: &S) {
         self.add_bytes(label);
         self.put(data)
     }
 
     /// Append the given data items as the message bytes produced by their [`Serial`] implementation to the state of the oracle.
-    /// The given `label` as appended first as domain separation together with the number of items.
+    /// The given label as appended first as domain separation together with the number of items.
     fn append_messages<S: Serial, B: AsRef<[u8]>>(&mut self, label: B, data: &[S]) {
         self.add_bytes(label);
         self.put(&(data.len() as u64)); // convert to u64 to ensure platform independence
