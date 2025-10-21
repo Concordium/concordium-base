@@ -214,7 +214,7 @@ instance S.Serialize TransactionSignaturesV1 where
 
 -- | Data common to all v1 transaction types.
 --
---  * @SPEC: <$DOCS/Transactions#transaction-header-v1>
+--  * @SPEC: <$DOCS/TransactionsV1#transaction-header-v1>
 data TransactionHeaderV1 = TransactionHeaderV1
     { -- | Sender account.
       thv1Sender :: AccountAddress,
@@ -280,6 +280,47 @@ data AccountTransactionV1 = AccountTransactionV1
       atrv1SignHash :: !TransactionSignHashV0
     }
     deriving (Eq, Show)
+
+atrv1Prefix :: BS.ByteString
+atrv1Prefix = BS.pack $ replicate 31 0 ++ [1]
+
+-- | Construct an 'AccountTransactionV1', computing the correct
+--  'TransactionSignHash'.
+makeAccountTransactionV1 :: TransactionSignaturesV1 -> TransactionHeaderV1 -> EncodedPayload -> AccountTransactionV1
+makeAccountTransactionV1 atrv1Signature atrv1Header atrv1Payload = AccountTransactionV1{..}
+  where
+    atrv1SignHash = transactionV1SignHashFromHeaderPayload atrv1Header atrv1Payload
+
+-- | Construct a 'TransactionSignHash' from a 'TransactionHeaderV1' and 'EncodedPayload'.
+transactionV1SignHashFromHeaderPayload :: TransactionHeaderV1 -> EncodedPayload -> TransactionSignHashV0
+transactionV1SignHashFromHeaderPayload atrv1Header atrv1Payload = TransactionSignHashV0 $ H.hashLazy $ S.runPutLazy $ message
+  where
+    message = S.put atrv1Prefix <> S.put atrv1Header <> putEncodedPayload atrv1Payload
+
+-- TODO: make sure this aligns with the bluepaper
+
+-- | @SPEC: <$DOCS/TransactionsV1#serialization-format-transactions>
+instance S.Serialize AccountTransactionV1 where
+    put AccountTransactionV1{..} =
+        S.put atrv1Signature
+            <> S.put atrv1Header
+            <> putEncodedPayload atrv1Payload
+
+    get = S.label "account transaction" $ do
+        atrv1Signature <- S.label "signature" S.get
+        ((atrv1Header, atrv1Payload), bodyBytes) <- getWithBytes $ do
+            atrv1Header <- S.label "header" S.get
+            atrv1Payload <- S.label "payload" $ getEncodedPayload (thv1PayloadSize atrv1Header)
+            return (atrv1Header, atrv1Payload)
+        let atrv1SignHash = transactionSignHashFromBytes bodyBytes
+        return $! AccountTransactionV1{..}
+
+-- instance HashableTo TransactionHashV0 AccountTransactionV1 where
+--     getHash = transactionHashFromBareBlockItem . NormalTransaction
+--     {-# INLINE getHash #-}
+
+instance HashableTo TransactionSignHashV0 AccountTransactionV1 where
+    getHash = atrv1SignHash
 
 -- | An 'AccountCreation' is a credential together with an expiry. It is a
 --  message that is included in a block, if valid, but it is not paid for
