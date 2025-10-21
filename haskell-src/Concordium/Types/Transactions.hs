@@ -33,6 +33,7 @@ import Concordium.Types
 import Concordium.Types.HashableTo
 import Concordium.Types.Updates
 import Concordium.Utils
+import Data.Bits
 
 -- * Account transactions
 
@@ -230,6 +231,33 @@ data TransactionHeaderV1 = TransactionHeaderV1
       thv1Sponsor :: Maybe AccountAddress
     }
     deriving (Show, Eq)
+
+instance S.Serialize TransactionHeaderV1 where
+    put TransactionHeaderV1{..} =
+        let bitmap = S.put (bitFor 0 thv1Sponsor :: Word16)
+            v0header = S.put thv1Sender <> S.put thv1Nonce <> S.put thv1EnergyAmount <> S.put thv1PayloadSize <> S.put thv1Expiry
+            optionals = maybe mempty S.put thv1Sponsor
+        in  bitmap <> v0header <> optionals
+
+    get = S.label "transaction header v1" $ do
+        (bitmap :: Word16) <- S.label "bitmap" S.get
+        thv1Sender <- S.label "sender" S.get
+        thv1Nonce <- S.label "nonce" S.get
+        thv1EnergyAmount <- S.label "energy amount" S.get
+        thv1PayloadSize <- S.label "payload size" S.get
+        thv1Expiry <- S.label "expiry" S.get
+        thv1Sponsor <- maybeGet bitmap 0 "sponsor"
+        return $! TransactionHeaderV1{..}
+      where
+        maybeGet bitmap bitNum label =
+            if testBit bitmap bitNum
+                then Just <$> S.label label S.get
+                else return Nothing
+
+-- | Set the given bit if the value is a 'Just'.
+bitFor :: (Bits b) => Int -> Maybe a -> b
+bitFor _ Nothing = zeroBits
+bitFor i (Just _) = bit i
 
 -- | An 'AccountTransactionV1' is a transaction that originates from
 --  a specific account (the sender), and is paid for by either the sender
