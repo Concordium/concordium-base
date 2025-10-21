@@ -196,20 +196,20 @@ instance HashableTo TransactionSignHashV0 AccountTransaction where
 --  * @SPEC: <$DOCS/Transactions#transaction-signatures-v1>
 data TransactionSignaturesV1 = TransactionSignaturesV1
     { -- | The signatures for the sender account
-      tv1sSender :: TransactionSignature,
+      tsv1Sender :: TransactionSignature,
       -- | The signatures for the sponsor account. These must be present if a sponsor
       -- is specified for the transaction in the corresponding transaction header.
-      tv1sSponsor :: Maybe TransactionSignature
+      tsv1Sponsor :: Maybe TransactionSignature
     }
     deriving (Show, Eq)
 
 instance S.Serialize TransactionSignaturesV1 where
     put TransactionSignaturesV1{..} =
-        S.put tv1sSender <> S.put tv1sSponsor
+        S.put tsv1Sender <> S.put tsv1Sponsor
 
     get = S.label "transaction signatures v1" $ do
-        tv1sSender <- S.label "sender" S.get
-        tv1sSponsor <- S.label "sponsor" S.get
+        tsv1Sender <- S.label "sender" S.get
+        tsv1Sponsor <- S.label "sponsor" S.get
         return $! TransactionSignaturesV1{..}
 
 -- | Data common to all v1 transaction types.
@@ -231,6 +231,10 @@ data TransactionHeaderV1 = TransactionHeaderV1
       thv1Sponsor :: Maybe AccountAddress
     }
     deriving (Show, Eq)
+
+transactionHeaderV0 :: TransactionHeaderV1 -> TransactionHeader
+transactionHeaderV0 TransactionHeaderV1{..} =
+    TransactionHeader{thSender = thv1Sender, thNonce = thv1Nonce, thEnergyAmount = thv1EnergyAmount, thPayloadSize = thv1PayloadSize, thExpiry = thv1Expiry}
 
 instance S.Serialize TransactionHeaderV1 where
     put TransactionHeaderV1{..} =
@@ -315,9 +319,9 @@ instance S.Serialize AccountTransactionV1 where
         let atrv1SignHash = transactionSignHashFromBytes bodyBytes
         return $! AccountTransactionV1{..}
 
--- instance HashableTo TransactionHashV0 AccountTransactionV1 where
---     getHash = transactionHashFromBareBlockItem . NormalTransaction
---     {-# INLINE getHash #-}
+instance HashableTo TransactionHashV0 AccountTransactionV1 where
+    getHash = transactionHashFromBareBlockItem . ExtendedTransaction
+    {-# INLINE getHash #-}
 
 instance HashableTo TransactionSignHashV0 AccountTransactionV1 where
     getHash = atrv1SignHash
@@ -389,6 +393,7 @@ instance HashableTo TransactionHash (WithMetadata value) where
 
 type Transaction = WithMetadata AccountTransaction
 type CredentialDeploymentWithMeta = WithMetadata AccountCreation
+type TransactionV1 = WithMetadata AccountTransactionV1
 
 addMetadata :: (a -> BareBlockItem) -> TransactionTime -> a -> WithMetadata a
 addMetadata f time a =
@@ -403,6 +408,12 @@ addMetadata f time a =
 
 fromAccountTransaction :: TransactionTime -> AccountTransaction -> Transaction
 fromAccountTransaction wmdArrivalTime wmdData =
+    let wmdHash = getHash wmdData
+        wmdSize = BS.length (S.encode wmdData) + 1
+    in  WithMetadata{..}
+
+fromAccountTransactionV1 :: TransactionTime -> AccountTransactionV1 -> TransactionV1
+fromAccountTransactionV1 wmdArrivalTime wmdData =
     let wmdHash = getHash wmdData
         wmdSize = BS.length (S.encode wmdData) + 1
     in  WithMetadata{..}
@@ -445,18 +456,22 @@ data BlockItemKind
     = AccountTransactionKind
     | CredentialDeploymentKind
     | UpdateInstructionKind
+    | AccountTransactionV1Kind
     deriving (Eq, Ord, Show)
 
+-- | @SPEC: <$DOCS/BlockItems#serialization-format-block-item>
 instance S.Serialize BlockItemKind where
     put AccountTransactionKind = S.putWord8 0
     put CredentialDeploymentKind = S.putWord8 1
     put UpdateInstructionKind = S.putWord8 2
+    put AccountTransactionV1Kind = S.putWord8 3
     {-# INLINE put #-}
     get =
         S.getWord8 >>= \case
             0 -> return AccountTransactionKind
             1 -> return CredentialDeploymentKind
             2 -> return UpdateInstructionKind
+            3 -> return AccountTransactionV1Kind
             _ -> fail "unknown block item kind"
     {-# INLINE get #-}
 
@@ -471,6 +486,9 @@ data BareBlockItem
     | ChainUpdate
         { biUpdate :: !UpdateInstruction
         }
+    | ExtendedTransaction
+        { biTransactionV1 :: !AccountTransactionV1
+        }
     deriving (Eq, Show)
 
 instance HashableTo TransactionHash BareBlockItem where
@@ -482,6 +500,7 @@ putBareBlockItem :: S.Putter BareBlockItem
 putBareBlockItem NormalTransaction{..} = S.put AccountTransactionKind <> S.put biTransaction
 putBareBlockItem CredentialDeployment{..} = S.put CredentialDeploymentKind <> S.put biCred
 putBareBlockItem ChainUpdate{..} = S.put UpdateInstructionKind <> putUpdateInstruction biUpdate
+putBareBlockItem ExtendedTransaction{..} = S.put AccountTransactionV1Kind <> S.put biTransactionV1
 
 getBareBlockItem :: SProtocolVersion pv -> S.Get BareBlockItem
 getBareBlockItem spv =
@@ -490,6 +509,7 @@ getBareBlockItem spv =
             AccountTransactionKind -> NormalTransaction <$> S.get
             CredentialDeploymentKind -> CredentialDeployment <$> S.get
             UpdateInstructionKind -> ChainUpdate <$> getUpdateInstruction spv
+            AccountTransactionV1Kind -> ExtendedTransaction <$> S.get
 
 -- | Datatypes which have an expiry, which here we set to mean the latest time
 --  the item can be included in a block.
@@ -508,10 +528,15 @@ instance HasMessageExpiry UpdateInstruction where
     {-# INLINE msgExpiry #-}
     msgExpiry = updateTimeout . uiHeader
 
+instance HasMessageExpiry AccountTransactionV1 where
+    {-# INLINE msgExpiry #-}
+    msgExpiry = thv1Expiry . atrv1Header
+
 instance HasMessageExpiry BareBlockItem where
     msgExpiry (NormalTransaction t) = msgExpiry t
     msgExpiry (CredentialDeployment t) = msgExpiry t
     msgExpiry (ChainUpdate t) = msgExpiry t
+    msgExpiry (ExtendedTransaction t) = msgExpiry t
 
 instance (HasMessageExpiry a) => HasMessageExpiry (WithMetadata a) where
     {-# INLINE msgExpiry #-}
@@ -559,6 +584,10 @@ credentialDeployment WithMetadata{..} = WithMetadata{wmdData = CredentialDeploym
 
 chainUpdate :: WithMetadata UpdateInstruction -> BlockItem
 chainUpdate WithMetadata{..} = WithMetadata{wmdData = ChainUpdate wmdData, wmdSize = wmdSize + 1, ..}
+
+-- | Embed a v1 transaction as a block item.
+extendedTransaction :: TransactionV1 -> BlockItem
+extendedTransaction WithMetadata{..} = WithMetadata{wmdData = ExtendedTransaction wmdData, wmdSize = wmdSize + 1, ..}
 
 -- | Serialize a block item according to V0 format, without the metadata.
 putBlockItemV0 :: BlockItem -> S.Put
@@ -749,6 +778,26 @@ instance TransactionData Transaction where
     transactionPayload = atrPayload . wmdData
     transactionSignature = atrSignature . wmdData
     transactionSignHash = atrSignHash . wmdData
+    transactionHash = wmdHash
+
+instance TransactionData AccountTransactionV1 where
+    transactionHeader = transactionHeaderV0 . atrv1Header
+    transactionSender = thv1Sender . atrv1Header
+    transactionNonce = thv1Nonce . atrv1Header
+    transactionGasAmount = thv1EnergyAmount . atrv1Header
+    transactionPayload = atrv1Payload
+    transactionSignature = tsv1Sender . atrv1Signature
+    transactionSignHash = atrv1SignHash
+    transactionHash = getHash
+
+instance TransactionData TransactionV1 where
+    transactionHeader = transactionHeader . wmdData
+    transactionSender = transactionSender . wmdData
+    transactionNonce = transactionNonce . wmdData
+    transactionGasAmount = transactionGasAmount . wmdData
+    transactionPayload = transactionPayload . wmdData
+    transactionSignature = transactionSignature . wmdData
+    transactionSignHash = transactionSignHash . wmdData
     transactionHash = wmdHash
 
 --------------------------
