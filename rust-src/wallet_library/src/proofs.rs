@@ -57,9 +57,8 @@ impl AcceptableRequest<constants::ArCurve, Web3IdAttribute> for Web3IdProofInput
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
-    use crate::test_helpers::read_web3_id_request;
+    use crate::test_helpers::{read_web3_id_request, read_web3_id_request_v1challenge};
     use concordium_base::web3id::Presentation;
 
     #[test]
@@ -71,6 +70,19 @@ mod tests {
             serde_json::from_str::<Presentation<constants::ArCurve, Web3IdAttribute>>(&data)
                 .is_ok(),
             "Cannot deserialize proof correctly."
+        );
+        Ok(())
+    }
+
+    #[test]
+    pub fn create_web3_id_proof_with_v1challenge_test() -> anyhow::Result<()> {
+        let request = read_web3_id_request_v1challenge();
+        let proof = request.create_proof();
+        let data = serde_json::to_string_pretty(&proof?)?;
+        assert!(
+            serde_json::from_str::<Presentation<constants::ArCurve, Web3IdAttribute>>(&data)
+                .is_ok(),
+            "Cannot deserialize proof with v1Challenge correctly."
         );
         Ok(())
     }
