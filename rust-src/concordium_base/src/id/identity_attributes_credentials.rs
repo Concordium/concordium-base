@@ -3,7 +3,7 @@
 
 use super::{account_holder, types::*, utils};
 use crate::pedersen_commitment::{CommitmentKey, Randomness};
-use crate::sigma_protocols::ps_sig_known::{PsSigKnown, PsSigMsg, PsSigSecret, PsSigSecretMsg};
+use crate::sigma_protocols::ps_sig_known::{PsSigKnown, PsSigMsg, PsSigWitness, PsSigWitnessMsg};
 use crate::{
     curve_arithmetic::{Curve, Pairing},
     pedersen_commitment::{
@@ -224,7 +224,7 @@ fn compute_pok_sig<
     cmm_rand_id_cred_sec: Randomness<C>,
 ) -> anyhow::Result<(
     PsSigKnown<P, C>,
-    PsSigSecret<P, C>,
+    PsSigWitness<P, C>,
     SignaturePokOutput<P, C, AttributeType>,
 )> {
     // The identity provider signature is on a message of:
@@ -253,7 +253,7 @@ fn compute_pok_sig<
     // For IdCredSec, we prove equal to a commitment in order to link the signature proof
     // to the IdCredSec encryption parts proofs
     msgs.push(PsSigMsg::EqualToCommitment(cmm_id_cred_sec));
-    secrets.push(PsSigSecretMsg::EqualToCommitment(
+    secrets.push(PsSigWitnessMsg::EqualToCommitment(
         id_object_use_data
             .aci
             .cred_holder_info
@@ -265,7 +265,7 @@ fn compute_pok_sig<
 
     // The PRF secret key we just prove knowledge of
     msgs.push(PsSigMsg::Known);
-    secrets.push(PsSigSecretMsg::Known(
+    secrets.push(PsSigWitnessMsg::Known(
         id_object_use_data.aci.prf_key.to_value(),
     ));
 
@@ -279,23 +279,23 @@ fn compute_pok_sig<
             .threshold,
     )?;
     msgs.push(PsSigMsg::Public(Value::new(public_vals)));
-    secrets.push(PsSigSecretMsg::Public);
+    secrets.push(PsSigWitnessMsg::Public);
 
     // Anonymity revoker ids are public values
     for ar_scalar in ar_scalars {
         msgs.push(PsSigMsg::Public(Value::new(ar_scalar)));
-        secrets.push(PsSigSecretMsg::Public);
+        secrets.push(PsSigWitnessMsg::Public);
     }
 
     // Attribute tag set is a public value
     let tags_val = utils::encode_tags(alist.alist.keys())?;
     msgs.push(PsSigMsg::Public(Value::new(tags_val)));
-    secrets.push(PsSigSecretMsg::Public);
+    secrets.push(PsSigWitnessMsg::Public);
 
     // Max accounts is not public, we prove knowledge of it
     let max_accounts_val = C::scalar_from_u64(alist.max_accounts.into());
     msgs.push(PsSigMsg::Known);
-    secrets.push(PsSigSecretMsg::Known(Value::new(max_accounts_val)));
+    secrets.push(PsSigWitnessMsg::Known(Value::new(max_accounts_val)));
 
     let mut attributes = BTreeMap::new();
     let mut attribute_rand = BTreeMap::new();
@@ -306,18 +306,18 @@ fn compute_pok_sig<
             Some(IdentityAttributeHandling::Commit) => {
                 let (attr_cmm, attr_rand) = commitment_key.commit(&value, csprng);
                 msgs.push(PsSigMsg::EqualToCommitment(attr_cmm));
-                secrets.push(PsSigSecretMsg::EqualToCommitment(value, attr_rand.clone()));
+                secrets.push(PsSigWitnessMsg::EqualToCommitment(value, attr_rand.clone()));
                 attributes.insert(*tag, IdentityAttribute::Committed(attr_cmm));
                 attribute_rand.insert(*tag, attr_rand);
             }
             Some(IdentityAttributeHandling::Reveal) => {
                 msgs.push(PsSigMsg::Public(value));
-                secrets.push(PsSigSecretMsg::Public);
+                secrets.push(PsSigWitnessMsg::Public);
                 attributes.insert(*tag, IdentityAttribute::Revealed(Clone::clone(attribute)));
             }
             None => {
                 msgs.push(PsSigMsg::Known);
-                secrets.push(PsSigSecretMsg::Known(value));
+                secrets.push(PsSigWitnessMsg::Known(value));
                 attributes.insert(*tag, IdentityAttribute::Known);
             }
         }
@@ -332,7 +332,7 @@ fn compute_pok_sig<
     // only the second part is used (as per the protocol)
     let (blinded_sig, blind_rand) = retrieved_sig.blind(csprng);
 
-    let secret = PsSigSecret {
+    let secret = PsSigWitness {
         r_prime: blind_rand.1,
         msgs: secrets,
     };
