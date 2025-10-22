@@ -964,7 +964,7 @@ mod test {
             &mut transcript,
         );
 
-        assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
+        assert_matches!(res, Err(AttributeCommitmentVerificationError::IdCredPub));
     }
 
     /// Test that the verifier fails if identity provider is not set correctly.
