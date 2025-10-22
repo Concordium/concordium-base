@@ -626,9 +626,9 @@ mod test {
     use crate::common;
     use crate::curve_arithmetic::arkworks_instances::ArkGroup;
     use ark_bls12_381::G1Projective;
+    use rand::{CryptoRng, Rng, SeedableRng};
     use std::str::FromStr;
     use std::sync::LazyLock;
-    use rand::{CryptoRng, Rng, SeedableRng};
 
     type G1 = ArkGroup<G1Projective>;
     type Bls12 = ark_ec::models::bls12::Bls12<ark_bls12_381::Config>;
@@ -674,8 +674,6 @@ mod test {
 
     /// Create identity object for use in tests
     fn identity_object_fixture() -> IdentityObjectFixture {
-
-
         let max_attrs = 10;
         let num_ars = 5;
         let IpData {
@@ -949,7 +947,7 @@ mod test {
             &attributes_handling,
             &mut transcript,
         )
-            .expect("prove");
+        .expect("prove");
 
         // remove one of the encryptions
         let ar = *id_attr_info.values.ar_data.keys().next().unwrap();
@@ -1199,8 +1197,6 @@ mod test {
         assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
     }
 
-
-
     /// Test that we can verify proofs created by previous versions of the protocol.
     /// This test protects from changes that introduces braking changes without proper versioning.
     ///
@@ -1230,7 +1226,7 @@ mod test {
 
         let proof_bytes_hex = "0000000004000500000001b7790ac52eb5bef7c740a90bf64de506409ea31d216e627bc56cb4c1ac65d1dcd89830969b0d45ea854feecdf55914948a63bc55ca4b90e34ffacde9f87eeb87132c63baaaa1af4d46804969e50818563c649ea296734c09a57062bb1412586400000002846c0079337660c3c4975ecd8d474e7389533a63310065f7c4069463a1af98b95109e2be80a927e8ffcc1a90855dfbe88eca7632c0c971ad958fc838f9351493ba0c89a8cc4d55bd073c9a721328f80456ff6f504ad528376391b32f202a27860000000382515086ccd2eba066be4d2a2bc13ad03c2f19070d3d1453092f21ac1ba97d4576a94c43f808e15e11e2ff55fbd88a8eb632c3ebe27b43b72a6010be661b128a30a94fdb8a243ab78a238863b505afb89ab5a1b2618d1cc3cc3978b9ac4039d80000000491addc8ba1a9d64a1abde10f9c538972209e80d3a8012eefe8a386ce22794b6b83f43ac98398f0025aef75522fc9cce5a87965b8b9e5561fe71379b73b902db64e55caddd25305a53242ee075d7fd59897a5a8fffb00a5234e65e0524a8e865800000005812e5b0b3f2f57d811fc0e567d1fd20df001b68c88debc0e5d32085121ea80bdfca2e6b510992c5bbdd82d268958208c82d9b3854cf10475a90d2cf4de8d501308010aad29b4654d16caffe1d7c47b54b8dd9a3ae2cdf8c7ce3f5c277aba2ab2000300008bde7d1cd3986e7b3f2d211c44cc9d354fbac5b6726db823ce9e6baedbf4964def9cec920e5bb38eb208be04c86a9a240201057465737431050207e60507e405a9c381e0e2a0788926054773cbd0138113c6de8875baf7335cac34a2e289b98619b71da239c85771e11150cefb55065eb3818417673bbbe784a374c7a0be666b02417bdeaacb8186f40faf3af8c4b3cd8f348a589e5f159dd0c824cc698062c10000000000000004a611c34e0525df3a45f5fe37b6f903d47ed19ec55b41f09db2b405f695a42b8120c18f3603997ca13837b6cd9e22a91f8dbe0797ed64a2938a17d7a922410079cda8ba9e2f8fb426d5396d6e00dbca9a531ece677a560999e7b305a4d7da0abe9053ac2e47f4e9ec78bdfb6cf3718734186fbba89a6af417de5af810aa7f478719e3d1a90621ebd2caa921db1f76bb2daf527f7e2b9c341b6800c87e8ee4a11aef1d25e7648096c9ef312adc54a91e51bd7a857d84f72909af0c2f8989734e8fe2c5a073593acd17e1a951a90caa4ace68ef16c26a05797b13f90349bb02b02000000005000000016e9a97723a39dfe8450ac003042e0d71ebe4c823446fe247186adb04b7c74fb41a3820510d634fbb54eab9cdcfefc97695d8c9c27e4cdc3fa8f1f0bdd8e62b4a6f6785d4761b1d18cbacab4d3a459092c950f4f2cd8e4594ffc927d2a549f5fb0000000239a897a07c5a39d212058086df8f7e661f64579003744cb1ece303d9fafd499813d744b729e161abf590c0aff65534ad4ddd1298e1e02d9cefdbc26ca764666e6132225d2e5ec1210961161d13be8a0a6bde0b5ead1771d002568b85f39f83ad000000034293238faa94ebb3f2c30297797128a03b7c2230154365b8b9bcde5a0c7e9c79202eb6cd99ebe9ec9e55868146d2d9b9f39a77a22598f8910bbd774564d96da75c9d637aa403c86ee78c0bf3f2e840e7614c0db54810404e4f873dae36721455000000043d3189150ccc4806fca732bbffdbb4f1dda265e16f337e4b700e2bdd82769275183fdee2c3e9272499011b39217d87f4b86433d55e70211b3930bab9baa0fa8800dfd858238e6132a35f75dc9f6b2eb9bb16c26764256da2ff67932a19d6c8ce000000050a10141cf98e8e10de9cc0d983938f0016a52abc4c12db58fe3cd2a9938f28716537c7191a34bda5ac3302a696dadca3d0276dbdab84776bd4ef1acf1ac949983d4b6a307515efb2be9e3817a1418b56f28cb0c5232ad41fa30a1b8dce65957a31c63aa492ca4fb5df6102112d01788334d66f812d800cf73299f977f2a4e330000000090001367db1da697ee4fd667383e60a6c9a53eda7d983abce0c8315d6dbcb60af482fb0ac84f576df7351f6ff4872c550edac258a1873b9f83844326e6b15a62fd2024e274065782ff79f821bb55613317129a56a657d841b8670a8d1e138c4e655d30101025183f153e93724535f4095f809aadd9f140d843d3803cf17b4d18948b4051ce80219cf7f128fbf52d8989a25f9adb06cbadacb0cf1ca02fa0e8c913b24abafecf60039b8ec31a7e35283fb7ae5103f6a0112b99004fd4810ed1ba13109fc6a33278c21f14b857fd503153aaef2d20326e49f2fa8c678e209bfd8992deefa9aec46ed01025cbbd98b2dd75174e0e88cf6f68213a5501f0f5d9297800a1c0d6b64491d7d48";
         let proof_bytes = hex::decode(&proof_bytes_hex).unwrap();
-        let id_attr_info: IdentityAttributesCredentialsInfo< Bls12, G1, AttributeKind> =
+        let id_attr_info: IdentityAttributesCredentialsInfo<Bls12, G1, AttributeKind> =
             common::from_bytes(&mut proof_bytes.as_slice()).expect("deserialize");
 
         let mut transcript = RandomOracle::empty();
