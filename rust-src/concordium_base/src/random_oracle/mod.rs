@@ -159,7 +159,7 @@
 //!
 //! let vec = vec![Type1, Type1];
 //!
-//! let mut transcript = RandomOracle::empty();
+//! let mut transcript = RandomOracle::with_domain("Proof of something");
 //! transcript.append_each("Collection", &vec, |transcript, item| {
 //!     append_type1(transcript, item);
 //! });
@@ -297,7 +297,7 @@ pub trait StructuredDigest: Buffer {
         B::IntoIter: ExactSizeIterator,
     {
         let items = items.into_iter();
-        self.add_bytes(label);
+        self.append_label(label);
         self.put(&(items.len() as u64));
         for item in items {
             append_item(self, item);
@@ -571,7 +571,7 @@ mod tests {
         let challenge_hex = hex::encode(ro.get_challenge());
         assert_eq!(
             challenge_hex,
-            "891fd1754242e364a9eca7a15133403f3293ad330ce295cca0dd8347b94df7a8"
+            "652c10e0ce89b6932b47161b7f29f9eee578917b906519f4a3e85a4aae93cc50"
         );
     }
 }
