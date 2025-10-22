@@ -18,7 +18,7 @@
 //! After adding data, call [`RandomOracle::get_challenge`] to consume/hash the bytes
 //! and produce a random challenge.
 //!
-//! # Caution: Type/Field ambiguity without domain separation
+//! # Caution: Type ambiguity without domain separation
 //! Special care is required when adding bytes to domain separate them with labels.
 //! Naively appending just bytes (without separation) can produce collisions of different types.
 //! For example:
@@ -51,26 +51,26 @@
 //!
 //! # Example: Adding struct data
 //!
-//! If you add a struct to the transcript use its type name as separator and use `append_message`
-//! with a **label** for each field as domain separation.
+//! If you add a struct to the transcript use its type name as separator and its [`Serial`]
+//! to define the data message bytes.
 //!
 //! ```
 //! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
+//! # use concordium_base::common::{Serialize};
 //!
-//! struct Type {
+//! #[derive(Serialize)]
+//! struct Type1 {
 //!     field_1: u8,
 //!     field_2: u8,
 //! }
 //!
-//! let example = Type {
+//! let example = Type1 {
 //!     field_1: 1u8,
 //!     field_2: 2u8,
 //! };
 //!
 //! let mut transcript = RandomOracle::empty();
-//! transcript.add_bytes(b"Type");
-//! transcript.append_message(b"field_1", &example.field_1);
-//! transcript.append_message(b"field_2", &example.field_2);
+//! transcript.append_message(b"Type1", &example);
 //!```
 //!
 //! # Caution: Ambiguous variable-length data
@@ -115,7 +115,7 @@
 //! let mut transcript = RandomOracle::empty();
 //! let string = "abc".to_string();
 //! // The serialization implementation of the `String` type prepends the length of the field values.
-//! transcript.append_message(b"String", &string);
+//! transcript.append_message(b"String1", &string);
 //! ```
 //!
 //! # Example: Adding collections of data using `Serial`
@@ -127,36 +127,7 @@
 //!
 //! let mut transcript = RandomOracle::empty();
 //! let collection = vec![2,3,4];
-//! transcript.append_message(b"Collection", &collection);
-//! ```
-//!
-//! # Example: Adding variable number of items
-//!
-//! Digesting a variable number of items without relying on `Serial` implementation on the items
-//!
-//! ```
-//! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
-//!
-//! struct Type {
-//!     field_1: String,
-//!     field_2: String,
-//! }
-//!
-//! let vec = vec![
-//!     Type {
-//!         field_1: "abc".to_string(),
-//!         field_2: "efg".to_string(),
-//!     },
-//!     Type {
-//!         field_1: "hij".to_string(),
-//!         field_2: "klm".to_string(),
-//!     },
-//! ];
-//! let mut transcript = RandomOracle::empty();
-//! transcript.append_each(b"Collection", &vec, |transcript, item| {
-//!     transcript.append_message(b"Field1", &item.field_1);
-//!     transcript.append_message(b"Field2", &item.field_2);
-//! });
+//! transcript.append_message(b"Collection1", &collection);
 //! ```
 //!
 //! # Example: Adding data with different variants
@@ -167,20 +138,20 @@
 //! ```
 //! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
 //!
-//! enum Enum {
+//! enum Enum1 {
 //!     Variant_0,
 //!     Variant_1
 //! }
 //!
 //! let mut transcript = RandomOracle::empty();
 //!
-//! transcript.add_bytes(b"Enum");
+//! transcript.add_bytes(b"Enum1");
 //! transcript.add_bytes(b"Variant_0");
 //! // add data from Variant_0
 //! ```
 //!
-//! If you serialize an enum that implements [`Serial`],
-//! the variant discriminator should be serialized (check the [`Serial`] of the enum)
+//! Notice that if you serialize an enum that implements [`Serial`],
+//! the variant discriminator will be serialized (check the [`Serial`] of the enum)
 use crate::{common::*, curve_arithmetic::Curve};
 use sha3::{Digest, Sha3_256};
 use std::io::Write;
@@ -337,7 +308,7 @@ impl RandomOracle {
     /// repeatedly calling append in sequence.
     /// Returns the new state of the random oracle, consuming the initial state.
     #[deprecated(
-        note = "Use RandomOracle::append_message or RandomOracle::append_each instead such that the number of elements is prepended. Do not change existing provers/verifiers since it will break compatability with existing proofs."
+        note = "Use RandomOracle::append_message (with a collection type) instead such that the number of elements is prepended. Do not change existing provers/verifiers since it will break compatability with existing proofs."
     )]
     pub fn extend_from<'a, I, S, B: AsRef<[u8]>>(&mut self, label: B, iter: I)
     where
