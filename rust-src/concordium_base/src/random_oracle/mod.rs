@@ -18,6 +18,34 @@
 //! After adding data, call [`RandomOracle::get_challenge`] to consume/hash the bytes
 //! and produce a random challenge.
 //!
+//! # Example: Ensuring proper domain separation
+//!
+//! The oracle should be initialized with a domain separating string. Further branches in the code
+//! or nested proofs should also be labelled for domain separation.
+//!
+//! ```
+//! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
+//! # use concordium_base::common::{Serialize};
+//!
+//! #[derive(Serialize)]
+//! struct Type1 {
+//!     field_1: u8,
+//!     field_2: u8,
+//! }
+//!
+//! let example = Type1 {
+//!     field_1: 1u8,
+//!     field_2: 2u8,
+//! };
+//!
+//! let mut transcript = RandomOracle::domain("Proof of something");
+//! // ...
+//! transcript.add_bytes(b"Subproof1");
+//! // ...
+//! transcript.add_bytes(b"Branch1");
+//! // ...
+//!```
+//!
 //! # Caution: Type ambiguity without domain separation
 //! Special care is required when adding bytes to domain separate them with labels.
 //! Naively appending just bytes (without separation) can produce collisions of different types.
@@ -69,7 +97,7 @@
 //!     field_2: 2u8,
 //! };
 //!
-//! let mut transcript = RandomOracle::empty();
+//! let mut transcript = RandomOracle::domain("Proof of something");
 //! transcript.append_message(b"Type1", &example);
 //!```
 //!
@@ -112,7 +140,7 @@
 //! ```
 //! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
 //!
-//! let mut transcript = RandomOracle::empty();
+//! let mut transcript = RandomOracle::domain("Proof of something");
 //! let string = "abc".to_string();
 //! // The serialization implementation of the `String` type prepends the length of the field values.
 //! transcript.append_message(b"String1", &string);
@@ -125,7 +153,7 @@
 //! ```
 //! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
 //!
-//! let mut transcript = RandomOracle::empty();
+//! let mut transcript = RandomOracle::domain("Proof of something");
 //! let collection = vec![2,3,4];
 //! transcript.append_message(b"Collection1", &collection);
 //! ```
@@ -143,7 +171,7 @@
 //!     Variant_1
 //! }
 //!
-//! let mut transcript = RandomOracle::empty();
+//! let mut transcript = RandomOracle::domain("Proof of something");
 //!
 //! transcript.add_bytes(b"Enum1");
 //! transcript.add_bytes(b"Variant_0");
@@ -202,6 +230,7 @@ impl Buffer for RandomOracle {
 
     #[inline(always)]
     fn start() -> Self {
+        #[allow(deprecated)]
         RandomOracle::empty()
     }
 
@@ -220,55 +249,76 @@ impl PartialEq for RandomOracle {
 }
 
 /// Trait for digesting messages that encourages encoding the structure of the data into
-/// the message bytes. This is done e.g. by applying length prefixes for variable-length data and
-/// prefixing variants with a discriminator.
-/// And by labelling types and fields for domain separation. Both are done to prevent malleability
-/// in the proofs where the oracle is used.
+/// the message bytes and doing proper domain separation. This is done e.g. by applying length
+/// prefixes for variable-length data and prefixing data variants with a discriminator.
+/// And by labelling data for domain separation. Both are done to prevent malleability
+/// in the proofs or signatures where the digest is used.
 ///
 /// Using [`Serial`] is one of the approaches to correctly produce the message
-/// bytes for variable-length types (including enums), since the corresponding [`Deserial`]
+/// bytes for variable-length types and data types with different variants (enums), since the corresponding [`Deserial`]
 /// implementation guarantees the message bytes are unique for the data. Notice that using [`Serial`]
-/// does not label types or fields in the nested data.
+/// does not label types or fields in the nested data. This can be ok, as labelling top level data types
+/// is the most important.
 pub trait StructuredDigest: Buffer {
-    /// Add raw message bytes to the state of the oracle. Should primarily be used to
-    /// append labels.
-    fn add_bytes(&mut self, data: impl AsRef<[u8]>);
+    /// Add raw message bytes to the state of the digest, without any length prepended.
+    /// Should generally not be used directly, prefer using one of the other methods on the trait.
+    fn add_raw_bytes(&mut self, data: impl AsRef<[u8]>);
 
-    /// Append the given data as the message bytes produced by its [`Serial`] implementation to the state of the oracle.
-    /// The given label is appended first as domain separation. Notice that a slice, `Vec` and several other collections of
-    /// items implementing [`Serial`] itself implements [`Serial`]. When serializing variable-length
+    /// Add domain separating label to the digest. The label bytes will be prepended with the bytes length.
+    fn append_label(&mut self, label: impl AsRef<[u8]>) {
+        let label = label.as_ref();
+        self.put(&(label.len() as u64));
+        self.add_raw_bytes(label);
+    }
+
+    /// Append the given data as the message bytes produced by its [`Serial`] implementation to the state of the digest.
+    /// The given label is appended first as domain separation. Notice that slices, `Vec`s, and several other collections of
+    /// items implementing [`Serial`], itself implements [`Serial`]. When serializing variable-length
     /// types or collection types, the length or size will be prepended in the serialization.
     fn append_message(&mut self, label: impl AsRef<[u8]>, data: &impl Serial) {
-        self.add_bytes(label);
+        self.append_label(label);
         self.put(data)
     }
 }
 
 impl StructuredDigest for RandomOracle {
-    fn add_bytes(&mut self, data: impl AsRef<[u8]>) {
+    fn add_raw_bytes(&mut self, data: impl AsRef<[u8]>) {
         self.0.update(data)
     }
 }
 
 impl StructuredDigest for sha2::Sha256 {
-    fn add_bytes(&mut self, data: impl AsRef<[u8]>) {
+    fn add_raw_bytes(&mut self, data: impl AsRef<[u8]>) {
         self.update(data)
     }
 }
 
 impl StructuredDigest for sha2::Sha512 {
-    fn add_bytes(&mut self, data: impl AsRef<[u8]>) {
+    fn add_raw_bytes(&mut self, data: impl AsRef<[u8]>) {
         self.update(data)
     }
 }
 
 impl RandomOracle {
     /// Start with the initial empty state of the oracle.
+    #[cfg_attr(not(test), deprecated(
+        note = "Use RandomOracle::with_domain initializes with a domain. Do not change existing provers/verifiers since it will break compatability with existing proofs."
+    ))]
     pub fn empty() -> Self {
         RandomOracle(Sha3_256::new())
     }
 
+    /// Start with the initial domain string. Prepend with length of the domain string bytes.
+    pub fn with_domain(label: impl AsRef<[u8]>) -> Self {
+        let mut ro = RandomOracle(Sha3_256::new());
+        ro.append_label(label);
+        ro
+    }
+
     /// Start with the initial domain string.
+    #[cfg_attr(not(test), deprecated(
+        note = "Use RandomOracle::with_domain which prepends the label length. Do not change existing provers/verifiers since it will break compatability with existing proofs."
+    ))]
     pub fn domain<B: AsRef<[u8]>>(data: B) -> Self {
         RandomOracle(Sha3_256::new().chain_update(data))
     }
@@ -277,6 +327,13 @@ impl RandomOracle {
     /// Further updates are independent.
     pub fn split(&self) -> Self {
         RandomOracle(self.0.clone())
+    }
+
+    #[deprecated(
+        note = "Use either StructuredDigest::append_label or StructuredDigest::add_raw_bytes instead. Do not change existing provers/verifiers since it will break compatability with existing proofs."
+    )]
+    pub fn add_bytes<B: AsRef<[u8]>>(&mut self, data: B) {
+        self.0.update(data)
     }
 
     /// Append all items from an iterator to the random oracle. Equivalent to
@@ -290,6 +347,7 @@ impl RandomOracle {
         S: Serial + 'a,
         I: IntoIterator<Item = &'a S>,
     {
+        #[allow(deprecated)]
         self.add_bytes(label);
         for i in iter.into_iter() {
             self.put(i)
@@ -299,7 +357,9 @@ impl RandomOracle {
     /// Try to convert the computed result into a field element. This interprets
     /// the output of the random oracle as a big-endian integer and reduces is
     /// mod field order.
-    pub fn result_to_scalar<C: Curve>(self) -> C::Scalar {
+    ///
+    /// Use the public method [`Self::challenge_scalar`] which labels as part of getting the challenge.
+    fn result_to_scalar<C: Curve>(self) -> C::Scalar {
         C::scalar_from_bytes(self.result())
     }
 
@@ -313,7 +373,7 @@ impl RandomOracle {
     /// Get a challenge in the form of a Scalar, using `label` as domain
     /// separation.
     pub fn challenge_scalar<C: Curve, B: AsRef<[u8]>>(&mut self, label: B) -> C::Scalar {
-        self.add_bytes(label);
+        self.add_raw_bytes(label);
         self.split().result_to_scalar::<C>()
     }
 }
@@ -321,6 +381,8 @@ impl RandomOracle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common;
+    use crate::id::constants::ArCurve;
     use rand::*;
 
     // Tests that extend_from acts in the intended way.
@@ -361,7 +423,7 @@ mod tests {
             }
             let res1 = s1.result();
             let ref_res1: &[u8] = res1.as_ref();
-            s2.add_bytes(&v1);
+            s2.add_raw_bytes(&v1);
             let res2 = s2.result();
             let ref_res2: &[u8] = res2.as_ref();
             assert_eq!(ref_res1, ref_res2);
@@ -372,6 +434,7 @@ mod tests {
     /// by [`RandomOracle::domain`]
     #[test]
     pub fn test_domain_stable() {
+        #[allow(deprecated)]
         let ro = RandomOracle::domain("Domain1");
 
         let challenge_hex = hex::encode(ro.get_challenge());
@@ -382,16 +445,58 @@ mod tests {
     }
 
     /// Test that we don't accidentally change the digest produced
-    /// by [`StructuredDigest::add_bytes`]
+    /// by [`RandomOracle::with_domain`]
+    #[test]
+    pub fn test_with_domain_stable() {
+        let ro = RandomOracle::with_domain("Domain1");
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "5691f0658460c461ffe14baa70071545df78725892d0decfe6f6642233a0d8e2"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`RandomOracle::add_bytes`]
     #[test]
     pub fn test_add_bytes_stable() {
         let mut ro = RandomOracle::empty();
+        #[allow(deprecated)]
         ro.add_bytes([1u8, 2, 3]);
 
         let challenge_hex = hex::encode(ro.get_challenge());
         assert_eq!(
             challenge_hex,
             "fd1780a6fc9ee0dab26ceb4b3941ab03e66ccd970d1db91612c66df4515b0a0a"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`StructuredDigest::add_raw_bytes`]
+    #[test]
+    pub fn test_add_raw_bytes_stable() {
+        let mut ro = RandomOracle::empty();
+        ro.add_raw_bytes([1u8, 2, 3]);
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "fd1780a6fc9ee0dab26ceb4b3941ab03e66ccd970d1db91612c66df4515b0a0a"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`StructuredDigest::append_label`]
+    #[test]
+    pub fn test_append_label_stable() {
+        let mut ro = RandomOracle::empty();
+        ro.append_label("Label1");
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "fa7389e2cab48f620de96d0a0f8e82f84336f77e45fc545af21c7cef1dd999a4"
         );
     }
 
@@ -406,6 +511,22 @@ mod tests {
         assert_eq!(
             challenge_hex,
             "891fd1754242e364a9eca7a15133403f3293ad330ce295cca0dd8347b94df7a8"
+        );
+    }
+
+    /// Test that we don't accidentally change the scalar produced
+    /// by [`RandomOracle::challenge_scalar`]
+    #[test]
+    pub fn test_challenge_scalar_stable() {
+        #[allow(deprecated)]
+        let mut ro = RandomOracle::domain("Domain1");
+
+        let scalar_hex = hex::encode(common::to_bytes(
+            &ro.challenge_scalar::<ArCurve, _>("Scalar1"),
+        ));
+        assert_eq!(
+            scalar_hex,
+            "3166667654ae8d1d41a2ecf6816f53451a29981e2b32cc2bd915c5fb8bfedbb6"
         );
     }
 }

@@ -68,7 +68,7 @@ pub fn prove_verify_benchmarks<SomeCurve: Curve>(c: &mut Criterion) {
     let v_vec_p = v_vec.clone();
     let gens_p = gens.clone();
     let randomness_p = randomness.clone();
-    let mut transcript = RandomOracle::empty();
+    let mut transcript = RandomOracle::with_domain("Bench");
     group.bench_function("Prove", move |b| {
         b.iter(|| {
             prove(
@@ -86,7 +86,7 @@ pub fn prove_verify_benchmarks<SomeCurve: Curve>(c: &mut Criterion) {
     });
 
     let rng = &mut thread_rng();
-    let mut transcript = RandomOracle::empty();
+    let mut transcript = RandomOracle::with_domain("Bench");
     let proof = prove(
         ProofVersion::Version1,
         &mut transcript,
@@ -102,7 +102,7 @@ pub fn prove_verify_benchmarks<SomeCurve: Curve>(c: &mut Criterion) {
 
     group.bench_function("Verify Efficient", move |b| {
         b.iter(|| {
-            let mut transcript = RandomOracle::empty();
+            let mut transcript = RandomOracle::with_domain("Bench");
             assert!(verify_efficient(
                 ProofVersion::Version1,
                 &mut transcript,
@@ -150,7 +150,7 @@ fn compare_inner_product_proof<SomeCurve: Curve>(c: &mut Criterion) {
     let mut H_prime: Vec<SomeCurve> = Vec::with_capacity(n);
     let y_inv = y.inverse().unwrap();
     let mut H_prime_scalars: Vec<<SomeCurve as Curve>::Scalar> = Vec::with_capacity(n);
-    let mut transcript = RandomOracle::empty();
+    let mut transcript = RandomOracle::with_domain("Bench");
     let G_vec_p = G_vec.clone();
     let H_vec_p = H_vec.clone();
     let a_vec_p = a_vec.clone();
@@ -165,7 +165,7 @@ fn compare_inner_product_proof<SomeCurve: Curve>(c: &mut Criterion) {
             prove_inner_product(&mut transcript, &G_vec, &H_prime, &Q, &a_vec, &b_vec);
         })
     });
-    let mut transcript = RandomOracle::empty();
+    let mut transcript = RandomOracle::with_domain("Bench");
     group.bench_function("Better inner product proof with scalars", move |b| {
         b.iter(|| {
             let mut y_inv_i = <SomeCurve as Curve>::Scalar::one();
