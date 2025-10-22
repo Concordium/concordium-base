@@ -604,7 +604,8 @@ fn signature_knowledge_verifier<
 
 #[cfg(test)]
 mod test {
-    use crate::curve_arithmetic::{Curve, Value};
+    use crate::curve_arithmetic::{Value};
+    use crate::elgamal::Message;
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
     use crate::id::identity_attributes_credentials::{
         prove_identity_attributes, verify_identity_attributes,
@@ -619,8 +620,11 @@ mod test {
     use crate::random_oracle::RandomOracle;
     use assert_matches::assert_matches;
     use std::collections::BTreeMap;
+
     use std::str::FromStr;
     use std::sync::LazyLock;
+    use ark_bls12_381::G1Projective;
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
 
     struct IdentityObjectFixture {
         id_object: IdentityObjectV1<IpPairing, ArCurve, AttributeKind>,
@@ -777,14 +781,14 @@ mod test {
         )
         .expect("prove");
 
-        assert_matches!(id_attr_info.values.attributes.get(&TAG_0), Some(IdentityAttribute::Revealed(m)) => {
-            assert_eq!(m, &*VALUE_0);
+        assert_matches!(id_attr_info.values.attributes.get(&TAG_0), Some(IdentityAttribute::Revealed(a)) => {
+            assert_eq!(a, &*VALUE_0);
         });
-        assert_matches!(id_attr_info.values.attributes.get(&TAG_1), Some(IdentityAttribute::Revealed(m)) => {
-            assert_eq!(m, &*VALUE_1);
+        assert_matches!(id_attr_info.values.attributes.get(&TAG_1), Some(IdentityAttribute::Revealed(a)) => {
+            assert_eq!(a, &*VALUE_1);
         });
-        assert_matches!(id_attr_info.values.attributes.get(&TAG_2), Some(IdentityAttribute::Revealed(m)) => {
-            assert_eq!(m, &*VALUE_2);
+        assert_matches!(id_attr_info.values.attributes.get(&TAG_2), Some(IdentityAttribute::Revealed(a)) => {
+            assert_eq!(a, &*VALUE_2);
         });
 
         let mut transcript = RandomOracle::empty();
@@ -856,14 +860,14 @@ mod test {
             &attributes_handling,
             &mut transcript,
         )
-            .expect("prove");
+        .expect("prove");
 
         assert_matches!(id_attr_info.values.attributes.get(&TAG_0), Some(IdentityAttribute::Committed(c)) => {
             let r= rand.attributes_rand.get(&TAG_0).expect("rand");
             assert!(id_object_fixture.global_ctx.on_chain_commitment_key.open(&Value::new(VALUE_0.to_field_element()), r, c));
         });
-        assert_matches!(id_attr_info.values.attributes.get(&TAG_1), Some(IdentityAttribute::Revealed(m)) => {
-            assert_eq!(m, &*VALUE_1);
+        assert_matches!(id_attr_info.values.attributes.get(&TAG_1), Some(IdentityAttribute::Revealed(a)) => {
+            assert_eq!(a, &*VALUE_1);
         });
         assert_matches!(
             id_attr_info.values.attributes.get(&TAG_2),
@@ -878,24 +882,18 @@ mod test {
             &id_attr_info,
             &mut transcript,
         )
-            .expect("verify");
+        .expect("verify");
     }
 
     /// Test that the verifier does not accept the proof if the
-    /// id cred pub encryption
+    /// id cred pub encryption is not what is signed by the identity provider
     #[test]
     pub fn test_identity_attributes_soundness_ar_shares_encryption() {
+        let mut csprng = rand::thread_rng();
+
         let id_object_fixture = identity_object_fixture();
 
-        let attributes_handling = id_object_fixture
-            .id_object
-            .alist
-            .alist
-            .keys()
-            .copied()
-            .map(|tag| (tag, IdentityAttributeHandling::Commit))
-            .collect();
-
+        let attributes_handling = BTreeMap::new();
         let mut transcript = RandomOracle::empty();
         let (mut id_attr_info, _) = prove_identity_attributes(
             ip_context(&id_object_fixture),
@@ -907,11 +905,13 @@ mod test {
         .expect("prove");
 
         // make one of the ar share encryptions invalid
-        let enc = id_attr_info.values.ar_data.values_mut().next().unwrap();
-        enc.enc_id_cred_pub_share.1 = enc
-            .enc_id_cred_pub_share
-            .1
-            .plus_point(&ArCurve::one_point());
+        let ar = *id_attr_info.values.ar_data.keys().next().unwrap();
+        let enc = id_attr_info.values.ar_data.get_mut(&ar).unwrap();
+        let ar_info = id_object_fixture.ars_infos.get(&ar).unwrap();
+        let new_message = Message::generate(&mut csprng);
+        enc.enc_id_cred_pub_share = ar_info
+            .ar_public_key
+            .encrypt(&mut csprng, &new_message);
 
         let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(
@@ -930,15 +930,7 @@ mod test {
     pub fn test_identity_attributes_soundness_ip() {
         let id_object_fixture = identity_object_fixture();
 
-        let attributes_handling = id_object_fixture
-            .id_object
-            .alist
-            .alist
-            .keys()
-            .copied()
-            .map(|tag| (tag, IdentityAttributeHandling::Commit))
-            .collect();
-
+        let attributes_handling = BTreeMap::new();
         let mut transcript = RandomOracle::empty();
         let (mut id_attr_info, _) = prove_identity_attributes(
             ip_context(&id_object_fixture),
@@ -963,22 +955,14 @@ mod test {
     }
 
     /// Test that the verifier does not accept the proof if the
-    /// identity provider signature does not match the provided values.
+    /// identity provider signature does not match the values in the identity attribute credentials.
     #[test]
-    pub fn test_identity_attributes_soundness_ip_signature() {
+    pub fn test_identity_attributes_soundness_ip_signature_ar_threshold() {
         let id_object_fixture = identity_object_fixture();
 
-        let attributes_handling = id_object_fixture
-            .id_object
-            .alist
-            .alist
-            .keys()
-            .copied()
-            .map(|tag| (tag, IdentityAttributeHandling::Commit))
-            .collect();
-
+        let attributes_handling = BTreeMap::new();
         let mut transcript = RandomOracle::empty();
-        let (id_attr_info, _) = prove_identity_attributes(
+        let (mut id_attr_info, _) = prove_identity_attributes(
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
@@ -987,10 +971,9 @@ mod test {
         )
         .expect("prove");
 
-        // change one of the public values in the signature: decrease ar threshold
-        let mut id_attr_info_invalid = id_attr_info.clone();
-        id_attr_info_invalid.values.threshold.0 -= 1;
-        id_attr_info_invalid
+        // decrease ar threshold
+        id_attr_info.values.threshold.0 -= 1;
+        id_attr_info
             .proofs
             .commitments
             .cmm_id_cred_sec_sharing_coeff
@@ -1001,50 +984,176 @@ mod test {
             &id_object_fixture.global_ctx,
             &id_object_fixture.ip_info,
             &id_object_fixture.ars_infos,
-            &id_attr_info_invalid,
+            &id_attr_info,
             &mut transcript,
         );
         assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
+    }
 
-        // change one of the public values in the signature: remove one of the ars
-        let mut id_attr_info_invalid = id_attr_info.clone();
-        let ar_to_remove = *id_attr_info_invalid.values.ar_data.keys().next().unwrap();
-        id_attr_info_invalid.values.ar_data.remove(&ar_to_remove);
-        id_attr_info_invalid
-            .proofs
-            .proof_id_cred_pub
-            .remove(&ar_to_remove);
+    /// Test that the verifier does not accept the proof if the
+    /// identity provider signature does not match the values in the identity attribute credentials.
+    #[test]
+    pub fn test_identity_attributes_soundness_ip_signature_ar_ids() {
+        let id_object_fixture = identity_object_fixture();
+
+        let attributes_handling = BTreeMap::new();
+        let mut transcript = RandomOracle::empty();
+        let (mut id_attr_info, _) = prove_identity_attributes(
+            ip_context(&id_object_fixture),
+            &id_object_fixture.id_object,
+            &id_object_fixture.id_use_data,
+            &attributes_handling,
+            &mut transcript,
+        )
+        .expect("prove");
+
+        // remove one of the ars
+        let ar_to_remove = *id_attr_info.values.ar_data.keys().next().unwrap();
+        id_attr_info.values.ar_data.remove(&ar_to_remove);
+        id_attr_info.proofs.proof_id_cred_pub.remove(&ar_to_remove);
 
         let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
             &id_object_fixture.ip_info,
             &id_object_fixture.ars_infos,
-            &id_attr_info_invalid,
+            &id_attr_info,
             &mut transcript,
         );
         assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
+    }
 
-        // todo ar
-        // // change one of the committed values in the signature
-        // let mut id_attr_info_invalid = id_attr_info.clone();
-        // let attr_cmm = id_attr_info_invalid
-        //     .proofs
-        //     .commitments
-        //     .cmm_attributes
-        //     .values_mut()
-        //     .next()
-        //     .unwrap();
-        // attr_cmm.0 = attr_cmm.0.plus_point(&ArCurve::one_point());
-        //
-        // let mut transcript = RandomOracle::empty();
-        // let res = verify_identity_attributes(
-        //     &id_object_fixture.global_ctx,
-        //     &id_object_fixture.ip_info,
-        //     &id_object_fixture.ars_infos,
-        //     &id_attr_info_invalid,
-        //     &mut transcript,
-        // );
-        // assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
+    /// Test that the verifier does not accept the proof if the
+    /// identity provider signature does not match the values in the identity attribute credentials.
+    #[test]
+    pub fn test_identity_attributes_soundness_ip_signature_created_at() {
+        let id_object_fixture = identity_object_fixture();
+
+        let attributes_handling = BTreeMap::new();
+        let mut transcript = RandomOracle::empty();
+        let (mut id_attr_info, _) = prove_identity_attributes(
+            ip_context(&id_object_fixture),
+            &id_object_fixture.id_object,
+            &id_object_fixture.id_use_data,
+            &attributes_handling,
+            &mut transcript,
+        )
+        .expect("prove");
+
+        // change created at
+        id_attr_info.values.validity.created_at = YearMonth::try_from(2025 << 8 | 5).unwrap();
+
+        let mut transcript = RandomOracle::empty();
+        let res = verify_identity_attributes(
+            &id_object_fixture.global_ctx,
+            &id_object_fixture.ip_info,
+            &id_object_fixture.ars_infos,
+            &id_attr_info,
+            &mut transcript,
+        );
+        assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
+    }
+
+    /// Test that the verifier does not accept the proof if the
+    /// identity provider signature does not match the values in the identity attribute credentials.
+    #[test]
+    pub fn test_identity_attributes_soundness_ip_signature_valid_to() {
+        let id_object_fixture = identity_object_fixture();
+
+        let attributes_handling = BTreeMap::new();
+        let mut transcript = RandomOracle::empty();
+        let (mut id_attr_info, _) = prove_identity_attributes(
+            ip_context(&id_object_fixture),
+            &id_object_fixture.id_object,
+            &id_object_fixture.id_use_data,
+            &attributes_handling,
+            &mut transcript,
+        )
+        .expect("prove");
+
+        // change valid to
+        id_attr_info.values.validity.valid_to = YearMonth::try_from(2025 << 8 | 5).unwrap();
+
+        let mut transcript = RandomOracle::empty();
+        let res = verify_identity_attributes(
+            &id_object_fixture.global_ctx,
+            &id_object_fixture.ip_info,
+            &id_object_fixture.ars_infos,
+            &id_attr_info,
+            &mut transcript,
+        );
+        assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
+    }
+
+    /// Test that the verifier does not accept the proof if the
+    /// identity provider signature does not match the values in the identity attribute credentials.
+    #[test]
+    pub fn test_identity_attributes_soundness_ip_signature_revealed_attribute() {
+        let id_object_fixture = identity_object_fixture();
+
+        let mut attributes_handling = BTreeMap::new();
+        attributes_handling.insert(TAG_0, IdentityAttributeHandling::Reveal);
+        let mut transcript = RandomOracle::empty();
+        let (mut id_attr_info, _) = prove_identity_attributes(
+            ip_context(&id_object_fixture),
+            &id_object_fixture.id_object,
+            &id_object_fixture.id_use_data,
+            &attributes_handling,
+            &mut transcript,
+        )
+        .expect("prove");
+
+        // change revealed value
+        assert_matches!(id_attr_info.values.attributes.get_mut(&TAG_0).unwrap(), IdentityAttribute::Revealed(a) => {
+            *a = AttributeKind::from_str("someotherstring").unwrap()
+        });
+
+        let mut transcript = RandomOracle::empty();
+        let res = verify_identity_attributes(
+            &id_object_fixture.global_ctx,
+            &id_object_fixture.ip_info,
+            &id_object_fixture.ars_infos,
+            &id_attr_info,
+            &mut transcript,
+        );
+        assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
+    }
+
+    /// Test that the verifier does not accept the proof if the
+    /// identity provider signature does not match the values in the identity attribute credentials.
+    #[test]
+    pub fn test_identity_attributes_soundness_ip_signature_commited_attribute() {
+        let mut csprng = rand::thread_rng();
+
+        let id_object_fixture = identity_object_fixture();
+
+        let mut attributes_handling = BTreeMap::new();
+        attributes_handling.insert(TAG_0, IdentityAttributeHandling::Commit);
+        let mut transcript = RandomOracle::empty();
+        let (mut id_attr_info, _) = prove_identity_attributes(
+            ip_context(&id_object_fixture),
+            &id_object_fixture.id_object,
+            &id_object_fixture.id_use_data,
+            &attributes_handling,
+            &mut transcript,
+        )
+        .expect("prove");
+
+        // change attribute commitment
+        assert_matches!(id_attr_info.values.attributes.get_mut(&TAG_0).unwrap(), IdentityAttribute::Committed(c) => {
+            let a = AttributeKind::from_str("someotherstring").unwrap();
+            let (new_c, _r) = id_object_fixture.global_ctx.on_chain_commitment_key.commit(&Value::<ArkGroup<G1Projective>>::new(a.to_field_element()), &mut csprng);
+            *c = new_c;
+        });
+
+        let mut transcript = RandomOracle::empty();
+        let res = verify_identity_attributes(
+            &id_object_fixture.global_ctx,
+            &id_object_fixture.ip_info,
+            &id_object_fixture.ars_infos,
+            &id_attr_info,
+            &mut transcript,
+        );
+        assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
     }
 }
