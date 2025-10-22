@@ -3,16 +3,25 @@
 
 use super::{account_holder, types::*, utils};
 use crate::pedersen_commitment::{CommitmentKey, Randomness};
+use crate::sigma_protocols::common::{
+    AndAdapter, AndResponse, ReplicateAdapter, ReplicateResponse, SigmaProof,
+};
 use crate::sigma_protocols::ps_sig_known::{PsSigKnown, PsSigMsg, PsSigWitness, PsSigWitnessMsg};
-use crate::{curve_arithmetic::{Curve, Pairing}, pedersen_commitment::{
-    Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
-}, ps_sig, random_oracle::RandomOracle, sigma_protocols, sigma_protocols::{com_enc_eq}};
+use crate::{
+    curve_arithmetic::{Curve, Pairing},
+    pedersen_commitment::{
+        Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
+    },
+    ps_sig,
+    random_oracle::RandomOracle,
+    sigma_protocols,
+    sigma_protocols::com_enc_eq,
+};
 use anyhow::Context;
 use core::fmt;
 use core::fmt::Display;
 use rand::*;
 use std::collections::{btree_map::BTreeMap, BTreeSet};
-use crate::sigma_protocols::common::{AndAdapter, AndResponse, ReplicateAdapter, ReplicateResponse, SigmaProof};
 
 /// How to handle an identity credential attribute
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -118,7 +127,7 @@ pub fn prove_identity_attributes<
         .clone();
 
     // Proof of knowledge of the signature of the identity provider.
-    let (prover_signature, witness_signature, signature_pok_output) = compute_pok_sig(
+    let (prover_signature, witness_signature, signature_pok_output) = signature_knowledge_prover(
         &mut csprng,
         &context.global_context.on_chain_commitment_key,
         &context.ip_info.ip_verify_key,
@@ -129,8 +138,8 @@ pub fn prove_identity_attributes<
         cmm_rand_id_cred_sec,
     )?;
 
-    // We "and" the signature proof of knowledge and the IdCredSec share encryption proofs.
-    // The commitment to the coefficients of the sharing polynomial bind the proofs together
+    // We "and" the signature proof of knowledge and the IdCredSec share encryption provers.
+    // The commitment to the coefficients of the sharing polynomial bind the generated proofs together
     // such that we actually prove that the signed IdCredSec is what is encrypted in the shares.
     let prover = AndAdapter {
         first: prover_signature,
@@ -210,7 +219,7 @@ struct SignaturePokOutput<
     blinded_sig: ps_sig::BlindedSignature<P>,
 }
 
-fn compute_pok_sig<
+fn signature_knowledge_prover<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
@@ -415,23 +424,28 @@ pub fn verify_identity_attributes<
     transcript.append_message(b"identity_attribute_values", &id_attr_info.values);
     transcript.append_message(b"global_context", &global_context);
 
-    let commitments = &id_attr_info.proofs.commitments;
-
-    let verifier_sig = pok_sig_verifier(
+    let verifier_sig = signature_knowledge_verifier(
         &global_context.on_chain_commitment_key,
         &ip_info.ip_verify_key,
         id_attr_info,
     )
     .ok_or(AttributeCommitmentVerificationError::Signature)?;
 
+    // Create verifiers for encryption of IdCredSec
     let (id_cred_pub_verifier, id_cred_pub_responses) = id_cred_pub_verifier(
         &global_context.on_chain_commitment_key,
         known_ars,
         &id_attr_info.values.ar_data,
-        &commitments.cmm_id_cred_sec_sharing_coeff,
+        &id_attr_info
+            .proofs
+            .commitments
+            .cmm_id_cred_sec_sharing_coeff,
         &id_attr_info.proofs.proof_id_cred_pub,
     )?;
 
+    // We "and" the signature proof of knowledge and the IdCredSec share encryption verifiers.
+    // The commitment to the coefficients of the sharing polynomial bind the proofs together
+    // such that we actually verify that the signed IdCredSec is what is encrypted in the shares.
     let verifier = AndAdapter {
         first: verifier_sig,
         second: id_cred_pub_verifier,
@@ -501,7 +515,7 @@ fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
 /// Verify the proof of knowledge of signature on the attribute list.
 /// A none return value means we cannot construct a verifier, and consequently
 /// it should be interpreted as the signature being invalid.
-fn pok_sig_verifier<
+fn signature_knowledge_verifier<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
@@ -559,9 +573,8 @@ fn pok_sig_verifier<
         msgs.push(PsSigMsg::Public(Value::new(ar_scalar)));
     }
 
-    // Attribute tag set is a public value
-    let tags_val = utils::encode_tags(id_attr_info.values.attributes.keys()).ok()?;
-    msgs.push(PsSigMsg::Public(Value::new(tags_val)));
+    // Attribute tag set is just verified known
+    msgs.push(PsSigMsg::Known);
 
     // Max accounts is not public, we verify knowledge of it
     msgs.push(PsSigMsg::Known);
@@ -591,7 +604,7 @@ fn pok_sig_verifier<
 
 #[cfg(test)]
 mod test {
-    use crate::curve_arithmetic::Curve;
+    use crate::curve_arithmetic::{Curve, Value};
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
     use crate::id::identity_attributes_credentials::{
         prove_identity_attributes, verify_identity_attributes,
@@ -599,14 +612,15 @@ mod test {
     };
     use crate::id::test::ExampleAttributeList;
     use crate::id::types::{
-        ArIdentity, ArInfo, AttributeTag, GlobalContext, IdObjectUseData, IdentityObjectV1,
-        IpContext, IpData, IpInfo, YearMonth,
+        ArIdentity, ArInfo, Attribute, AttributeTag, GlobalContext, IdObjectUseData,
+        IdentityAttribute, IdentityObjectV1, IpContext, IpData, IpInfo, YearMonth,
     };
     use crate::id::{identity_provider, test};
     use crate::random_oracle::RandomOracle;
     use assert_matches::assert_matches;
     use std::collections::BTreeMap;
     use std::str::FromStr;
+    use std::sync::LazyLock;
 
     struct IdentityObjectFixture {
         id_object: IdentityObjectV1<IpPairing, ArCurve, AttributeKind>,
@@ -616,14 +630,21 @@ mod test {
         global_ctx: GlobalContext<ArCurve>,
     }
 
+    const TAG_0: AttributeTag = AttributeTag(0u8);
+    static VALUE_0: LazyLock<AttributeKind> = LazyLock::new(|| AttributeKind::from(55));
+
+    const TAG_1: AttributeTag = AttributeTag(2u8);
+    static VALUE_1: LazyLock<AttributeKind> =
+        LazyLock::new(|| AttributeKind::from_str("test1").unwrap());
+
+    const TAG_2: AttributeTag = AttributeTag(5u8);
+    static VALUE_2: LazyLock<AttributeKind> = LazyLock::new(|| AttributeKind::from(31));
+
     fn test_create_attributes() -> ExampleAttributeList {
         let mut alist = BTreeMap::new();
-        alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
-        alist.insert(
-            AttributeTag::from(3u8),
-            AttributeKind::from_str("test1").unwrap(),
-        );
-        alist.insert(AttributeTag::from(8u8), AttributeKind::from(31));
+        alist.insert(TAG_0, VALUE_0.clone());
+        alist.insert(TAG_1, VALUE_1.clone());
+        alist.insert(TAG_2, VALUE_2.clone());
 
         let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
         let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
@@ -684,11 +705,7 @@ mod test {
         }
     }
 
-    // todo ar tests
-
-    // todo ar test specify handling of attributes not in credentials
-
-    /// Test that the verifier accepts a valid proof
+    /// Test that the verifier accepts a valid proof when commiting to attributes
     #[test]
     pub fn test_identity_attributes_completeness_commit() {
         let id_object_fixture = identity_object_fixture();
@@ -703,7 +720,7 @@ mod test {
             .collect();
 
         let mut transcript = RandomOracle::empty();
-        let (id_attr_info, _) = prove_identity_attributes(
+        let (id_attr_info, rand) = prove_identity_attributes(
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
@@ -711,6 +728,19 @@ mod test {
             &mut transcript,
         )
         .expect("prove");
+
+        assert_matches!(id_attr_info.values.attributes.get(&TAG_0), Some(IdentityAttribute::Committed(c)) => {
+            let r= rand.attributes_rand.get(&TAG_0).expect("rand");
+            assert!(id_object_fixture.global_ctx.on_chain_commitment_key.open(&Value::new(VALUE_0.to_field_element()), r, c));
+        });
+        assert_matches!(id_attr_info.values.attributes.get(&TAG_1), Some(IdentityAttribute::Committed(c)) => {
+            let r= rand.attributes_rand.get(&TAG_1).expect("rand");
+            assert!(id_object_fixture.global_ctx.on_chain_commitment_key.open(&Value::new(VALUE_1.to_field_element()), r, c));
+        });
+        assert_matches!(id_attr_info.values.attributes.get(&TAG_2), Some(IdentityAttribute::Committed(c)) => {
+            let r= rand.attributes_rand.get(&TAG_2).expect("rand");
+            assert!(id_object_fixture.global_ctx.on_chain_commitment_key.open(&Value::new(VALUE_2.to_field_element()), r, c));
+        });
 
         let mut transcript = RandomOracle::empty();
         verify_identity_attributes(
@@ -723,7 +753,7 @@ mod test {
         .expect("verify");
     }
 
-    /// Test that the verifier accepts a valid proof
+    /// Test that the verifier accepts a valid proof when revealing attributes
     #[test]
     pub fn test_identity_attributes_completeness_reveal() {
         let id_object_fixture = identity_object_fixture();
@@ -747,6 +777,16 @@ mod test {
         )
         .expect("prove");
 
+        assert_matches!(id_attr_info.values.attributes.get(&TAG_0), Some(IdentityAttribute::Revealed(m)) => {
+            assert_eq!(m, &*VALUE_0);
+        });
+        assert_matches!(id_attr_info.values.attributes.get(&TAG_1), Some(IdentityAttribute::Revealed(m)) => {
+            assert_eq!(m, &*VALUE_1);
+        });
+        assert_matches!(id_attr_info.values.attributes.get(&TAG_2), Some(IdentityAttribute::Revealed(m)) => {
+            assert_eq!(m, &*VALUE_2);
+        });
+
         let mut transcript = RandomOracle::empty();
         verify_identity_attributes(
             &id_object_fixture.global_ctx,
@@ -758,19 +798,12 @@ mod test {
         .expect("verify");
     }
 
-    /// Test that the verifier accepts a valid proof
+    /// Test that the verifier accepts a valid proof when just proving all attributes known
     #[test]
-    pub fn test_identity_attributes_completeness_known() {
+    pub fn test_identity_attributes_completeness_empty() {
         let id_object_fixture = identity_object_fixture();
 
-        let attributes_handling = id_object_fixture
-            .id_object
-            .alist
-            .alist
-            .keys()
-            .copied()
-            .map(|tag| (tag, IdentityAttributeHandling::Reveal))
-            .collect();
+        let attributes_handling = BTreeMap::new();
 
         let mut transcript = RandomOracle::empty();
         let (id_attr_info, _) = prove_identity_attributes(
@@ -782,6 +815,19 @@ mod test {
         )
         .expect("prove");
 
+        assert_matches!(
+            id_attr_info.values.attributes.get(&TAG_0),
+            Some(IdentityAttribute::Known)
+        );
+        assert_matches!(
+            id_attr_info.values.attributes.get(&TAG_1),
+            Some(IdentityAttribute::Known)
+        );
+        assert_matches!(
+            id_attr_info.values.attributes.get(&TAG_2),
+            Some(IdentityAttribute::Known)
+        );
+
         let mut transcript = RandomOracle::empty();
         verify_identity_attributes(
             &id_object_fixture.global_ctx,
@@ -791,6 +837,48 @@ mod test {
             &mut transcript,
         )
         .expect("verify");
+    }
+
+    /// Test that the verifier accepts a valid proof when mixing how attributes are handled
+    #[test]
+    pub fn test_identity_attributes_completeness_mixed() {
+        let id_object_fixture = identity_object_fixture();
+
+        let mut attributes_handling = BTreeMap::new();
+        attributes_handling.insert(TAG_0, IdentityAttributeHandling::Commit);
+        attributes_handling.insert(TAG_1, IdentityAttributeHandling::Reveal);
+
+        let mut transcript = RandomOracle::empty();
+        let (id_attr_info, rand) = prove_identity_attributes(
+            ip_context(&id_object_fixture),
+            &id_object_fixture.id_object,
+            &id_object_fixture.id_use_data,
+            &attributes_handling,
+            &mut transcript,
+        )
+            .expect("prove");
+
+        assert_matches!(id_attr_info.values.attributes.get(&TAG_0), Some(IdentityAttribute::Committed(c)) => {
+            let r= rand.attributes_rand.get(&TAG_0).expect("rand");
+            assert!(id_object_fixture.global_ctx.on_chain_commitment_key.open(&Value::new(VALUE_0.to_field_element()), r, c));
+        });
+        assert_matches!(id_attr_info.values.attributes.get(&TAG_1), Some(IdentityAttribute::Revealed(m)) => {
+            assert_eq!(m, &*VALUE_1);
+        });
+        assert_matches!(
+            id_attr_info.values.attributes.get(&TAG_2),
+            Some(IdentityAttribute::Known)
+        );
+
+        let mut transcript = RandomOracle::empty();
+        verify_identity_attributes(
+            &id_object_fixture.global_ctx,
+            &id_object_fixture.ip_info,
+            &id_object_fixture.ars_infos,
+            &id_attr_info,
+            &mut transcript,
+        )
+            .expect("verify");
     }
 
     /// Test that the verifier does not accept the proof if the
