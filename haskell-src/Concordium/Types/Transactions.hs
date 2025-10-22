@@ -227,7 +227,7 @@ data TransactionHeaderV1 = TransactionHeaderV1
       -- | Absolute expiration time after which transaction will not be executed
       thv1Expiry :: TransactionExpiryTime,
       -- | An optional sponsor account which pays the transaction fees for the
-      -- transtaction execution
+      --  transtaction execution
       thv1Sponsor :: Maybe AccountAddress
     }
     deriving (Show, Eq)
@@ -259,7 +259,7 @@ instance S.Serialize TransactionHeaderV1 where
                 else return Nothing
 
 -- | Set the given bit if the value is a 'Just'.
-bitFor :: (Bits b) => Int -> Maybe a -> b
+bitFor :: Bits b => Int -> Maybe a -> b
 bitFor _ Nothing = zeroBits
 bitFor i (Just _) = bit i
 
@@ -297,7 +297,7 @@ makeAccountTransactionV1 atrv1Signature atrv1Header atrv1Payload = AccountTransa
 
 -- | Construct a 'TransactionSignHash' from a 'TransactionHeaderV1' and 'EncodedPayload'.
 transactionV1SignHashFromHeaderPayload :: TransactionHeaderV1 -> EncodedPayload -> TransactionSignHashV0
-transactionV1SignHashFromHeaderPayload atrv1Header atrv1Payload = TransactionSignHashV0 $ H.hashLazy $ S.runPutLazy $ message
+transactionV1SignHashFromHeaderPayload atrv1Header atrv1Payload = TransactionSignHashV0 $ H.hashLazy $ S.runPutLazy message
   where
     message = S.put atrv1Prefix <> S.put atrv1Header <> putEncodedPayload atrv1Payload
 
