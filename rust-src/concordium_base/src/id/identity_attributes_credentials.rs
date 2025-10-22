@@ -506,6 +506,7 @@ fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
         provers.push(item_prover);
         responses.push(response.clone());
     }
+
     Ok((
         ReplicateAdapter { protocols: provers },
         ReplicateResponse { responses },
@@ -933,6 +934,39 @@ mod test {
         assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
     }
 
+    /// Test that the verifier does not accept the proof if the
+    /// id cred pub encryption has share missing for an ar
+    #[test]
+    pub fn test_identity_attributes_soundness_ar_shares_encryption_remove_ar() {
+        let id_object_fixture = identity_object_fixture();
+
+        let attributes_handling = BTreeMap::new();
+        let mut transcript = RandomOracle::empty();
+        let (mut id_attr_info, _) = prove_identity_attributes(
+            ip_context(&id_object_fixture),
+            &id_object_fixture.id_object,
+            &id_object_fixture.id_use_data,
+            &attributes_handling,
+            &mut transcript,
+        )
+            .expect("prove");
+
+        // remove one of the encryptions
+        let ar = *id_attr_info.values.ar_data.keys().next().unwrap();
+        let enc = id_attr_info.values.ar_data.remove(&ar);
+
+        let mut transcript = RandomOracle::empty();
+        let res = verify_identity_attributes(
+            &id_object_fixture.global_ctx,
+            &id_object_fixture.ip_info,
+            &id_object_fixture.ars_infos,
+            &id_attr_info,
+            &mut transcript,
+        );
+
+        assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
+    }
+
     /// Test that the verifier fails if identity provider is not set correctly.
     #[test]
     pub fn test_identity_attributes_soundness_ip() {
@@ -1164,6 +1198,8 @@ mod test {
         );
         assert_matches!(res, Err(AttributeCommitmentVerificationError::Proof));
     }
+
+
 
     /// Test that we can verify proofs created by previous versions of the protocol.
     /// This test protects from changes that introduces braking changes without proper versioning.
