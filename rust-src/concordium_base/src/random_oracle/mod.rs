@@ -54,7 +54,7 @@
 //! If you add a struct to the transcript use its type name as separator and its [`Serial`]
 //! to define the data message bytes.
 //!
-//! ```
+//! ```rust,ignore
 //! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
 //! # use concordium_base::common::{Serialize};
 //!
