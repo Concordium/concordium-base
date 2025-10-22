@@ -69,7 +69,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("SM Prove", n), move |b| {
             b.iter(|| {
                 let rng = &mut thread_rng();
-                let mut transcript = RandomOracle::empty();
+                let mut transcript = RandomOracle::with_domain("Bench");
                 set_membership_proof::prove(
                     ProofVersion::Version1,
                     &mut transcript,
@@ -92,7 +92,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("SNM Prove", n), move |b| {
             b.iter(|| {
                 let rng = &mut thread_rng();
-                let mut transcript = RandomOracle::empty();
+                let mut transcript = RandomOracle::with_domain("Bench");
                 set_non_membership_proof::prove(
                     ProofVersion::Version1,
                     &mut transcript,
@@ -108,7 +108,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         });
 
         // Generate valid proofs for verification
-        let mut transcript = RandomOracle::empty();
+        let mut transcript = RandomOracle::with_domain("Bench");
         let snm_proof = set_non_membership_proof::prove(
             ProofVersion::Version1,
             &mut transcript,
@@ -121,7 +121,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         );
         assert!(snm_proof.is_ok());
         let snm_proof = snm_proof.unwrap();
-        let mut transcript = RandomOracle::empty();
+        let mut transcript = RandomOracle::with_domain("Bench");
         let sm_proof = set_membership_proof::prove(
             ProofVersion::Version1,
             &mut transcript,
@@ -143,7 +143,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         let sm_proof_p = sm_proof.clone();
         group.bench_function(BenchmarkId::new("SM Verify", n), move |b| {
             b.iter(|| {
-                let mut transcript = RandomOracle::empty();
+                let mut transcript = RandomOracle::with_domain("Bench");
                 set_membership_proof::verify(
                     ProofVersion::Version1,
                     &mut transcript,
@@ -165,7 +165,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         let snm_proof_p = snm_proof.clone();
         group.bench_function(BenchmarkId::new("SNM Verify", n), move |b| {
             b.iter(|| {
-                let mut transcript = RandomOracle::empty();
+                let mut transcript = RandomOracle::with_domain("Bench");
                 set_non_membership_proof::verify(
                     ProofVersion::Version1,
                     &mut transcript,

@@ -18,6 +18,34 @@
 //! After adding data, call [`RandomOracle::get_challenge`] to consume/hash the bytes
 //! and produce a random challenge.
 //!
+//! # Example: Ensuring proper domain separation
+//!
+//! The oracle should be initialized with a domain separating string. Further branches in the code
+//! or nested proofs should also be labelled for domain separation.
+//!
+//! ```
+//! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
+//! # use concordium_base::common::{Serialize};
+//!
+//! #[derive(Serialize)]
+//! struct Type1 {
+//!     field_1: u8,
+//!     field_2: u8,
+//! }
+//!
+//! let example = Type1 {
+//!     field_1: 1u8,
+//!     field_2: 2u8,
+//! };
+//!
+//! let mut transcript = RandomOracle::domain("Proof of something");
+//! // ...
+//! transcript.add_bytes(b"Subproof1");
+//! // ...
+//! transcript.add_bytes(b"Branch1");
+//! // ...
+//!```
+//!
 //! # Caution: Type ambiguity without domain separation
 //! Special care is required when adding bytes to domain separate them with labels.
 //! Naively appending just bytes (without separation) can produce collisions of different types.
@@ -69,7 +97,7 @@
 //!     field_2: 2u8,
 //! };
 //!
-//! let mut transcript = RandomOracle::empty();
+//! let mut transcript = RandomOracle::domain("Proof of something");
 //! transcript.append_message(b"Type1", &example);
 //!```
 //!
@@ -112,7 +140,7 @@
 //! ```
 //! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
 //!
-//! let mut transcript = RandomOracle::empty();
+//! let mut transcript = RandomOracle::domain("Proof of something");
 //! let string = "abc".to_string();
 //! // The serialization implementation of the `String` type prepends the length of the field values.
 //! transcript.append_message(b"String1", &string);
@@ -125,7 +153,7 @@
 //! ```
 //! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
 //!
-//! let mut transcript = RandomOracle::empty();
+//! let mut transcript = RandomOracle::domain("Proof of something");
 //! let collection = vec![2,3,4];
 //! transcript.append_message(b"Collection1", &collection);
 //! ```
@@ -143,7 +171,7 @@
 //!     Variant_1
 //! }
 //!
-//! let mut transcript = RandomOracle::empty();
+//! let mut transcript = RandomOracle::domain("Proof of something");
 //!
 //! transcript.add_bytes(b"Enum1");
 //! transcript.add_bytes(b"Variant_0");
@@ -202,6 +230,7 @@ impl Buffer for RandomOracle {
 
     #[inline(always)]
     fn start() -> Self {
+        #[allow(deprecated)]
         RandomOracle::empty()
     }
 
@@ -272,11 +301,14 @@ impl StructuredDigest for sha2::Sha512 {
 
 impl RandomOracle {
     /// Start with the initial empty state of the oracle.
+    #[cfg_attr(not(test), deprecated(
+        note = "Use RandomOracle::with_domain initializes with a domain. Do not change existing provers/verifiers since it will break compatability with existing proofs."
+    ))]
     pub fn empty() -> Self {
         RandomOracle(Sha3_256::new())
     }
 
-    /// Start with the initial domain string. Prepend length
+    /// Start with the initial domain string. Prepend with length of the domain string bytes.
     pub fn with_domain(label: impl AsRef<[u8]>) -> Self {
         let mut ro = RandomOracle(Sha3_256::new());
         ro.append_label(label);
@@ -284,9 +316,9 @@ impl RandomOracle {
     }
 
     /// Start with the initial domain string.
-    #[deprecated(
+    #[cfg_attr(not(test), deprecated(
         note = "Use RandomOracle::with_domain which prepends the label length. Do not change existing provers/verifiers since it will break compatability with existing proofs."
-    )]
+    ))]
     pub fn domain<B: AsRef<[u8]>>(data: B) -> Self {
         RandomOracle(Sha3_256::new().chain_update(data))
     }
@@ -325,7 +357,9 @@ impl RandomOracle {
     /// Try to convert the computed result into a field element. This interprets
     /// the output of the random oracle as a big-endian integer and reduces is
     /// mod field order.
-    pub fn result_to_scalar<C: Curve>(self) -> C::Scalar {
+    ///
+    /// Use the public method [`Self::challenge_scalar`] which labels as part of getting the challenge.
+    fn result_to_scalar<C: Curve>(self) -> C::Scalar {
         C::scalar_from_bytes(self.result())
     }
 
@@ -477,20 +511,6 @@ mod tests {
         assert_eq!(
             challenge_hex,
             "891fd1754242e364a9eca7a15133403f3293ad330ce295cca0dd8347b94df7a8"
-        );
-    }
-
-    /// Test that we don't accidentally change the scalar produced
-    /// by [`RandomOracle::result_to_scalar`]
-    #[test]
-    pub fn test_result_to_scalar_stable() {
-        #[allow(deprecated)]
-        let ro = RandomOracle::domain("Domain1");
-
-        let scalar_hex = hex::encode(common::to_bytes(&ro.result_to_scalar::<ArCurve>()));
-        assert_eq!(
-            scalar_hex,
-            "3166667654ae8d1d41a2ecf6816f53451a29981e2b32cc2bd915c5fb8bfedbb6"
         );
     }
 
