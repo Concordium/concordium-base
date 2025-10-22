@@ -309,12 +309,11 @@ impl Deserial for TransactionHeaderV1 {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let bitmap: u8 = source.get()?;
         let header_v0: TransactionHeader = source.get()?;
-        let sponsor;
-        if (bitmap & 0b0000000000000001) != 0 {
-            sponsor = Some(source.get()?);
+        let sponsor = if (bitmap & 0b0000000000000001) != 0 {
+            Some(source.get()?)
         } else {
-            sponsor = None;
-        }
+            None
+        };
 
         Ok(TransactionHeaderV1 {
             sender: header_v0.sender,
@@ -322,7 +321,7 @@ impl Deserial for TransactionHeaderV1 {
             energy_amount: header_v0.energy_amount,
             payload_size: header_v0.payload_size,
             expiry: header_v0.expiry,
-            sponsor: sponsor,
+            sponsor,
         })
     }
 }
@@ -1902,7 +1901,7 @@ pub fn verify_signature_transaction_sign_hash_v1(
 ) -> bool {
     let sender_sig_ok = verify_data_signature(sender_keys, hash, &signatures.sender);
     let sponsor_sig_ok = if let Some(sponsor_sig) = &signatures.sponsor {
-        verify_data_signature(sponsor_keys, hash, &sponsor_sig)
+        verify_data_signature(sponsor_keys, hash, sponsor_sig)
     } else {
         true // if there's no sponsor there is nothing to check.
     };
