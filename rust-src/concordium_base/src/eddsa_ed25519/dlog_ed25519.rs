@@ -160,11 +160,13 @@ mod tests {
             let secret = signing.to_bytes();
             let public = signing.verifying_key();
             let challenge_prefix = generate_challenge_prefix(&mut csprng);
+            #[allow(deprecated)]
             let mut ro = RandomOracle::domain(&challenge_prefix);
             let proof = prove_dlog_ed25519(&mut csprng, &mut ro.split(), &public, &secret);
             assert!(verify_dlog_ed25519(&mut ro, &public, &proof));
             let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
             if verify_dlog_ed25519(
+                #[allow(deprecated)]
                 &mut RandomOracle::domain(&challenge_prefix_1),
                 &public,
                 &proof,
@@ -185,6 +187,7 @@ mod tests {
             let challenge_prefix = generate_challenge_prefix(&mut csprng);
             let proof = prove_dlog_ed25519(
                 &mut csprng,
+                #[allow(deprecated)]
                 &mut RandomOracle::domain(&challenge_prefix),
                 &public,
                 &secret,

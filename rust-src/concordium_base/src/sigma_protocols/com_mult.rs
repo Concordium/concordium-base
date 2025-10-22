@@ -188,6 +188,7 @@ mod tests {
         for _ in 0..100 {
             ComMult::<G1>::with_valid_data(0, &mut csprng, |com_mult, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
+                #[allow(deprecated)]
                 let mut ro = RandomOracle::domain(challenge_prefix);
                 let proof = prove(&mut ro.split(), &com_mult, secret, csprng)
                     .expect("Proving should succeed.");
@@ -202,12 +203,14 @@ mod tests {
         for _ in 0..100 {
             ComMult::<G1>::with_valid_data(0, &mut csprng, |com_mult, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
+                #[allow(deprecated)]
                 let ro = RandomOracle::domain(&challenge_prefix);
                 let proof = prove(&mut ro.split(), &com_mult, secret, csprng)
                     .expect("Proving should succeed.");
                 assert!(verify(&mut ro.split(), &com_mult, &proof));
 
                 // Construct invalid parameters
+                #[allow(deprecated)]
                 let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
 
                 // Verify failure for invalid parameters, or that the same RO state has been

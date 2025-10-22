@@ -671,7 +671,7 @@ fn append_challenge(digest: &mut impl StructuredDigest, challenge: &Challenge) {
             // is different to any `Sha256` challenge.
             digest.add_raw_bytes([0u8; 32]);
             // Add tag/version `V1` to the random oracle.
-            digest.add_label("ContextV1");
+            digest.append_label("ContextV1");
             digest.append_message("given", &context.given);
             digest.append_message("requested", &context.requested);
         }
@@ -904,6 +904,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
         params: &GlobalContext<C>,
         public: impl ExactSizeIterator<Item = &'a CredentialsInputs<C>>,
     ) -> Result<Request<C, AttributeType>, PresentationVerificationError> {
+        #[allow(deprecated)]
         let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
         append_challenge(&mut transcript, &self.presentation_context);
         transcript.append_message(b"ctx", &params);
@@ -1659,6 +1660,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
         AttributeType: 'a,
     {
         let mut proofs = Vec::with_capacity(attrs.len());
+        #[allow(deprecated)]
         let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
         append_challenge(&mut transcript, &self.challenge);
         transcript.append_message(b"ctx", &params);

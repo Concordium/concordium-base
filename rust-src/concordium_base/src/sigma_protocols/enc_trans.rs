@@ -494,6 +494,7 @@ mod tests {
         for _i in 1..20 {
             EncTrans::<G1>::with_valid_data(&mut rng, |enc_trans, secret, rng| {
                 let challenge_prefix = generate_challenge_prefix(rng);
+                #[allow(deprecated)]
                 let mut ro = RandomOracle::domain(challenge_prefix);
                 let mut ro_copy = ro.split();
                 let proof =
@@ -510,11 +511,13 @@ mod tests {
         for _ in 1..20 {
             EncTrans::<G1>::with_valid_data(&mut rng, |enc_trans, secret, rng| {
                 let challenge_prefix = generate_challenge_prefix(rng);
+                #[allow(deprecated)]
                 let ro = RandomOracle::domain(&challenge_prefix);
                 let mut ro_split = ro.split();
                 let proof =
                     prove(&mut ro_split, &enc_trans, secret, rng).expect("Proving should succeed.");
 
+                #[allow(deprecated)]
                 let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(rng));
                 if verify(&mut wrong_ro, &enc_trans, &proof) {
                     assert_eq!(wrong_ro, ro);

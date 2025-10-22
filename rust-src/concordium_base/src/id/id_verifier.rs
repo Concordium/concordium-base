@@ -67,6 +67,7 @@ pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     let b = upper.to_field_element();
     match version {
         ProofVersion::Version1 => {
+            #[allow(deprecated)]
             let mut transcript_v1 = RandomOracle::domain("attribute_range_proof");
             verify_in_range(
                 ProofVersion::Version1,
@@ -80,6 +81,7 @@ pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
             )
         }
         ProofVersion::Version2 => {
+            #[allow(deprecated)]
             transcript.add_bytes(b"AttributeRangeProof");
             transcript.append_message(b"a", &a);
             transcript.append_message(b"b", &b);
@@ -178,6 +180,7 @@ impl<
                     // There is a commitment to the relevant attribute. We can then check the
                     // proof.
                     let x = attribute.to_field_element();
+                    #[allow(deprecated)]
                     transcript.add_bytes(b"RevealAttributeDlogProof");
                     // x is known to the verifier and should go into the transcript
                     transcript.append_message(b"x", &x);
@@ -304,8 +307,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
         commitments: &CredentialDeploymentCommitments<C>,
         proofs: &Proof<C, AttributeType>,
     ) -> bool {
+        #[allow(deprecated)]
         let mut transcript = RandomOracle::domain("Concordium ID2.0 proof");
         transcript.append_message(b"ctx", &global);
+        #[allow(deprecated)]
         transcript.add_bytes(challenge);
         transcript.append_message(b"credential", credential);
         if self.statements.len() != proofs.proofs.len() {
@@ -401,6 +406,7 @@ mod tests {
         let upper = AttributeKind("20000103".to_string());
         let value = Value::<G1>::new(attribute.to_field_element());
         let (commitment, randomness) = keys.commit(&value, &mut csprng);
+        #[allow(deprecated)]
         let mut transcript = RandomOracle::domain("Test");
         let maybe_proof = prove_attribute_in_range(
             ProofVersion::Version1,
@@ -431,6 +437,7 @@ mod tests {
         } else {
             panic!("Failed to produce version 1 proof.");
         };
+        #[allow(deprecated)]
         let mut transcript = RandomOracle::domain("Test");
         let maybe_proof = prove_attribute_in_range(
             ProofVersion::Version2,
@@ -474,6 +481,7 @@ mod tests {
         let upper = AttributeKind("20000103".to_string());
         let value = Value::<G1>::new(attribute.to_field_element());
         let (commitment, randomness) = keys.commit(&value, &mut csprng);
+        #[allow(deprecated)]
         let mut transcript = RandomOracle::domain("Test");
         let maybe_proof = prove_attribute_in_range(
             ProofVersion::Version2,

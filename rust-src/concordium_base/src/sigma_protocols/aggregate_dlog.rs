@@ -138,6 +138,7 @@ mod tests {
                 &mut csprng,
                 |agg: AggregateDlog<G1>, secret, csprng| {
                     let challenge_prefix = generate_challenge_prefix(csprng);
+                    #[allow(deprecated)]
                     let mut ro = RandomOracle::domain(challenge_prefix);
                     let proof =
                         prove(&mut ro.split(), &agg, secret, csprng).expect("Input data is valid.");
@@ -153,6 +154,7 @@ mod tests {
         for i in 1..20 {
             AggregateDlog::with_valid_data(i, &mut csprng, |agg, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
+                #[allow(deprecated)]
                 let ro = RandomOracle::domain(challenge_prefix);
                 let proof =
                     prove(&mut ro.split(), &agg, secret, csprng).expect("Input data is valid.");
@@ -160,6 +162,7 @@ mod tests {
                 // Construct invalid parameters
                 let index_wrong_coeff: usize = csprng.gen_range(0..i);
 
+                #[allow(deprecated)]
                 let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
                 let wrong_public = G1::generate(csprng);
                 let mut wrong_coeff = agg.coeff.clone();

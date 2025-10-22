@@ -236,6 +236,7 @@ mod tests {
         for _ in 0..10 {
             ComLin::<G1>::with_valid_data(10, &mut csprng, |com_lin, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
+                #[allow(deprecated)]
                 let mut ro = RandomOracle::domain(challenge_prefix);
                 let proof = prove(&mut ro.split(), &com_lin, secret, csprng)
                     .expect("Proving should succeed.");
@@ -254,12 +255,14 @@ mod tests {
             let n = 6;
             ComLin::<G1>::with_valid_data(n, &mut csprng, |com_lin, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
+                #[allow(deprecated)]
                 let mut ro = RandomOracle::domain(&challenge_prefix);
                 let proof = prove(&mut ro.split(), &com_lin, secret, csprng)
                     .expect("Proving should succeed.");
                 assert!(verify(&mut ro.split(), &com_lin, &proof));
 
                 // Construct invalid parameters
+                #[allow(deprecated)]
                 let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
 
                 // Verify failure for invalid parameters
@@ -403,6 +406,7 @@ mod tests {
         };
         let secret = ComLinSecret { xs, rs, r };
         let challenge_prefix = generate_challenge_prefix(rng);
+        #[allow(deprecated)]
         let mut ro = RandomOracle::domain(&challenge_prefix);
         let proof = prove(&mut ro.split(), &com_lin, secret, rng).expect("Proving should succeed.");
         assert!(verify(&mut ro, &com_lin, &proof));

@@ -236,6 +236,7 @@ mod tests {
         for i in 1..20 {
             VecComEq::with_valid_data(i, &mut csprng, |agg: VecComEq<G1>, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
+                #[allow(deprecated)]
                 let mut ro = RandomOracle::domain(challenge_prefix);
                 let proof =
                     prove(&mut ro.split(), &agg, secret, csprng).expect("Input data is valid.");
@@ -283,6 +284,7 @@ mod tests {
         };
         let secret = (xis, r, ris);
         let challenge_prefix = generate_challenge_prefix(csprng);
+        #[allow(deprecated)]
         let mut ro = RandomOracle::domain(challenge_prefix);
         let proof = prove(&mut ro.split(), &agg, secret, csprng).expect("Input data is valid.");
         assert!(verify(&mut ro, &agg, &proof));
@@ -362,8 +364,10 @@ mod tests {
         };
         let secret = (xis, r, ris);
         let challenge_prefix = generate_challenge_prefix(csprng);
+        #[allow(deprecated)]
         let mut ro = RandomOracle::domain(challenge_prefix);
         let proof = prove(&mut ro.split(), &vcom, secret, csprng).expect("Input data is valid.");
+        #[allow(deprecated)]
         let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
         assert!(!verify(&mut wrong_ro, &vcom, &proof));
         assert!(!verify(&mut ro, &vcom_wrong_comm, &proof));
@@ -418,6 +422,7 @@ mod tests {
         };
         let secret = (xis, r, ris);
         let challenge_prefix = generate_challenge_prefix(csprng);
+        #[allow(deprecated)]
         let mut ro = RandomOracle::domain(challenge_prefix);
         let proof = prove(&mut ro.split(), &agg, secret, csprng).expect("Input data is valid.");
         assert!(verify(&mut ro, &agg, &proof));

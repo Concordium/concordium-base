@@ -733,6 +733,7 @@ mod test {
         let S = pk_sender.encrypt_exponent_given_generator(&s_value, generator, &mut csprng);
 
         let challenge_prefix = generate_challenge_prefix(&mut csprng);
+        #[allow(deprecated)]
         let mut ro = RandomOracle::domain(challenge_prefix);
 
         let index = csprng.gen::<u64>().into(); // index is only important for on-chain stuff, not for proofs.
@@ -784,6 +785,7 @@ mod test {
 
         let challenge_prefix = generate_challenge_prefix(&mut csprng);
 
+        #[allow(deprecated)]
         let mut ro = RandomOracle::domain(challenge_prefix);
         let index = csprng.gen::<u64>().into(); // index is only important for on-chain stuff, not for proofs.
         let transaction = gen_sec_to_pub_trans(

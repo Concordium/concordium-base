@@ -209,6 +209,7 @@ mod test {
             ],
         );
         let challenge_prefix = generate_challenge_prefix(&mut csprng);
+        #[allow(deprecated)]
         let mut ro = RandomOracle::domain(challenge_prefix);
         let proof = prove(&mut ro.split(), &protocol, secret, &mut csprng).unwrap();
         assert!(verify(&mut ro, &protocol, &proof));

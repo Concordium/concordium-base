@@ -316,6 +316,7 @@ mod tests {
         for i in 1..20 {
             ComEqSig::<Bls12, G1>::with_valid_data(i, &mut csprng, |ces, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
+                #[allow(deprecated)]
                 let mut ro = RandomOracle::domain(challenge_prefix);
 
                 let proof =
@@ -332,6 +333,7 @@ mod tests {
         for i in 1..20 {
             ComEqSig::<Bls12, G1>::with_valid_data(i, &mut csprng, |ces, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
+                #[allow(deprecated)]
                 let ro = RandomOracle::domain(challenge_prefix);
 
                 let proof =
@@ -339,6 +341,7 @@ mod tests {
                 assert!(verify(&mut ro.split(), &ces, &proof));
 
                 // Construct invalid parameters
+                #[allow(deprecated)]
                 let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
                 if verify(&mut wrong_ro, &ces, &proof) {
                     assert_eq!(wrong_ro, ro);

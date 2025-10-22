@@ -178,6 +178,7 @@ mod tests {
         for _i in 0..100 {
             ComEqDiffGroups::<G1, G2>::with_valid_data(0, &mut csprng, |cdg, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
+                #[allow(deprecated)]
                 let mut ro = RandomOracle::domain(challenge_prefix);
 
                 let proof =
@@ -193,12 +194,14 @@ mod tests {
         for _i in 0..100 {
             ComEqDiffGroups::<G1, G2>::with_valid_data(0, &mut csprng, |cdg, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
+                #[allow(deprecated)]
                 let ro = RandomOracle::domain(challenge_prefix);
 
                 let proof =
                     prove(&mut ro.split(), &cdg, secret, csprng).expect("Proving should succeed.");
 
                 // Construct invalid parameters
+                #[allow(deprecated)]
                 let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
                 if verify(&mut wrong_ro, &cdg, &proof) {
                     assert_eq!(wrong_ro, ro);

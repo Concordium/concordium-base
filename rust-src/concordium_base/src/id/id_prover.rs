@@ -40,8 +40,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
         let mut proofs: Vec<AtomicProof<C, AttributeType>> =
             Vec::with_capacity(self.statement.statements.len());
 
+        #[allow(deprecated)]
         let mut transcript = RandomOracle::domain("Concordium ID2.0 proof");
         transcript.append_message(b"ctx", &global);
+        #[allow(deprecated)]
         transcript.add_bytes(challenge);
         transcript.append_message(b"credential", &self.credential);
         let mut csprng = rand::thread_rng();
@@ -80,6 +82,7 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
                     .get_attribute_commitment_randomness(&statement.attribute_tag)
                     .ok()?;
                 let x = attribute.to_field_element(); // This is public in the sense that the verifier should learn it
+                #[allow(deprecated)]
                 transcript.add_bytes(b"RevealAttributeDlogProof");
                 transcript.append_message(b"x", &x);
                 if version >= ProofVersion::Version2 {
@@ -230,6 +233,7 @@ pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     let b = upper.to_field_element();
     match version {
         ProofVersion::Version1 => {
+            #[allow(deprecated)]
             let mut transcript_v1 = RandomOracle::domain("attribute_range_proof");
             prove_in_range(
                 ProofVersion::Version1,
@@ -244,6 +248,7 @@ pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
             )
         }
         ProofVersion::Version2 => {
+            #[allow(deprecated)]
             transcript.add_bytes(b"AttributeRangeProof");
             transcript.append_message(b"a", &a);
             transcript.append_message(b"b", &b);

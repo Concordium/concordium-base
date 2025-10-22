@@ -72,6 +72,7 @@ pub fn prove<C: Curve, R: Rng>(
 ) -> Result<SetNonMembershipProof<C>, ProverError> {
     // Part 0: Add public inputs to transcript
     // Domain separation
+    #[allow(deprecated)]
     transcript.add_bytes(b"SetNonMembershipProof");
     // Pad set if not power of two
     let mut set_vec = the_set.to_vec();
@@ -360,6 +361,7 @@ pub fn verify<C: Curve>(
     let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().take(n).cloned().unzip();
 
     // Domain separation
+    #[allow(deprecated)]
     transcript.add_bytes(b"SetNonMembershipProof");
     if version >= ProofVersion::Version2 {
         // Explicitly add generators and commitment keys to the transcript

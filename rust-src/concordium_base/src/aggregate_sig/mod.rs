@@ -486,6 +486,7 @@ mod test {
             let m = rng.gen::<[u8; 32]>();
             let mut c = Vec::new();
             c.push(rng.gen::<u8>());
+            #[allow(deprecated)]
             let mut ro = RandomOracle::domain(&c);
 
             let sk = SecretKey::<Bls12>::generate(&mut rng);
@@ -521,6 +522,7 @@ mod test {
             let m = rng.gen::<[u8; 32]>();
             let mut c = Vec::new();
             c.push(rng.gen::<u8>());
+            #[allow(deprecated)]
             let mut ro = RandomOracle::domain(&c);
 
             let sk = SecretKey::<Bls12>::generate(&mut rng);
@@ -559,7 +561,9 @@ mod test {
                     break;
                 }
             }
+            #[allow(deprecated)]
             let mut ro1 = RandomOracle::domain(c1);
+            #[allow(deprecated)]
             let mut ro2 = RandomOracle::domain(c2);
 
             let sk = SecretKey::<Bls12>::generate(&mut csprng);

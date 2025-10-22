@@ -169,6 +169,7 @@ mod test {
         for _i in 1..20 {
             ComEq::<G1, G2>::with_valid_data(0, &mut csprng, |com_eq, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
+                #[allow(deprecated)]
                 let mut ro = RandomOracle::domain(challenge_prefix);
                 let proof = prove(&mut ro.split(), &com_eq, secret, csprng)
                     .expect("Proving should succeed.");
@@ -184,10 +185,12 @@ mod test {
         for i in 1..20 {
             ComEq::<G1, G2>::with_valid_data(i, &mut csprng, |com_eq, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
+                #[allow(deprecated)]
                 let ro = RandomOracle::domain(challenge_prefix);
                 let proof = prove(&mut ro.split(), &com_eq, secret, csprng)
                     .expect("Proving should succeed.");
 
+                #[allow(deprecated)]
                 let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
                 if verify(&mut wrong_ro, &com_eq, &proof) {
                     assert_eq!(wrong_ro, ro);
