@@ -435,6 +435,97 @@ impl Deserial for TransactionSignature {
     }
 }
 
+/// Transaction signatures v1 structure, to match the one on the Haskell side.
+#[derive(SerdeDeserialize, SerdeSerialize, Clone, PartialEq, Eq, Debug, derive_more::AsRef)]
+pub struct TransactionSignaturesV1 {
+    pub sender: BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>>,
+    pub sponsor: Option<BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>>>,
+}
+
+impl TransactionSignaturesV1 {
+    /// The total number of signatures.
+    pub fn num_signatures(&self) -> u32 {
+        fn count(m: &BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>>) -> usize {
+            m.values().map(|sigs| sigs.len()).sum()
+        }
+        let x: usize = count(&self.sender);
+        let y: usize = self.sponsor.as_ref().map_or(0, count);
+        // Since there are at most 256 credential indices, at most 256 key
+        // indices and at most two signature maps using `as` is safe.
+        (x + y) as u32
+    }
+}
+
+impl Serial for TransactionSignaturesV1 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        fn cred_map_serial<B: Buffer>(
+            creds: &BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>>,
+            out: &mut B,
+        ) {
+            for (idx, map) in creds.iter() {
+                idx.serial(out);
+                (map.len() as u8).serial(out);
+                super::serial_map_no_length(map, out);
+            }
+        }
+        let l1 = self.sender.len() as u8;
+        l1.serial(out);
+        cred_map_serial(&self.sender, out);
+        let l2 = self.sponsor.as_ref().map_or(0, |ss| ss.len()) as u8;
+        l2.serial(out);
+        for map in self.sponsor.as_ref().iter() {
+            cred_map_serial(map, out)
+        }
+    }
+}
+
+impl Deserial for TransactionSignaturesV1 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        fn get_credentials<R: ReadBytesExt>(
+            out: &mut BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>>,
+            source: &mut R,
+            num_creds: u8,
+        ) -> ParseResult<()> {
+            let mut last = None;
+            for _ in 0..num_creds {
+                let idx = source.get()?;
+                anyhow::ensure!(
+                    last < Some(idx),
+                    "Credential indices must be strictly increasing."
+                );
+                last = Some(idx);
+                let inner_len: u8 = source.get()?;
+                anyhow::ensure!(
+                    inner_len > 0,
+                    "Each credential must have at least one signature."
+                );
+                let inner_map = super::deserial_map_no_length(source, inner_len.into())?;
+                out.insert(idx, inner_map);
+            }
+            Ok(())
+        }
+        let num_sender_creds: u8 = source.get()?;
+        anyhow::ensure!(
+            num_sender_creds > 0,
+            "Number of sender signatures must not be 0."
+        );
+        let mut sender_out = BTreeMap::new();
+        get_credentials(&mut sender_out, source, num_sender_creds)?;
+        let num_sponsor_creds: u8 = source.get()?;
+        let sponsor = if num_sponsor_creds > 0 {
+            let mut sponsor_out = BTreeMap::new();
+            get_credentials(&mut sponsor_out, source, num_sponsor_creds)?;
+            Some(sponsor_out)
+        } else {
+            None
+        };
+        Ok(TransactionSignaturesV1 {
+            sender: sender_out,
+            sponsor: sponsor,
+        })
+    }
+}
+
 /// Datatype used to indicate transaction expiry.
 #[derive(
     SerdeDeserialize, SerdeSerialize, PartialEq, Eq, Debug, Serialize, Clone, Copy, PartialOrd, Ord,
