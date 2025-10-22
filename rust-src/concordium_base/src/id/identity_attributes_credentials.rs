@@ -3,6 +3,7 @@
 
 use super::{account_holder, secret_sharing::*, types::*, utils};
 use crate::pedersen_commitment::{CommitmentKey, Randomness};
+use crate::random_oracle::StructuredDigest;
 use crate::{
     curve_arithmetic::{Curve, Pairing},
     dodis_yampolskiy_prf as prf,
