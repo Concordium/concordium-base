@@ -132,6 +132,27 @@
 //! transcript.append_message(b"Collection1", &collection);
 //! ```
 //!
+//! # Example: Adding variable number of items
+//!
+//! Digesting a variable number of items without relying on `Serial` implementation on the items:
+//!
+//! ```
+//! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
+//!
+//! struct Type1;
+//!
+//! fn append_type1(transcript: &mut impl StructuredDigest, val: &Type1) {
+//!     // digest Type1
+//! }
+//!
+//! let vec = vec![Type1, Type1];
+//!
+//! let mut transcript = RandomOracle::empty();
+//! transcript.append_each("Collection", &vec, |transcript, item| {
+//!     append_type1(transcript, item);
+//! });
+//! ```
+//!
 //! # Example: Adding data with different variants
 //!
 //! If you add an enum manually to the transcript add the variant name
@@ -243,6 +264,24 @@ pub trait StructuredDigest: Buffer {
     fn append_message(&mut self, label: impl AsRef<[u8]>, data: &impl Serial) {
         self.add_bytes(label);
         self.put(data)
+    }
+
+    /// Append the items in the given iterator using the `append_item` closure to the state of the oracle.
+    /// The given label is appended first as domain separation followed by the length of the iterator.
+    fn append_each<T, B: IntoIterator<Item = T>>(
+        &mut self,
+        label: &str,
+        items: B,
+        mut append_item: impl FnMut(&mut Self, T),
+    ) where
+        B::IntoIter: ExactSizeIterator,
+    {
+        let items = items.into_iter();
+        self.add_bytes(label);
+        self.put(&(items.len() as u64));
+        for item in items {
+            append_item(self, item);
+        }
     }
 }
 
@@ -425,6 +464,22 @@ mod tests {
         assert_eq!(
             scalar_hex,
             "08646777f9c47efc863115861aa18d95653212c3bdf36899c7db46fbdae095cd"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`StructuredDigest::append_message`]
+    #[test]
+    pub fn test_append_each_stable() {
+        let mut ro = RandomOracle::empty();
+        ro.append_each("Label1", &vec![1u8, 2, 3], |ro, item| {
+            ro.append_message("Item", item)
+        });
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "891fd1754242e364a9eca7a15133403f3293ad330ce295cca0dd8347b94df7a8"
         );
     }
 }
