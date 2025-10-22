@@ -518,8 +518,7 @@ mod tests {
     /// by [`RandomOracle::challenge_scalar`]
     #[test]
     pub fn test_challenge_scalar_stable() {
-        #[allow(deprecated)]
-        let mut ro = RandomOracle::domain("Domain1");
+        let mut ro = RandomOracle::empty();
 
         let scalar_hex = hex::encode(common::to_bytes(
             &ro.challenge_scalar::<ArCurve, _>("Scalar1"),
