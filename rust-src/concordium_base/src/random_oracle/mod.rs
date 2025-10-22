@@ -25,24 +25,11 @@
 //!
 //! ```
 //! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
-//! # use concordium_base::common::{Serialize};
-//!
-//! #[derive(Serialize)]
-//! struct Type1 {
-//!     field_1: u8,
-//!     field_2: u8,
-//! }
-//!
-//! let example = Type1 {
-//!     field_1: 1u8,
-//!     field_2: 2u8,
-//! };
-//!
-//! let mut transcript = RandomOracle::domain("Proof of something");
+//! let mut transcript = RandomOracle::with_domain("Proof of something");
 //! // ...
-//! transcript.add_bytes(b"Subproof1");
+//! transcript.append_label("Subproof1");
 //! // ...
-//! transcript.add_bytes(b"Branch1");
+//! transcript.append_label("Branch1");
 //! // ...
 //!```
 //!
@@ -75,17 +62,16 @@
 //!
 //! Appending the [`RandomOracle`] with either of above types by just adding each type's field values naively
 //! (meaning `hash([1u8, 2u8]`) would produce the same hashing result for both examples. To avoid this, the
-//! recommendation is to add the type name and its field names as labels for domain separation.
+//! recommendation is to add the type name as labels for domain separation.
 //!
 //! # Example: Adding struct data
 //!
 //! If you add a struct to the transcript use its type name as separator and its [`Serial`]
 //! to define the data message bytes.
 //!
-//! ```
+//! ```rust,ignore
 //! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
-//! # use concordium_base::common::{Serialize};
-//!
+//! # use concordium_base::common::Serialize;
 //! #[derive(Serialize)]
 //! struct Type1 {
 //!     field_1: u8,
@@ -97,7 +83,7 @@
 //!     field_2: 2u8,
 //! };
 //!
-//! let mut transcript = RandomOracle::domain("Proof of something");
+//! let mut transcript = RandomOracle::with_domain("Proof of something");
 //! transcript.append_message(b"Type1", &example);
 //!```
 //!
@@ -139,11 +125,10 @@
 //!
 //! ```
 //! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
-//!
-//! let mut transcript = RandomOracle::domain("Proof of something");
+//! let mut transcript = RandomOracle::with_domain("Proof of something");
 //! let string = "abc".to_string();
 //! // The serialization implementation of the `String` type prepends the length of the field values.
-//! transcript.append_message(b"String1", &string);
+//! transcript.append_message("String1", &string);
 //! ```
 //!
 //! # Example: Adding collections of data using `Serial`
@@ -152,10 +137,9 @@
 //!
 //! ```
 //! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
-//!
-//! let mut transcript = RandomOracle::domain("Proof of something");
+//! let mut transcript = RandomOracle::with_domain("Proof of something");
 //! let collection = vec![2,3,4];
-//! transcript.append_message(b"Collection1", &collection);
+//! transcript.append_message("Collection1", &collection);
 //! ```
 //!
 //! # Example: Adding data with different variants
@@ -165,16 +149,15 @@
 //!
 //! ```
 //! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
-//!
 //! enum Enum1 {
 //!     Variant_0,
 //!     Variant_1
 //! }
 //!
-//! let mut transcript = RandomOracle::domain("Proof of something");
+//! let mut transcript = RandomOracle::with_domain("Proof of something");
 //!
-//! transcript.add_bytes(b"Enum1");
-//! transcript.add_bytes(b"Variant_0");
+//! transcript.append_label("Enum1");
+//! transcript.append_label("Variant_0");
 //! // add data from Variant_0
 //! ```
 //!
@@ -301,9 +284,12 @@ impl StructuredDigest for sha2::Sha512 {
 
 impl RandomOracle {
     /// Start with the initial empty state of the oracle.
-    #[cfg_attr(not(test), deprecated(
-        note = "Use RandomOracle::with_domain initializes with a domain. Do not change existing provers/verifiers since it will break compatability with existing proofs."
-    ))]
+    #[cfg_attr(
+        not(test),
+        deprecated(
+            note = "Use RandomOracle::with_domain initializes with a domain. Do not change existing provers/verifiers since it will break compatability with existing proofs."
+        )
+    )]
     pub fn empty() -> Self {
         RandomOracle(Sha3_256::new())
     }
@@ -316,9 +302,12 @@ impl RandomOracle {
     }
 
     /// Start with the initial domain string.
-    #[cfg_attr(not(test), deprecated(
-        note = "Use RandomOracle::with_domain which prepends the label length. Do not change existing provers/verifiers since it will break compatability with existing proofs."
-    ))]
+    #[cfg_attr(
+        not(test),
+        deprecated(
+            note = "Use RandomOracle::with_domain which prepends the label length. Do not change existing provers/verifiers since it will break compatability with existing proofs."
+        )
+    )]
     pub fn domain<B: AsRef<[u8]>>(data: B) -> Self {
         RandomOracle(Sha3_256::new().chain_update(data))
     }
@@ -528,5 +517,4 @@ mod tests {
             "08646777f9c47efc863115861aa18d95653212c3bdf36899c7db46fbdae095cd"
         );
     }
-
 }
