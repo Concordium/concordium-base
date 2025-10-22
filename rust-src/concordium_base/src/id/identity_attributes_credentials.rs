@@ -119,10 +119,10 @@ pub fn prove_identity_attributes<
     }
 
     let cmm_id_cred_sec = *cmm_id_cred_sec_sharing_coeff
-        .get(0)
+        .first()
         .context("id cred sharing commitment")?;
     let cmm_rand_id_cred_sec = cmm_rand_id_cred_sec_sharing_coeff
-        .get(0)
+        .first()
         .context("id cred sharing commitment randomness")?
         .clone();
 
@@ -219,6 +219,7 @@ struct SignaturePokOutput<
     blinded_sig: ps_sig::BlindedSignature<P>,
 }
 
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn signature_knowledge_prover<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -554,7 +555,7 @@ fn signature_knowledge_verifier<
             .proofs
             .commitments
             .cmm_id_cred_sec_sharing_coeff
-            .get(0)?,
+            .first()?,
     ));
 
     // The PRF secret key we just verify knowledge of
@@ -581,7 +582,7 @@ fn signature_knowledge_verifier<
     msgs.push(PsSigMsg::Known);
 
     // Iterate attributes in the same order as signed by the identity provider (tag order)
-    for (_tag, attribute) in &id_attr_info.values.attributes {
+    for attribute in id_attr_info.values.attributes.values() {
         match attribute {
             IdentityAttribute::Committed(attr_cmm) => {
                 msgs.push(PsSigMsg::EqualToCommitment(*attr_cmm));
