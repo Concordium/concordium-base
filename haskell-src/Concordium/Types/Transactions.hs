@@ -196,7 +196,7 @@ instance HashableTo TransactionSignHashV0 AccountTransaction where
 --  * @SPEC: <$DOCS/Transactions#transaction-signatures-v1>
 data TransactionSignaturesV1 = TransactionSignaturesV1
     { -- | The signatures for the sender account
-      tsv1Sender :: TransactionSignature,
+      tsv1Sender :: !TransactionSignature,
       -- | The signatures for the sponsor account. These must be present if a sponsor
       -- is specified for the transaction in the corresponding transaction header.
       tsv1Sponsor :: Maybe TransactionSignature
@@ -232,8 +232,8 @@ data TransactionHeaderV1 = TransactionHeaderV1
     }
     deriving (Show, Eq)
 
-transactionHeaderV0 :: TransactionHeaderV1 -> TransactionHeader
-transactionHeaderV0 TransactionHeaderV1{..} =
+toTransactionHeader :: TransactionHeaderV1 -> TransactionHeader
+toTransactionHeader TransactionHeaderV1{..} =
     TransactionHeader{thSender = thv1Sender, thNonce = thv1Nonce, thEnergyAmount = thv1EnergyAmount, thPayloadSize = thv1PayloadSize, thExpiry = thv1Expiry}
 
 instance S.Serialize TransactionHeaderV1 where
@@ -242,6 +242,11 @@ instance S.Serialize TransactionHeaderV1 where
             v0header = S.put thv1Sender <> S.put thv1Nonce <> S.put thv1EnergyAmount <> S.put thv1PayloadSize <> S.put thv1Expiry
             optionals = maybe mempty S.put thv1Sponsor
         in  bitmap <> v0header <> optionals
+      where
+        -- \| Set the given bit if the value is a 'Just'.
+        bitFor :: (Bits b) => Int -> Maybe a -> b
+        bitFor _ Nothing = zeroBits
+        bitFor i (Just _) = bit i
 
     get = S.label "transaction header v1" $ do
         bitmap <- S.label "bitmap" S.getWord16be
@@ -253,15 +258,9 @@ instance S.Serialize TransactionHeaderV1 where
         thv1Sponsor <- maybeGet bitmap 0 "sponsor"
         return $! TransactionHeaderV1{..}
       where
-        maybeGet bitmap bitNum label =
-            if testBit bitmap bitNum
-                then Just <$> S.label label S.get
-                else return Nothing
-
--- | Set the given bit if the value is a 'Just'.
-bitFor :: Bits b => Int -> Maybe a -> b
-bitFor _ Nothing = zeroBits
-bitFor i (Just _) = bit i
+        maybeGet bitmap bitNum label
+            | testBit bitmap bitNum = Just <$> S.label label S.get
+            | otherwise = return Nothing
 
 -- | An 'AccountTransactionV1' is a transaction that originates from
 --  a specific account (the sender), and is paid for by either the sender
@@ -285,8 +284,8 @@ data AccountTransactionV1 = AccountTransactionV1
     }
     deriving (Eq, Show)
 
-atrv1Prefix :: BS.ByteString
-atrv1Prefix = BS.pack $ replicate 31 0 ++ [1]
+v1TransactionSignHashPrefix :: BS.ByteString
+v1TransactionSignHashPrefix = BS.pack [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
 
 -- | Construct an 'AccountTransactionV1', computing the correct
 --  'TransactionSignHash'.
@@ -299,7 +298,7 @@ makeAccountTransactionV1 atrv1Signature atrv1Header atrv1Payload = AccountTransa
 transactionV1SignHashFromHeaderPayload :: TransactionHeaderV1 -> EncodedPayload -> TransactionSignHashV0
 transactionV1SignHashFromHeaderPayload atrv1Header atrv1Payload = TransactionSignHashV0 $ H.hashLazy $ S.runPutLazy message
   where
-    message = S.put atrv1Prefix <> S.put atrv1Header <> putEncodedPayload atrv1Payload
+    message = S.put v1TransactionSignHashPrefix <> S.put atrv1Header <> putEncodedPayload atrv1Payload
 
 -- TODO: make sure this aligns with the bluepaper
 
@@ -316,7 +315,7 @@ instance S.Serialize AccountTransactionV1 where
             atrv1Header <- S.label "header" S.get
             atrv1Payload <- S.label "payload" $ getEncodedPayload (thv1PayloadSize atrv1Header)
             return (atrv1Header, atrv1Payload)
-        let atrv1SignHash = transactionSignHashFromBytes bodyBytes
+        let atrv1SignHash = transactionSignHashFromBytes $ v1TransactionSignHashPrefix <> bodyBytes
         return $! AccountTransactionV1{..}
 
 instance HashableTo TransactionHashV0 AccountTransactionV1 where
@@ -781,7 +780,7 @@ instance TransactionData Transaction where
     transactionHash = wmdHash
 
 instance TransactionData AccountTransactionV1 where
-    transactionHeader = transactionHeaderV0 . atrv1Header
+    transactionHeader = toTransactionHeader . atrv1Header
     transactionSender = thv1Sender . atrv1Header
     transactionNonce = thv1Nonce . atrv1Header
     transactionGasAmount = thv1EnergyAmount . atrv1Header
