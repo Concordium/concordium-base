@@ -18,6 +18,8 @@
 //! After adding data, call [`RandomOracle::get_challenge`] to consume/hash the bytes
 //! and produce a random challenge.
 //!
+//! For background, the Merlin transcript can also be studied here: <https://merlin.cool/index.html> (implemented at <https://github.com/dalek-cryptography/merlin>).
+//!
 //! # Caution: Type ambiguity without domain separation
 //! Special care is required when adding bytes to domain separate them with labels.
 //! Naively appending just bytes (without separation) can produce collisions of different types.
