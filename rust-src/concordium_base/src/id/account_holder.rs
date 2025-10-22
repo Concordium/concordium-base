@@ -92,6 +92,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     crate::ps_sig::SigRetrievalRandomness<P>,
 )> {
     let mut csprng = thread_rng();
+    #[allow(deprecated)]
     let mut transcript = RandomOracle::domain("PreIdentityProof");
     // Prove ownership of the initial account
     let pub_info_for_ip = build_pub_info_for_ip(
@@ -191,6 +192,7 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     crate::ps_sig::SigRetrievalRandomness<P>,
 )> {
     let mut csprng = thread_rng();
+    #[allow(deprecated)]
     let mut transcript = RandomOracle::domain("PreIdentityProof");
     let CommonPioGenerationOutput {
         prover,
@@ -835,6 +837,7 @@ pub fn create_unsigned_credential<
     // Compute the challenge prefix by hashing the values.
     // FIXME: We should do something different here.
     // Eventually we'll have to include the genesis hash.
+    #[allow(deprecated)]
     let mut ro = RandomOracle::domain("credential");
     ro.append_message(b"cred_values", &cred_values);
     ro.append_message(b"address", &addr);
@@ -1249,6 +1252,7 @@ pub fn generate_id_recovery_request<P: Pairing, C: Curve<Scalar = P::ScalarField
     };
 
     let mut csprng = thread_rng();
+    #[allow(deprecated)]
     let mut transcript = RandomOracle::domain("IdRecoveryProof");
     transcript.append_message(b"ctx", &context);
     transcript.append_message(b"timestamp", &timestamp);
