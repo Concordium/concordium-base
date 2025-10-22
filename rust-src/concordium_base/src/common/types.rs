@@ -521,7 +521,7 @@ impl Deserial for TransactionSignaturesV1 {
         };
         Ok(TransactionSignaturesV1 {
             sender: sender_out,
-            sponsor: sponsor,
+            sponsor,
         })
     }
 }
