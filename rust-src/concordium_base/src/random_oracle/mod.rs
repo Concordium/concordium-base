@@ -330,7 +330,7 @@ impl RandomOracle {
     /// repeatedly calling append in sequence.
     /// Returns the new state of the random oracle, consuming the initial state.
     #[deprecated(
-        note = "Use the labelled version RandomOracle::append_message instead. Do not change existing provers/verifiers since it will break compatability with existing proofs."
+        note = "Use RandomOracle::append_message or RandomOracle::append_each instead such that the number of elements is prepended. Do not change existing provers/verifiers since it will break compatability with existing proofs."
     )]
     pub fn extend_from<'a, I, S, B: AsRef<[u8]>>(&mut self, label: B, iter: I)
     where
