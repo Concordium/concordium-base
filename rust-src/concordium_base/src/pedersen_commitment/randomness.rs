@@ -4,6 +4,7 @@
 //! The randomness used in commitment
 
 use crate::{common::*, curve_arithmetic::*};
+use std::fmt::Debug;
 
 use rand::*;
 use std::ops::Deref;

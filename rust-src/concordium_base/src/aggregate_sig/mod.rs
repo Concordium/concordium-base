@@ -8,9 +8,11 @@ use crate::{
     random_oracle::RandomOracle,
     sigma_protocols::{common::*, dlog::*},
 };
+use core::fmt;
 use rand::Rng;
 use rayon::iter::*;
 use sha2::{digest::Output, Digest, Sha512};
+use std::fmt::{Debug, Formatter};
 
 /// Size of the aggregate signature public key in bytes.
 pub const PUBLIC_KEY_SIZE: usize = 96;
@@ -23,8 +25,14 @@ pub const SIGNATURE_SIZE: usize = 48;
 ///
 /// EQUALITY IS NOT CONSTANT TIME!!! Do not use in production
 /// the trait is implemented only for testing purposes
-#[derive(Debug, Eq, Serialize)]
+#[derive(Eq, Serialize)]
 pub struct SecretKey<P: Pairing>(P::ScalarField);
+
+impl<P: Pairing> Debug for SecretKey<P> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("<SecretKey>")
+    }
+}
 
 impl<P: Pairing> SecretKey<P> {
     pub fn generate<R: Rng>(rng: &mut R) -> SecretKey<P> {

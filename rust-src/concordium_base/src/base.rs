@@ -13,7 +13,6 @@ use crate::{
     },
     pedersen_commitment::{Randomness, Value},
     random_oracle::RandomOracle,
-    updates::{GASRewards, GASRewardsV1},
 };
 use concordium_contracts_common::AccountAddress;
 pub use concordium_contracts_common::{
@@ -297,20 +296,6 @@ impl Deserial for DelegationTarget {
     }
 }
 
-/// Additional information about a baking pool.
-/// This information is added with the introduction of delegation in protocol
-/// version 4.
-#[derive(SerdeSerialize, SerdeDeserialize, PartialEq, Eq, Serial, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct BakerPoolInfo {
-    /// Whether the pool allows delegators.
-    pub open_status: OpenStatus,
-    /// The URL that links to the metadata about the pool.
-    pub metadata_url: UrlText,
-    /// The commission rates charged by the pool owner.
-    pub commission_rates: CommissionRates,
-}
-
 /// Slot number
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
@@ -530,11 +515,6 @@ impl Deserial for ProtocolVersion {
         Ok(pv)
     }
 }
-
-pub struct ChainParameterVersion0;
-pub struct ChainParameterVersion1;
-pub struct ChainParameterVersion2;
-pub struct ChainParameterVersion3;
 
 /// Height of a block since chain genesis.
 #[repr(transparent)]
@@ -1252,56 +1232,6 @@ impl Deserial for MintDistributionV1 {
         })
     }
 }
-
-/// Trait used to define mapping from a type to a `MintDistribution` type.
-pub trait MintDistributionFamily {
-    type Output;
-}
-
-impl MintDistributionFamily for ChainParameterVersion0 {
-    type Output = MintDistributionV0;
-}
-
-impl MintDistributionFamily for ChainParameterVersion1 {
-    type Output = MintDistributionV1;
-}
-
-impl MintDistributionFamily for ChainParameterVersion2 {
-    type Output = MintDistributionV1;
-}
-
-impl MintDistributionFamily for ChainParameterVersion3 {
-    type Output = MintDistributionV1;
-}
-
-/// Type family mapping a `ChainParameterVersion` to its corresponding type for
-/// the `MintDistribution`.
-pub type MintDistribution<CPV> = <CPV as MintDistributionFamily>::Output;
-
-/// Trait used to define mapping from a type to a `GasRewards` type.
-pub trait GASRewardsFamily {
-    type Output;
-}
-
-impl GASRewardsFamily for ChainParameterVersion0 {
-    type Output = GASRewards;
-}
-
-impl GASRewardsFamily for ChainParameterVersion1 {
-    type Output = GASRewards;
-}
-
-impl GASRewardsFamily for ChainParameterVersion2 {
-    type Output = GASRewardsV1;
-}
-
-impl GASRewardsFamily for ChainParameterVersion3 {
-    type Output = GASRewardsV1;
-}
-
-/// Type family mapping a `ChainParameterVersion` to its corresponding type for
-/// the `GasRewards`.
-pub type GASRewardsFor<CPV> = <CPV as GASRewardsFamily>::Output;
 
 #[derive(Debug, Serialize, Clone, Copy)]
 /// Rate of creation of new CCDs. For example, A value of `0.05` would mean an

@@ -41,7 +41,7 @@ impl Deserial for SecretKey {
 
 impl Debug for SecretKey {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        write!(f, "SecretKey: {:?}", &self.0[..])
+        f.write_str("<SecretKey>")
     }
 }
 

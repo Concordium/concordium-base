@@ -7,8 +7,7 @@
 pub mod did;
 
 #[cfg(test)]
-#[doc(hidden)]
-pub mod test;
+mod test;
 
 // TODO:
 // - Documentation.
@@ -615,9 +614,92 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
 /// Used as a phantom type to indicate a Web3ID challenge.
 pub enum Web3IdChallengeMarker {}
 
-/// Challenge string that serves as a distinguishing context when requesting
+/// Sha256 challenge string that serves as a distinguishing context when requesting
 /// proofs.
-pub type Challenge = HashBytes<Web3IdChallengeMarker>;
+pub type Sha256Challenge = HashBytes<Web3IdChallengeMarker>;
+
+/// Context challenge that serves as a distinguishing context when requesting
+/// proofs.
+#[derive(
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    serde::Deserialize,
+    serde::Serialize,
+    crate::common::Serial,
+    crate::common::Deserial,
+    Debug,
+)]
+pub struct Context {
+    /// This part of the challenge is suppose to be provided by the dapp backend (e.g. merchant backend).
+    pub given: Vec<GivenContext>,
+    /// This part of the challenge is suppose to be provided by the wallet or ID app.
+    pub requested: Vec<GivenContext>,
+}
+
+#[derive(
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    serde::Deserialize,
+    serde::Serialize,
+    crate::common::Serial,
+    crate::common::Deserial,
+    Debug,
+)]
+pub struct GivenContext {
+    pub label: String,
+    pub context: String,
+}
+
+/// A challenge that can be added to the proof transcript.
+#[derive(serde::Deserialize, serde::Serialize)]
+// The type is `untagged` to be backward compatible with old proofs and requests.
+#[serde(untagged)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub enum Challenge {
+    Sha256(Sha256Challenge),
+    V1(Context),
+}
+
+/// Append a `web3id::Challenge` to the state of the random oracle.
+/// Newly added challenge variants should use a tag/version, as well as labels for each struct field
+/// as domain name separators to ensure every part of the challenge is accounted for.
+/// Each challenge variant should contribute uniquely to the random oracle.
+fn append_challenge(transcript: &mut RandomOracle, challenge: &Challenge) {
+    transcript.add_bytes(b"Challenge");
+    match challenge {
+        Challenge::Sha256(hash_bytes) => {
+            // No tag/version `V0` is added to be backward compatible with old proofs and requests.
+            transcript.add_bytes(hash_bytes);
+        }
+        Challenge::V1(context) => {
+            // An empty sha256 hash is prepended to ensure this output
+            // is different to any `Sha256` challenge.
+            let separator = [0u8; 32];
+            transcript.add_bytes(separator);
+            // Add tag/version `V1` to the random oracle.
+            transcript.add_bytes(b"V1");
+            transcript.add_bytes(b"Context");
+            transcript.add_bytes(b"given");
+            transcript.add(&(context.given.len() as u64));
+            for item in &context.given {
+                transcript.append_message(b"label", &item.label);
+                transcript.append_message(b"context", &item.context);
+            }
+            transcript.add_bytes(b"requested");
+            transcript.add(&(context.requested.len() as u64));
+            for item in &context.requested {
+                transcript.append_message(b"label", &item.label);
+                transcript.append_message(b"context", &item.context);
+            }
+        }
+    }
+}
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -846,17 +928,17 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
         public: impl ExactSizeIterator<Item = &'a CredentialsInputs<C>>,
     ) -> Result<Request<C, AttributeType>, PresentationVerificationError> {
         let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
-        transcript.add_bytes(self.presentation_context);
+        append_challenge(&mut transcript, &self.presentation_context);
         transcript.append_message(b"ctx", &params);
 
         let mut request = Request {
-            challenge: self.presentation_context,
+            challenge: self.presentation_context.clone(),
             credential_statements: Vec::new(),
         };
 
         // Compute the data that the linking proof signed.
         let to_sign =
-            linking_proof_message_to_sign(self.presentation_context, &self.verifiable_credential);
+            linking_proof_message_to_sign(&self.presentation_context, &self.verifiable_credential);
 
         let mut linking_proof_iter = self.linking_proof.proof_value.iter();
 
@@ -885,16 +967,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
         } else {
             Err(PresentationVerificationError::ExcessiveLinkingProof)
         }
-    }
-}
-
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
-    for Presentation<C, AttributeType>
-{
-    fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
-        self.presentation_context.serial(out);
-        self.verifiable_credential.serial(out);
-        self.linking_proof.serial(out);
     }
 }
 
@@ -1584,14 +1656,29 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
 }
 
 fn linking_proof_message_to_sign<C: Curve, AttributeType: Attribute<C::Scalar>>(
-    challenge: Challenge,
+    challenge: &Challenge,
     proofs: &[CredentialProof<C, AttributeType>],
 ) -> Vec<u8> {
     use crate::common::Serial;
     use sha2::Digest;
     // hash the context and proof.
     let mut out = sha2::Sha512::new();
-    challenge.serial(&mut out);
+    match &challenge {
+        Challenge::Sha256(hash_bytes) => {
+            // To stay backward compatible with older Sha256 challenges (proofs generated by older wallets),
+            // don't add the version/tag of the `Challenge` enum.
+            hash_bytes.serial(&mut out)
+        }
+        Challenge::V1(context_info) => {
+            // An empty sha256 hash is prepended to ensure this output
+            // is different to any `Sha256` challenge.
+            let separator = [0u8; 32];
+            separator.serial(&mut out);
+            // Serialize the version/tag first.
+            1u8.serial(&mut out);
+            context_info.serial(&mut out)
+        }
+    }
     proofs.serial(&mut out);
     let mut msg = LINKING_DOMAIN_STRING.to_vec();
     msg.extend_from_slice(&out.finalize());
@@ -1611,7 +1698,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
     {
         let mut proofs = Vec::with_capacity(attrs.len());
         let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
-        transcript.add_bytes(self.challenge);
+        append_challenge(&mut transcript, &self.challenge);
         transcript.append_message(b"ctx", &params);
         let mut csprng = rand::thread_rng();
         if self.credential_statements.len() != attrs.len() {
@@ -1625,7 +1712,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
             let proof = cred_statement.prove(params, &mut transcript, &mut csprng, attributes)?;
             proofs.push(proof);
         }
-        let to_sign = linking_proof_message_to_sign(self.challenge, &proofs);
+        let to_sign = linking_proof_message_to_sign(&self.challenge, &proofs);
         // Linking proof
         let mut proof_value = Vec::new();
         for signer in signers {
@@ -1859,6 +1946,8 @@ impl Attribute<<ArCurve as Curve>::Scalar> for Web3IdAttribute {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+    use crate::hashes::BlockHash;
     use crate::id::id_proof_types::{
         AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
     };
@@ -1874,7 +1963,7 @@ mod tests {
     /// JSON serialization of requests and presentations is also tested.
     fn test_web3_only() -> anyhow::Result<()> {
         let mut rng = rand::thread_rng();
-        let challenge = Challenge::new(rng.gen());
+        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
         let signer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
         let signer_2 = ed25519_dalek::SigningKey::generate(&mut rng);
         let issuer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
@@ -2089,7 +2178,7 @@ mod tests {
     /// JSON serialization of requests and presentations is also tested.
     fn test_mixed() -> anyhow::Result<()> {
         let mut rng = rand::thread_rng();
-        let challenge = Challenge::new(rng.gen());
+        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
         let params = GlobalContext::generate("Test".into());
         let cred_id_exp = ArCurve::generate_scalar(&mut rng);
         let cred_id = CredentialRegistrationID::from_exponent(&params, cred_id_exp);
@@ -2245,6 +2334,164 @@ mod tests {
                 commitments: commitments_2,
             },
         ];
+        anyhow::ensure!(
+            proof
+                .verify(&params, public.iter())
+                .context("Verification of mixed presentation failed.")?
+                == request,
+            "Proof verification failed."
+        );
+
+        let data = serde_json::to_string_pretty(&proof)?;
+        assert!(
+            serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok(),
+            "Cannot deserialize proof correctly."
+        );
+
+        let data = serde_json::to_string_pretty(&request)?;
+        assert_eq!(
+            serde_json::from_str::<Request<ArCurve, Web3IdAttribute>>(&data)?,
+            request,
+            "Cannot deserialize request correctly."
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    /// Test that constructing proofs for a account credential
+    /// request works with a `Context` in the sense that the proof verifies.
+    ///
+    /// JSON serialization of requests and presentations is also tested.
+    fn test_with_context_challenge() -> anyhow::Result<()> {
+        let mut rng = rand::thread_rng();
+        // Randomly generated nonce. It is important that the nonce is freshly generated by the backend
+        // for each request so that the presentation request anchor on-chain truely looks random.
+        let nonce_context = GivenContext {
+            label: "nonce".into(),
+            context: Sha256Challenge::new(rng.gen()).into(),
+        };
+        // Human readable string giving more context to the request.
+        let context_string_context = GivenContext {
+            label: "context_string".into(),
+            context: "My great ZK application.".into(),
+        };
+        // The topic of the wallet connection as defined by `walletConnect`.
+        // The wallet or ID app use this value to check that the topic matches the current active connection.
+        let connection_id_context = GivenContext {
+            label: "connection_id".into(),
+            context: "43eee2b1e5128c9a26c871b7aff2cfe448aee66c5a927d47116e8f0c30f452e1".into(),
+        };
+        // Human readable string giving more context to the request.
+        let block_hash_context = GivenContext {
+            label: "block_hash".into(),
+            context: BlockHash::new(rng.gen()).into(),
+        };
+        // The website URL that the wallet is connected to or a TLS certificate/fingerprint of the connected website.
+        let resource_id_context = GivenContext {
+            label: "resource_id".into(),
+            context: "https://my-great-website.com".into(),
+        };
+        let challenge = Challenge::V1(crate::web3id::Context {
+            given: vec![nonce_context, context_string_context, connection_id_context],
+            requested: vec![block_hash_context, resource_id_context],
+        });
+
+        let params = GlobalContext::generate("Test".into());
+        let cred_id_exp = ArCurve::generate_scalar(&mut rng);
+        let cred_id = CredentialRegistrationID::from_exponent(&params, cred_id_exp);
+        let credential_statements = vec![CredentialStatement::Account {
+            network: Network::Testnet,
+            cred_id,
+            statement: vec![
+                AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: 3.into(),
+                        lower: Web3IdAttribute::Numeric(80),
+                        upper: Web3IdAttribute::Numeric(1237),
+                        _phantom: PhantomData,
+                    },
+                },
+                AtomicStatement::AttributeNotInSet {
+                    statement: AttributeNotInSetStatement {
+                        attribute_tag: 1u8.into(),
+                        set: [
+                            Web3IdAttribute::String(AttributeKind("ff".into())),
+                            Web3IdAttribute::String(AttributeKind("aa".into())),
+                            Web3IdAttribute::String(AttributeKind("zz".into())),
+                        ]
+                        .into_iter()
+                        .collect(),
+                        _phantom: PhantomData,
+                    },
+                },
+            ],
+        }];
+
+        let request = Request::<ArCurve, Web3IdAttribute> {
+            challenge,
+            credential_statements,
+        };
+
+        let mut values = BTreeMap::new();
+        values.insert(3.into(), Web3IdAttribute::Numeric(137));
+        values.insert(
+            1.into(),
+            Web3IdAttribute::String(AttributeKind("xkcd".into())),
+        );
+        let mut randomness = BTreeMap::new();
+        for tag in values.keys() {
+            randomness.insert(
+                *tag,
+                pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
+            );
+        }
+
+        let secrets: CommitmentInputs<
+            '_,
+            ArkGroup<ark_ec::short_weierstrass::Projective<ark_bls12_381::g1::Config>>,
+            Web3IdAttribute,
+            ed25519_dalek::SigningKey,
+        > = CommitmentInputs::Account {
+            values: &values,
+            randomness: &randomness,
+            issuer: IpIdentity::from(17u32),
+        };
+        let commitment_inputs = [secrets];
+
+        let proof = request
+            .clone()
+            .prove(
+                &params,
+                <[CommitmentInputs<
+                    '_,
+                    ArkGroup<ark_ec::short_weierstrass::Projective<ark_bls12_381::g1::Config>>,
+                    Web3IdAttribute,
+                    _,
+                >; 1] as IntoIterator>::into_iter(commitment_inputs),
+            )
+            .context("Cannot prove")?;
+
+        let commitments = {
+            let key = params.on_chain_commitment_key;
+            let mut comms = BTreeMap::new();
+            for (tag, value) in randomness.iter() {
+                let _ = comms.insert(
+                    AttributeTag::from(*tag),
+                    key.hide(
+                        &pedersen_commitment::Value::<ArCurve>::new(
+                            values.get(tag).unwrap().to_field_element(),
+                        ),
+                        value,
+                    ),
+                );
+            }
+            comms
+        };
+
+        let public = vec![CredentialsInputs::Account {
+            commitments: commitments,
+        }];
         anyhow::ensure!(
             proof
                 .verify(&params, public.iter())

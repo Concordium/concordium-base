@@ -11,7 +11,156 @@
 //! The [`RandomOracle`] instance used to verify a proof needs to be initialised
 //! with the context used to produce the proof. Any verification of sub-proofs
 //! needs to be performed in the same order as when producing the proof.
-
+//!
+//! The [`RandomOracle`] instance should be used to append bytes to its internal state.
+//! After adding data, call [`crate::random_oracle::RandomOracle::get_challenge`] to consume/hash the bytes
+//! and produce a random challenge.
+//!
+//! # Caution: Type/Field ambiguity without domain separation
+//! Special care is required when adding bytes to domain separate them with labels.
+//! Naively appending just bytes (without separation) can produce collisions of different types.
+//! For example:
+//!
+//! ```
+//! struct Type1 {
+//!     field_1: u8,
+//!     field_2: u8,
+//! }
+//!
+//! struct Type2 {
+//!     field_1: u8,
+//!     field_2: u8,
+//! }
+//!
+//! let example1 = Type1 {
+//!     field_1: 1u8,
+//!     field_2: 2u8,
+//! };
+//!
+//! let example2 = Type2 {
+//!     field_1: 1u8,
+//!     field_2: 2u8,
+//! };
+//! ```
+//!
+//! Appending the [`RandomOracle`] with either of above types by just adding each type's field values naively
+//! (meaning `hash([1u8, 2u8]`) would produce the same hashing result for both examples. To avoid this, the
+//! recommendation is to add the type name and its field names as labels for domain separation.
+//!
+//! # Example: Adding struct data
+//!
+//! If you add a struct to the transcript use its type name as separator and use `append_message`
+//! with a **label** for each field as domain separation.
+//!
+//! ```
+//! # use concordium_base::random_oracle::RandomOracle;
+//! struct Type {
+//!     field_1: u8,
+//!     field_2: u8,
+//! }
+//!
+//! let example = Type {
+//!     field_1: 1u8,
+//!     field_2: 2u8,
+//! };
+//!
+//! let mut transcript = RandomOracle::empty();
+//! transcript.add_bytes(b"Type");
+//! transcript.append_message(b"field_1", &example.field_1);
+//! transcript.append_message(b"field_2", &example.field_2);
+//!```
+//!
+//! # Caution: Ambigious variable-length data
+//! Special care is required when handling variable-length types such as
+//! `String`, `Vec`, `BTreeSet`, `BTreeMap`, or other collections.
+//! Naively appending the bytes (without including the length of the collection) can produce collisions.
+//! For example:
+//!
+//! ```
+//! struct Type {
+//!     field_1: String,
+//!     field_2: String,
+//! }
+//!
+//! let example1 = Type {
+//!     field_1: "field_2".to_string(),
+//!     field_2: "".to_string(),
+//! };
+//!
+//! let example2 = Type {
+//!     field_1: "".to_string(),
+//!     field_2: "field_2".to_string(),
+//! };
+//! ```
+//!
+//! Appending the [`RandomOracle`] with each field label and value naively
+//! (meaning `hash("field_1" + "field_2" + "field_2")`) would produce
+//! the same hashing result for both examples. To avoid this,
+//! prepend the length of the variable-length data.
+//!
+//! Note: The serialization implementation of a variable-length type already
+//! prepends the length of the data which is why it is used to add data to the transcript.
+//!
+//! References for serialization implementations:
+//! - [`concordium_base_derive::Serial`]
+//! - [serialize.rs](https://github.com/Concordium/concordium-base/blob/main/rust-src/concordium_base/src/common/serialize.rs)
+//!
+//! # Example: Adding struct data with variable-length data
+//!
+//! ```
+//! # use concordium_base::random_oracle::RandomOracle;
+//! struct Type {
+//!     field_1: String,
+//!     field_2: String,
+//! }
+//!
+//! let example = Type {
+//!     field_1: "abc".to_string(),
+//!     field_2: "def".to_string(),
+//! };
+//!
+//! let mut transcript = RandomOracle::empty();
+//! transcript.add_bytes(b"Type");
+//! // The serialization implementation of the `String` type prepends the lenght of the field values.
+//! transcript.append_message(b"field_1", &example.field_1);
+//! transcript.append_message(b"field_2", &example.field_2);
+//! ```
+//!
+//! # Example: Adding data in loops
+//!
+//! If you manually iterate through any collection, add the length of the collection to the transcript.
+//!
+//! ```
+//! # use concordium_base::random_oracle::RandomOracle;
+//! let mut transcript = RandomOracle::empty();
+//! let collection = vec![2,3,4];
+//! transcript.add(&(collection.len() as u64));
+//! for item in collection {
+//!     transcript.add(&item);
+//! }
+//! ```
+//!
+//! # Example: Adding data with different variants
+//!
+//! If you add an enum manually to the transcript add the tag/version
+//! to the transcript.
+//!
+//! ```
+//! # use concordium_base::random_oracle::RandomOracle;
+//! enum Enum {
+//!     Variant_0
+//! }
+//!
+//! let mut transcript = RandomOracle::empty();
+//!
+//! // --- Option 1: Numeric tag ---
+//! transcript.add_bytes(b"Enum");
+//! transcript.add_bytes(&[0u8]); // Variant0
+//!
+//! // --- Option 2: String tag / version ---
+//! transcript.add_bytes(b"Enum");
+//! transcript.add_bytes(b"V0"); // Variant0
+//! ```
 use crate::{common::*, curve_arithmetic::Curve};
 use sha3::{Digest, Sha3_256};
 use std::io::Write;
