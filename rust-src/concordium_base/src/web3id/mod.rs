@@ -664,20 +664,16 @@ fn append_challenge(digest: &mut impl StructuredDigest, challenge: &Challenge) {
     match challenge {
         Challenge::Sha256(hash_bytes) => {
             // No tag/version `V0` is added to be backward compatible with old proofs and requests.
-            digest.add_bytes(hash_bytes);
+            digest.add_raw_bytes(hash_bytes);
         }
         Challenge::V1(context) => {
             // A zero sha256 hash is prepended to ensure this output
             // is different to any `Sha256` challenge.
-            digest.add_bytes([0u8; 32]);
+            digest.add_raw_bytes([0u8; 32]);
             // Add tag/version `V1` to the random oracle.
-            digest.add_bytes("V1");
-            digest.add_bytes("Context");
+            digest.add_label("ContextV1");
             digest.append_message("given", &context.given);
-            digest.append_each("requested", &context.requested, |digest, item| {
-                digest.append_message("label", &item.label);
-                digest.append_message("context", &item.context);
-            });
+            digest.append_message("requested", &context.requested);
         }
     }
 }

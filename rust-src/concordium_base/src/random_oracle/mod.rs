@@ -249,62 +249,52 @@ impl PartialEq for RandomOracle {
 }
 
 /// Trait for digesting messages that encourages encoding the structure of the data into
-/// the message bytes. This is done e.g. by applying length prefixes for variable-length data and
-/// prefixing variants with a discriminator.
-/// And by labelling types and fields for domain separation. Both are done to prevent malleability
-/// in the proofs where the oracle is used.
+/// the message bytes and doing proper domain separation. This is done e.g. by applying length
+/// prefixes for variable-length data and prefixing data variants with a discriminator.
+/// And by labelling data for domain separation. Both are done to prevent malleability
+/// in the proofs or signatures where the digest is used.
 ///
 /// Using [`Serial`] is one of the approaches to correctly produce the message
-/// bytes for variable-length types (including enums), since the corresponding [`Deserial`]
+/// bytes for variable-length types and data types with different variants (enums), since the corresponding [`Deserial`]
 /// implementation guarantees the message bytes are unique for the data. Notice that using [`Serial`]
-/// does not label types or fields in the nested data.
+/// does not label types or fields in the nested data. This can be ok, as labelling top level data types
+/// is the most important.
 pub trait StructuredDigest: Buffer {
-    /// Add raw message bytes to the state of the oracle. Should primarily be used to
-    /// append labels.
-    fn add_bytes(&mut self, data: impl AsRef<[u8]>);
+    /// Add raw message bytes to the state of the digest, without any length prepended.
+    /// Should generally not be used directly, prefer using one of the other methods on the trait.
+    fn add_raw_bytes(&mut self, data: impl AsRef<[u8]>);
 
-    /// Append the given data as the message bytes produced by its [`Serial`] implementation to the state of the oracle.
-    /// The given label is appended first as domain separation. Notice that a slice, `Vec` and several other collections of
-    /// items implementing [`Serial`] itself implements [`Serial`]. When serializing variable-length
-    /// types or collection types, the length or size will be prepended in the serialization.
-    fn append_message(&mut self, label: impl AsRef<[u8]>, data: &impl Serial) {
-        self.add_bytes(label);
-        self.put(data)
+    /// Add domain separating label to the digest. The label bytes will be prepended with the bytes length.
+    fn add_label(&mut self, label: impl AsRef<[u8]>) {
+        let label = label.as_ref();
+        self.put(&(label.len() as u64));
+        self.add_raw_bytes(label);
     }
 
-    /// Append the items in the given iterator using the `append_item` closure to the state of the oracle.
-    /// The given label is appended first as domain separation followed by the length of the iterator.
-    fn append_each<T, B: IntoIterator<Item = T>>(
-        &mut self,
-        label: &str,
-        items: B,
-        mut append_item: impl FnMut(&mut Self, T),
-    ) where
-        B::IntoIter: ExactSizeIterator,
-    {
-        let items = items.into_iter();
-        self.add_bytes(label);
-        self.put(&(items.len() as u64));
-        for item in items {
-            append_item(self, item);
-        }
+    /// Append the given data as the message bytes produced by its [`Serial`] implementation to the state of the digest.
+    /// The given label is appended first as domain separation. Notice that slices, `Vec`s, and several other collections of
+    /// items implementing [`Serial`], itself implements [`Serial`]. When serializing variable-length
+    /// types or collection types, the length or size will be prepended in the serialization.
+    fn append_message(&mut self, label: impl AsRef<[u8]>, data: &impl Serial) {
+        self.add_label(label);
+        self.put(data)
     }
 }
 
 impl StructuredDigest for RandomOracle {
-    fn add_bytes(&mut self, data: impl AsRef<[u8]>) {
+    fn add_raw_bytes(&mut self, data: impl AsRef<[u8]>) {
         self.0.update(data)
     }
 }
 
 impl StructuredDigest for sha2::Sha256 {
-    fn add_bytes(&mut self, data: impl AsRef<[u8]>) {
+    fn add_raw_bytes(&mut self, data: impl AsRef<[u8]>) {
         self.update(data)
     }
 }
 
 impl StructuredDigest for sha2::Sha512 {
-    fn add_bytes(&mut self, data: impl AsRef<[u8]>) {
+    fn add_raw_bytes(&mut self, data: impl AsRef<[u8]>) {
         self.update(data)
     }
 }
@@ -313,6 +303,12 @@ impl RandomOracle {
     /// Start with the initial empty state of the oracle.
     pub fn empty() -> Self {
         RandomOracle(Sha3_256::new())
+    }
+
+    /// Start with the initial domain string. Prepend length
+    pub fn with_domain<B: AsRef<[u8]>>(data: B) -> Self {
+        // todo prepend length
+        RandomOracle(Sha3_256::new().chain_update(data))
     }
 
     /// Start with the initial domain string.
@@ -324,6 +320,10 @@ impl RandomOracle {
     /// Further updates are independent.
     pub fn split(&self) -> Self {
         RandomOracle(self.0.clone())
+    }
+
+    pub fn add_bytes<B: AsRef<[u8]>>(&mut self, data: B) {
+        self.0.update(data)
     }
 
     /// Append all items from an iterator to the random oracle. Equivalent to
@@ -442,6 +442,20 @@ mod tests {
     }
 
     /// Test that we don't accidentally change the digest produced
+    /// by [`StructuredDigest::add_raw_bytes`]
+    #[test]
+    pub fn test_add_raw_bytes_stable() {
+        let mut ro = RandomOracle::empty();
+        ro.add_raw_bytes([1u8, 2, 3]);
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "fd1780a6fc9ee0dab26ceb4b3941ab03e66ccd970d1db91612c66df4515b0a0a"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
     /// by [`StructuredDigest::append_message`]
     #[test]
     pub fn test_append_message_stable() {
@@ -452,22 +466,6 @@ mod tests {
         assert_eq!(
             challenge_hex,
             "891fd1754242e364a9eca7a15133403f3293ad330ce295cca0dd8347b94df7a8"
-        );
-    }
-
-    /// Test that we don't accidentally change the digest produced
-    /// by [`StructuredDigest::append_message`]
-    #[test]
-    pub fn test_append_each_stable() {
-        let mut ro = RandomOracle::empty();
-        ro.append_each("Label1", &vec![1u8, 2, 3], |ro, item| {
-            ro.append_message("Item", item)
-        });
-
-        let challenge_hex = hex::encode(ro.get_challenge());
-        assert_eq!(
-            challenge_hex,
-            "544c5dc5dbde3b40f86935b5dc8556dc42d2fef240c902f0b627ce2541c4b0a6"
         );
     }
 }
