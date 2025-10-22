@@ -2715,11 +2715,9 @@ pub struct IdentityAttributesCredentialsCommitments<C: Curve> {
     pub cmm_id_cred_sec_sharing_coeff: Vec<PedersenCommitment<C>>,
 }
 
-/// Randomness that is generated to commit to attributes when
+/// Randomness that is generated when we commit to the identity attributes as part of
 /// proving identity attribute credentials.
-/// This randomness is needed later on if the user wishes to do
-/// something with those commitments, for example reveal the commited value, or
-/// prove a property of the value.
+/// This randomness is needed later to prove a property of the value.
 pub struct IdentityAttributesCredentialsRandomness<C: Curve> {
     /// Randomness, if any, used to commit to user-chosen attributes, such as
     /// country of nationality.
@@ -2733,43 +2731,38 @@ pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::
     /// (Blinded) Signature derived from the signature on the pre-identity
     /// object by the IP
     #[serde(
-        rename = "sig",
+        rename = "signature",
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub sig: crate::ps_sig::BlindedSignature<P>,
-    /// list of  commitments to the attributes .
+    pub signature: crate::ps_sig::BlindedSignature<P>,
+    /// Commitments linking the proofs together
     #[serde(
         rename = "commitments",
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
     pub commitments: IdentityAttributesCredentialsCommitments<C>,
-    /// Challenge used for all of the proofs.
+    /// Challenge used for all the proofs
     #[serde(
         rename = "challenge",
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
     pub challenge: Challenge,
-    /// Responses in the proof that the computed commitment to the share
-    /// contains the same value as the encryption
-    /// the commitment to the share is not sent but computed from
-    /// the commitments to the sharing coefficients
+    /// Proof (response part), or each privacy guardian (anonymity revoker) that the commitment to
+    /// the IdCredSec share contains the same value as the encryption. The commitment to the share
+    /// is calculated from the commitments to the coefficients in the sharing polynomial.
     #[serde(rename = "proofIdCredPub")]
     #[map_size_length = 4]
     pub proof_id_cred_pub: BTreeMap<ArIdentity, com_enc_eq::Response<C>>,
-    /// Responses in the proof of knowledge of signature of Identity Provider on
-    /// the list
-    ///
-    /// - `(idCredSec, prfKey, attributes[0], attributes[1], ..., attributes[n],
-    ///   AR[1], ..., AR[m])`
+    /// Proof of knowledge of signature of identity provider
     #[serde(
-        rename = "proofIpSig",
+        rename = "proofIpSignature",
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub proof_ip_sig: ps_sig_known::Response<P, C>,
+    pub proof_ip_signature: ps_sig_known::Response<P, C>,
 }
 
 /// Describes the time period for which a credential is valid
@@ -2787,11 +2780,11 @@ pub struct CredentialValidity {
 /// revealed, or just proven known.
 #[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone)]
 pub enum IdentityAttribute<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    /// The attribute value has been committed to, with the given commitment
+    /// The attribute value is committed to and the value is proven equal to the value in the commitment
     Committed(PedersenCommitment<C>),
-    /// The attribute value has been revealed and has given value
+    /// The attribute value is revealed
     Revealed(AttributeType),
-    /// The attribute value is known
+    /// The attribute value is proven known
     Known,
 }
 

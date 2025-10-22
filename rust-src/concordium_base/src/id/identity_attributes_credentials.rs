@@ -4,20 +4,15 @@
 use super::{account_holder, types::*, utils};
 use crate::pedersen_commitment::{CommitmentKey, Randomness};
 use crate::sigma_protocols::ps_sig_known::{PsSigKnown, PsSigMsg, PsSigWitness, PsSigWitnessMsg};
-use crate::{
-    curve_arithmetic::{Curve, Pairing},
-    pedersen_commitment::{
-        Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
-    },
-    ps_sig,
-    random_oracle::RandomOracle,
-    sigma_protocols::{com_enc_eq, common::*},
-};
+use crate::{curve_arithmetic::{Curve, Pairing}, pedersen_commitment::{
+    Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
+}, ps_sig, random_oracle::RandomOracle, sigma_protocols, sigma_protocols::{com_enc_eq}};
 use anyhow::Context;
 use core::fmt;
 use core::fmt::Display;
 use rand::*;
 use std::collections::{btree_map::BTreeMap, BTreeSet};
+use crate::sigma_protocols::common::{AndAdapter, AndResponse, ReplicateAdapter, ReplicateResponse, SigmaProof};
 
 /// How to handle an identity credential attribute
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -91,11 +86,11 @@ pub fn prove_identity_attributes<
 
     let mut id_cred_pub_share_numbers = Vec::with_capacity(id_cred_data.len());
     let mut id_cred_pub_provers = Vec::with_capacity(id_cred_data.len());
-    let mut id_cred_pub_secrets = Vec::with_capacity(id_cred_data.len());
+    let mut id_cred_pub_witnesses = Vec::with_capacity(id_cred_data.len());
 
     // Create provers for correct encryption of IdCredSec
     for item in id_cred_data.iter() {
-        let secret = com_enc_eq::ComEncEqSecret {
+        let witness = com_enc_eq::ComEncEqSecret {
             value: item.share.clone(),
             elgamal_rand: item.encryption_randomness.clone(),
             pedersen_rand: item.randomness_cmm_to_share.clone(),
@@ -111,7 +106,7 @@ pub fn prove_identity_attributes<
 
         id_cred_pub_share_numbers.push(item.ar.ar_identity);
         id_cred_pub_provers.push(item_prover);
-        id_cred_pub_secrets.push(secret);
+        id_cred_pub_witnesses.push(witness);
     }
 
     let cmm_id_cred_sec = *cmm_id_cred_sec_sharing_coeff
@@ -123,7 +118,7 @@ pub fn prove_identity_attributes<
         .clone();
 
     // Proof of knowledge of the signature of the identity provider.
-    let (prover_sig, secret_sig, sig_pok_output) = compute_pok_sig(
+    let (prover_signature, witness_signature, signature_pok_output) = compute_pok_sig(
         &mut csprng,
         &context.global_context.on_chain_commitment_key,
         &context.ip_info.ip_verify_key,
@@ -134,14 +129,17 @@ pub fn prove_identity_attributes<
         cmm_rand_id_cred_sec,
     )?;
 
+    // We "and" the signature proof of knowledge and the IdCredSec share encryption proofs.
+    // The commitment to the coefficients of the sharing polynomial bind the proofs together
+    // such that we actually prove that the signed IdCredSec is what is encrypted in the shares.
     let prover = AndAdapter {
-        first: prover_sig,
+        first: prover_signature,
         second: ReplicateAdapter {
             protocols: id_cred_pub_provers,
         },
     };
 
-    let secret = (secret_sig, id_cred_pub_secrets);
+    let witness = (witness_signature, id_cred_pub_witnesses);
 
     let validity = CredentialValidity {
         valid_to: id_object.get_attribute_list().valid_to,
@@ -153,7 +151,7 @@ pub fn prove_identity_attributes<
     };
 
     let cmm_rand = IdentityAttributesCredentialsRandomness {
-        attributes_rand: sig_pok_output.attribute_cmm_rand,
+        attributes_rand: signature_pok_output.attribute_cmm_rand,
     };
 
     let id_attribute_values = IdentityAttributesCredentialsValues {
@@ -164,11 +162,11 @@ pub fn prove_identity_attributes<
         ar_data,
         ip_identity: context.ip_info.ip_identity,
         validity,
-        attributes: sig_pok_output.attributes,
+        attributes: signature_pok_output.attributes,
     };
 
     // The label "IdentityAttributesCredentials" is appended to the transcript followed all
-    // values of the identity attributes, specifically appending the
+    // values of the identity attribute credentials, specifically appending the
     // IdentityAttributesCommitmentValues struct.
     // This should make the proof non-reusable.
     // We should add the genesis hash also at some point
@@ -176,18 +174,18 @@ pub fn prove_identity_attributes<
     transcript.append_message(b"identity_attribute_values", &id_attribute_values);
     transcript.append_message(b"global_context", &context.global_context);
 
-    let proof = prove(transcript, &prover, secret, &mut csprng)
+    let proof = sigma_protocols::common::prove(transcript, &prover, witness, &mut csprng)
         .context("cannot produce zero knowledge proof")?;
 
     let id_proofs = IdentityAttributesCredentialsProofs {
-        sig: sig_pok_output.blinded_sig,
+        signature: signature_pok_output.blinded_sig,
         commitments,
         challenge: proof.challenge,
         proof_id_cred_pub: id_cred_pub_share_numbers
             .into_iter()
             .zip(proof.response.r2.responses)
             .collect(),
-        proof_ip_sig: proof.response.r1,
+        proof_ip_signature: proof.response.r1,
     };
 
     let info = IdentityAttributesCredentialsInfo {
@@ -204,8 +202,11 @@ struct SignaturePokOutput<
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 > {
+    /// Representation of each attribute in the attribute credentials
     attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
+    /// Commitment randomness for the attributes we commit to
     attribute_cmm_rand: BTreeMap<AttributeTag, PedersenRandomness<C>>,
+    /// Signature with fresh blinding randomness
     blinded_sig: ps_sig::BlindedSignature<P>,
 }
 
@@ -287,10 +288,11 @@ fn compute_pok_sig<
         secrets.push(PsSigWitnessMsg::Public);
     }
 
-    // Attribute tag set is a public value
+    // Attribute tag set we choose not to be public. In that way we only disclose the tags
+    // for the attributes we commit to or reveal.
     let tags_val = utils::encode_tags(alist.alist.keys())?;
-    msgs.push(PsSigMsg::Public(Value::new(tags_val)));
-    secrets.push(PsSigWitnessMsg::Public);
+    msgs.push(PsSigMsg::Known);
+    secrets.push(PsSigWitnessMsg::Known(Value::new(tags_val)));
 
     // Max accounts is not public, we prove knowledge of it
     let max_accounts_val = C::scalar_from_u64(alist.max_accounts.into());
@@ -298,7 +300,7 @@ fn compute_pok_sig<
     secrets.push(PsSigWitnessMsg::Known(Value::new(max_accounts_val)));
 
     let mut attributes = BTreeMap::new();
-    let mut attribute_rand = BTreeMap::new();
+    let mut attribute_cmm_rand = BTreeMap::new();
     // Iterate attributes in the same order as signed by the identity provider (tag order)
     for (tag, attribute) in &alist.alist {
         let value = Value::<C>::new(attribute.to_field_element());
@@ -308,7 +310,7 @@ fn compute_pok_sig<
                 msgs.push(PsSigMsg::EqualToCommitment(attr_cmm));
                 secrets.push(PsSigWitnessMsg::EqualToCommitment(value, attr_rand.clone()));
                 attributes.insert(*tag, IdentityAttribute::Committed(attr_cmm));
-                attribute_rand.insert(*tag, attr_rand);
+                attribute_cmm_rand.insert(*tag, attr_rand);
             }
             Some(IdentityAttributeHandling::Reveal) => {
                 msgs.push(PsSigMsg::Public(value));
@@ -323,16 +325,15 @@ fn compute_pok_sig<
         }
     }
 
-    // Prepare a fresh blinded signature for the proof.
-    // retrieve the signature on the underlying idcredsec + prf_key + attribute_list
+    // Retrieve the identity provider signature unapplying the signature randomness
     let retrieved_sig = id_object
         .get_signature()
         .retrieve(&id_object_use_data.randomness);
-    // and then we blind the signature to disassociate it from the message.
-    // only the second part is used (as per the protocol)
+    // Prepare a fresh blinded signature for the proof. This way proofs cannot be associated with each other
+    // via the signature
     let (blinded_sig, blind_rand) = retrieved_sig.blind(csprng);
 
-    let secret = PsSigWitness {
+    let witness = PsSigWitness {
         r_prime: blind_rand.1,
         msgs: secrets,
     };
@@ -345,11 +346,11 @@ fn compute_pok_sig<
 
     let output = SignaturePokOutput {
         attributes,
-        attribute_cmm_rand: attribute_rand,
+        attribute_cmm_rand,
         blinded_sig,
     };
 
-    Ok((prover, secret, output))
+    Ok((prover, witness, output))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -436,7 +437,7 @@ pub fn verify_identity_attributes<
         second: id_cred_pub_verifier,
     };
     let response = AndResponse {
-        r1: id_attr_info.proofs.proof_ip_sig.clone(),
+        r1: id_attr_info.proofs.proof_ip_signature.clone(),
         r2: id_cred_pub_responses,
     };
     let proof = SigmaProof {
@@ -444,7 +445,7 @@ pub fn verify_identity_attributes<
         response,
     };
 
-    if !verify(transcript, &verifier, &proof) {
+    if !sigma_protocols::common::verify(transcript, &verifier, &proof) {
         return Err(AttributeCommitmentVerificationError::Proof);
     }
 
@@ -581,7 +582,7 @@ fn pok_sig_verifier<
     }
 
     Some(PsSigKnown {
-        blinded_sig: id_attr_info.proofs.sig.clone(),
+        blinded_sig: id_attr_info.proofs.signature.clone(),
         msgs,
         ps_pub_key: ip_pub_key.clone(),
         cmm_key: *commitment_key,
