@@ -510,7 +510,22 @@ mod tests {
         let challenge_hex = hex::encode(ro.get_challenge());
         assert_eq!(
             challenge_hex,
-            "891fd1754242e364a9eca7a15133403f3293ad330ce295cca0dd8347b94df7a8"
+            "3756eec6f9241f9a1cd8b401f54679cf9be2e057365728336221b1871ff666fb"
+        );
+    }
+
+    /// Test that we don't accidentally change the scalar produced
+    /// by [`RandomOracle::challenge_scalar`]
+    #[test]
+    pub fn test_challenge_scalar_stable() {
+        let mut ro = RandomOracle::empty();
+
+        let scalar_hex = hex::encode(common::to_bytes(
+            &ro.challenge_scalar::<ArCurve, _>("Scalar1"),
+        ));
+        assert_eq!(
+            scalar_hex,
+            "08646777f9c47efc863115861aa18d95653212c3bdf36899c7db46fbdae095cd"
         );
     }
 
