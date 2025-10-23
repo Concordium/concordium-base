@@ -41,7 +41,8 @@ pub fn prove_identity_attributes<
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Clone + Attribute<C::Scalar>,
 >(
-    context: IpContext<'_, P, C>,
+    global_context: &GlobalContext<C>,
+    ip_context: IpContextOnly<'_, P, C>,
     id_object: &(impl HasIdentityObjectFields<P, C, AttributeType> + ?Sized),
     id_object_use_data: &IdObjectUseData<P, C>,
     attributes_handling: &BTreeMap<AttributeTag, IdentityAttributeHandling>,
@@ -61,7 +62,7 @@ pub fn prove_identity_attributes<
             .ar_identities
             .iter()
         {
-            let info = context.ars_infos.get(ar_id).with_context(|| {
+            let info = ip_context.ars_infos.get(ar_id).with_context(|| {
                 format!("cannot find anonymity revoker {} in the context", ar_id)
             })?;
             ars.insert(*ar_id, info.clone());
@@ -78,7 +79,7 @@ pub fn prove_identity_attributes<
                 .get_common_pio_fields()
                 .choice_ar_parameters
                 .threshold,
-            &context.global_context.on_chain_commitment_key,
+            &global_context.on_chain_commitment_key,
         );
 
     // Create ar data map
@@ -110,7 +111,7 @@ pub fn prove_identity_attributes<
             cipher: item.encrypted_share,
             commitment: item.cmm_to_share,
             pub_key: item.ar.ar_public_key,
-            cmm_key: context.global_context.on_chain_commitment_key,
+            cmm_key: global_context.on_chain_commitment_key,
             encryption_in_exponent_generator: item.ar.ar_public_key.generator,
         };
 
@@ -130,8 +131,8 @@ pub fn prove_identity_attributes<
     // Proof of knowledge of the signature of the identity provider.
     let (prover_signature, witness_signature, signature_pok_output) = signature_knowledge_prover(
         &mut csprng,
-        &context.global_context.on_chain_commitment_key,
-        &context.ip_info.ip_verify_key,
+        &global_context.on_chain_commitment_key,
+        &ip_context.ip_info.ip_verify_key,
         id_object,
         id_object_use_data,
         attributes_handling,
@@ -170,7 +171,7 @@ pub fn prove_identity_attributes<
             .choice_ar_parameters
             .threshold,
         ar_data,
-        ip_identity: context.ip_info.ip_identity,
+        ip_identity: ip_context.ip_info.ip_identity,
         validity,
         attributes: signature_pok_output.attributes,
     };
@@ -182,7 +183,7 @@ pub fn prove_identity_attributes<
     // We should add the genesis hash also at some point
     transcript.add_bytes(b"IdentityAttributesCredentials");
     transcript.append_message(b"identity_attribute_values", &id_attribute_values);
-    transcript.append_message(b"global_context", &context.global_context);
+    transcript.append_message(b"global_context", &global_context);
 
     let proof = sigma_protocols::common::prove(transcript, &prover, witness, &mut csprng)
         .context("cannot produce zero knowledge proof")?;
@@ -394,17 +395,13 @@ pub fn verify_identity_attributes<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
-    A: HasArPublicKey<C>,
 >(
     global_context: &GlobalContext<C>,
-    ip_info: &IpInfo<P>,
-    // NB: The following map only needs to be a superset of the ars
-    // in the identity attribute values.
-    known_ars: &BTreeMap<ArIdentity, A>,
+    ip_context: IpContextOnly<'_, P, C>,
     id_attr_info: &IdentityAttributesCredentialsInfo<P, C, AttributeType>,
     transcript: &mut RandomOracle,
 ) -> Result<(), AttributeCommitmentVerificationError> {
-    if ip_info.ip_identity != id_attr_info.values.ip_identity {
+    if ip_context.ip_info.ip_identity != id_attr_info.values.ip_identity {
         return Err(AttributeCommitmentVerificationError::Signature);
     }
     // We need to check that the threshold is actually equal to
@@ -428,7 +425,7 @@ pub fn verify_identity_attributes<
 
     let verifier_sig = signature_knowledge_verifier(
         &global_context.on_chain_commitment_key,
-        &ip_info.ip_verify_key,
+        &ip_context.ip_info.ip_verify_key,
         id_attr_info,
     )
     .ok_or(AttributeCommitmentVerificationError::Signature)?;
@@ -436,7 +433,7 @@ pub fn verify_identity_attributes<
     // Create verifiers for encryption of IdCredSec
     let (id_cred_pub_verifier, id_cred_pub_responses) = id_cred_pub_verifier(
         &global_context.on_chain_commitment_key,
-        known_ars,
+        ip_context.ars_infos,
         &id_attr_info.values.ar_data,
         &id_attr_info
             .proofs
@@ -469,9 +466,9 @@ pub fn verify_identity_attributes<
 }
 
 /// verify id_cred data
-fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
+fn id_cred_pub_verifier<C: Curve>(
     commitment_key: &CommitmentKey<C>,
-    known_ars: &BTreeMap<ArIdentity, A>,
+    known_ars: &BTreeMap<ArIdentity, ArInfo<C>>,
     chain_ar_data: &BTreeMap<ArIdentity, ChainArData<C>>,
     cmm_sharing_coeff: &[Commitment<C>],
     proof_id_cred_pub: &BTreeMap<ArIdentity, com_enc_eq::Response<C>>,
@@ -617,8 +614,8 @@ mod test {
     use crate::id::test::ExampleAttributeList;
     use crate::id::types::{
         ArIdentity, ArInfo, Attribute, AttributeTag, GlobalContext, IdObjectUseData,
-        IdentityAttribute, IdentityAttributesCredentialsInfo, IdentityObjectV1, IpContext, IpData,
-        IpInfo, YearMonth,
+        IdentityAttribute, IdentityAttributesCredentialsInfo, IdentityObjectV1, IpContextOnly,
+        IpData, IpInfo, YearMonth,
     };
     use crate::id::{identity_provider, test};
     use crate::random_oracle::RandomOracle;
@@ -712,11 +709,12 @@ mod test {
         }
     }
 
-    fn ip_context(id_object_fixture: &IdentityObjectFixture) -> IpContext<'_, IpPairing, ArCurve> {
-        IpContext {
+    fn ip_context(
+        id_object_fixture: &IdentityObjectFixture,
+    ) -> IpContextOnly<'_, IpPairing, ArCurve> {
+        IpContextOnly {
             ip_info: &id_object_fixture.ip_info,
             ars_infos: &id_object_fixture.ars_infos,
-            global_context: &id_object_fixture.global_ctx,
         }
     }
 
@@ -736,6 +734,7 @@ mod test {
 
         let mut transcript = RandomOracle::empty();
         let (id_attr_info, rand) = prove_identity_attributes(
+            &id_object_fixture.global_ctx,
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
@@ -760,8 +759,7 @@ mod test {
         let mut transcript = RandomOracle::empty();
         verify_identity_attributes(
             &id_object_fixture.global_ctx,
-            &id_object_fixture.ip_info,
-            &id_object_fixture.ars_infos,
+            ip_context(&id_object_fixture),
             &id_attr_info,
             &mut transcript,
         )
@@ -784,6 +782,7 @@ mod test {
 
         let mut transcript = RandomOracle::empty();
         let (id_attr_info, _) = prove_identity_attributes(
+            &id_object_fixture.global_ctx,
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
@@ -805,8 +804,7 @@ mod test {
         let mut transcript = RandomOracle::empty();
         verify_identity_attributes(
             &id_object_fixture.global_ctx,
-            &id_object_fixture.ip_info,
-            &id_object_fixture.ars_infos,
+            ip_context(&id_object_fixture),
             &id_attr_info,
             &mut transcript,
         )
@@ -822,6 +820,7 @@ mod test {
 
         let mut transcript = RandomOracle::empty();
         let (id_attr_info, _) = prove_identity_attributes(
+            &id_object_fixture.global_ctx,
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
@@ -846,8 +845,7 @@ mod test {
         let mut transcript = RandomOracle::empty();
         verify_identity_attributes(
             &id_object_fixture.global_ctx,
-            &id_object_fixture.ip_info,
-            &id_object_fixture.ars_infos,
+            ip_context(&id_object_fixture),
             &id_attr_info,
             &mut transcript,
         )
@@ -865,6 +863,7 @@ mod test {
 
         let mut transcript = RandomOracle::empty();
         let (id_attr_info, rand) = prove_identity_attributes(
+            &id_object_fixture.global_ctx,
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
@@ -888,8 +887,7 @@ mod test {
         let mut transcript = RandomOracle::empty();
         verify_identity_attributes(
             &id_object_fixture.global_ctx,
-            &id_object_fixture.ip_info,
-            &id_object_fixture.ars_infos,
+            ip_context(&id_object_fixture),
             &id_attr_info,
             &mut transcript,
         )
@@ -907,6 +905,7 @@ mod test {
         let attributes_handling = BTreeMap::new();
         let mut transcript = RandomOracle::empty();
         let (mut id_attr_info, _) = prove_identity_attributes(
+            &id_object_fixture.global_ctx,
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
@@ -925,8 +924,7 @@ mod test {
         let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
-            &id_object_fixture.ip_info,
-            &id_object_fixture.ars_infos,
+            ip_context(&id_object_fixture),
             &id_attr_info,
             &mut transcript,
         );
@@ -943,6 +941,7 @@ mod test {
         let attributes_handling = BTreeMap::new();
         let mut transcript = RandomOracle::empty();
         let (mut id_attr_info, _) = prove_identity_attributes(
+            &id_object_fixture.global_ctx,
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
@@ -958,8 +957,7 @@ mod test {
         let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
-            &id_object_fixture.ip_info,
-            &id_object_fixture.ars_infos,
+            ip_context(&id_object_fixture),
             &id_attr_info,
             &mut transcript,
         );
@@ -975,6 +973,7 @@ mod test {
         let attributes_handling = BTreeMap::new();
         let mut transcript = RandomOracle::empty();
         let (mut id_attr_info, _) = prove_identity_attributes(
+            &id_object_fixture.global_ctx,
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
@@ -988,8 +987,7 @@ mod test {
         let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
-            &id_object_fixture.ip_info,
-            &id_object_fixture.ars_infos,
+            ip_context(&id_object_fixture),
             &id_attr_info,
             &mut transcript,
         );
@@ -1005,6 +1003,7 @@ mod test {
         let attributes_handling = BTreeMap::new();
         let mut transcript = RandomOracle::empty();
         let (mut id_attr_info, _) = prove_identity_attributes(
+            &id_object_fixture.global_ctx,
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
@@ -1024,8 +1023,7 @@ mod test {
         let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
-            &id_object_fixture.ip_info,
-            &id_object_fixture.ars_infos,
+            ip_context(&id_object_fixture),
             &id_attr_info,
             &mut transcript,
         );
@@ -1041,6 +1039,7 @@ mod test {
         let attributes_handling = BTreeMap::new();
         let mut transcript = RandomOracle::empty();
         let (mut id_attr_info, _) = prove_identity_attributes(
+            &id_object_fixture.global_ctx,
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
@@ -1057,8 +1056,7 @@ mod test {
         let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
-            &id_object_fixture.ip_info,
-            &id_object_fixture.ars_infos,
+            ip_context(&id_object_fixture),
             &id_attr_info,
             &mut transcript,
         );
@@ -1074,6 +1072,7 @@ mod test {
         let attributes_handling = BTreeMap::new();
         let mut transcript = RandomOracle::empty();
         let (mut id_attr_info, _) = prove_identity_attributes(
+            &id_object_fixture.global_ctx,
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
@@ -1088,8 +1087,7 @@ mod test {
         let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
-            &id_object_fixture.ip_info,
-            &id_object_fixture.ars_infos,
+            ip_context(&id_object_fixture),
             &id_attr_info,
             &mut transcript,
         );
@@ -1105,6 +1103,7 @@ mod test {
         let attributes_handling = BTreeMap::new();
         let mut transcript = RandomOracle::empty();
         let (mut id_attr_info, _) = prove_identity_attributes(
+            &id_object_fixture.global_ctx,
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
@@ -1119,8 +1118,7 @@ mod test {
         let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
-            &id_object_fixture.ip_info,
-            &id_object_fixture.ars_infos,
+            ip_context(&id_object_fixture),
             &id_attr_info,
             &mut transcript,
         );
@@ -1137,6 +1135,7 @@ mod test {
         attributes_handling.insert(TAG_0, IdentityAttributeHandling::Reveal);
         let mut transcript = RandomOracle::empty();
         let (mut id_attr_info, _) = prove_identity_attributes(
+            &id_object_fixture.global_ctx,
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
@@ -1153,8 +1152,7 @@ mod test {
         let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
-            &id_object_fixture.ip_info,
-            &id_object_fixture.ars_infos,
+            ip_context(&id_object_fixture),
             &id_attr_info,
             &mut transcript,
         );
@@ -1173,6 +1171,7 @@ mod test {
         attributes_handling.insert(TAG_0, IdentityAttributeHandling::Commit);
         let mut transcript = RandomOracle::empty();
         let (mut id_attr_info, _) = prove_identity_attributes(
+            &id_object_fixture.global_ctx,
             ip_context(&id_object_fixture),
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
@@ -1191,8 +1190,7 @@ mod test {
         let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(
             &id_object_fixture.global_ctx,
-            &id_object_fixture.ip_info,
-            &id_object_fixture.ars_infos,
+            ip_context(&id_object_fixture),
             &id_attr_info,
             &mut transcript,
         );
@@ -1215,6 +1213,7 @@ mod test {
         //
         // let mut transcript = RandomOracle::empty();
         // let (id_attr_info, rand) = prove_identity_attributes(
+        //     &id_object_fixture.global_ctx,
         //     ip_context(&id_object_fixture),
         //     &id_object_fixture.id_object,
         //     &id_object_fixture.id_use_data,
@@ -1234,8 +1233,7 @@ mod test {
         let mut transcript = RandomOracle::empty();
         verify_identity_attributes(
             &id_object_fixture.global_ctx,
-            &id_object_fixture.ip_info,
-            &id_object_fixture.ars_infos,
+            ip_context(&id_object_fixture),
             &id_attr_info,
             &mut transcript,
         )

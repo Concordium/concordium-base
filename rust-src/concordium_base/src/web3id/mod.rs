@@ -11,7 +11,7 @@ mod proofs;
 mod test;
 
 use crate::id::types::{
-    ArIdentity, ArInfos, ArPublicKey, CredentialValidity, HasIdentityObjectFields, IdObjectUseData,
+    ArInfos, CredentialValidity, HasIdentityObjectFields, IdObjectUseData,
     IdentityAttributesCredentialsInfo, IdentityObjectV1, IpContextOnly, IpInfo,
 };
 use crate::{
@@ -1087,6 +1087,7 @@ pub enum CommitmentInputs<
     },
     /// Inputs are for an identity credential issued by an identity provider.
     Identity {
+        /// Context with identity provider data
         ip_context: IpContextOnly<'a, P, C>,
         /// Identity object. Together with `id_object_use_data`, it constitutes the identity credentials
         id_object: &'a dyn HasIdentityObjectFields<P, C, AttributeType>,
@@ -1484,16 +1485,18 @@ pub enum ProofError {
 pub enum CredentialsInputs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     Account {
         // All the commitments of the credential.
-        // In principle we only ever need to borrow this, but it is simpler to
+        // In principle, we only ever need to borrow this, but it is simpler to
         // have the owned map instead of a reference to it.
         commitments: BTreeMap<AttributeTag, pedersen_commitment::Commitment<C>>,
     },
     Identity {
-        // todo1 borrow via IpContext instead?
+        /// Public information on the chosen identity provider.
         ip_info: IpInfo<P>,
-        // NB: The following map only needs to be a superset of the ars
-        // in the cdi.
-        known_ars: BTreeMap<ArIdentity, ArPublicKey<C>>,
+        /// Public information on the __supported__ anonymity revokers.
+        /// This is used by the identity provider and the chain to
+        /// validate the identity object requests, to validate credentials,
+        /// as well as by the account holder to create a credential.
+        ars_infos: ArInfos<C>,
     },
     Web3 {
         /// The public key of the issuer.

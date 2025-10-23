@@ -19,7 +19,7 @@ use crate::curve_arithmetic::Pairing;
 use crate::id::id_proof_types::{AtomicStatement, ProofVersion};
 use crate::id::identity_attributes_credentials;
 use crate::id::identity_attributes_credentials::IdentityAttributeHandling;
-use crate::id::types::{IdentityAttribute, IpContext};
+use crate::id::types::{IdentityAttribute, IpContextOnly};
 use concordium_contracts_common::ContractAddress;
 use std::collections::BTreeMap;
 
@@ -171,12 +171,14 @@ fn verify_single_credential<
                 id_attr_cred_info,
                 ..
             },
-            CredentialsInputs::Identity { ip_info, known_ars },
+            CredentialsInputs::Identity { ip_info, ars_infos },
         ) => {
             if !identity_attributes_credentials::verify_identity_attributes(
                 global,
-                ip_info,
-                known_ars,
+                IpContextOnly {
+                    ip_info,
+                    ars_infos: &ars_infos.anonymity_revokers,
+                },
                 id_attr_cred_info,
                 transcript,
             )
@@ -313,11 +315,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
 
                 let (id_attr_cred_info, id_attr_cmm_rand) =
                     identity_attributes_credentials::prove_identity_attributes(
-                        IpContext {
-                            ip_info: ip_context.ip_info,
-                            ars_infos: ip_context.ars_infos,
-                            global_context: global,
-                        },
+                        global,
+                        ip_context,
                         id_object,
                         id_object_use_data,
                         &attributes_handling,
