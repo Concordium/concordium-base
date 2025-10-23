@@ -494,8 +494,11 @@ impl<P: PayloadLike> AccountTransaction<P> {
 /// expensive. It is thus useful to delay deserialization until after we have
 /// checked signatures and the sender account information.
 pub struct AccountTransactionV1<PayloadType> {
+    // Signatures by the sender and optionally the sponsor.
     pub signatures: TransactionSignaturesV1,
+    // Transaction header containing the optional sponsor address.
     pub header: TransactionHeaderV1,
+    // The transaction payload.
     pub payload: PayloadType,
 }
 
@@ -1961,7 +1964,10 @@ pub enum BlockItem<PayloadType> {
         >,
     ),
     UpdateInstruction(updates::UpdateInstruction),
+    // Account transactions v1 are messages which are signed and paid for by
+    // either the sender account or a sponsor account..
     AccountTransactionV1(AccountTransactionV1<PayloadType>),
+    // A raw block item encoded as a byte string.
     RawBlockItem(Vec<u8>),
 }
 

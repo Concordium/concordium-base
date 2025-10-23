@@ -439,7 +439,9 @@ impl Deserial for TransactionSignature {
 #[derive(SerdeDeserialize, SerdeSerialize, Clone, PartialEq, Eq, Debug, derive_more::AsRef)]
 #[derive(SerdeDeserialize, SerdeSerialize, Serialize, Clone, PartialEq, Eq, Debug)]
 pub struct TransactionSignaturesV1 {
+    // The signature of the sender of the transaction.
     pub sender: TransactionSignature,
+    // The optional signature of the sponsor of the transaction.
     pub sponsor: Option<TransactionSignature>,
 }
 
