@@ -18,6 +18,7 @@ use crate::cis4_types::IssuerKey;
 use crate::id::id_proof_types::ProofVersion;
 use concordium_contracts_common::ContractAddress;
 use std::collections::BTreeMap;
+use crate::curve_arithmetic::Pairing;
 
 /// Append a `web3id::Challenge` to the state of the random oracle.
 /// Newly added challenge variants should use a tag/version, as well as labels for each struct field
@@ -60,7 +61,7 @@ impl<C: Curve> SignedCommitments<C> {
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeType> {
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>> Presentation<P, C, AttributeType> {
     /// Get an iterator over the metadata for each of the verifiable credentials
     /// in the order they appear in the presentation.
     pub fn metadata(&self) -> impl ExactSizeIterator<Item = ProofMetadata> + '_ {
@@ -79,7 +80,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
     pub fn verify<'a>(
         &self,
         params: &GlobalContext<C>,
-        public: impl ExactSizeIterator<Item = &'a CredentialsInputs<C>>,
+        public: impl ExactSizeIterator<Item = &'a CredentialsInputs<P, C>>,
     ) -> Result<Request<C, AttributeType>, PresentationVerificationError> {
         let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
         append_challenge(&mut transcript, &self.presentation_context);
@@ -126,11 +127,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
 
 /// Verify a single credential. This only checks the cryptographic parts and
 /// ignores the metadata such as issuance date.
-fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
+fn verify_single_credential<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>(
     global: &GlobalContext<C>,
     transcript: &mut RandomOracle,
-    cred_proof: &CredentialProof<C, AttributeType>,
-    public: &CredentialsInputs<C>,
+    cred_proof: &CredentialProof<P, C, AttributeType>,
+    public: &CredentialsInputs<P, C>,
 ) -> bool {
     match (&cred_proof, public) {
         (
@@ -188,13 +189,13 @@ fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, AttributeType> {
-    fn prove<Signer: Web3IdSigner>(
+    fn prove<P: Pairing<ScalarField = C::Scalar>, Signer: Web3IdSigner>(
         self,
         global: &GlobalContext<C>,
         ro: &mut RandomOracle,
         csprng: &mut impl rand::Rng,
-        input: CommitmentInputs<C, AttributeType, Signer>,
-    ) -> Result<CredentialProof<C, AttributeType>, ProofError> {
+        input: CommitmentInputs<P, C, AttributeType, Signer>,
+    ) -> Result<CredentialProof<P, C, AttributeType>, ProofError> {
         match (self, input) {
             (
                 CredentialStatement::Account {
@@ -308,9 +309,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
     }
 }
 
-fn linking_proof_message_to_sign<C: Curve, AttributeType: Attribute<C::Scalar>>(
+fn linking_proof_message_to_sign<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>(
     challenge: &Challenge,
-    proofs: &[CredentialProof<C, AttributeType>],
+    proofs: &[CredentialProof<P, C, AttributeType>],
 ) -> Vec<u8> {
     use crate::common::Serial;
     use sha2::Digest;
@@ -326,11 +327,11 @@ fn linking_proof_message_to_sign<C: Curve, AttributeType: Attribute<C::Scalar>>(
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
     /// Construct a proof for the [`Request`] using the provided cryptographic
     /// parameters and secrets.
-    pub fn prove<'a, Signer: 'a + Web3IdSigner>(
+    pub fn prove<'a, P:Pairing<ScalarField = C::Scalar>, Signer: 'a + Web3IdSigner>(
         self,
         params: &GlobalContext<C>,
-        attrs: impl ExactSizeIterator<Item = CommitmentInputs<'a, C, AttributeType, Signer>>,
-    ) -> Result<Presentation<C, AttributeType>, ProofError>
+        attrs: impl ExactSizeIterator<Item = CommitmentInputs<'a, P, C, AttributeType, Signer>>,
+    ) -> Result<Presentation<P, C, AttributeType>, ProofError>
     where
         AttributeType: 'a,
     {

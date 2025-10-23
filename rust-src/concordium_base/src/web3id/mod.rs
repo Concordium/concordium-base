@@ -35,6 +35,7 @@ use std::{
     marker::PhantomData,
     str::FromStr,
 };
+use crate::curve_arithmetic::Pairing;
 
 /// Domain separation string used when the issuer signs the commitments.
 pub const COMMITMENT_SIGNATURE_DOMAIN_STRING: &[u8] = b"WEB3ID:COMMITMENTS";
@@ -203,7 +204,7 @@ pub struct ProofMetadata {
     pub cred_metadata: CredentialMetadata,
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, AttributeType> {
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>> CredentialProof<P, C, AttributeType> {
     pub fn metadata(&self) -> ProofMetadata {
         match self {
             CredentialProof::Account {
@@ -279,7 +280,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
 /// all the information needed to verify it, except the issuer's public key in
 /// case of the `Web3Id` proof, and the public commitments in case of the
 /// `Account` proof.
-pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
+pub enum CredentialProof<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>> {
     Account {
         /// Creation timestamp of the proof.
         created: chrono::DateTime<chrono::Utc>,
@@ -383,8 +384,8 @@ impl<C: Curve> SignedCommitments<C> {
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
-    for CredentialProof<C, AttributeType>
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
+    for CredentialProof<P, C, AttributeType>
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -467,8 +468,8 @@ fn get_optional_field(
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned>
-    TryFrom<serde_json::Value> for CredentialProof<C, AttributeType>
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned>
+    TryFrom<serde_json::Value> for CredentialProof<P, C, AttributeType>
 {
     type Error = anyhow::Error;
 
@@ -571,8 +572,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
-    for CredentialProof<C, AttributeType>
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>> crate::common::Serial
+    for CredentialProof<P, C, AttributeType>
 {
     fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
         match self {
@@ -847,9 +848,9 @@ pub type CredentialHolderId = Ed25519PublicKey<CredentialHolderIdRole>;
 /// A presentation is the response to a [`Request`]. It contains proofs for
 /// statements, ownership proof for all Web3 credentials, and a context. The
 /// only missing part to verify the proof are the public commitments.
-pub struct Presentation<C: Curve, AttributeType: Attribute<C::Scalar>> {
+pub struct Presentation<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>> {
     pub presentation_context: Challenge,
-    pub verifiable_credential: Vec<CredentialProof<C, AttributeType>>,
+    pub verifiable_credential: Vec<CredentialProof<P, C, AttributeType>>,
     /// Signatures from keys of Web3 credentials (not from ID credentials).
     /// The order is the same as that in the `credential_proofs` field.
     pub linking_proof: LinkingProof,
@@ -870,8 +871,8 @@ pub enum PresentationVerificationError {
     InvalidCredential,
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<serde_json::Value>
-    for Presentation<C, AttributeType>
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<serde_json::Value>
+    for Presentation<P, C, AttributeType>
 {
     type Error = anyhow::Error;
 
@@ -891,8 +892,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<s
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
-    for Presentation<C, AttributeType>
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
+    for Presentation<P, C, AttributeType>
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -1021,7 +1022,7 @@ impl Web3IdSigner for ed25519_dalek::SecretKey {
 
 /// The additional inputs, additional to the [`Request`] that are needed to
 /// produce a [`Presentation`].
-pub enum CommitmentInputs<'a, C: Curve, AttributeType, Web3IdSigner> {
+pub enum CommitmentInputs<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType, Web3IdSigner> {
     /// Inputs are for an account credential derived from an identity issued by an
     /// identity provider.
     Account {
@@ -1284,10 +1285,10 @@ impl<C: Curve, AttributeType: DeserializeOwned> TryFrom<serde_json::Value>
 
 impl<C: Curve, AttributeType> Web3IdCredential<C, AttributeType> {
     /// Convert the credential into inputs for a proof.
-    pub fn into_inputs<'a, S: Web3IdSigner>(
+    pub fn into_inputs<'a, P: Pairing<ScalarField = C::Scalar>, S: Web3IdSigner>(
         &'a self,
         signer: &'a S,
-    ) -> CommitmentInputs<'a, C, AttributeType, S> {
+    ) -> CommitmentInputs<'a, P, C, AttributeType, S> {
         CommitmentInputs::Web3Issuer {
             signature: self.signature,
             signer,
@@ -1333,13 +1334,13 @@ pub enum OwnedCommitmentInputs<C: Curve, AttributeType, Web3IdSigner> {
     },
 }
 
-impl<'a, C: Curve, AttributeType, Web3IdSigner>
+impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType, Web3IdSigner>
     From<&'a OwnedCommitmentInputs<C, AttributeType, Web3IdSigner>>
-    for CommitmentInputs<'a, C, AttributeType, Web3IdSigner>
+    for CommitmentInputs<'a, P, C, AttributeType, Web3IdSigner>
 {
     fn from(
         owned: &'a OwnedCommitmentInputs<C, AttributeType, Web3IdSigner>,
-    ) -> CommitmentInputs<'a, C, AttributeType, Web3IdSigner> {
+    ) -> CommitmentInputs<'a, P, C, AttributeType, Web3IdSigner> {
         match owned {
             OwnedCommitmentInputs::Account {
                 issuer,
@@ -1396,7 +1397,7 @@ pub enum ProofError {
     rename_all_fields = "camelCase",
     tag = "type"
 )]
-pub enum CredentialsInputs<C: Curve> {
+pub enum CredentialsInputs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     Account {
         // All the commitments of the credential.
         // In principle we only ever need to borrow this, but it is simpler to
