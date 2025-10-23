@@ -1902,8 +1902,10 @@ pub fn verify_signature_transaction_sign_hash_v1(
     hash: &hashes::TransactionSignHash,
     signatures: &TransactionSignaturesV1,
 ) -> bool {
-    let sender_sig_ok = verify_data_signature(sender_keys, hash, &signatures.sender);
-    let sponsor_sig_ok = signatures.sponsor.map_or(true, |sig| verify_data_signature(sponsor_keys, hash, &sig));
+    let sender_sig_ok = verify_data_signature(sender_keys, hash, &signatures.sender.signatures);
+    let sponsor_sig_ok = signatures.sponsor.as_ref().map_or(true, |sig| {
+        verify_data_signature(sponsor_keys, hash, &sig.signatures)
+    });
     sender_sig_ok && sponsor_sig_ok
 }
 
@@ -3680,8 +3682,8 @@ mod tests {
         let hash = TransactionSignHash::new(rng.gen());
         let sender_sig = sender_keys.sign_transaction_hash(&hash);
         let sender_and_sponsor_sigs = TransactionSignaturesV1 {
-            sender: sender_sig.signatures.clone(),
-            sponsor: Some(sponsor_keys.sign_transaction_hash(&hash).signatures),
+            sender: sender_sig.clone(),
+            sponsor: Some(sponsor_keys.sign_transaction_hash(&hash)),
         };
         let sender_threshold =
             AccountThreshold::try_from(rng.gen_range(1..(sender_keys.len() + 1) as u8)).unwrap();
