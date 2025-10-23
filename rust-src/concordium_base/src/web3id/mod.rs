@@ -228,6 +228,21 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
                     cred_id: *cred_id,
                 },
             },
+            CredentialProof::Identity {
+                created,
+                network,
+                id_attr_cred_info,
+                ..
+            } => {
+                ProofMetadata {
+                    created: *created,
+                    network: *network,
+                    cred_metadata: CredentialMetadata::Identity {
+                        issuer: id_attr_cred_info.values.ip_identity,
+                        validity:  id_attr_cred_info.values.validity.clone(),
+                    },
+                }
+            }
             CredentialProof::Web3Id {
                 created,
                 holder,
@@ -244,9 +259,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
                     holder: *holder,
                 },
             },
-            CredentialProof::Identity { .. } => {
-                todo!()
-            }
+
         }
     }
 
