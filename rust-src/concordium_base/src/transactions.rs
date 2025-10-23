@@ -1965,6 +1965,8 @@ pub enum BlockItem<PayloadType> {
         >,
     ),
     UpdateInstruction(updates::UpdateInstruction),
+    AccountTransactionV1(AccountTransactionV1<PayloadType>),
+    RawBlockItem(Vec<u8>),
 }
 
 impl<PayloadType> From<AccountTransaction<PayloadType>> for BlockItem<PayloadType> {
@@ -2126,6 +2128,14 @@ impl<P: PayloadLike> Serial for BlockItem<P> {
             BlockItem::UpdateInstruction(ui) => {
                 out.put(&2u8);
                 out.put(ui);
+            }
+            BlockItem::AccountTransactionV1(atv1) => {
+                out.put(&3u8);
+                out.put(atv1);
+            }
+            BlockItem::RawBlockItem(bytes) => {
+                out.put(&4u8);
+                out.put(bytes);
             }
         }
     }
