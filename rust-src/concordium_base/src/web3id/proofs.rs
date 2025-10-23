@@ -10,6 +10,7 @@ use crate::web3id::{
     Challenge, CommitmentInputs, CredentialHolderId, CredentialProof, CredentialStatement,
     CredentialsInputs, LinkingProof, Presentation, PresentationVerificationError, ProofError,
     ProofMetadata, Request, SignedCommitments, WeakLinkingProof, Web3IdSigner,
+    COMMITMENT_SIGNATURE_DOMAIN_STRING, LINKING_DOMAIN_STRING,
 };
 use ed25519_dalek::Verifier;
 
@@ -17,17 +18,6 @@ use crate::cis4_types::IssuerKey;
 use crate::id::id_proof_types::ProofVersion;
 use concordium_contracts_common::ContractAddress;
 use std::collections::BTreeMap;
-
-/// Domain separation string used when the issuer signs the commitments.
-pub const COMMITMENT_SIGNATURE_DOMAIN_STRING: &[u8] = b"WEB3ID:COMMITMENTS";
-
-/// Domain separation string used when signing the revoke transaction
-/// using the credential secret key.
-pub const REVOKE_DOMAIN_STRING: &[u8] = b"WEB3ID:REVOKE";
-
-/// Domain separation string used when signing the linking proof using
-/// the credential secret key.
-pub const LINKING_DOMAIN_STRING: &[u8] = b"WEB3ID:LINKING";
 
 /// Append a `web3id::Challenge` to the state of the random oracle.
 /// Newly added challenge variants should use a tag/version, as well as labels for each struct field

@@ -7,8 +7,6 @@
 pub mod did;
 mod proofs;
 
-pub use proofs::*;
-
 #[cfg(test)]
 mod test;
 
@@ -36,6 +34,17 @@ use std::{
     marker::PhantomData,
     str::FromStr,
 };
+
+/// Domain separation string used when the issuer signs the commitments.
+pub const COMMITMENT_SIGNATURE_DOMAIN_STRING: &[u8] = b"WEB3ID:COMMITMENTS";
+
+/// Domain separation string used when signing the revoke transaction
+/// using the credential secret key.
+pub const REVOKE_DOMAIN_STRING: &[u8] = b"WEB3ID:REVOKE";
+
+/// Domain separation string used when signing the linking proof using
+/// the credential secret key.
+pub const LINKING_DOMAIN_STRING: &[u8] = b"WEB3ID:LINKING";
 
 /// A statement about a single credential, either an identity credential or a
 /// Web3 credential.
