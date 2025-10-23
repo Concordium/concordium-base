@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use crate::id::constants::IpPairing;
     use crate::id::types::Attribute;
     use crate::web3id::{
         Challenge, CommitmentInputs, CredentialStatement, CredentialsInputs, Presentation, Request,
@@ -16,7 +17,6 @@ mod tests {
     };
     use crate::{
         common::types::{KeyIndex, KeyPair},
-        curve_arithmetic::arkworks_instances::ArkGroup,
         id::{
             account_holder::create_credential,
             chain::verify_cdi,
@@ -158,7 +158,8 @@ mod tests {
         );
         let secrets: CommitmentInputs<
             '_,
-            ArkGroup<ark_ec::short_weierstrass::Projective<ark_bls12_381::g1::Config>>,
+            IpPairing,
+            ArCurve,
             Web3IdAttribute,
             ed25519_dalek::SigningKey,
         > = CommitmentInputs::Account {
@@ -197,7 +198,9 @@ mod tests {
                 &global_ctx,
                 <[CommitmentInputs<
                     '_,
-                    ArkGroup<ark_ec::short_weierstrass::Projective<ark_bls12_381::g1::Config>>,
+                    IpPairing
+                    ,
+                    ArCurve,
                     Web3IdAttribute,
                     _,
                 >; 1] as IntoIterator>::into_iter(commitment_inputs),
@@ -233,7 +236,8 @@ mod tests {
 
         let data = serde_json::to_string_pretty(&proof)?;
         assert!(
-            serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok(),
+            serde_json::from_str::<Presentation<IpPairing, ArCurve, Web3IdAttribute>>(&data)
+                .is_ok(),
             "Cannot deserialize proof correctly."
         );
 

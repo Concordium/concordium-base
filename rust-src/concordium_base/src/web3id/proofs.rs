@@ -15,10 +15,10 @@ use crate::web3id::{
 use ed25519_dalek::Verifier;
 
 use crate::cis4_types::IssuerKey;
+use crate::curve_arithmetic::Pairing;
 use crate::id::id_proof_types::ProofVersion;
 use concordium_contracts_common::ContractAddress;
 use std::collections::BTreeMap;
-use crate::curve_arithmetic::Pairing;
 
 /// Append a `web3id::Challenge` to the state of the random oracle.
 /// Newly added challenge variants should use a tag/version, as well as labels for each struct field
@@ -61,7 +61,9 @@ impl<C: Curve> SignedCommitments<C> {
     }
 }
 
-impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>> Presentation<P, C, AttributeType> {
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
+    Presentation<P, C, AttributeType>
+{
     /// Get an iterator over the metadata for each of the verifiable credentials
     /// in the order they appear in the presentation.
     pub fn metadata(&self) -> impl ExactSizeIterator<Item = ProofMetadata> + '_ {
@@ -127,7 +129,11 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 
 /// Verify a single credential. This only checks the cryptographic parts and
 /// ignores the metadata such as issuance date.
-fn verify_single_credential<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>(
+fn verify_single_credential<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+>(
     global: &GlobalContext<C>,
     transcript: &mut RandomOracle,
     cred_proof: &CredentialProof<P, C, AttributeType>,
@@ -309,7 +315,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
     }
 }
 
-fn linking_proof_message_to_sign<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>(
+fn linking_proof_message_to_sign<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+>(
     challenge: &Challenge,
     proofs: &[CredentialProof<P, C, AttributeType>],
 ) -> Vec<u8> {
@@ -327,7 +337,7 @@ fn linking_proof_message_to_sign<P: Pairing, C: Curve<Scalar = P::ScalarField>, 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
     /// Construct a proof for the [`Request`] using the provided cryptographic
     /// parameters and secrets.
-    pub fn prove<'a, P:Pairing<ScalarField = C::Scalar>, Signer: 'a + Web3IdSigner>(
+    pub fn prove<'a, P: Pairing<ScalarField = C::Scalar>, Signer: 'a + Web3IdSigner>(
         self,
         params: &GlobalContext<C>,
         attrs: impl ExactSizeIterator<Item = CommitmentInputs<'a, P, C, AttributeType, Signer>>,
@@ -374,9 +384,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
 mod tests {
     use super::*;
     use crate::base::CredentialRegistrationID;
-    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use crate::hashes::BlockHash;
-    use crate::id::constants::{ArCurve, AttributeKind};
+    use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
     use crate::id::id_proof_types::{
         AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement,
         AttributeNotInSetStatement,
@@ -563,7 +573,7 @@ mod tests {
             contract_2,
         )
         .unwrap();
-        let secrets_2 = CommitmentInputs::Web3Issuer {
+        let secrets_2 = CommitmentInputs::Web3Issuer::<IpPairing, _, _, _> {
             signer: &signer_2,
             values: &values_2,
             randomness: &randomness_2,
@@ -590,7 +600,8 @@ mod tests {
 
         let data = serde_json::to_string_pretty(&proof)?;
         assert!(
-            serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok(),
+            serde_json::from_str::<Presentation<IpPairing, ArCurve, Web3IdAttribute>>(&data)
+                .is_ok(),
             "Cannot deserialize proof correctly."
         );
 
@@ -711,7 +722,7 @@ mod tests {
             contract_1,
         )
         .unwrap();
-        let secrets_1 = CommitmentInputs::Web3Issuer {
+        let secrets_1 = CommitmentInputs::Web3Issuer::<IpPairing, _, _, _> {
             signer: &signer_1,
             values: &values_1,
             randomness: &randomness_1,
@@ -777,7 +788,8 @@ mod tests {
 
         let data = serde_json::to_string_pretty(&proof)?;
         assert!(
-            serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok(),
+            serde_json::from_str::<Presentation<IpPairing, ArCurve, Web3IdAttribute>>(&data)
+                .is_ok(),
             "Cannot deserialize proof correctly."
         );
 
@@ -882,7 +894,8 @@ mod tests {
 
         let secrets: CommitmentInputs<
             '_,
-            ArkGroup<ark_ec::short_weierstrass::Projective<ark_bls12_381::g1::Config>>,
+            IpPairing,
+            ArCurve,
             Web3IdAttribute,
             ed25519_dalek::SigningKey,
         > = CommitmentInputs::Account {
@@ -898,7 +911,8 @@ mod tests {
                 &params,
                 <[CommitmentInputs<
                     '_,
-                    ArkGroup<ark_ec::short_weierstrass::Projective<ark_bls12_381::g1::Config>>,
+                    IpPairing,
+                    ArCurve,
                     Web3IdAttribute,
                     _,
                 >; 1] as IntoIterator>::into_iter(commitment_inputs),
@@ -935,7 +949,8 @@ mod tests {
 
         let data = serde_json::to_string_pretty(&proof)?;
         assert!(
-            serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok(),
+            serde_json::from_str::<Presentation<IpPairing, ArCurve, Web3IdAttribute>>(&data)
+                .is_ok(),
             "Cannot deserialize proof correctly."
         );
 
