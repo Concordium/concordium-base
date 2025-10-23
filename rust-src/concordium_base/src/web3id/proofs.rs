@@ -19,6 +19,7 @@ use crate::curve_arithmetic::Pairing;
 use crate::id::id_proof_types::ProofVersion;
 use concordium_contracts_common::ContractAddress;
 use std::collections::BTreeMap;
+use crate::id::identity_attributes_credentials;
 
 /// Append a `web3id::Challenge` to the state of the random oracle.
 /// Newly added challenge variants should use a tag/version, as well as labels for each struct field
@@ -236,6 +237,48 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                     network,
                     created,
                     issuer,
+                })
+            }
+            (
+                CredentialStatement::Identity {
+                    network, statement, ..
+                },
+                CommitmentInputs::Identity {
+                    context,
+                    id_object,
+                    id_object_use_data,
+                },
+            ) => {
+                let (identity_attributes_info, it_attr_cmm_rand) =
+                    identity_attributes_credentials::prove_identity_attributes(
+                        context,
+                        id_object.as_ref(),
+                        &id_object_use_data,
+                        policy,
+                        ro,
+                    )
+                        .expect("todo");
+
+                let mut proofs = Vec::new();
+                for statement in statement {
+                    let proof = statement
+                        .prove(
+                            ProofVersion::Version2,
+                            global,
+                            ro,
+                            csprng,
+                            &id_object.get_attribute_list().alist,
+                            &it_attr_cmm_rand.attributes_rand,
+                        )
+                        .ok_or(ProofError::MissingAttribute)?;
+                    proofs.push((statement, proof));
+                }
+                let created = chrono::Utc::now();
+                Ok(CredentialProof::IdentityCredentials {
+                    proofs,
+                    network,
+                    created,
+                    identity_attributes_info,
                 })
             }
             (
