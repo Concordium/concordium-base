@@ -168,7 +168,7 @@ makeAccountTransaction atrSignature atrHeader atrPayload = AccountTransaction{..
   where
     atrSignHash = transactionSignHashFromHeaderPayload atrHeader atrPayload
 
--- | @SPEC: <$DOCS/Transactions#serialization-format-transactions>
+-- | @SPEC: <$DOCS/Transactions#serialization-format-v1-transactions>
 instance S.Serialize AccountTransaction where
     put AccountTransaction{..} =
         S.put atrSignature
@@ -214,7 +214,7 @@ instance S.Serialize TransactionSignaturesV1 where
 
 -- | Data common to all v1 transaction types.
 --
---  * @SPEC: <$DOCS/TransactionsV1#transaction-header-v1>
+--  * @SPEC: <$DOCS/Transactions#transaction-header-v1>
 data TransactionHeaderV1 = TransactionHeaderV1
     { -- | Sender account.
       thv1Sender :: AccountAddress,
@@ -299,8 +299,6 @@ transactionV1SignHashFromHeaderPayload :: TransactionHeaderV1 -> EncodedPayload 
 transactionV1SignHashFromHeaderPayload atrv1Header atrv1Payload = TransactionSignHashV0 $ H.hashLazy $ S.runPutLazy message
   where
     message = S.put v1TransactionSignHashPrefix <> S.put atrv1Header <> putEncodedPayload atrv1Payload
-
--- TODO: make sure this aligns with the bluepaper
 
 -- | @SPEC: <$DOCS/TransactionsV1#serialization-format-transactions>
 instance S.Serialize AccountTransactionV1 where
