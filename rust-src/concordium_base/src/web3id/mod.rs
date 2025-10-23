@@ -10,7 +10,7 @@ mod proofs;
 #[cfg(test)]
 mod test;
 
-use crate::id::types::{CredentialValidity, HasIdentityObjectFields, IdObjectUseData, IdentityAttributesCredentialsInfo, IpContext};
+use crate::id::types::{ArIdentity, ArPublicKey, CredentialValidity, HasIdentityObjectFields, IdObjectUseData, IdentityAttributesCredentialsInfo, IpContext, IpInfo};
 use crate::{
     base::CredentialRegistrationID,
     cis4_types::IssuerKey,
@@ -1398,7 +1398,7 @@ pub enum CredentialsInputs<C: Curve> {
         commitments: BTreeMap<AttributeTag, pedersen_commitment::Commitment<C>>,
     },
     Identity {
-        global_context: GlobalContext<C>,
+        // todo borrow via IpContext instead?
         ip_info: IpInfo<P>,
         // NB: The following map only needs to be a superset of the ars
         // in the cdi.
