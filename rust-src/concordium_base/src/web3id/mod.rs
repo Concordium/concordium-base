@@ -11,8 +11,8 @@ mod proofs;
 mod test;
 
 use crate::id::types::{
-    ArIdentity, ArPublicKey, CredentialValidity, HasIdentityObjectFields, IdObjectUseData,
-    IdentityAttributesCredentialsInfo, IpContext, IpInfo,
+    ArIdentity, ArInfos, ArPublicKey, CredentialValidity, HasIdentityObjectFields, IdObjectUseData,
+    IdentityAttributesCredentialsInfo, IdentityObjectV1, IpContextOnly, IpInfo,
 };
 use crate::{
     base::CredentialRegistrationID,
@@ -70,6 +70,7 @@ pub enum CredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// identity provider.
     Identity {
         network: Network,
+        // todo add identity providers
         /// Attribute statements
         statement: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
     },
@@ -1086,11 +1087,11 @@ pub enum CommitmentInputs<
     },
     /// Inputs are for an identity credential issued by an identity provider.
     Identity {
-        context: IpContext<'a, P, C>,
+        ip_context: IpContextOnly<'a, P, C>,
         /// Identity object. Together with `id_object_use_data`, it constitutes the identity credentials
-        id_object: Box<dyn HasIdentityObjectFields<P, C, AttributeType>>,
+        id_object: &'a dyn HasIdentityObjectFields<P, C, AttributeType>,
         /// Identity credentials
-        id_object_use_data: IdObjectUseData<P, C>,
+        id_object_use_data: &'a IdObjectUseData<P, C>,
     },
     /// Inputs are for a credential issued by Web3ID issuer.
     Web3Issuer {
@@ -1355,7 +1356,12 @@ impl<C: Curve, AttributeType> Web3IdCredential<C, AttributeType> {
 #[serde(bound(deserialize = "AttributeType: DeserializeOwned, Web3IdSigner: DeserializeOwned"))]
 #[serde(rename_all = "camelCase", tag = "type")]
 /// An owned version of [`CommitmentInputs`] that can be deserialized.
-pub enum OwnedCommitmentInputs<C: Curve, AttributeType, Web3IdSigner> {
+pub enum OwnedCommitmentInputs<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+    Web3IdSigner,
+> {
     #[serde(rename_all = "camelCase")]
     Account {
         issuer: IpIdentity,
@@ -1363,6 +1369,19 @@ pub enum OwnedCommitmentInputs<C: Curve, AttributeType, Web3IdSigner> {
         values: BTreeMap<AttributeTag, AttributeType>,
         #[serde_as(as = "BTreeMap<serde_with::DisplayFromStr, _>")]
         randomness: BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Identity {
+        /// Identity provider information
+        ip_info: IpInfo<P>,
+        /// Public information on the __supported__ anonymity revokers.
+        /// Must include at least the anonymity revokers supported by the identity provider.
+        /// This is used to create and validate credential.
+        ar_infos: ArInfos<C>,
+        /// Identity object. Together with `id_object_use_data`, it constitutes the identity credentials
+        id_object: IdentityObjectV1<P, C, AttributeType>,
+        /// Identity credentials
+        id_object_use_data: IdObjectUseData<P, C>,
     },
     #[serde(rename_all = "camelCase")]
     Web3Issuer {
@@ -1382,12 +1401,17 @@ pub enum OwnedCommitmentInputs<C: Curve, AttributeType, Web3IdSigner> {
     },
 }
 
-impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType, Web3IdSigner>
-    From<&'a OwnedCommitmentInputs<C, AttributeType, Web3IdSigner>>
+impl<
+        'a,
+        P: Pairing,
+        C: Curve<Scalar = P::ScalarField>,
+        AttributeType: Attribute<C::Scalar>,
+        Web3IdSigner,
+    > From<&'a OwnedCommitmentInputs<P, C, AttributeType, Web3IdSigner>>
     for CommitmentInputs<'a, P, C, AttributeType, Web3IdSigner>
 {
     fn from(
-        owned: &'a OwnedCommitmentInputs<C, AttributeType, Web3IdSigner>,
+        owned: &'a OwnedCommitmentInputs<P, C, AttributeType, Web3IdSigner>,
     ) -> CommitmentInputs<'a, P, C, AttributeType, Web3IdSigner> {
         match owned {
             OwnedCommitmentInputs::Account {
@@ -1398,6 +1422,19 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType, Web3IdSig
                 issuer: *issuer,
                 values,
                 randomness,
+            },
+            OwnedCommitmentInputs::Identity {
+                ip_info,
+                ar_infos,
+                id_object,
+                id_object_use_data,
+            } => CommitmentInputs::Identity {
+                ip_context: IpContextOnly {
+                    ip_info,
+                    ars_infos: &ar_infos.anonymity_revokers,
+                },
+                id_object,
+                id_object_use_data,
             },
             OwnedCommitmentInputs::Web3Issuer {
                 signer,

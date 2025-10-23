@@ -19,7 +19,7 @@ use crate::curve_arithmetic::Pairing;
 use crate::id::id_proof_types::{AtomicStatement, ProofVersion};
 use crate::id::identity_attributes_credentials;
 use crate::id::identity_attributes_credentials::IdentityAttributeHandling;
-use crate::id::types::IdentityAttribute;
+use crate::id::types::{IdentityAttribute, IpContext};
 use concordium_contracts_common::ContractAddress;
 use std::collections::BTreeMap;
 
@@ -288,7 +288,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                     network, statement, ..
                 },
                 CommitmentInputs::Identity {
-                    context,
+                    ip_context,
                     id_object,
                     id_object_use_data,
                 },
@@ -313,9 +313,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
 
                 let (id_attr_cred_info, id_attr_cmm_rand) =
                     identity_attributes_credentials::prove_identity_attributes(
-                        context,
-                        &*id_object,
-                        &id_object_use_data,
+                        IpContext {
+                            ip_info: ip_context.ip_info,
+                            ars_infos: ip_context.ars_infos,
+                            global_context: global,
+                        },
+                        id_object,
+                        id_object_use_data,
                         &attributes_handling,
                         ro,
                     )

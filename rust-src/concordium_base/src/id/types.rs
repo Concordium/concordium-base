@@ -2051,6 +2051,21 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> IpContext<'a, P, C> {
     }
 }
 
+/// Context needed to generate create identity attributes and verify them.
+/// It includes identity provider public keys and privacy guardian (anonymity revokers)
+/// public keys. Compared to [`IpContext`], this type does not include
+/// the global context.
+#[derive(Clone)]
+pub struct IpContextOnly<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    /// Public information on the chosen identity provider.
+    pub ip_info: &'a IpInfo<P>,
+    /// Public information on the __supported__ anonymity revokers.
+    /// This is used by the identity provider and the chain to
+    /// validate the identity object requests, to validate credentials,
+    /// as well as by the account holder to create a credential.
+    pub ars_infos: &'a BTreeMap<ArIdentity, ArInfo<C>>,
+}
+
 /// A helper trait to access the public parts of the InitialAccountData
 /// structure. We use this to allow implementations that do not give or have
 /// access to the secret keys.
