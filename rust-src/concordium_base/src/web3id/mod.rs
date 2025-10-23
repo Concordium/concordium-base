@@ -1365,10 +1365,6 @@ pub enum OwnedCommitmentInputs<C: Curve, AttributeType, Web3IdSigner> {
         randomness: BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
     },
     #[serde(rename_all = "camelCase")]
-    Identity {
-        // todo
-    },
-    #[serde(rename_all = "camelCase")]
     Web3Issuer {
         signer: Web3IdSigner,
         #[serde_as(as = "BTreeMap<serde_with::DisplayFromStr, _>")]
@@ -1414,9 +1410,6 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType, Web3IdSig
                 randomness,
                 signature: *signature,
             },
-            OwnedCommitmentInputs::Identity { .. } => {
-                todo!()
-            }
         }
     }
 }
@@ -1459,7 +1452,7 @@ pub enum CredentialsInputs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
         commitments: BTreeMap<AttributeTag, pedersen_commitment::Commitment<C>>,
     },
     Identity {
-        // todo borrow via IpContext instead?
+        // todo1 borrow via IpContext instead?
         ip_info: IpInfo<P>,
         // NB: The following map only needs to be a superset of the ars
         // in the cdi.
