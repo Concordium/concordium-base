@@ -299,8 +299,8 @@ impl Serial for TransactionHeaderV1 {
         };
         bitmap.serial(out);
         header_v0.serial(out);
-        for sp in self.sponsor.iter() {
-            sp.serial(out);
+        if let Some(sponsor) = self.sponsor {
+            sponsor.serial(out);
         }
     }
 }
