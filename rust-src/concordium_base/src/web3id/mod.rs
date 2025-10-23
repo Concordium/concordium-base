@@ -312,7 +312,7 @@ pub enum CredentialProof<
         created: chrono::DateTime<chrono::Utc>,
         network: Network,
         /// Commitments to attribute values and their proofs
-        identity_attributes_info: IdentityAttributesCredentialsInfo<P, C, AttributeType>,
+        id_attr_cred_info: IdentityAttributesCredentialsInfo<P, C, AttributeType>,
         proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
     },
     Web3Id {

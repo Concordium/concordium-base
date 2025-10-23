@@ -42,7 +42,7 @@ pub fn prove_identity_attributes<
     AttributeType: Clone + Attribute<C::Scalar>,
 >(
     context: IpContext<'_, P, C>,
-    id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
+    id_object: &(impl HasIdentityObjectFields<P, C, AttributeType> + ?Sized),
     id_object_use_data: &IdObjectUseData<P, C>,
     attributes_handling: &BTreeMap<AttributeTag, IdentityAttributeHandling>,
     transcript: &mut RandomOracle,
@@ -229,7 +229,7 @@ fn signature_knowledge_prover<
     csprng: &mut impl Rng,
     commitment_key: &PedersenKey<C>,
     ip_pub_key: &ps_sig::PublicKey<P>,
-    id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
+    id_object: &(impl HasIdentityObjectFields<P, C, AttributeType> + ?Sized),
     id_object_use_data: &IdObjectUseData<P, C>,
     attributes_handling: &BTreeMap<AttributeTag, IdentityAttributeHandling>,
     cmm_id_cred_sec: Commitment<C>,

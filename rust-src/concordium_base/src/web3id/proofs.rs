@@ -16,10 +16,12 @@ use ed25519_dalek::Verifier;
 
 use crate::cis4_types::IssuerKey;
 use crate::curve_arithmetic::Pairing;
-use crate::id::id_proof_types::ProofVersion;
+use crate::id::id_proof_types::{AtomicStatement, ProofVersion};
+use crate::id::identity_attributes_credentials;
+use crate::id::identity_attributes_credentials::IdentityAttributeHandling;
+use crate::id::types::IdentityAttribute;
 use concordium_contracts_common::ContractAddress;
 use std::collections::BTreeMap;
-use crate::id::identity_attributes_credentials;
 
 /// Append a `web3id::Challenge` to the state of the random oracle.
 /// Newly added challenge variants should use a tag/version, as well as labels for each struct field
@@ -164,6 +166,48 @@ fn verify_single_credential<
             }
         }
         (
+            CredentialProof::Identity {
+                proofs,
+                id_attr_cred_info,
+                ..
+            },
+            CredentialsInputs::Identity { ip_info, known_ars },
+        ) => {
+            if !identity_attributes_credentials::verify_identity_attributes(
+                global,
+                ip_info,
+                known_ars,
+                id_attr_cred_info,
+                transcript,
+            )
+            .is_ok()
+            {
+                return false;
+            }
+
+            let cmm_attributes: BTreeMap<_, _> = id_attr_cred_info
+                .values
+                .attributes
+                .iter()
+                .filter_map(|(tag, attr)| match attr {
+                    IdentityAttribute::Committed(cmm) => Some((*tag, cmm.clone())),
+                    _ => None,
+                })
+                .collect();
+
+            for (statement, proof) in proofs.iter() {
+                if !statement.verify(
+                    ProofVersion::Version2,
+                    global,
+                    transcript,
+                    &cmm_attributes,
+                    proof,
+                ) {
+                    return false;
+                }
+            }
+        }
+        (
             CredentialProof::Web3Id {
                 network: _proof_network,
                 contract: proof_contract,
@@ -249,15 +293,33 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                     id_object_use_data,
                 },
             ) => {
-                let (identity_attributes_info, it_attr_cmm_rand) =
+                let attributes_handling: BTreeMap<_, _> = statement
+                    .iter()
+                    .map(|stmt| match stmt {
+                        AtomicStatement::RevealAttribute { statement } => {
+                            (statement.attribute_tag, IdentityAttributeHandling::Commit)
+                        }
+                        AtomicStatement::AttributeInRange { statement } => {
+                            (statement.attribute_tag, IdentityAttributeHandling::Commit)
+                        }
+                        AtomicStatement::AttributeInSet { statement } => {
+                            (statement.attribute_tag, IdentityAttributeHandling::Commit)
+                        }
+                        AtomicStatement::AttributeNotInSet { statement } => {
+                            (statement.attribute_tag, IdentityAttributeHandling::Commit)
+                        }
+                    })
+                    .collect();
+
+                let (id_attr_cred_info, id_attr_cmm_rand) =
                     identity_attributes_credentials::prove_identity_attributes(
                         context,
-                        id_object.as_ref(),
+                        &*id_object,
                         &id_object_use_data,
-                        policy,
+                        &attributes_handling,
                         ro,
                     )
-                        .expect("todo");
+                    .expect("todo");
 
                 let mut proofs = Vec::new();
                 for statement in statement {
@@ -268,17 +330,17 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                             ro,
                             csprng,
                             &id_object.get_attribute_list().alist,
-                            &it_attr_cmm_rand.attributes_rand,
+                            &id_attr_cmm_rand.attributes_rand,
                         )
                         .ok_or(ProofError::MissingAttribute)?;
                     proofs.push((statement, proof));
                 }
                 let created = chrono::Utc::now();
-                Ok(CredentialProof::IdentityCredentials {
+                Ok(CredentialProof::Identity {
                     proofs,
                     network,
                     created,
-                    identity_attributes_info,
+                    id_attr_cred_info,
                 })
             }
             (
