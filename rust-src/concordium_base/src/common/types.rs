@@ -436,8 +436,7 @@ impl Deserial for TransactionSignature {
 }
 
 /// Transaction signatures v1 structure, to match the one on the Haskell side.
-#[derive(SerdeDeserialize, SerdeSerialize, Clone, PartialEq, Eq, Debug, derive_more::AsRef)]
-#[derive(SerdeDeserialize, SerdeSerialize, Serialize, Clone, PartialEq, Eq, Debug)]
+#[derive(SerdeDeserialize, SerdeSerialize, Clone, PartialEq, Eq, Debug, Serialize)]
 pub struct TransactionSignaturesV1 {
     // The signature of the sender of the transaction.
     pub sender: TransactionSignature,
