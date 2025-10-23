@@ -162,6 +162,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 });
                 json.serialize(serializer)
             }
+            CredentialStatement::Identity { .. } => {todo!()}
         }
     }
 }
@@ -235,6 +236,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
                     holder: *holder,
                 },
             },
+            CredentialProof::Identity { .. } => {todo!()}
         }
     }
 
@@ -265,6 +267,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
                 credential: *holder,
                 statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
             },
+            CredentialProof::Identity { .. } => {todo!()}
         }
     }
 }
@@ -435,6 +438,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 });
                 json.serialize(serializer)
             }
+            CredentialProof::Identity { .. } => {todo!()}
         }
     }
 }
@@ -610,6 +614,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
                 commitments.serial(out);
                 proofs.serial(out)
             }
+            CredentialProof::Identity { .. } => {}
         }
     }
 }
@@ -1356,6 +1361,7 @@ impl<'a, C: Curve, AttributeType, Web3IdSigner>
                 randomness,
                 signature: *signature,
             },
+            OwnedCommitmentInputs::Identity { .. } => {todo!()}
         }
     }
 }
