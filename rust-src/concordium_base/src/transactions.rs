@@ -3651,6 +3651,56 @@ mod tests {
     #[test]
     fn test_transaction_signature_check() {
         let mut rng = rand::thread_rng();
+        let mut keys = BTreeMap::<CredentialIndex, BTreeMap<KeyIndex, KeyPair>>::new();
+        let bound: usize = rng.gen_range(1..20);
+        for _ in 0..bound {
+            let c_idx = CredentialIndex::from(rng.gen::<u8>());
+            if keys.get(&c_idx).is_none() {
+                let inner_bound: usize = rng.gen_range(1..20);
+                let mut cred_keys = BTreeMap::new();
+                for _ in 0..inner_bound {
+                    let k_idx = KeyIndex::from(rng.gen::<u8>());
+                    cred_keys.insert(k_idx, KeyPair::generate(&mut rng));
+                }
+                keys.insert(c_idx, cred_keys);
+            }
+        }
+        let hash = TransactionSignHash::new(rng.gen());
+        let sig = keys.sign_transaction_hash(&hash);
+        let threshold =
+            AccountThreshold::try_from(rng.gen_range(1..(keys.len() + 1) as u8)).unwrap();
+        let pub_keys = keys
+            .iter()
+            .map(|(&ci, keys)| {
+                let threshold =
+                    SignatureThreshold::try_from(rng.gen_range(1..keys.len() + 1) as u8).unwrap();
+                let keys = keys
+                    .iter()
+                    .map(|(&ki, kp)| (ki, VerifyKey::from(kp)))
+                    .collect();
+                (ci, CredentialPublicKeys { keys, threshold })
+            })
+            .collect::<BTreeMap<_, _>>();
+        let mut access_structure = AccountAccessStructure {
+            threshold: threshold,
+            keys: pub_keys,
+        };
+        assert!(
+            verify_signature_transaction_sign_hash(&access_structure, &hash, &sig),
+            "Transaction signature must validate."
+        );
+
+        access_structure.threshold = AccountThreshold::try_from((keys.len() + 1) as u8).unwrap();
+
+        assert!(
+            !verify_signature_transaction_sign_hash(&access_structure, &hash, &sig),
+            "Transaction signature must not validate with invalid threshold."
+        );
+    }
+
+    #[test]
+    fn test_sponsored_transaction_signature_check() {
+        let mut rng = rand::thread_rng();
         let mut sender_keys = BTreeMap::<CredentialIndex, BTreeMap<KeyIndex, KeyPair>>::new();
         let mut sponsor_keys = BTreeMap::<CredentialIndex, BTreeMap<KeyIndex, KeyPair>>::new();
         let sender_bound: usize = rng.gen_range(1..20);
@@ -3722,34 +3772,17 @@ mod tests {
             keys: sponsor_pub_keys,
         };
         assert!(
-            verify_signature_transaction_sign_hash(&sender_access_structure, &hash, &sender_sig),
-            "Transaction signature must validate."
-        );
-
-        sender_access_structure.threshold =
-            AccountThreshold::try_from((sender_keys.len() + 1) as u8).unwrap();
-
-        assert!(
-            !verify_signature_transaction_sign_hash(&sender_access_structure, &hash, &sender_sig),
-            "Transaction signature must not validate with invalid threshold."
-        );
-
-        // reset sender access structure
-        sender_access_structure.threshold =
-            AccountThreshold::try_from((sender_keys.len()) as u8).unwrap();
-        assert!(
             verify_signature_transaction_sign_hash_v1(
                 &sender_access_structure,
                 &sponsor_access_structure,
                 &hash,
                 &sender_and_sponsor_sigs
             ),
-            "(Sponsor) transaction signature must validate."
+            "Sponsored transaction signature must validate."
         );
 
         sponsor_access_structure.threshold =
             AccountThreshold::try_from((sponsor_keys.len() + 1) as u8).unwrap();
-
         assert!(
             !verify_signature_transaction_sign_hash_v1(
                 &sender_access_structure,
@@ -3757,7 +3790,22 @@ mod tests {
                 &hash,
                 &sender_and_sponsor_sigs
             ),
-            "(Sponsor) transaction signature must not validate with invalid threshold."
+            "Sponsored transaction signature must not validate with invalid sponsor threshold."
+        );
+
+        // reset sponsor signature threshold
+        sponsor_access_structure.threshold =
+            AccountThreshold::try_from((sponsor_keys.len()) as u8).unwrap();
+        sender_access_structure.threshold =
+            AccountThreshold::try_from((sender_keys.len() + 1) as u8).unwrap();
+        assert!(
+            !verify_signature_transaction_sign_hash_v1(
+                &sender_access_structure,
+                &sponsor_access_structure,
+                &hash,
+                &sender_and_sponsor_sigs
+            ),
+            "Sponsored transaction signature must not validate with invalid sender threshold."
         );
     }
 }
