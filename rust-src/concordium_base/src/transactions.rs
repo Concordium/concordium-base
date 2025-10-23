@@ -3648,6 +3648,15 @@ mod tests {
     use std::convert::TryFrom;
 
     use super::*;
+
+    #[test]
+    fn test_transaction_header_v1_serialization() {
+        unimplemented!("TODO(drsk)")
+    }
+    #[test]
+    fn test_account_transaction_v1_serialization() {
+        unimplemented!("TODO(drsk)")
+    }
     #[test]
     fn test_transaction_signature_check() {
         let mut rng = rand::thread_rng();
