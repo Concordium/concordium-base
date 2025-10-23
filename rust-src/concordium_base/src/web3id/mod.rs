@@ -233,16 +233,14 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
                 network,
                 id_attr_cred_info,
                 ..
-            } => {
-                ProofMetadata {
-                    created: *created,
-                    network: *network,
-                    cred_metadata: CredentialMetadata::Identity {
-                        issuer: id_attr_cred_info.values.ip_identity,
-                        validity:  id_attr_cred_info.values.validity.clone(),
-                    },
-                }
-            }
+            } => ProofMetadata {
+                created: *created,
+                network: *network,
+                cred_metadata: CredentialMetadata::Identity {
+                    issuer: id_attr_cred_info.values.ip_identity,
+                    validity: id_attr_cred_info.values.validity.clone(),
+                },
+            },
             CredentialProof::Web3Id {
                 created,
                 holder,
@@ -259,7 +257,6 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
                     holder: *holder,
                 },
             },
-
         }
     }
 
@@ -276,6 +273,12 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
                 cred_id: *cred_id,
                 statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
             },
+            CredentialProof::Identity {
+                network, proofs, ..
+            } => CredentialStatement::Identity {
+                network: *network,
+                statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
+            },
             CredentialProof::Web3Id {
                 holder,
                 network,
@@ -290,9 +293,6 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
                 credential: *holder,
                 statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
             },
-            CredentialProof::Identity { .. } => {
-                todo!()
-            }
         }
     }
 }
