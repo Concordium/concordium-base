@@ -7,13 +7,15 @@ use crate::{
 };
 
 use crate::web3id::{
-    Challenge, CommitmentInputs, CredentialProof, CredentialStatement, CredentialsInputs,
-    LinkingProof, Presentation, PresentationVerificationError, ProofMetadata, Request,
-    SignedCommitments, WeakLinkingProof, Web3IdSigner,
+    Challenge, CommitmentInputs, CredentialHolderId, CredentialProof, CredentialStatement,
+    CredentialsInputs, LinkingProof, Presentation, PresentationVerificationError, ProofError,
+    ProofMetadata, Request, SignedCommitments, WeakLinkingProof, Web3IdSigner,
 };
 use ed25519_dalek::Verifier;
 
+use crate::cis4_types::IssuerKey;
 use crate::id::id_proof_types::ProofVersion;
+use concordium_contracts_common::ContractAddress;
 use std::collections::BTreeMap;
 
 /// Domain separation string used when the issuer signs the commitments.
@@ -47,6 +49,24 @@ fn append_challenge(digest: &mut impl StructuredDigest, challenge: &Challenge) {
             digest.append_message("given", &context.given);
             digest.append_message("requested", &context.requested);
         }
+    }
+}
+
+impl<C: Curve> SignedCommitments<C> {
+    /// Verify signatures on the commitments in the context of the holder's
+    /// public key, and the issuer contract.
+    pub fn verify_signature(
+        &self,
+        holder: &CredentialHolderId,
+        issuer_pk: &IssuerKey,
+        issuer_contract: ContractAddress,
+    ) -> bool {
+        use crate::common::Serial;
+        let mut data = COMMITMENT_SIGNATURE_DOMAIN_STRING.to_vec();
+        holder.serial(&mut data);
+        issuer_contract.serial(&mut data);
+        self.commitments.serial(&mut data);
+        issuer_pk.public_key.verify(&data, &self.signature).is_ok()
     }
 }
 
@@ -112,25 +132,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
             Err(PresentationVerificationError::ExcessiveLinkingProof)
         }
     }
-}
-
-#[derive(thiserror::Error, Debug)]
-/// An error that can occurr when attempting to produce a proof.
-pub enum ProofError {
-    #[error("Too many attributes to produce a proof.")]
-    TooManyAttributes,
-    #[error("Missing identity attribute.")]
-    MissingAttribute,
-    #[error("No attributes were provided.")]
-    NoAttributes,
-    #[error("Inconsistent values and randomness. Cannot construct commitments.")]
-    InconsistentValuesAndRandomness,
-    #[error("Cannot construct gluing proof.")]
-    UnableToProve,
-    #[error("The number of commitment inputs and statements is inconsistent.")]
-    CommitmentsStatementsMismatch,
-    #[error("The ID in the statement and in the provided signer do not match.")]
-    InconsistentIds,
 }
 
 /// Verify a single credential. This only checks the cryptographic parts and
