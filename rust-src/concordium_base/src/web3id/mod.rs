@@ -11,6 +11,7 @@ mod test;
 
 // TODO:
 // - Documentation.
+use crate::id::types::{CredentialValidity, HasIdentityObjectFields, IdObjectUseData, IdentityAttributesCredentialsInfo, IpContext};
 use crate::random_oracle::StructuredDigest;
 use crate::{
     base::CredentialRegistrationID,
@@ -56,11 +57,18 @@ pub const LINKING_DOMAIN_STRING: &[u8] = b"WEB3ID:LINKING";
     bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned")
 )]
 pub enum CredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    /// Statement about a credential derived from an identity issued by an
+    /// Statement about an account credential derived from an identity issued by an
     /// identity provider.
     Account {
         network: Network,
         cred_id: CredentialRegistrationID,
+        statement: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
+    },
+    /// Statement about identity attributes derived directly from an identity issued by an
+    /// identity provider.
+    Identity {
+        network: Network,
+        /// Attribute statements
         statement: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
     },
     /// Statement about a credential issued by a Web3 identity provider, a smart
@@ -174,6 +182,12 @@ pub enum CredentialMetadata {
         issuer: IpIdentity,
         cred_id: CredentialRegistrationID,
     },
+    /// Metadata of identity attributes derived directly from an
+    /// identity object.
+    Identity {
+        issuer: IpIdentity,
+        validity: CredentialValidity,
+    },
     /// Metadata of a Web3Id credential.
     Web3Id {
         contract: ContractAddress,
@@ -274,6 +288,14 @@ pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
         /// Issuer of this credential, the identity provider index on the
         /// relevant network.
         issuer: IpIdentity,
+        proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
+    },
+    Identity {
+        /// Creation timestamp of the proof.
+        created: chrono::DateTime<chrono::Utc>,
+        network: Network,
+        /// Commitments to attribute values and their proofs
+        identity_attributes_info: IdentityAttributesCredentialsInfo<P, C, AttributeType>,
         proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
     },
     Web3Id {
@@ -1100,13 +1122,22 @@ impl Web3IdSigner for ed25519_dalek::SecretKey {
 /// The additional inputs, additional to the [`Request`] that are needed to
 /// produce a [`Presentation`].
 pub enum CommitmentInputs<'a, C: Curve, AttributeType, Web3IdSigner> {
-    /// Inputs are for an identity credential issued by an identity provider.
+    /// Inputs are for an account credential derived from an identity issued by an
+    /// identity provider.
     Account {
         issuer: IpIdentity,
         /// The values that are committed to and are required in the proofs.
         values: &'a BTreeMap<AttributeTag, AttributeType>,
         /// The randomness to go along with commitments in `values`.
         randomness: &'a BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
+    },
+    /// Inputs are for an identity credential issued by an identity provider.
+    Identity {
+        context: IpContext<'a, P, C>,
+        /// Identity object. Together with `id_object_use_data`, it constitutes the identity credentials
+        id_object: Box<dyn HasIdentityObjectFields<P, C, AttributeType>>,
+        /// Identity credentials
+        id_object_use_data: IdObjectUseData<P, C>,
     },
     /// Inputs are for a credential issued by Web3ID issuer.
     Web3Issuer {
@@ -1379,6 +1410,10 @@ pub enum OwnedCommitmentInputs<C: Curve, AttributeType, Web3IdSigner> {
         values: BTreeMap<AttributeTag, AttributeType>,
         #[serde_as(as = "BTreeMap<serde_with::DisplayFromStr, _>")]
         randomness: BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Identity {
+        // todo
     },
     #[serde(rename_all = "camelCase")]
     Web3Issuer {
@@ -1711,6 +1746,13 @@ pub enum CredentialsInputs<C: Curve> {
         // In principle we only ever need to borrow this, but it is simpler to
         // have the owned map instead of a reference to it.
         commitments: BTreeMap<AttributeTag, pedersen_commitment::Commitment<C>>,
+    },
+    Identity {
+        global_context: GlobalContext<C>,
+        ip_info: IpInfo<P>,
+        // NB: The following map only needs to be a superset of the ars
+        // in the cdi.
+        known_ars: BTreeMap<ArIdentity, ArPublicKey<C>>,
     },
     Web3 {
         /// The public key of the issuer.
