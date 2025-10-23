@@ -86,7 +86,7 @@
 //! };
 //!
 //! let mut transcript = RandomOracle::with_domain("Proof of something");
-//! transcript.append_message(b"Type1", &example);
+//! transcript.append_message_v2(b"Type1", &example);
 //!```
 //!
 //! # Caution: Ambiguous variable-length data
@@ -130,7 +130,7 @@
 //! let mut transcript = RandomOracle::with_domain("Proof of something");
 //! let string = "abc".to_string();
 //! // The serialization implementation of the `String` type prepends the length of the field values.
-//! transcript.append_message("String1", &string);
+//! transcript.append_message_v2("String1", &string);
 //! ```
 //!
 //! # Example: Adding collections of data using `Serial`
@@ -141,7 +141,7 @@
 //! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
 //! let mut transcript = RandomOracle::with_domain("Proof of something");
 //! let collection = vec![2,3,4];
-//! transcript.append_message("Collection1", &collection);
+//! transcript.append_message_v2("Collection1", &collection);
 //! ```
 //!
 //! # Example: Adding variable number of items
@@ -271,17 +271,29 @@ pub trait StructuredDigest: Buffer {
     fn add_raw_bytes(&mut self, data: impl AsRef<[u8]>);
 
     /// Add domain separating label to the digest. The label bytes will be prepended with the bytes length.
-    fn append_label(&mut self, label: impl AsRef<[u8]>) {
-        let label = label.as_ref();
+    fn append_label(&mut self, label: &str) {
+        let label = label.as_bytes();
         self.put(&(label.len() as u64));
         self.add_raw_bytes(label);
+    }
+
+    /// Same as [`Self::append_message_v2`], but the label is not prepended with the number of bytes in the label.
+    #[cfg_attr(
+        not(test),
+        deprecated(
+            note = "Use RandomOracle::append_message_v2 which prepends the label length. Do not change existing provers/verifiers since it will break compatability with existing proofs."
+        )
+    )]
+    fn append_message(&mut self, label: impl AsRef<[u8]>, data: &impl Serial) {
+        self.add_raw_bytes(label);
+        self.put(data)
     }
 
     /// Append the given data as the message bytes produced by its [`Serial`] implementation to the state of the digest.
     /// The given label is appended first as domain separation. Notice that slices, `Vec`s, and several other collections of
     /// items implementing [`Serial`], itself implements [`Serial`]. When serializing variable-length
     /// types or collection types, the length or size will be prepended in the serialization.
-    fn append_message(&mut self, label: impl AsRef<[u8]>, data: &impl Serial) {
+    fn append_message_v2(&mut self, label: &str, data: &impl Serial) {
         self.append_label(label);
         self.put(data)
     }
@@ -328,7 +340,7 @@ impl RandomOracle {
     #[cfg_attr(
         not(test),
         deprecated(
-            note = "Use RandomOracle::with_domain initializes with a domain. Do not change existing provers/verifiers since it will break compatability with existing proofs."
+            note = "Use RandomOracle::with_domain which initializes with a domain separator. Do not change existing provers/verifiers since it will break compatability with existing proofs."
         )
     )]
     pub fn empty() -> Self {
@@ -336,7 +348,7 @@ impl RandomOracle {
     }
 
     /// Start with the initial domain string. Prepend with length of the domain string bytes.
-    pub fn with_domain(label: impl AsRef<[u8]>) -> Self {
+    pub fn with_domain(label: &str) -> Self {
         let mut ro = RandomOracle(Sha3_256::new());
         ro.append_label(label);
         ro
@@ -544,6 +556,20 @@ mod tests {
         );
     }
 
+    /// Test that we don't accidentally change the digest produced
+    /// by [`StructuredDigest::append_message_v2`]
+    #[test]
+    pub fn test_append_message_v2_stable() {
+        let mut ro = RandomOracle::empty();
+        ro.append_message_v2("Label1", &vec![1u8, 2, 3]);
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "771b0d48152296ca8fa5fea470b6cb0ccacc4808e7b447b7cae88ee926afef65"
+        );
+    }
+
     /// Test that we don't accidentally change the scalar produced
     /// by [`RandomOracle::challenge_scalar`]
     #[test]
@@ -565,7 +591,7 @@ mod tests {
     pub fn test_append_each_stable() {
         let mut ro = RandomOracle::empty();
         ro.append_each("Label1", &vec![1u8, 2, 3], |ro, item| {
-            ro.append_message("Item", item)
+            ro.append_message_v2("Item", item)
         });
 
         let challenge_hex = hex::encode(ro.get_challenge());

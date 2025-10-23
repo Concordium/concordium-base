@@ -172,11 +172,11 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
     fn public(&self, ro: &mut RandomOracle) {
         ro.append_label("PsSigKnown");
         // public input to statement:
-        ro.append_message("blinded_sig", &self.blinded_sig);
-        ro.append_message("messages", &self.msgs);
+        ro.append_message_v2("blinded_sig", &self.blinded_sig);
+        ro.append_message_v2("messages", &self.msgs);
         // implicit public values
-        ro.append_message("ps_pub_key", &self.ps_pub_key);
-        ro.append_message("comm_key", &self.cmm_key)
+        ro.append_message_v2("ps_pub_key", &self.ps_pub_key);
+        ro.append_message_v2("comm_key", &self.cmm_key)
     }
 
     #[inline]

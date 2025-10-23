@@ -122,8 +122,8 @@ pub fn prove_identity_attributes<
     // This should make the proof non-reusable.
     // We should add the genesis hash also at some point
     transcript.append_label("IdentityAttributesCredentials");
-    transcript.append_message("identity_attribute_values", &id_attribute_values);
-    transcript.append_message("global_context", &context.global_context);
+    transcript.append_message_v2("identity_attribute_values", &id_attribute_values);
+    transcript.append_message_v2("global_context", &context.global_context);
 
     // We now produce all the proofs.
 
@@ -483,8 +483,8 @@ pub fn verify_identity_attributes<
     let ip_verify_key = &ip_info.ip_verify_key;
     // Compute the challenge prefix by hashing the values.
     transcript.append_label("IdentityAttributesCredentials");
-    transcript.append_message("identity_attribute_values", &id_attr_info.values);
-    transcript.append_message("global_context", &global_context);
+    transcript.append_message_v2("identity_attribute_values", &id_attr_info.values);
+    transcript.append_message_v2("global_context", &global_context);
 
     let commitments = &id_attr_info.proofs.commitments;
 
