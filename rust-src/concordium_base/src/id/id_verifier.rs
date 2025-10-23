@@ -12,6 +12,7 @@ use crate::bulletproofs::{
 };
 
 use super::id_proof_types::*;
+use crate::random_oracle::StructuredDigest;
 use crate::{
     curve_arithmetic::{Curve, Field},
     pedersen_commitment::{

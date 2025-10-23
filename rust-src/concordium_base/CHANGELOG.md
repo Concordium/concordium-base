@@ -4,6 +4,8 @@
 - Removed `ChainParameterVersionX` types and the `MintDistributionFamily`, `GASRewardsFamily` and `AuthorizationsFamily` traits and their implementations.
 - Revised `UpdateSigner` implementations not to use references, since the one method (`sign_update_hash`) already takes a reference (`&self`).
 - Made `find_authorized_keys` public for easier re-use.
+- Introduced the trait `StructuredDigest` to add data to `RandomOracle` and other hashes
+- Removed the method `RandomOracle::add` and deprecated `RandomOracle::extend_from`
 
 ## 8.0.0-alpha.3 (2025-10-08)
 

@@ -22,6 +22,7 @@
 
 use crate::common::{Buffer, Deserial, Get, ParseResult, Put, Serial};
 use crate::curve_arithmetic::{Curve, Field, Pairing, Secret};
+use crate::random_oracle::StructuredDigest;
 use crate::sigma_protocols::common::SigmaProtocol;
 use crate::{
     curve_arithmetic,
@@ -169,13 +170,13 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
 
     #[inline]
     fn public(&self, ro: &mut RandomOracle) {
-        ro.add_bytes(b"PsSigKnown");
+        ro.add_bytes("PsSigKnown");
         // public input to statement:
-        ro.append_message(b"blinded_sig", &self.blinded_sig);
-        ro.extend_from(b"messages", self.msgs.iter());
+        ro.append_message("blinded_sig", &self.blinded_sig);
+        ro.append_message("messages", &self.msgs);
         // implicit public values
-        ro.append_message(b"ps_pub_key", &self.ps_pub_key);
-        ro.append_message(b"comm_key", &self.cmm_key)
+        ro.append_message("ps_pub_key", &self.ps_pub_key);
+        ro.append_message("comm_key", &self.cmm_key)
     }
 
     #[inline]
@@ -855,7 +856,7 @@ mod tests {
             blinded_sig,
         };
 
-        let proof_bytes_hex = "6aea07afb4049c5ca500157fba4df9444f7605eb041913a0e625f5f96c4e92584aadeb7c2a4d151f903e8c4bf91da6e3dc73464fe0e096a09f8576d14e6d07020000000300183be4c51cbba430dc02aaaf1a011e7bf397e854119571ba096be52e56abfd411943057b83218dbb3364bb3e28235259ec7337bf08ab9ca0869bc23de8ece97e0102560705f85e1741e403007fcb7987e0aca7255255c8fe2f2b8ec80a494fde8815";
+        let proof_bytes_hex = "25207d6ee28196c6e9323be3984ce3be8c891fa0a33c2d830431055621c5500e29028a7a91da2f8b0b54836484d507f09a0d319944058c759d75513c30d992b700000003006b33753485415971000b4a8d46d46e55f7fb2bcea3561e83a6535bafed712c900be4bb1cc0e3a14821257f030b7cb9edd5919f0c1f2f49f562d2de756e58d02f01023510ef149cff79dbf3cf47a19cb9588157caf1cd5ac07ff62baf80cbe6a3b763";
         let proof_bytes = hex::decode(&proof_bytes_hex).unwrap();
         let proof: SigmaProof<Response<Bls12, G1>> =
             common::from_bytes(&mut proof_bytes.as_slice()).expect("deserialize");
