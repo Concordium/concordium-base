@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
     use crate::id::constants::IpPairing;
-    use crate::id::types::Attribute;
     use crate::id::{account_holder, chain, identity_provider};
     use crate::web3id::{
         Challenge, CommitmentInputs, CredentialStatement, CredentialsInputs, Request,
@@ -10,7 +9,6 @@ mod tests {
     use crate::{
         base::CredentialRegistrationID,
         id::{
-            constants::{ArCurve, AttributeKind},
             id_proof_types::AtomicStatement,
             types::{AttributeList, AttributeTag, GlobalContext, IpIdentity},
         },

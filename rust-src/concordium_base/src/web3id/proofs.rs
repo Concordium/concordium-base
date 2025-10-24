@@ -501,18 +501,71 @@ mod tests {
     };
     use crate::id::types::{AttributeTag, IpIdentity};
     use crate::web3id::did::Network;
-    use crate::web3id::{CredentialHolderId, GivenContext, Sha256Challenge, Web3IdAttribute};
-    use anyhow::Context;
+    use crate::web3id::{
+        CredentialHolderId, GivenContext, OwnedCommitmentInputs, Sha256Challenge, Web3IdAttribute,
+    };
     use concordium_contracts_common::{ContractAddress, Timestamp};
     use rand::Rng;
     use std::marker::PhantomData;
+    use crate::curve_arithmetic::Value;
 
-    #[test]
+    struct AccountCredentialsFixture {
+        commitment_inputs:
+            OwnedCommitmentInputs<IpPairing, ArCurve, Web3IdAttribute, ed25519_dalek::SigningKey>,
+        credential_inputs: CredentialsInputs<IpPairing, ArCurve>,
+    }
+
+    impl AccountCredentialsFixture {
+        fn commitment_inputs(
+            &self,
+        ) -> CommitmentInputs<'_, IpPairing, ArCurve, Web3IdAttribute, ed25519_dalek::SigningKey>
+        {
+            CommitmentInputs::from(&self.commitment_inputs)
+        }
+    }
+
+    fn account_credentials_fixture(
+        attrs: BTreeMap<AttributeTag, Web3IdAttribute>,
+        global_context: &GlobalContext<ArCurve>,
+    ) -> AccountCredentialsFixture {
+        let mut rng = rand::thread_rng();
+
+        let cred_id_exp = ArCurve::generate_scalar(&mut rng);
+        let cred_id = CredentialRegistrationID::from_exponent(&global_context, cred_id_exp);
+
+        let mut attr_rand = BTreeMap::new();
+        let mut attr_cmm = BTreeMap::new();
+        for (tag, attr) in &attrs {
+            let attr_scalar = Value::<ArCurve>::new(attr.to_field_element());
+            let (cmm, cmm_rand) = global_context
+                .on_chain_commitment_key
+                .commit(&attr_scalar, &mut rng);
+            attr_rand.insert(*tag, cmm_rand);
+            attr_cmm.insert(*tag, cmm);
+        }
+
+        let commitment_inputs = OwnedCommitmentInputs::Account {
+            values: attrs,
+            randomness: attr_rand,
+            issuer: IpIdentity::from(17u32),
+        };
+
+        let credential_inputs = CredentialsInputs::Account {
+            commitments: attr_cmm,
+        };
+
+        AccountCredentialsFixture {
+            commitment_inputs,
+            credential_inputs,
+        }
+    }
+
     /// Test that constructing proofs for web3 only credentials works in the
     /// sense that the proof verifies.
     ///
     /// JSON serialization of requests and presentations is also tested.
-    fn test_web3_only() -> anyhow::Result<()> {
+    #[test]
+    fn test_web3_only() {
         let mut rng = rand::thread_rng();
         let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
         let signer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
@@ -691,7 +744,7 @@ mod tests {
         let proof = request
             .clone()
             .prove(&params, attrs.into_iter())
-            .context("Cannot prove")?;
+            .expect("Cannot prove");
 
         let public = vec![
             CredentialsInputs::Web3 {
@@ -701,34 +754,33 @@ mod tests {
                 issuer_pk: issuer_2.verifying_key().into(),
             },
         ];
-        anyhow::ensure!(
-            proof.verify(&params, public.iter())? == request,
+        assert_eq!(
+            proof.verify(&params, public.iter()).expect("verify"),
+            request,
             "Proof verification failed."
         );
 
-        let data = serde_json::to_string_pretty(&proof)?;
+        let data = serde_json::to_string_pretty(&proof).unwrap();
         assert!(
             serde_json::from_str::<Presentation<IpPairing, ArCurve, Web3IdAttribute>>(&data)
                 .is_ok(),
             "Cannot deserialize proof correctly."
         );
 
-        let data = serde_json::to_string_pretty(&request)?;
+        let data = serde_json::to_string_pretty(&request).unwrap();
         assert_eq!(
-            serde_json::from_str::<Request<ArCurve, Web3IdAttribute>>(&data)?,
+            serde_json::from_str::<Request<ArCurve, Web3IdAttribute>>(&data).unwrap(),
             request,
             "Cannot deserialize request correctly."
         );
-
-        Ok(())
     }
 
-    #[test]
     /// Test that constructing proofs for a mixed (both web3 and id2 credentials
     /// involved) request works in the sense that the proof verifies.
     ///
     /// JSON serialization of requests and presentations is also tested.
-    fn test_mixed() -> anyhow::Result<()> {
+    #[test]
+    fn test_completeness_mixed() {
         let mut rng = rand::thread_rng();
         let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
         let params = GlobalContext::generate("Test".into());
@@ -737,6 +789,22 @@ mod tests {
         let signer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
         let issuer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
         let contract_1 = ContractAddress::new(1337, 42);
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let acc_cred_fixture = account_credentials_fixture(
+            [
+                (3.into(), Web3IdAttribute::Numeric(137)),
+                (
+                    1.into(),
+                    Web3IdAttribute::String(AttributeKind("xkcd".into())),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+            &global_context,
+        );
+
         let credential_statements = vec![
             CredentialStatement::Web3Id {
                 ty: [
@@ -806,6 +874,7 @@ mod tests {
             challenge,
             credential_statements,
         };
+
         let mut values_1 = BTreeMap::new();
         values_1.insert(17.to_string(), Web3IdAttribute::Numeric(137));
         values_1.insert(
@@ -837,78 +906,41 @@ mod tests {
             signature: signed_commitments_1.signature,
         };
 
-        let mut values_2 = BTreeMap::new();
-        values_2.insert(3.into(), Web3IdAttribute::Numeric(137));
-        values_2.insert(
-            1.into(),
-            Web3IdAttribute::String(AttributeKind("xkcd".into())),
-        );
-        let mut randomness_2 = BTreeMap::new();
-        for tag in values_2.keys() {
-            randomness_2.insert(
-                *tag,
-                pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
-            );
-        }
-        let secrets_2 = CommitmentInputs::Account {
-            values: &values_2,
-            randomness: &randomness_2,
-            issuer: IpIdentity::from(17u32),
-        };
-        let attrs = [secrets_1, secrets_2];
         let proof = request
             .clone()
-            .prove(&params, attrs.into_iter())
-            .context("Cannot prove")?;
-
-        let commitments_2 = {
-            let key = params.on_chain_commitment_key;
-            let mut comms = BTreeMap::new();
-            for (tag, value) in randomness_2.iter() {
-                let _ = comms.insert(
-                    AttributeTag::from(*tag),
-                    key.hide(
-                        &pedersen_commitment::Value::<ArCurve>::new(
-                            values_2.get(tag).unwrap().to_field_element(),
-                        ),
-                        value,
-                    ),
-                );
-            }
-            comms
-        };
+            .prove(
+                &params,
+                [secrets_1, acc_cred_fixture.commitment_inputs()].into_iter(),
+            )
+            .expect("Cannot prove");
 
         let public = vec![
             CredentialsInputs::Web3 {
                 issuer_pk: issuer_1.verifying_key().into(),
             },
-            CredentialsInputs::Account {
-                commitments: commitments_2,
-            },
+            acc_cred_fixture.credential_inputs,
         ];
-        anyhow::ensure!(
+        assert_eq!(
             proof
                 .verify(&params, public.iter())
-                .context("Verification of mixed presentation failed.")?
-                == request,
+                .expect("Verification of mixed presentation failed."),
+            request,
             "Proof verification failed."
         );
 
-        let data = serde_json::to_string_pretty(&proof)?;
+        let data = serde_json::to_string_pretty(&proof).unwrap();
         assert!(
             serde_json::from_str::<Presentation<IpPairing, ArCurve, Web3IdAttribute>>(&data)
                 .is_ok(),
             "Cannot deserialize proof correctly."
         );
 
-        let data = serde_json::to_string_pretty(&request)?;
+        let data = serde_json::to_string_pretty(&request).unwrap();
         assert_eq!(
-            serde_json::from_str::<Request<ArCurve, Web3IdAttribute>>(&data)?,
+            serde_json::from_str::<Request<ArCurve, Web3IdAttribute>>(&data).unwrap(),
             request,
             "Cannot deserialize request correctly."
         );
-
-        Ok(())
     }
 
     #[test]
@@ -916,7 +948,7 @@ mod tests {
     /// request works with a `Context` in the sense that the proof verifies.
     ///
     /// JSON serialization of requests and presentations is also tested.
-    fn test_with_context_challenge() -> anyhow::Result<()> {
+    fn test_with_context_challenge() {
         let mut rng = rand::thread_rng();
         // Randomly generated nonce. It is important that the nonce is freshly generated by the backend
         // for each request so that the presentation request anchor on-chain truely looks random.
@@ -1025,7 +1057,7 @@ mod tests {
                     _,
                 >; 1] as IntoIterator>::into_iter(commitment_inputs),
             )
-            .context("Cannot prove")?;
+            .expect("Cannot prove");
 
         let commitments = {
             let key = params.on_chain_commitment_key;
@@ -1047,28 +1079,26 @@ mod tests {
         let public = vec![CredentialsInputs::Account {
             commitments: commitments,
         }];
-        anyhow::ensure!(
+        assert_eq!(
             proof
                 .verify(&params, public.iter())
-                .context("Verification of mixed presentation failed.")?
-                == request,
+                .expect("Verification of mixed presentation failed."),
+            request,
             "Proof verification failed."
         );
 
-        let data = serde_json::to_string_pretty(&proof)?;
+        let data = serde_json::to_string_pretty(&proof).unwrap();
         assert!(
             serde_json::from_str::<Presentation<IpPairing, ArCurve, Web3IdAttribute>>(&data)
                 .is_ok(),
             "Cannot deserialize proof correctly."
         );
 
-        let data = serde_json::to_string_pretty(&request)?;
+        let data = serde_json::to_string_pretty(&request).unwrap();
         assert_eq!(
-            serde_json::from_str::<Request<ArCurve, Web3IdAttribute>>(&data)?,
+            serde_json::from_str::<Request<ArCurve, Web3IdAttribute>>(&data).unwrap(),
             request,
             "Cannot deserialize request correctly."
         );
-
-        Ok(())
     }
 }
