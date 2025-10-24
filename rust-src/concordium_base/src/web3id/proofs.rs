@@ -563,25 +563,121 @@ mod tests {
         }
     }
 
+    struct Web3CredentialsFixture {
+        commitment_inputs:
+            OwnedCommitmentInputs<IpPairing, ArCurve, Web3IdAttribute, ed25519_dalek::SigningKey>,
+        credential_inputs: CredentialsInputs<IpPairing, ArCurve>,
+        cred_id: CredentialHolderId,
+        contract: ContractAddress,
+    }
+
+    impl Web3CredentialsFixture {
+        fn commitment_inputs(
+            &self,
+        ) -> CommitmentInputs<'_, IpPairing, ArCurve, Web3IdAttribute, ed25519_dalek::SigningKey>
+        {
+            CommitmentInputs::from(&self.commitment_inputs)
+        }
+    }
+
+    fn web3_credentials_fixture(
+        attrs: BTreeMap<String, Web3IdAttribute>,
+        global_context: &GlobalContext<ArCurve>,
+    ) -> Web3CredentialsFixture {
+        let mut rng = rand::thread_rng();
+
+        let signer = ed25519_dalek::SigningKey::generate(&mut rng);
+        let cred_id = CredentialHolderId::new(signer.verifying_key());
+
+        let issuer = ed25519_dalek::SigningKey::generate(&mut rng);
+        let contract = ContractAddress::new(1337, 42);
+
+        let mut attr_rand = BTreeMap::new();
+        let mut attr_cmm = BTreeMap::new();
+        for (tag, attr) in &attrs {
+            let attr_scalar = Value::<ArCurve>::new(attr.to_field_element());
+            let (cmm, cmm_rand) = global_context
+                .on_chain_commitment_key
+                .commit(&attr_scalar, &mut rng);
+            attr_rand.insert(tag.clone(), cmm_rand);
+            attr_cmm.insert(tag.clone(), cmm);
+        }
+
+        let signed_cmms = SignedCommitments::from_secrets(
+            &global_context,
+            &attrs,
+            &attr_rand,
+            &cred_id,
+            &issuer,
+            contract,
+        )
+        .unwrap();
+
+        let commitment_inputs = OwnedCommitmentInputs::Web3Issuer {
+            signer,
+            values: attrs,
+            randomness: attr_rand,
+            signature: signed_cmms.signature,
+        };
+
+        let credential_inputs = CredentialsInputs::Web3 {
+            issuer_pk: issuer.verifying_key().into(),
+        };
+
+        Web3CredentialsFixture {
+            commitment_inputs,
+            credential_inputs,
+            cred_id,
+            contract,
+        }
+    }
+
     /// Test that constructing proofs for web3 only credentials works in the
     /// sense that the proof verifies.
     ///
     /// JSON serialization of requests and presentations is also tested.
     #[test]
-    fn test_web3_only() {
+    fn test_completeness_web3() {
         let mut rng = rand::thread_rng();
         let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
-        let signer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
-        let signer_2 = ed25519_dalek::SigningKey::generate(&mut rng);
-        let issuer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
-        let issuer_2 = ed25519_dalek::SigningKey::generate(&mut rng);
-        let contract_1 = ContractAddress::new(1337, 42);
-        let contract_2 = ContractAddress::new(1338, 0);
+
         let min_timestamp = chrono::Duration::try_days(Web3IdAttribute::TIMESTAMP_DATE_OFFSET)
             .unwrap()
             .num_milliseconds()
             .try_into()
             .unwrap();
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let web3_cred_1 = web3_credentials_fixture(
+            [
+                (17.to_string(), Web3IdAttribute::Numeric(137)),
+                (
+                    23.to_string(),
+                    Web3IdAttribute::String(AttributeKind("ff".into())),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+            &global_context,
+        );
+
+        let web3_cred_2 = web3_credentials_fixture(
+            [
+                (0.to_string(), Web3IdAttribute::Numeric(137)),
+                (
+                    1.to_string(),
+                    Web3IdAttribute::String(AttributeKind("xkcd".into())),
+                ),
+                (
+                    2.to_string(),
+                    Web3IdAttribute::Timestamp(Timestamp::from_timestamp_millis(min_timestamp * 2)),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+            &global_context,
+        );
 
         let credential_statements = vec![
             CredentialStatement::Web3Id {
@@ -593,8 +689,8 @@ mod tests {
                 .into_iter()
                 .collect(),
                 network: Network::Testnet,
-                contract: contract_1,
-                credential: CredentialHolderId::new(signer_1.verifying_key()),
+                contract: web3_cred_1.contract,
+                credential: web3_cred_1.cred_id,
                 statement: vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
@@ -628,8 +724,8 @@ mod tests {
                 .into_iter()
                 .collect(),
                 network: Network::Testnet,
-                contract: contract_2,
-                credential: CredentialHolderId::new(signer_2.verifying_key()),
+                contract: web3_cred_2.contract,
+                credential: web3_cred_2.cred_id,
                 statement: vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
@@ -672,95 +768,26 @@ mod tests {
             challenge,
             credential_statements,
         };
-        let params = GlobalContext::generate("Test".into());
-        let mut values_1 = BTreeMap::new();
-        values_1.insert(17.to_string(), Web3IdAttribute::Numeric(137));
-        values_1.insert(
-            23.to_string(),
-            Web3IdAttribute::String(AttributeKind("ff".into())),
-        );
-        let mut randomness_1 = BTreeMap::new();
-        randomness_1.insert(
-            17.to_string(),
-            pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
-        );
-        randomness_1.insert(
-            23.to_string(),
-            pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
-        );
-        let commitments_1 = SignedCommitments::from_secrets(
-            &params,
-            &values_1,
-            &randomness_1,
-            &CredentialHolderId::new(signer_1.verifying_key()),
-            &issuer_1,
-            contract_1,
-        )
-        .unwrap();
 
-        let secrets_1 = CommitmentInputs::Web3Issuer {
-            signer: &signer_1,
-            values: &values_1,
-            randomness: &randomness_1,
-            signature: commitments_1.signature,
-        };
-
-        let mut values_2 = BTreeMap::new();
-        values_2.insert(0.to_string(), Web3IdAttribute::Numeric(137));
-        values_2.insert(
-            1.to_string(),
-            Web3IdAttribute::String(AttributeKind("xkcd".into())),
-        );
-        values_2.insert(
-            2.to_string(),
-            Web3IdAttribute::Timestamp(Timestamp::from_timestamp_millis(min_timestamp * 2)),
-        );
-        let mut randomness_2 = BTreeMap::new();
-        randomness_2.insert(
-            0.to_string(),
-            pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
-        );
-        randomness_2.insert(
-            1.to_string(),
-            pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
-        );
-        randomness_2.insert(
-            2.to_string(),
-            pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
-        );
-        let commitments_2 = SignedCommitments::from_secrets(
-            &params,
-            &values_2,
-            &randomness_2,
-            &CredentialHolderId::new(signer_2.verifying_key()),
-            &issuer_2,
-            contract_2,
-        )
-        .unwrap();
-        let secrets_2 = CommitmentInputs::Web3Issuer::<IpPairing, _, _, _> {
-            signer: &signer_2,
-            values: &values_2,
-            randomness: &randomness_2,
-            signature: commitments_2.signature,
-        };
-        let attrs = [secrets_1, secrets_2];
         let proof = request
             .clone()
-            .prove(&params, attrs.into_iter())
-            .expect("Cannot prove");
+            .prove(
+                &global_context,
+                [
+                    web3_cred_1.commitment_inputs(),
+                    web3_cred_2.commitment_inputs(),
+                ]
+                .into_iter(),
+            )
+            .expect("prove");
 
-        let public = vec![
-            CredentialsInputs::Web3 {
-                issuer_pk: issuer_1.verifying_key().into(),
-            },
-            CredentialsInputs::Web3 {
-                issuer_pk: issuer_2.verifying_key().into(),
-            },
-        ];
+        let public = vec![web3_cred_1.credential_inputs, web3_cred_2.credential_inputs];
         assert_eq!(
-            proof.verify(&params, public.iter()).expect("verify"),
+            proof
+                .verify(&global_context, public.iter())
+                .expect("verify"),
             request,
-            "Proof verification failed."
+            "verify request"
         );
 
         let data = serde_json::to_string_pretty(&proof).unwrap();
@@ -1239,7 +1266,7 @@ mod tests {
             .expect("prove");
 
         // change statement to be invalid
-        let CredentialProof::Account {proofs, ..} = &mut proof.verifiable_credential[0] else {
+        let CredentialProof::Account { proofs, .. } = &mut proof.verifiable_credential[0] else {
             panic!("should be account proof");
         };
         proofs[1].0 = AtomicStatement::AttributeInRange {
