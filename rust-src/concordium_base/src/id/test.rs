@@ -375,6 +375,7 @@ pub fn test_pipeline() {
     assert_ne!(cdi_check, Ok(()));
 }
 
+/// Test issue identity credential by identity provider and use them to deploy account credentials.
 #[test]
 pub fn test_pipeline_v1() {
     let mut csprng = thread_rng();

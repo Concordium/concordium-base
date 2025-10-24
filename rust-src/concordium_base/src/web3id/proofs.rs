@@ -1195,9 +1195,79 @@ mod tests {
         assert_eq!(err, PresentationVerificationError::InvalidCredential);
     }
 
-    // todo ar test mismatch
 
-    // todo ar change to test new
+
+    /// Test verify fails if the credentials and credential inputs have
+    /// mismatching types.
+    #[test]
+    fn test_soundness_mismatching_credential_typesp() {
+        let mut rng = rand::thread_rng();
+        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let acc_cred_fixture = account_credentials_fixture(
+            [
+                (3.into(), Web3IdAttribute::Numeric(137)),
+
+            ]
+                .into_iter()
+                .collect(),
+            &global_context,
+        );
+
+
+        let credential_statements = vec![CredentialStatement::Account {
+            network: Network::Testnet,
+            cred_id: acc_cred_fixture.cred_id,
+            statement: vec![
+
+                AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: 3.into(),
+                        lower: Web3IdAttribute::Numeric(80),
+                        upper: Web3IdAttribute::Numeric(1237),
+                        _phantom: PhantomData,
+                    },
+                },
+            ],
+        }];
+
+        let request = Request::<ArCurve, Web3IdAttribute> {
+            challenge,
+            credential_statements,
+        };
+
+        let mut proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [acc_cred_fixture.commitment_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        // use mismatching type of credential inptus
+        let web3_cred_fixture = web3_credentials_fixture(
+            [
+                (3.to_string(), Web3IdAttribute::Numeric(137)),
+
+            ]
+                .into_iter()
+                .collect(),
+            &global_context,
+        );
+
+        let public = vec![web3_cred_fixture.credential_inputs];
+
+        let err = proof
+            .verify(&global_context, public.iter())
+            .expect_err("verify");
+        assert_eq!(err, PresentationVerificationError::InvalidCredential);
+    }
+
+    // todo ar test web3 soundness, signature + linking proof
+
+    // todo ar test new stuff
 
     /// Test that constructing proofs for a account credential
     /// request works with a `Context` in the sense that the proof verifies.
