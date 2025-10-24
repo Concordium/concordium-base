@@ -508,6 +508,7 @@ mod tests {
     use concordium_contracts_common::{ContractAddress, Timestamp};
     use rand::Rng;
     use std::marker::PhantomData;
+    use assert_matches::assert_matches;
 
     struct AccountCredentialsFixture {
         commitment_inputs:
@@ -1162,15 +1163,85 @@ mod tests {
                 &global_context,
                 [acc_cred_fixture.commitment_inputs()].into_iter(),
             )
-            .expect("Cannot prove");
+            .expect("prove");
 
         let public = vec![acc_cred_fixture.credential_inputs];
         assert_eq!(
             proof
                 .verify(&global_context, public.iter())
-                .expect("Verification of mixed presentation failed."),
+                .expect("verify"),
             request,
-            "Proof verification failed."
+            "verify request"
         );
+    }
+
+    /// Test prove and verify presentation for account credentials where
+    /// verification fails.
+    #[test]
+    fn test_soundness_account() {
+        let mut rng = rand::thread_rng();
+        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let acc_cred_fixture = account_credentials_fixture(
+            [
+                (3.into(), Web3IdAttribute::Numeric(79)),
+                (
+                    1.into(),
+                    Web3IdAttribute::String(AttributeKind("xkcd".into())),
+                ),
+            ]
+                .into_iter()
+                .collect(),
+            &global_context,
+        );
+
+        let credential_statements = vec![CredentialStatement::Account {
+            network: Network::Testnet,
+            cred_id: acc_cred_fixture.cred_id,
+            statement: vec![
+                AtomicStatement::AttributeNotInSet {
+                    statement: AttributeNotInSetStatement {
+                        attribute_tag: 1u8.into(),
+                        set: [
+                            Web3IdAttribute::String(AttributeKind("ff".into())),
+                            Web3IdAttribute::String(AttributeKind("aa".into())),
+                            Web3IdAttribute::String(AttributeKind("zz".into())),
+                        ]
+                            .into_iter()
+                            .collect(),
+                        _phantom: PhantomData,
+                    },
+                },
+                AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: 3.into(),
+                        lower: Web3IdAttribute::Numeric(80),
+                        upper: Web3IdAttribute::Numeric(1237),
+                        _phantom: PhantomData,
+                    },
+                },
+            ],
+        }];
+
+        let request = Request::<ArCurve, Web3IdAttribute> {
+            challenge,
+            credential_statements,
+        };
+
+        let mut proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [acc_cred_fixture.commitment_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        let public = vec![acc_cred_fixture.credential_inputs];
+
+        proof
+            .verify(&global_context, public.iter())
+            .expect_err("verify");
     }
 }
