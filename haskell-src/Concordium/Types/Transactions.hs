@@ -296,9 +296,9 @@ makeAccountTransactionV1 atrv1Signature atrv1Header atrv1Payload = AccountTransa
 
 -- | Construct a 'TransactionSignHash' from a 'TransactionHeaderV1' and 'EncodedPayload'.
 transactionV1SignHashFromHeaderPayload :: TransactionHeaderV1 -> EncodedPayload -> TransactionSignHashV0
-transactionV1SignHashFromHeaderPayload atrv1Header atrv1Payload = TransactionSignHashV0 $ H.hashLazy $ S.runPutLazy message
+transactionV1SignHashFromHeaderPayload atrv1Header atrv1Payload = transactionSignHashFromBytes $ v1TransactionSignHashPrefix <> bodyBytes
   where
-    message = S.put v1TransactionSignHashPrefix <> S.put atrv1Header <> putEncodedPayload atrv1Payload
+    bodyBytes = S.runPut $ S.put atrv1Header <> putEncodedPayload atrv1Payload
 
 -- | @SPEC: <$DOCS/TransactionsV1#serialization-format-transactions>
 instance S.Serialize AccountTransactionV1 where
