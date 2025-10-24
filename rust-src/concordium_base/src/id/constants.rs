@@ -161,6 +161,9 @@ mod test {
 
     #[test]
     fn test_try_new() {
+        let attr = AttributeKind::try_new("".to_string()).expect("try_new");
+        assert_eq!(attr.as_ref(), "");
+
         let attr = AttributeKind::try_new("abc".to_string()).expect("try_new");
         assert_eq!(attr.as_ref(), "abc");
 
@@ -172,6 +175,9 @@ mod test {
 
     #[test]
     fn test_from_str() {
+        let attr = AttributeKind::from_str().expect("from_str");
+        assert_eq!(attr.as_ref(), "");
+
         let attr = AttributeKind::from_str("abc").expect("from_str");
         assert_eq!(attr.as_ref(), "abc");
 
@@ -183,6 +189,13 @@ mod test {
 
     #[test]
     fn test_serial_deserial() {
+        let attr = AttributeKind::try_new("".to_string()).unwrap();
+        let bytes_hex = hex::encode(common::to_bytes(&attr));
+        assert_eq!(bytes_hex, "00");
+        let attr_deserial: AttributeKind =
+            common::from_bytes(&mut hex::decode(bytes_hex).unwrap().as_bytes()).expect("deserial");
+        assert_eq!(attr_deserial, attr);
+
         let attr = AttributeKind::try_new("abc".to_string()).unwrap();
         let bytes_hex = hex::encode(common::to_bytes(&attr));
         assert_eq!(bytes_hex, "03616263");
@@ -213,6 +226,12 @@ mod test {
 
     #[test]
     fn test_serde_serialize_deserialize() {
+        let attr = AttributeKind::try_new("".to_string()).unwrap();
+        let json = serde_json::to_string(&attr).expect("serialize");
+        assert_eq!(json, r#""""#);
+        let attr_deserialized: AttributeKind = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(attr_deserialized, attr);
+
         let attr = AttributeKind::try_new("abc".to_string()).unwrap();
         let json = serde_json::to_string(&attr).expect("serialize");
         assert_eq!(json, r#""abc""#);

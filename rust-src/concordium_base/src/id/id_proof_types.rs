@@ -441,7 +441,7 @@ impl Statement<G1, AttributeKind> {
     /// the "document expiry no earlier than" statement.
     pub fn doc_expiry_no_earlier_than(mut self, lower: AttributeKind) -> Option<Self> {
         let upper = AttributeKind::try_new(String::from("99990101"))
-            .expect("date format can always be represented in attribute");
+            .expect("fixed length");
 
         let statement = AttributeInRangeStatement::<G1, _, _> {
             attribute_tag: AttributeTag::from_str("idDocExpiresAt").ok()?, // doc expiry
