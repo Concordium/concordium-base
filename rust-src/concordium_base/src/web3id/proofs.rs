@@ -505,7 +505,6 @@ mod tests {
     use crate::web3id::{
         CredentialHolderId, GivenContext, OwnedCommitmentInputs, Sha256Challenge, Web3IdAttribute,
     };
-    use assert_matches::assert_matches;
     use concordium_contracts_common::{ContractAddress, Timestamp};
     use rand::Rng;
     use std::marker::PhantomData;
@@ -873,8 +872,6 @@ mod tests {
             .prove(&global_context, [web3_cred.commitment_inputs()].into_iter())
             .expect("prove");
 
-
-
         // change statement to be invalid
         let CredentialProof::Web3Id { proofs, .. } = &mut proof.verifiable_credential[0] else {
             panic!("should be account proof");
@@ -896,22 +893,29 @@ mod tests {
         assert_eq!(err, PresentationVerificationError::InvalidCredential);
     }
 
-    /// Test that constructing proofs for a mixed (both web3 and id2 credentials
+    /// Test that constructing proofs for a mixed (both web3 and account credentials
     /// involved) request works in the sense that the proof verifies.
     ///
     /// JSON serialization of requests and presentations is also tested.
     #[test]
-    fn test_completeness_mixed() {
+    fn test_completeness_web3_and_account() {
         let mut rng = rand::thread_rng();
         let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
-        let params = GlobalContext::generate("Test".into());
-        let cred_id_exp = ArCurve::generate_scalar(&mut rng);
-        let cred_id = CredentialRegistrationID::from_exponent(&params, cred_id_exp);
-        let signer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
-        let issuer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
-        let contract_1 = ContractAddress::new(1337, 42);
 
         let global_context = GlobalContext::generate("Test".into());
+
+        let web3_cred_fixture = web3_credentials_fixture(
+            [
+                (17.to_string(), Web3IdAttribute::Numeric(137)),
+                (
+                    23.to_string(),
+                    Web3IdAttribute::String(AttributeKind("ff".into())),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+            &global_context,
+        );
 
         let acc_cred_fixture = account_credentials_fixture(
             [
@@ -936,8 +940,8 @@ mod tests {
                 .into_iter()
                 .collect(),
                 network: Network::Testnet,
-                contract: contract_1,
-                credential: CredentialHolderId::new(signer_1.verifying_key()),
+                contract: web3_cred_fixture.contract,
+                credential: web3_cred_fixture.cred_id,
                 statement: vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
@@ -964,7 +968,7 @@ mod tests {
             },
             CredentialStatement::Account {
                 network: Network::Testnet,
-                cred_id,
+                cred_id: acc_cred_fixture.cred_id,
                 statement: vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
@@ -996,57 +1000,28 @@ mod tests {
             credential_statements,
         };
 
-        let mut values_1 = BTreeMap::new();
-        values_1.insert(17.to_string(), Web3IdAttribute::Numeric(137));
-        values_1.insert(
-            23.to_string(),
-            Web3IdAttribute::String(AttributeKind("ff".into())),
-        );
-        let mut randomness_1 = BTreeMap::new();
-        randomness_1.insert(
-            17.to_string(),
-            pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
-        );
-        randomness_1.insert(
-            23.to_string(),
-            pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
-        );
-        let signed_commitments_1 = SignedCommitments::from_secrets(
-            &params,
-            &values_1,
-            &randomness_1,
-            &CredentialHolderId::new(signer_1.verifying_key()),
-            &issuer_1,
-            contract_1,
-        )
-        .unwrap();
-        let secrets_1 = CommitmentInputs::Web3Issuer::<IpPairing, _, _, _> {
-            signer: &signer_1,
-            values: &values_1,
-            randomness: &randomness_1,
-            signature: signed_commitments_1.signature,
-        };
-
         let proof = request
             .clone()
             .prove(
-                &params,
-                [secrets_1, acc_cred_fixture.commitment_inputs()].into_iter(),
+                &global_context,
+                [
+                    web3_cred_fixture.commitment_inputs(),
+                    acc_cred_fixture.commitment_inputs(),
+                ]
+                .into_iter(),
             )
             .expect("Cannot prove");
 
         let public = vec![
-            CredentialsInputs::Web3 {
-                issuer_pk: issuer_1.verifying_key().into(),
-            },
+            web3_cred_fixture.credential_inputs,
             acc_cred_fixture.credential_inputs,
         ];
         assert_eq!(
             proof
-                .verify(&params, public.iter())
-                .expect("Verification of mixed presentation failed."),
+                .verify(&global_context, public.iter())
+                .expect("verify"),
             request,
-            "Proof verification failed."
+            "verify request"
         );
 
         let data = serde_json::to_string_pretty(&proof).unwrap();
