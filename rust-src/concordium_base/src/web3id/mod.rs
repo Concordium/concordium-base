@@ -70,7 +70,6 @@ pub enum CredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// identity provider.
     Identity {
         network: Network,
-        // todo add identity providers
         /// Attribute statements
         statement: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
     },

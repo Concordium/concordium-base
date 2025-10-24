@@ -1915,7 +1915,7 @@ pub struct PublicInformationForIp<C: Curve> {
 /// This context is derived from the public information of the identity
 /// provider, as well as some other global parameters which can be found in the
 /// struct 'GlobalContext'.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct IpContext<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Public information on the chosen identity provider.
     pub ip_info: &'a IpInfo<P>,
@@ -2055,7 +2055,7 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> IpContext<'a, P, C> {
 /// It includes identity provider public keys and privacy guardian (anonymity revokers)
 /// public keys. Compared to [`IpContext`], this type does not include
 /// the global context.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct IpContextOnly<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Public information on the chosen identity provider.
     pub ip_info: &'a IpInfo<P>,
@@ -2065,6 +2065,8 @@ pub struct IpContextOnly<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// as well as by the account holder to create a credential.
     pub ars_infos: &'a BTreeMap<ArIdentity, ArInfo<C>>,
 }
+
+impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IpContextOnly<'a, P, C> {}
 
 /// A helper trait to access the public parts of the InitialAccountData
 /// structure. We use this to allow implementations that do not give or have
