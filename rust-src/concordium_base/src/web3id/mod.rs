@@ -896,7 +896,7 @@ pub struct Presentation<
     pub linking_proof: LinkingProof,
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, thiserror::Error)]
 #[non_exhaustive]
 pub enum PresentationVerificationError {
     #[error("The linking proof was incomplete.")]
