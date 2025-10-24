@@ -938,6 +938,11 @@ genAccountTransaction :: Gen AccountTransaction
 genAccountTransaction = do
     atrHeader <- genTransactionHeader
     atrPayload <- EncodedPayload <$> genShortByteStringLen (fromIntegral (thPayloadSize atrHeader))
+    atrSignature <- genTransactionSignature
+    return $! makeAccountTransaction atrSignature atrHeader atrPayload
+
+genTransactionSignature :: Gen TransactionSignature
+genTransactionSignature = do
     numCredentials <- chooseBoundedIntegral (1, 255)
     allKeys <- replicateM numCredentials $ do
         numKeys <- chooseBoundedIntegral (1, 255)
@@ -947,9 +952,30 @@ genAccountTransaction = do
             sig <- Signature <$> genShortByteStringLen sLen
             return (idx, sig)
         (,Map.fromList credentialSignatures) . CredentialIndex <$> arbitrary
+    return $ TransactionSignature (Map.fromList allKeys)
 
-    let atrSignature = TransactionSignature (Map.fromList allKeys)
-    return $! makeAccountTransaction atrSignature atrHeader atrPayload
+genTransactionSignaturesV1 :: Gen TransactionSignaturesV1
+genTransactionSignaturesV1 = do
+    tsv1Sender <- genTransactionSignature
+    tsv1Sponsor <- frequency [(1, Just <$> genTransactionSignature), (2, return Nothing)]
+    return TransactionSignaturesV1{..}
+
+genTransactionHeaderV1 :: Gen TransactionHeaderV1
+genTransactionHeaderV1 = do
+    thv1Sender <- genAccountAddress
+    thv1Nonce <- Nonce <$> arbitrary
+    thv1EnergyAmount <- Energy <$> arbitrary
+    thv1PayloadSize <- PayloadSize <$> chooseBoundedIntegral (0, maxPayloadSize SP4)
+    thv1Expiry <- TransactionTime <$> arbitrary
+    thv1Sponsor <- frequency [(1, Just <$> genAccountAddress), (2, return Nothing)]
+    return TransactionHeaderV1{..}
+
+genAccountTransactionV1 :: Gen AccountTransactionV1
+genAccountTransactionV1 = do
+    atrv1Header <- genTransactionHeaderV1
+    atrv1Payload <- EncodedPayload <$> genShortByteStringLen (fromIntegral (thv1PayloadSize atrv1Header))
+    atrv1Signature <- genTransactionSignaturesV1
+    return $! makeAccountTransactionV1 atrv1Signature atrv1Header atrv1Payload
 
 genTransaction :: Gen Transaction
 genTransaction = do
