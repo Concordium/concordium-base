@@ -505,10 +505,10 @@ mod tests {
     use crate::web3id::{
         CredentialHolderId, GivenContext, OwnedCommitmentInputs, Sha256Challenge, Web3IdAttribute,
     };
+    use assert_matches::assert_matches;
     use concordium_contracts_common::{ContractAddress, Timestamp};
     use rand::Rng;
     use std::marker::PhantomData;
-    use assert_matches::assert_matches;
 
     struct AccountCredentialsFixture {
         commitment_inputs:
@@ -1186,14 +1186,14 @@ mod tests {
 
         let acc_cred_fixture = account_credentials_fixture(
             [
-                (3.into(), Web3IdAttribute::Numeric(79)),
+                (3.into(), Web3IdAttribute::Numeric(137)),
                 (
                     1.into(),
                     Web3IdAttribute::String(AttributeKind("xkcd".into())),
                 ),
             ]
-                .into_iter()
-                .collect(),
+            .into_iter()
+            .collect(),
             &global_context,
         );
 
@@ -1209,8 +1209,8 @@ mod tests {
                             Web3IdAttribute::String(AttributeKind("aa".into())),
                             Web3IdAttribute::String(AttributeKind("zz".into())),
                         ]
-                            .into_iter()
-                            .collect(),
+                        .into_iter()
+                        .collect(),
                         _phantom: PhantomData,
                     },
                 },
@@ -1238,10 +1238,25 @@ mod tests {
             )
             .expect("prove");
 
+        // change statement to be invalid
+        let CredentialProof::Account {proofs, ..} = &mut proof.verifiable_credential[0] else {
+            panic!("should be account proof");
+        };
+        proofs[1].0 = AtomicStatement::AttributeInRange {
+            statement: AttributeInRangeStatement {
+                attribute_tag: 3.into(),
+                lower: Web3IdAttribute::Numeric(200),
+                upper: Web3IdAttribute::Numeric(1237),
+                _phantom: PhantomData,
+            },
+        };
+
         let public = vec![acc_cred_fixture.credential_inputs];
 
         proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
     }
+
+    // todo ar test mismatch
 }

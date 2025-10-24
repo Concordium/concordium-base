@@ -4,7 +4,7 @@ mod tests {
     use crate::id::{account_holder, chain, identity_provider};
     use crate::web3id::{
         Challenge, CommitmentInputs, CredentialStatement, CredentialsInputs, Request,
-        Sha256Challenge, Web3IdAttribute, Web3IdSigner,
+        Sha256Challenge, Web3IdAttribute,
     };
     use crate::{
         base::CredentialRegistrationID,
