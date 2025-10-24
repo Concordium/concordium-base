@@ -175,7 +175,7 @@ mod test {
 
     #[test]
     fn test_from_str() {
-        let attr = AttributeKind::from_str().expect("from_str");
+        let attr = AttributeKind::from_str("").expect("from_str");
         assert_eq!(attr.as_ref(), "");
 
         let attr = AttributeKind::from_str("abc").expect("from_str");
