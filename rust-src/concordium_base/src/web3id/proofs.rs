@@ -493,6 +493,7 @@ mod tests {
     use super::*;
     use crate::base::CredentialRegistrationID;
 
+    use crate::common;
     use crate::curve_arithmetic::Value;
     use crate::hashes::BlockHash;
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
@@ -506,7 +507,7 @@ mod tests {
         CredentialHolderId, GivenContext, OwnedCommitmentInputs, Sha256Challenge, Web3IdAttribute,
     };
     use concordium_contracts_common::{ContractAddress, Timestamp};
-    use rand::Rng;
+    use rand::{Rng, SeedableRng};
     use std::marker::PhantomData;
 
     struct AccountCredentialsFixture {
@@ -529,9 +530,7 @@ mod tests {
         attrs: BTreeMap<AttributeTag, Web3IdAttribute>,
         global_context: &GlobalContext<ArCurve>,
     ) -> AccountCredentialsFixture {
-        let mut rng = rand::thread_rng();
-
-        let cred_id_exp = ArCurve::generate_scalar(&mut rng);
+        let cred_id_exp = ArCurve::generate_scalar(&mut seed0());
         let cred_id = CredentialRegistrationID::from_exponent(&global_context, cred_id_exp);
 
         let mut attr_rand = BTreeMap::new();
@@ -540,7 +539,7 @@ mod tests {
             let attr_scalar = Value::<ArCurve>::new(attr.to_field_element());
             let (cmm, cmm_rand) = global_context
                 .on_chain_commitment_key
-                .commit(&attr_scalar, &mut rng);
+                .commit(&attr_scalar, &mut seed0());
             attr_rand.insert(*tag, cmm_rand);
             attr_cmm.insert(*tag, cmm);
         }
@@ -577,6 +576,10 @@ mod tests {
         {
             CommitmentInputs::from(&self.commitment_inputs)
         }
+    }
+
+    fn seed0() -> rand::rngs::StdRng {
+        rand::rngs::StdRng::seed_from_u64(0)
     }
 
     fn web3_credentials_fixture(
@@ -1195,8 +1198,6 @@ mod tests {
         assert_eq!(err, PresentationVerificationError::InvalidCredential);
     }
 
-
-
     /// Test verify fails if the credentials and credential inputs have
     /// mismatching types.
     #[test]
@@ -1207,30 +1208,23 @@ mod tests {
         let global_context = GlobalContext::generate("Test".into());
 
         let acc_cred_fixture = account_credentials_fixture(
-            [
-                (3.into(), Web3IdAttribute::Numeric(137)),
-
-            ]
+            [(3.into(), Web3IdAttribute::Numeric(137))]
                 .into_iter()
                 .collect(),
             &global_context,
         );
 
-
         let credential_statements = vec![CredentialStatement::Account {
             network: Network::Testnet,
             cred_id: acc_cred_fixture.cred_id,
-            statement: vec![
-
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: 3.into(),
-                        lower: Web3IdAttribute::Numeric(80),
-                        upper: Web3IdAttribute::Numeric(1237),
-                        _phantom: PhantomData,
-                    },
+            statement: vec![AtomicStatement::AttributeInRange {
+                statement: AttributeInRangeStatement {
+                    attribute_tag: 3.into(),
+                    lower: Web3IdAttribute::Numeric(80),
+                    upper: Web3IdAttribute::Numeric(1237),
+                    _phantom: PhantomData,
                 },
-            ],
+            }],
         }];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
@@ -1248,10 +1242,7 @@ mod tests {
 
         // use mismatching type of credential inptus
         let web3_cred_fixture = web3_credentials_fixture(
-            [
-                (3.to_string(), Web3IdAttribute::Numeric(137)),
-
-            ]
+            [(3.to_string(), Web3IdAttribute::Numeric(137))]
                 .into_iter()
                 .collect(),
             &global_context,
@@ -1424,5 +1415,99 @@ mod tests {
             request,
             "Cannot deserialize request correctly."
         );
+    }
+
+    /// Test that the verifier can verify previously generated proofs.
+    #[test]
+    fn test_stability_account() {
+        // let challenge = Challenge::Sha256(Sha256Challenge::new(seed0().gen()));
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let acc_cred_fixture = account_credentials_fixture(
+            [(3.into(), Web3IdAttribute::Numeric(137))]
+                .into_iter()
+                .collect(),
+            &global_context,
+        );
+
+        // let credential_statements = vec![CredentialStatement::Account {
+        //     network: Network::Testnet,
+        //     cred_id: acc_cred_fixture.cred_id,
+        //     statement: vec![AtomicStatement::AttributeInRange {
+        //         statement: AttributeInRangeStatement {
+        //             attribute_tag: 3.into(),
+        //             lower: Web3IdAttribute::Numeric(80),
+        //             upper: Web3IdAttribute::Numeric(1237),
+        //             _phantom: PhantomData,
+        //         },
+        //     }],
+        // }];
+        //
+        // let request = Request::<ArCurve, Web3IdAttribute> {
+        //     challenge,
+        //     credential_statements,
+        // };
+        //
+        // let proof = request
+        //     .clone()
+        //     .prove(
+        //         &global_context,
+        //         [acc_cred_fixture.commitment_inputs()].into_iter(),
+        //     )
+        //     .expect("prove");
+        //
+        // let proof_json = serde_json::to_string_pretty(&proof).unwrap();
+        // println!("proof_json:\n{}", proof_json);
+
+        let proof_json = r#"
+{
+  "presentationContext": "7fb27b941602d01d11542211134fc71aacae54e37e7d007bbb7b55eff062a284",
+  "proof": {
+    "created": "2025-10-25T07:34:54.280481Z",
+    "proofValue": [],
+    "type": "ConcordiumWeakLinkingProofV1"
+  },
+  "type": "VerifiablePresentation",
+  "verifiableCredential": [
+    {
+      "credentialSubject": {
+        "id": "did:ccd:testnet:cred:856793e4ba5d058cea0b5c3a1c8affb272efcf53bbab77ee28d3e2270d5041d220c1e1a9c6c8619c84e40ebd70fb583e",
+        "proof": {
+          "created": "2025-10-25T07:34:54.280317Z",
+          "proofValue": [
+            {
+              "proof": "ae278735684b0c19c140933e04f0e02494110f5a08b1caf04c7c49ab8817aabe7f162b2f7c4c9563159e770b3341bc10814fd7d72f4eb37821e0587e69f09f9710ea82d1bf56603b24f8650116eda95383f8f9c6a17d7c29c611fe8ba6da43eeaaaf5c91bed3ed11bac729220d142f7723188127b9c557a32329bdbdf3e8552c412076e758d6ff2371702ba5d8bda6a1a33238957633b91fe94b1ed52aa5e587f1a9d5581d1034fd504ff94067ab3b3dba286aa27407417f92e8d23b2f6adc55102c48a898a63975c29edb6a2bddb932cd4011c1d261f56f4e7c38ffa40da6d54774fa3768d24e43f5c062f7948eb2063353785dc2d8bd2bd48db1fb9f741aad095bd03ff739f421cedf743c7d8c370e9c506ca2315706853cf27a3e85791eaf00000007849a40131bb85963bde1d778a520028f6760d6c747716b02015c53286760856ad420a209a31174c4a794edd28d4a9efd9960c265363329b177985e27421d52b5f57141f11e65ac70984d7fd5212ed2bb8ddcd2bd92dc23f27a06b0dc3178cd01a32db39d0fac09781e5bf8b53d9a1346f68e02c3c4f5c181c7abf25f5f97d533f6c1f735982af9ffc2f4b430692aabe3892ccfe4b6b676d4d7ad0e85bd63ab1f5ca38a05fe7d9eb726f6b841ebde9bea683b32d8aee57ca16eacf7310da5a784a53bbb174e4d01ac17a47a77b8c5b945908d72c327be21c4c40ec1f5501739531ad26485d56adb139fbf6ba346cfd985b41880d6d6999f3b1fda204bae03f64b8347060533652daa5464e32acb5bfce4f94275af7ec352a936e44a85cb014ed2a4764c10ae9d31baebb73db94f9adf23f599f34953c434c7af5a8cc055bef0200009991f3a70c763a893efcd18b329a8a0b6b9f3b5f196cfa529a3edddd471e3eb894dabf34085c1adb92e2f14a9114bdd8416a51294b83c525a8666ef8d5348b58afc2f88242b672b487fb03d1cde6755971c974b62d8ca45e3321a86b7b5c6867d6531de64ad4e2c2eba4525acd18cb19eb1bd97f4198923f146f5fdebb22a27e26874f648c3b6afc69203aad675d37b31c736bf3dc443e1077b43f334c2dcb5a2863d4c53f8fba95f3bef90f2044f4db677b1ed621944d0b387ce5801a38d539a06df930374b25c2ede7b65129960886898a368729852539970b3ec7352dce984484fa34ec3f3b08d64b149ac4f8d6d06cf101af12745c4549af0c39c827593681a5c31a3d43c1e410a0635468728f137762bbc3cac97984e6a6a68633d4737413e79a904dd38347f94cbb3c1d1f7a8edb4c2a9a9e5d70a0ad13ebcf826f42bda51ed3e8cfcd21ef1ec53db3a5a2dc86bf2cf77fed6cadde66df0765f664b55a4a397d851a79a80974152991d822218d9a3154b4fe995fd935809a53c42cc5e355e265c0e40c12a12c0ac0c6edbfda5b9177ed095b6f33464e4199a2470af",
+              "type": "AttributeInRange"
+            }
+          ],
+          "type": "ConcordiumZKProofV3"
+        },
+        "statement": [
+          {
+            "attributeTag": "dob",
+            "lower": 80,
+            "type": "AttributeInRange",
+            "upper": 1237
+          }
+        ]
+      },
+      "issuer": "did:ccd:testnet:idp:17",
+      "type": [
+        "VerifiableCredential",
+        "ConcordiumVerifiableCredential"
+      ]
+    }
+  ]
+}
+"#;
+        let proof: Presentation<IpPairing, ArCurve, Web3IdAttribute> =
+            serde_json::from_str(proof_json).unwrap();
+
+        let public = vec![acc_cred_fixture.credential_inputs];
+
+        proof
+            .verify(&global_context, public.iter())
+            .expect("verify");
     }
 }
