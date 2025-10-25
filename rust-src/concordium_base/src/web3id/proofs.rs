@@ -1616,4 +1616,6 @@ mod tests {
             .verify(&global_context, public.iter())
             .expect("verify");
     }
+
+    // todo ar test stability all types of proofs
 }
