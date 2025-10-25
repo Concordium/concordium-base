@@ -586,12 +586,10 @@ mod tests {
         attrs: BTreeMap<String, Web3IdAttribute>,
         global_context: &GlobalContext<ArCurve>,
     ) -> Web3CredentialsFixture {
-        let mut rng = rand::thread_rng();
-
-        let signer = ed25519_dalek::SigningKey::generate(&mut rng);
+        let signer = ed25519_dalek::SigningKey::generate(&mut seed0());
         let cred_id = CredentialHolderId::new(signer.verifying_key());
 
-        let issuer = ed25519_dalek::SigningKey::generate(&mut rng);
+        let issuer = ed25519_dalek::SigningKey::generate(&mut seed0());
         let contract = ContractAddress::new(1337, 42);
 
         let mut attr_rand = BTreeMap::new();
@@ -600,7 +598,7 @@ mod tests {
             let attr_scalar = Value::<ArCurve>::new(attr.to_field_element());
             let (cmm, cmm_rand) = global_context
                 .on_chain_commitment_key
-                .commit(&attr_scalar, &mut rng);
+                .commit(&attr_scalar, &mut seed0());
             attr_rand.insert(tag.clone(), cmm_rand);
             attr_cmm.insert(tag.clone(), cmm);
         }
@@ -1505,6 +1503,114 @@ mod tests {
             serde_json::from_str(proof_json).unwrap();
 
         let public = vec![acc_cred_fixture.credential_inputs];
+
+        proof
+            .verify(&global_context, public.iter())
+            .expect("verify");
+    }
+
+    /// Test that the verifier can verify previously generated proofs.
+    #[test]
+    fn test_stability_web3() {
+        // let challenge = Challenge::Sha256(Sha256Challenge::new(seed0().gen()));
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let web3_cred = web3_credentials_fixture(
+            [(17.to_string(), Web3IdAttribute::Numeric(137))]
+                .into_iter()
+                .collect(),
+            &global_context,
+        );
+
+        // let credential_statements = vec![CredentialStatement::Web3Id {
+        //     ty: [
+        //         "VerifiableCredential".into(),
+        //         "ConcordiumVerifiableCredential".into(),
+        //         "TestCredential".into(),
+        //     ]
+        //     .into_iter()
+        //     .collect(),
+        //     network: Network::Testnet,
+        //     contract: web3_cred.contract,
+        //     credential: web3_cred.cred_id,
+        //     statement: vec![AtomicStatement::AttributeInRange {
+        //         statement: AttributeInRangeStatement {
+        //             attribute_tag: "17".into(),
+        //             lower: Web3IdAttribute::Numeric(80),
+        //             upper: Web3IdAttribute::Numeric(1237),
+        //             _phantom: PhantomData,
+        //         },
+        //     }],
+        // }];
+        //
+        // let request = Request::<ArCurve, Web3IdAttribute> {
+        //     challenge,
+        //     credential_statements,
+        // };
+        //
+        // let proof = request
+        //     .clone()
+        //     .prove(&global_context, [web3_cred.commitment_inputs()].into_iter())
+        //     .expect("prove");
+        //
+        // let proof_json = serde_json::to_string_pretty(&proof).unwrap();
+        // println!("proof_json:\n{}", proof_json);
+
+        let proof_json = r#"
+{
+  "presentationContext": "7fb27b941602d01d11542211134fc71aacae54e37e7d007bbb7b55eff062a284",
+  "proof": {
+    "created": "2025-10-25T07:40:54.678361Z",
+    "proofValue": [
+      "2f0a65e05478c9cd27c2dbffb8b336936b4d619a41d2dd0a777124825b1384738e4c588285ba7b33b40f0195d0f721176df4b80f3ab799708132a4d7d048c501"
+    ],
+    "type": "ConcordiumWeakLinkingProofV1"
+  },
+  "type": "VerifiablePresentation",
+  "verifiableCredential": [
+    {
+      "credentialSubject": {
+        "id": "did:ccd:testnet:pkc:ee1aa49a4459dfe813a3cf6eb882041230c7b2558469de81f87c9bf23bf10a03",
+        "proof": {
+          "commitments": {
+            "commitments": {
+              "17": "a26ce49a7a289e68eaa43a0c4c33b2055be159f044eabf7d0282d1d9f6a0109956d7fb7b6d08c9f0f2ac6a42d2c68a47"
+            },
+            "signature": "ad43311219bedc399454e54cc2c39e445fe69191163dcb15392d38eede9ef42f188575644d2cf634f819ecf2d152084935b7b960fef7cfad8de3e5a209b6970b"
+          },
+          "created": "2025-10-25T07:40:54.678228Z",
+          "proofValue": [
+            {
+              "proof": "b3d8c309698ca4ca49133b058c5e108cebe97c400073d3a037e644981584d9b174cc2f992d5dc050d536ac71e20ce1398e7a8529b30f252fe0463cc46531cedcadf0a4436fafa41f18305dc124bfcac7b5b6252ebe3c948ec965870f1fc0d3e5a3cdfd4e8a6c3cac7894361fb06d05b3525a3aa96423c0b5ff107412ad53f5838aeeb992bfa46e5d5e564cf8ee3a35b890cce92fdb7631ae6adf0ab6df26efd6894570fc575a30f4d0112464b26b563321ae64f9f5055dd92e3076d20871c6f257745d9feb223f25872c990627bae6224d6427be6e57e6872d0cf9910c410803518acd3345cb30ae3835067110dd085880f241f39872f5b479c89823c0d4487f56a91d5116f38d4bcfc840023c25f73dbca1f10d2d0e0967b1795b245fe6e35b00000007910aaa4fc2f2496f7ebcec8c0e74e58888660a92a77fda1897310b8624edd773b84cfb43b4df50ecf308b38a09d61fe7aa5cfb791047ff6e913ed4b95f12cbb4a29853020ae381e59f7febd654a8d48b168781d9898f7b4179e757fcbe7089b68785970923045ca9ff89df45d88ab2cc3517d90f268b00c2b9815f3dc01acb164b0835e1ca878a373769d9c05d243fbcb8e88238e8672b4784f6a4247de9e9dfa3abef46312a78fcd19b093e7820115c3116dabb19a203ef0a8057c9daa94a4b90ab74d4b7629615eb92124b09b2560db4014f7c4ae2f308f4d10b85f6feefa41bd0eed8ea60d70d296211c461b9fceda803e494319b69e4433bf610c1d190561e72b595d7918d7c03a41f4ea6391a611610fe7a788f9726c18c3e49f16e4fb6802ba5164c2ac927d1ed67e3d6c50db4ddf8e73c5496830cecf9d647b6436e272fe559d79892961610d0830befc49fa9b11176ce37057e2a490d96bbc242ef65cf9c22c2d25aaba0356926119eef7b0005660a0248f5a954b3a3b6f942df520d94c84ae59b76aca3e264ccb565a1426e71aa18816fc7cdcdee5c75560c1640ac926890f8739ec11895e29996befe38a38519264a65f4b1fb72e8a785278e7b638000f693feb2a5726ae86c9c7211b63cf570c6a3b3b037011d264c9729b0f094b976e92619615febb741969840f326c6fa021ddf602be20c1d9abc772c0cebf9b1542c6c327145a348ec0d87d77003c3b9b405be1b786eb2e66bfd58c2063a3ab1144dbee7cfce83a648a63a64baf8be10553e54aa538bca2793006914bdb55f89dbd3634d6a383942483c61001edc1ba1da554b68e537321caeaee59b6919cdef0bca9b0b0b37d256587302bf8ee6588082c7b2eb4a337912c0c2c7f2935b848586e5fe58581c2e18f5d01c4faf85e3ff5945f65203a08c8c85303ab0671e8b51fb4450ecd7de5c4d7b4864fcf53570708849097ad214179988d7f9b855ef413dd4c0c5b9037bc12b4e8382fbf4d4bd1820e40f8a0e60b16d9d70d8d20bdf72",
+              "type": "AttributeInRange"
+            }
+          ],
+          "type": "ConcordiumZKProofV3"
+        },
+        "statement": [
+          {
+            "attributeTag": "17",
+            "lower": 80,
+            "type": "AttributeInRange",
+            "upper": 1237
+          }
+        ]
+      },
+      "issuer": "did:ccd:testnet:sci:1337:42/issuer",
+      "type": [
+        "ConcordiumVerifiableCredential",
+        "TestCredential",
+        "VerifiableCredential"
+      ]
+    }
+  ]
+}
+"#;
+        let proof: Presentation<IpPairing, ArCurve, Web3IdAttribute> =
+            serde_json::from_str(proof_json).unwrap();
+
+        let public = vec![web3_cred.credential_inputs];
 
         proof
             .verify(&global_context, public.iter())
