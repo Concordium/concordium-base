@@ -497,7 +497,10 @@ mod tests {
     use crate::curve_arithmetic::Value;
     use crate::hashes::BlockHash;
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
-    use crate::id::id_proof_types::{AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement, RevealAttributeStatement};
+    use crate::id::id_proof_types::{
+        AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement,
+        AttributeNotInSetStatement, RevealAttributeStatement,
+    };
     use crate::id::types::{AttributeTag, IpIdentity};
     use crate::web3id::did::Network;
     use crate::web3id::{
@@ -564,6 +567,7 @@ mod tests {
         credential_inputs: CredentialsInputs<IpPairing, ArCurve>,
         cred_id: CredentialHolderId,
         contract: ContractAddress,
+        issuer_key: ed25519_dalek::SigningKey,
     }
 
     impl Web3CredentialsFixture {
@@ -583,10 +587,10 @@ mod tests {
         attrs: BTreeMap<String, Web3IdAttribute>,
         global_context: &GlobalContext<ArCurve>,
     ) -> Web3CredentialsFixture {
-        let signer = ed25519_dalek::SigningKey::generate(&mut seed0());
-        let cred_id = CredentialHolderId::new(signer.verifying_key());
+        let signer_key = ed25519_dalek::SigningKey::generate(&mut seed0());
+        let cred_id = CredentialHolderId::new(signer_key.verifying_key());
 
-        let issuer = ed25519_dalek::SigningKey::generate(&mut seed0());
+        let issuer_key = ed25519_dalek::SigningKey::generate(&mut seed0());
         let contract = ContractAddress::new(1337, 42);
 
         let mut attr_rand = BTreeMap::new();
@@ -605,20 +609,20 @@ mod tests {
             &attrs,
             &attr_rand,
             &cred_id,
-            &issuer,
+            &issuer_key,
             contract,
         )
         .unwrap();
 
         let commitment_inputs = OwnedCommitmentInputs::Web3Issuer {
-            signer,
+            signer: signer_key,
             values: attrs,
             randomness: attr_rand,
             signature: signed_cmms.signature,
         };
 
         let credential_inputs = CredentialsInputs::Web3 {
-            issuer_pk: issuer.verifying_key().into(),
+            issuer_pk: issuer_key.verifying_key().into(),
         };
 
         Web3CredentialsFixture {
@@ -626,6 +630,7 @@ mod tests {
             credential_inputs,
             cred_id,
             contract,
+            issuer_key,
         }
     }
 
@@ -803,9 +808,90 @@ mod tests {
     }
 
     /// Prove and verify where verification fails because
+    /// signature on commitments in invalid.
+    #[test]
+    fn test_soundness_web3_commitments_signature() {
+        let mut rng = rand::thread_rng();
+        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let web3_cred = web3_credentials_fixture(
+            [(17.to_string(), Web3IdAttribute::Numeric(137))]
+                .into_iter()
+                .collect(),
+            &global_context,
+        );
+
+        let credential_statements = vec![CredentialStatement::Web3Id {
+            ty: [
+                "VerifiableCredential".into(),
+                "ConcordiumVerifiableCredential".into(),
+                "TestCredential".into(),
+            ]
+            .into_iter()
+            .collect(),
+            network: Network::Testnet,
+            contract: web3_cred.contract,
+            credential: web3_cred.cred_id,
+            statement: vec![AtomicStatement::AttributeInRange {
+                statement: AttributeInRangeStatement {
+                    attribute_tag: "17".into(),
+                    lower: Web3IdAttribute::Numeric(80),
+                    upper: Web3IdAttribute::Numeric(1237),
+                    _phantom: PhantomData,
+                },
+            }],
+        }];
+
+        let request = Request::<ArCurve, Web3IdAttribute> {
+            challenge: challenge.clone(),
+            credential_statements,
+        };
+
+        let mut proof = request
+            .clone()
+            .prove(&global_context, [web3_cred.commitment_inputs()].into_iter())
+            .expect("prove");
+
+        // change commitments signature to be invalid
+        let CredentialProof::Web3Id { commitments, .. } = &mut proof.verifiable_credential[0]
+        else {
+            panic!("should be web3 proof");
+        };
+        commitments.signature = web3_cred.issuer_key.sign(&[0, 1, 2]);
+        fix_weak_link_proof(&mut proof, &challenge, web3_cred.commitment_inputs());
+
+        let public = vec![web3_cred.credential_inputs];
+
+        let err = proof
+            .verify(&global_context, public.iter())
+            .expect_err("verify");
+        assert_eq!(err, PresentationVerificationError::InvalidCredential);
+    }
+
+    fn fix_weak_link_proof(
+        proof: &mut Presentation<IpPairing, ArCurve, Web3IdAttribute>,
+        challenge: &Challenge,
+        cmm_input: CommitmentInputs<
+            IpPairing,
+            ArCurve,
+            Web3IdAttribute,
+            ed25519_dalek::SigningKey,
+        >,
+    ) {
+        let CommitmentInputs::Web3Issuer { signer, .. } = cmm_input else {
+            panic!("should be web3 proof");
+        };
+        let to_sign = linking_proof_message_to_sign(challenge, &proof.verifiable_credential);
+        let signature = signer.sign(&to_sign);
+        proof.linking_proof.proof_value[0] = WeakLinkingProof { signature };
+    }
+
+    /// Prove and verify where verification fails because
     /// a statements is invalid.
     #[test]
-    fn test_soundness_web3() {
+    fn test_soundness_web3_statements() {
         let mut rng = rand::thread_rng();
         let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
 
@@ -861,7 +947,7 @@ mod tests {
         }];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
-            challenge,
+            challenge: challenge.clone(),
             credential_statements,
         };
 
@@ -872,7 +958,7 @@ mod tests {
 
         // change statement to be invalid
         let CredentialProof::Web3Id { proofs, .. } = &mut proof.verifiable_credential[0] else {
-            panic!("should be account proof");
+            panic!("should be web3 proof");
         };
         proofs[1].0 = AtomicStatement::AttributeInRange {
             statement: AttributeInRangeStatement {
@@ -882,6 +968,7 @@ mod tests {
                 _phantom: PhantomData,
             },
         };
+        fix_weak_link_proof(&mut proof, &challenge, web3_cred.commitment_inputs());
 
         let public = vec![web3_cred.credential_inputs];
 
@@ -1196,7 +1283,7 @@ mod tests {
     /// Test verify fails if the credentials and credential inputs have
     /// mismatching types.
     #[test]
-    fn test_soundness_mismatching_credential_typesp() {
+    fn test_soundness_mismatching_credential_types() {
         let mut rng = rand::thread_rng();
         let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
 
@@ -1596,7 +1683,8 @@ mod tests {
         let global_context = GlobalContext::generate("Test".into());
 
         let web3_cred = web3_credentials_fixture(
-            [(3.to_string(), Web3IdAttribute::Numeric(137)),
+            [
+                (3.to_string(), Web3IdAttribute::Numeric(137)),
                 (
                     1.to_string(),
                     Web3IdAttribute::String(AttributeKind("xkcd".into())),
@@ -1608,9 +1696,10 @@ mod tests {
                 (
                     5.to_string(),
                     Web3IdAttribute::String(AttributeKind("testvalue".into())),
-                ),]
-                .into_iter()
-                .collect(),
+                ),
+            ]
+            .into_iter()
+            .collect(),
             &global_context,
         );
 
@@ -1779,6 +1868,4 @@ mod tests {
             .verify(&global_context, public.iter())
             .expect("verify");
     }
-
-
 }
