@@ -978,6 +978,73 @@ mod tests {
         assert_eq!(err, PresentationVerificationError::InvalidCredential);
     }
 
+    /// Prove and verify where verification fails because
+    /// linking proof is missing or invalid.
+    #[test]
+    fn test_soundness_web3_linking_proof() {
+        let mut rng = rand::thread_rng();
+        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let web3_cred = web3_credentials_fixture(
+            [
+                (17.to_string(), Web3IdAttribute::Numeric(137)),
+
+            ]
+                .into_iter()
+                .collect(),
+            &global_context,
+        );
+
+        let credential_statements = vec![CredentialStatement::Web3Id {
+            ty: [
+                "VerifiableCredential".into(),
+                "ConcordiumVerifiableCredential".into(),
+                "TestCredential".into(),
+            ]
+                .into_iter()
+                .collect(),
+            network: Network::Testnet,
+            contract: web3_cred.contract,
+            credential: web3_cred.cred_id,
+            statement: vec![
+
+                AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: "17".into(),
+                        lower: Web3IdAttribute::Numeric(80),
+                        upper: Web3IdAttribute::Numeric(1237),
+                        _phantom: PhantomData,
+                    },
+                },
+            ],
+        }];
+
+        let request = Request::<ArCurve, Web3IdAttribute> {
+            challenge: challenge.clone(),
+            credential_statements,
+        };
+
+        let mut proof = request
+            .clone()
+            .prove(&global_context, [web3_cred.commitment_inputs()].into_iter())
+            .expect("prove");
+
+        // change statement to be invalid
+        let CredentialProof::Web3Id { proofs, .. } = &mut proof.verifiable_credential[0] else {
+            panic!("should be web3 proof");
+        };
+        proof.linking_proof.proof_value.pop();
+
+        let public = vec![web3_cred.credential_inputs];
+
+        let err = proof
+            .verify(&global_context, public.iter())
+            .expect_err("verify");
+        assert_eq!(err, PresentationVerificationError::MissingLinkingProof);
+    }
+
     /// Test that constructing proofs for a mixed (both web3 and account credentials
     /// involved) request works in the sense that the proof verifies.
     ///
