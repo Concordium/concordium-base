@@ -873,12 +873,7 @@ mod tests {
     fn fix_weak_link_proof(
         proof: &mut Presentation<IpPairing, ArCurve, Web3IdAttribute>,
         challenge: &Challenge,
-        cmm_input: CommitmentInputs<
-            IpPairing,
-            ArCurve,
-            Web3IdAttribute,
-            ed25519_dalek::SigningKey,
-        >,
+        cmm_input: CommitmentInputs<IpPairing, ArCurve, Web3IdAttribute, ed25519_dalek::SigningKey>,
     ) {
         let CommitmentInputs::Web3Issuer { signer, .. } = cmm_input else {
             panic!("should be web3 inputs");
@@ -988,10 +983,7 @@ mod tests {
         let global_context = GlobalContext::generate("Test".into());
 
         let web3_cred = web3_credentials_fixture(
-            [
-                (17.to_string(), Web3IdAttribute::Numeric(137)),
-
-            ]
+            [(17.to_string(), Web3IdAttribute::Numeric(137))]
                 .into_iter()
                 .collect(),
             &global_context,
@@ -1003,22 +995,19 @@ mod tests {
                 "ConcordiumVerifiableCredential".into(),
                 "TestCredential".into(),
             ]
-                .into_iter()
-                .collect(),
+            .into_iter()
+            .collect(),
             network: Network::Testnet,
             contract: web3_cred.contract,
             credential: web3_cred.cred_id,
-            statement: vec![
-
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: "17".into(),
-                        lower: Web3IdAttribute::Numeric(80),
-                        upper: Web3IdAttribute::Numeric(1237),
-                        _phantom: PhantomData,
-                    },
+            statement: vec![AtomicStatement::AttributeInRange {
+                statement: AttributeInRangeStatement {
+                    attribute_tag: "17".into(),
+                    lower: Web3IdAttribute::Numeric(80),
+                    upper: Web3IdAttribute::Numeric(1237),
+                    _phantom: PhantomData,
                 },
-            ],
+            }],
         }];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
@@ -1048,11 +1037,16 @@ mod tests {
         let CredentialProof::Web3Id { proofs, .. } = &mut proof.verifiable_credential[0] else {
             panic!("should be web3 proof");
         };
-        let CommitmentInputs::Web3Issuer { signer, .. } = CommitmentInputs::from(&web3_cred.commitment_inputs) else {
+        let CommitmentInputs::Web3Issuer { signer, .. } =
+            CommitmentInputs::from(&web3_cred.commitment_inputs)
+        else {
             panic!("should be web3 inputs");
         };
         let signature = signer.sign(&[0, 1, 2]);
-        proof.linking_proof.proof_value.push(WeakLinkingProof { signature });
+        proof
+            .linking_proof
+            .proof_value
+            .push(WeakLinkingProof { signature });
 
         let err = proof
             .verify(&global_context, public.iter())
@@ -1420,6 +1414,55 @@ mod tests {
         assert_eq!(err, PresentationVerificationError::InvalidCredential);
     }
 
+    /// Test verify fails if the credentials and credential inputs have
+    /// mismatching lengths.
+    #[test]
+    fn test_soundness_mismatching_credential_length() {
+        let mut rng = rand::thread_rng();
+        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let acc_cred_fixture = account_credentials_fixture(
+            [(3.into(), Web3IdAttribute::Numeric(137))]
+                .into_iter()
+                .collect(),
+            &global_context,
+        );
+
+        let credential_statements = vec![CredentialStatement::Account {
+            network: Network::Testnet,
+            cred_id: acc_cred_fixture.cred_id,
+            statement: vec![AtomicStatement::AttributeInRange {
+                statement: AttributeInRangeStatement {
+                    attribute_tag: 3.into(),
+                    lower: Web3IdAttribute::Numeric(80),
+                    upper: Web3IdAttribute::Numeric(1237),
+                    _phantom: PhantomData,
+                },
+            }],
+        }];
+
+        let request = Request::<ArCurve, Web3IdAttribute> {
+            challenge,
+            credential_statements,
+        };
+
+        let mut proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [acc_cred_fixture.commitment_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        let public = vec![];
+
+        let err = proof
+            .verify(&global_context, public.iter())
+            .expect_err("verify");
+        assert_eq!(err, PresentationVerificationError::InconsistentPublicData);
+    }
 
     // todo ar test new stuff
 
