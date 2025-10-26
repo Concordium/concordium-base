@@ -497,10 +497,7 @@ mod tests {
     use crate::curve_arithmetic::Value;
     use crate::hashes::BlockHash;
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
-    use crate::id::id_proof_types::{
-        AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement,
-        AttributeNotInSetStatement,
-    };
+    use crate::id::id_proof_types::{AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement, RevealAttributeStatement};
     use crate::id::types::{AttributeTag, IpIdentity};
     use crate::web3id::did::Network;
     use crate::web3id::{
@@ -1423,25 +1420,72 @@ mod tests {
         let global_context = GlobalContext::generate("Test".into());
 
         let acc_cred_fixture = account_credentials_fixture(
-            [(3.into(), Web3IdAttribute::Numeric(137))]
-                .into_iter()
-                .collect(),
+            [
+                (3.into(), Web3IdAttribute::Numeric(137)),
+                (
+                    1.into(),
+                    Web3IdAttribute::String(AttributeKind("xkcd".into())),
+                ),
+                (
+                    2.into(),
+                    Web3IdAttribute::String(AttributeKind("aa".into())),
+                ),
+                (
+                    5.into(),
+                    Web3IdAttribute::String(AttributeKind("testvalue".into())),
+                ),
+            ]
+            .into_iter()
+            .collect(),
             &global_context,
         );
 
         // let credential_statements = vec![CredentialStatement::Account {
         //     network: Network::Testnet,
         //     cred_id: acc_cred_fixture.cred_id,
-        //     statement: vec![AtomicStatement::AttributeInRange {
-        //         statement: AttributeInRangeStatement {
-        //             attribute_tag: 3.into(),
-        //             lower: Web3IdAttribute::Numeric(80),
-        //             upper: Web3IdAttribute::Numeric(1237),
-        //             _phantom: PhantomData,
+        //     statement: vec![
+        //         AtomicStatement::AttributeInRange {
+        //             statement: AttributeInRangeStatement {
+        //                 attribute_tag: 3.into(),
+        //                 lower: Web3IdAttribute::Numeric(80),
+        //                 upper: Web3IdAttribute::Numeric(1237),
+        //                 _phantom: PhantomData,
+        //             },
         //         },
-        //     }],
+        //         AtomicStatement::AttributeInSet {
+        //             statement: AttributeInSetStatement {
+        //                 attribute_tag: 2.into(),
+        //                 set: [
+        //                     Web3IdAttribute::String(AttributeKind("ff".into())),
+        //                     Web3IdAttribute::String(AttributeKind("aa".into())),
+        //                     Web3IdAttribute::String(AttributeKind("zz".into())),
+        //                 ]
+        //                 .into_iter()
+        //                 .collect(),
+        //                 _phantom: PhantomData,
+        //             },
+        //         },
+        //         AtomicStatement::AttributeNotInSet {
+        //             statement: AttributeNotInSetStatement {
+        //                 attribute_tag: 1.into(),
+        //                 set: [
+        //                     Web3IdAttribute::String(AttributeKind("ff".into())),
+        //                     Web3IdAttribute::String(AttributeKind("aa".into())),
+        //                     Web3IdAttribute::String(AttributeKind("zz".into())),
+        //                 ]
+        //                     .into_iter()
+        //                     .collect(),
+        //                 _phantom: PhantomData,
+        //             },
+        //         },
+        //         AtomicStatement::RevealAttribute {
+        //             statement: RevealAttributeStatement {
+        //                 attribute_tag: 5.into(),
+        //             },
+        //         },
+        //     ],
         // }];
-        //
+
         // let request = Request::<ArCurve, Web3IdAttribute> {
         //     challenge,
         //     credential_statements,
@@ -1462,7 +1506,7 @@ mod tests {
 {
   "presentationContext": "7fb27b941602d01d11542211134fc71aacae54e37e7d007bbb7b55eff062a284",
   "proof": {
-    "created": "2025-10-25T07:34:54.280481Z",
+    "created": "2025-10-26T07:20:55.639111Z",
     "proofValue": [],
     "type": "ConcordiumWeakLinkingProofV1"
   },
@@ -1472,11 +1516,24 @@ mod tests {
       "credentialSubject": {
         "id": "did:ccd:testnet:cred:856793e4ba5d058cea0b5c3a1c8affb272efcf53bbab77ee28d3e2270d5041d220c1e1a9c6c8619c84e40ebd70fb583e",
         "proof": {
-          "created": "2025-10-25T07:34:54.280317Z",
+          "created": "2025-10-26T07:20:55.638868Z",
           "proofValue": [
             {
-              "proof": "ae278735684b0c19c140933e04f0e02494110f5a08b1caf04c7c49ab8817aabe7f162b2f7c4c9563159e770b3341bc10814fd7d72f4eb37821e0587e69f09f9710ea82d1bf56603b24f8650116eda95383f8f9c6a17d7c29c611fe8ba6da43eeaaaf5c91bed3ed11bac729220d142f7723188127b9c557a32329bdbdf3e8552c412076e758d6ff2371702ba5d8bda6a1a33238957633b91fe94b1ed52aa5e587f1a9d5581d1034fd504ff94067ab3b3dba286aa27407417f92e8d23b2f6adc55102c48a898a63975c29edb6a2bddb932cd4011c1d261f56f4e7c38ffa40da6d54774fa3768d24e43f5c062f7948eb2063353785dc2d8bd2bd48db1fb9f741aad095bd03ff739f421cedf743c7d8c370e9c506ca2315706853cf27a3e85791eaf00000007849a40131bb85963bde1d778a520028f6760d6c747716b02015c53286760856ad420a209a31174c4a794edd28d4a9efd9960c265363329b177985e27421d52b5f57141f11e65ac70984d7fd5212ed2bb8ddcd2bd92dc23f27a06b0dc3178cd01a32db39d0fac09781e5bf8b53d9a1346f68e02c3c4f5c181c7abf25f5f97d533f6c1f735982af9ffc2f4b430692aabe3892ccfe4b6b676d4d7ad0e85bd63ab1f5ca38a05fe7d9eb726f6b841ebde9bea683b32d8aee57ca16eacf7310da5a784a53bbb174e4d01ac17a47a77b8c5b945908d72c327be21c4c40ec1f5501739531ad26485d56adb139fbf6ba346cfd985b41880d6d6999f3b1fda204bae03f64b8347060533652daa5464e32acb5bfce4f94275af7ec352a936e44a85cb014ed2a4764c10ae9d31baebb73db94f9adf23f599f34953c434c7af5a8cc055bef0200009991f3a70c763a893efcd18b329a8a0b6b9f3b5f196cfa529a3edddd471e3eb894dabf34085c1adb92e2f14a9114bdd8416a51294b83c525a8666ef8d5348b58afc2f88242b672b487fb03d1cde6755971c974b62d8ca45e3321a86b7b5c6867d6531de64ad4e2c2eba4525acd18cb19eb1bd97f4198923f146f5fdebb22a27e26874f648c3b6afc69203aad675d37b31c736bf3dc443e1077b43f334c2dcb5a2863d4c53f8fba95f3bef90f2044f4db677b1ed621944d0b387ce5801a38d539a06df930374b25c2ede7b65129960886898a368729852539970b3ec7352dce984484fa34ec3f3b08d64b149ac4f8d6d06cf101af12745c4549af0c39c827593681a5c31a3d43c1e410a0635468728f137762bbc3cac97984e6a6a68633d4737413e79a904dd38347f94cbb3c1d1f7a8edb4c2a9a9e5d70a0ad13ebcf826f42bda51ed3e8cfcd21ef1ec53db3a5a2dc86bf2cf77fed6cadde66df0765f664b55a4a397d851a79a80974152991d822218d9a3154b4fe995fd935809a53c42cc5e355e265c0e40c12a12c0ac0c6edbfda5b9177ed095b6f33464e4199a2470af",
+              "proof": "ad2921ae1d65542c4d8f491c779028e989876ce7c95b817122b1d85b16f593d818792c9261dd83b097cd433e57ca5e05a273ada11a24afa3bc3fb3ea387e3a7569a6e5b962604146442305d0b272317d4232b06c3c51ab0d6fe52c600fdd7f648cbf4ef3174ee92910a9849cd1c948ba4c91ea92abfaf7068e4a026ebc39207404270d8420ccef4d0f99ca4964681fa6831ae08ff49f1d36c42ef14589f742a2539076002194b8bce2a776a4b987f73713f69aa29cc294e3ecf68c474d7abc570e1b2d902396bdec86e8713d3b0280a15eb73eaeb94ccb2a01f92aa0b3eb97c060864e8cd95c364a02a375873b319c911099b8514e3b37cce88d0cc5632a847b5496ba301d5e00c2769846f97289a2fd501d860966bea3ab867720f98754d57e00000007a58c2c0282d8a91ca553617311c51ca929c7a8f4cac3788d2b9a0a6cc92c90f332d7f8cec6fec159164049d15c0ba7e590d7657976135cba7acc2174245233dd44ea341f691e928306d66b074e02adb860cc740489a1f849f198cdc41045b38688ad8de18b6cb8f7ff4b026e7ec7228dcefe257bdc5a1c317a28662dd25349ac6018ef9868cb1b4d23a2ce29a0ff7a0ca49caef2e6838c6d54fb786a65e67ea252b4e5fedf15d6085a8abf2f725409851bc1ee2883272de5bcff7793477d56f3813889c8d8ad2dd2f83c4862f3092464e6d9dcf8c87d312c83dac7314467d5dbb9575b39aa72dade9a4d59328b79100e8ce2436e98a1e319324f4dcebff6c68d25d5834fc63c071090459692f644cba70f28593a0eb65f7f71efbe3022c6b438a178a45a266adb8ce205675425af8ffafc23cc4c542c6599cabbb1aa8f048388da74e4bdfec09913e2691f72c8eb804589640ba1d1cba99f9a20106506f4236fc72a8dd233aabd5333e1bb68b98ed7a3466d1d090ed581b85e521813fa6324fdb89d0b16585861afb706695be090a9ee847ec3221ee40a2442e6e8f6a91a42920a72f03e168d823abcd5594d6b339c4e969143a7c720885552657c0275d1d919b4beb031a12c0a1b179efc7e6339d2f2671d6f03024cf392fdb0774b778a585a9602d8f66833a5d6e5347327ad3027b7c583b3af18bbe30a28a5927ee848be6673883182c9591574c92030439a83250ea62a9ef2264294200608d86f654a29f876cfa77c369c43f0d801262b7da3368eb452a867dbfdf0613ec4401f0ffdd3fcb6da4220b4c96b3e8838d0936e03426d844a585269b50433f9da9e3b512992a559f7c28dfe165c267ac99a1d99e048d0a136ca1ca0ecf7941e4403364144f0ed4ddaa2788f57e690c63eb3c651609ed59a42f1f79861581932df7e9fe02d4e20058ee4afefaf9476c0e64bace57500a185d1ea272150e44f89cee08aa5a50c9f428be8e5dba12e21e2563675f7cd5a21a1d2ac0dc9b3542ccc87bb355aab2b63",
               "type": "AttributeInRange"
+            },
+            {
+              "proof": "b3f32d6d31476315f369557429adc7e2c6e4f52e148e8cd08d6240cff29eedaa35308c83dd06c3bccfd07aeec8c60dceb93697c3ca588f29bb1126a20e930c2634e96915c4eaa05586acf07e691bee08ccb8d003ab246e139c81c051836f157ab914b460f1de18361d32703e91bcc48a21e6198c60177e84ca2491673b667f25fdfbeb42f636335eabf3befa4c913790a30b5cee7a4442c7eae1fd029a7016624ab1dd421a9ca3f8ccac6d3816cda42b5b1dcc6e9ad0b0c55cb8f23d4004246317dcdc128226ba6e4c3876381d4a92927b91a34adf49c80b05781c4368d9a1bf72cd55f71352e42859638551dde2de772b02a64ed63aa1c6605d67e29e407a7c023b37380ec18747d1ecbd068275c51e422a6798443e577d3e0398b64c8a3897000000028f357fb97de1f64f81b8b70b7ce077d294d2a8dcd6c24ac1720b6b5943c2b72064045b8d5655ddceadda4c2235be921e915061e61b8ac78f84dfbd9de4991436659e444a8931d3bf4e04fb306cff517dac1dd1c403931b72695ef7c853856d73b4452d9b85bd851a73426e966638e6d67fb5efb49a0e795a8c9c8f9c0ac36f341f991ca85f3d497bbf947867d5bf6b9db81f8b99c9631b0b6a02973ce1912d126477d32c381c4e6109c7f4fbe121b978c6fc6d7d03f5e5a4e93555be4fd92c7914baadc605adbe46b60cb1488dd8b3686860e75a291accd0ce941c9e8511ade24b9c3930a1d80993fa6081003038b01a2514cb6a0790c6af3e2432e54ce4bb20",
+              "type": "AttributeInSet"
+            },
+            {
+              "proof": "94d3ea2668881ae0d6e5d1e7fc463bad6e902e2a7cd8d9be4b11d48f8854b9652cf9b0181123d667c134e7d6fd8bac0fb413ef563ed3eff09f9a7e6f1cfb75e7d711caf19a70b4f0a4f6941daab261ba58796e74f6e29a87e991e4c7696ceb2484cd39aa81a4eb49f9be71caecba3e3a3b4a062a3eedc0b73405230e03150ab07f980f4840730f990e754b7dc78e9f1b8926cf57d6ef243966533d2b122670fa0cd8d94b49f149f8bd3a1a5f13fd31c68c3f584e6e4829c20bc95aaafc79e4fa3ba5ed019f3e72ff4bcb9ed680b73c94371749e45b4e74f8286fed5f52aa676b16c75c385da8a877494e1ed6019e2b1f827d3dfb0001396dee7764f640f0f6a610e50ada2a30ef5d8883a1f692d8c29cfef88d9164dd630e0757a9636ecefdaa00000002b839595e42d08fab8492ff918eaa954c6dcf515da600a629604041c1c02a7393423507158c9783b85585167f4c8e603bb9782a730d25940704ffb1707921031cab55329beb4cfe4da63d6eba70c76063e5c7176f274bdbf2054f0e9e9d978bb6a23e6bba5168513f0663d18227b3a0b948b40da12619050f06b8c015a820a3b5a240ceb50ef269ffca17c197cc461287a34950e33adc3993a4e38eb851fabddb85e3badba69962602f2c994a4bf8426e3e153c2e42b4a68d5e6388673c3e6f3c42a1d499cc42408f56671666f32d3bd5d764422e041027562549e8f41c6e913326a72534109ebdb87ef445677fa5a27114b511a0d131ad9eac163ebdc1c00104",
+              "type": "AttributeNotInSet"
+            },
+            {
+              "attribute": "testvalue",
+              "proof": "fceb0900994b980e3bfab3733499731791634cd9a9bc2485cc027d88bc50a093637712584ac90ad0529d095de23705cdc0cffda27051f23bfb6ddaa8648b344d",
+              "type": "RevealAttribute"
             }
           ],
           "type": "ConcordiumZKProofV3"
@@ -1487,6 +1544,28 @@ mod tests {
             "lower": 80,
             "type": "AttributeInRange",
             "upper": 1237
+          },
+          {
+            "attributeTag": "sex",
+            "set": [
+              "aa",
+              "ff",
+              "zz"
+            ],
+            "type": "AttributeInSet"
+          },
+          {
+            "attributeTag": "lastName",
+            "set": [
+              "aa",
+              "ff",
+              "zz"
+            ],
+            "type": "AttributeNotInSet"
+          },
+          {
+            "attributeTag": "nationality",
+            "type": "RevealAttribute"
           }
         ]
       },
@@ -1517,7 +1596,19 @@ mod tests {
         let global_context = GlobalContext::generate("Test".into());
 
         let web3_cred = web3_credentials_fixture(
-            [(17.to_string(), Web3IdAttribute::Numeric(137))]
+            [(3.to_string(), Web3IdAttribute::Numeric(137)),
+                (
+                    1.to_string(),
+                    Web3IdAttribute::String(AttributeKind("xkcd".into())),
+                ),
+                (
+                    2.to_string(),
+                    Web3IdAttribute::String(AttributeKind("aa".into())),
+                ),
+                (
+                    5.to_string(),
+                    Web3IdAttribute::String(AttributeKind("testvalue".into())),
+                ),]
                 .into_iter()
                 .collect(),
             &global_context,
@@ -1534,14 +1625,48 @@ mod tests {
         //     network: Network::Testnet,
         //     contract: web3_cred.contract,
         //     credential: web3_cred.cred_id,
-        //     statement: vec![AtomicStatement::AttributeInRange {
-        //         statement: AttributeInRangeStatement {
-        //             attribute_tag: "17".into(),
-        //             lower: Web3IdAttribute::Numeric(80),
-        //             upper: Web3IdAttribute::Numeric(1237),
-        //             _phantom: PhantomData,
-        //         },
-        //     }],
+        //     statement: vec![
+        //                 AtomicStatement::AttributeInRange {
+        //                     statement: AttributeInRangeStatement {
+        //                         attribute_tag: 3.to_string(),
+        //                         lower: Web3IdAttribute::Numeric(80),
+        //                         upper: Web3IdAttribute::Numeric(1237),
+        //                         _phantom: PhantomData,
+        //                     },
+        //                 },
+        //                 AtomicStatement::AttributeInSet {
+        //                     statement: AttributeInSetStatement {
+        //                         attribute_tag: 2.to_string(),
+        //                         set: [
+        //                             Web3IdAttribute::String(AttributeKind("ff".into())),
+        //                             Web3IdAttribute::String(AttributeKind("aa".into())),
+        //                             Web3IdAttribute::String(AttributeKind("zz".into())),
+        //                         ]
+        //                         .into_iter()
+        //                         .collect(),
+        //                         _phantom: PhantomData,
+        //                     },
+        //                 },
+        //                 AtomicStatement::AttributeNotInSet {
+        //                     statement: AttributeNotInSetStatement {
+        //                         attribute_tag: 1.to_string(),
+        //                         set: [
+        //                             Web3IdAttribute::String(AttributeKind("ff".into())),
+        //                             Web3IdAttribute::String(AttributeKind("aa".into())),
+        //                             Web3IdAttribute::String(AttributeKind("zz".into())),
+        //                         ]
+        //                             .into_iter()
+        //                             .collect(),
+        //                         _phantom: PhantomData,
+        //                     },
+        //                 },
+        //                 AtomicStatement::RevealAttribute {
+        //                     statement: RevealAttributeStatement {
+        //                         attribute_tag: 5.to_string(),
+        //                     },
+        //                 },
+        //
+        //     ],
         // }];
         //
         // let request = Request::<ArCurve, Web3IdAttribute> {
@@ -1561,9 +1686,9 @@ mod tests {
 {
   "presentationContext": "7fb27b941602d01d11542211134fc71aacae54e37e7d007bbb7b55eff062a284",
   "proof": {
-    "created": "2025-10-25T07:40:54.678361Z",
+    "created": "2025-10-26T07:28:08.545556Z",
     "proofValue": [
-      "2f0a65e05478c9cd27c2dbffb8b336936b4d619a41d2dd0a777124825b1384738e4c588285ba7b33b40f0195d0f721176df4b80f3ab799708132a4d7d048c501"
+      "8dbdfb933b46a7661258cdd172547f16d17e2fdf335ddb55d91e1b9cf1dd9227a7e200207b53e494bf39ee821bc76b6c62d863a1103a0d577220dca418834100"
     ],
     "type": "ConcordiumWeakLinkingProofV1"
   },
@@ -1575,25 +1700,63 @@ mod tests {
         "proof": {
           "commitments": {
             "commitments": {
-              "17": "a26ce49a7a289e68eaa43a0c4c33b2055be159f044eabf7d0282d1d9f6a0109956d7fb7b6d08c9f0f2ac6a42d2c68a47"
+              "1": "9443780e625e360547c5a6a948de645e92b84d91425f4d9c0455bcf6040ef06a741b6977da833a1552e081fb9c4c9318",
+              "2": "83a4e3bc337339a16a97dfa4bfb426f7e660c61168f3ed922dcf26d7711e083faa841d7e70d44a5f090a9a6a67eff5ad",
+              "3": "a26ce49a7a289e68eaa43a0c4c33b2055be159f044eabf7d0282d1d9f6a0109956d7fb7b6d08c9f0f2ac6a42d2c68a47",
+              "5": "8ae7a7fc631dc8566d0db1ce0258ae9b025ac5535bc7206db92775459ba291789ae6c40687763918c6c297b636b3991c"
             },
-            "signature": "ad43311219bedc399454e54cc2c39e445fe69191163dcb15392d38eede9ef42f188575644d2cf634f819ecf2d152084935b7b960fef7cfad8de3e5a209b6970b"
+            "signature": "afeabe7b0948eaa432e7b664790338431399299f284c51bfb910706511c077e7bb6a19e4a18a537f3f930b89ba1cb7fd46413107fbb24633b127a2858729fe02"
           },
-          "created": "2025-10-25T07:40:54.678228Z",
+          "created": "2025-10-26T07:28:08.545294Z",
           "proofValue": [
             {
-              "proof": "b3d8c309698ca4ca49133b058c5e108cebe97c400073d3a037e644981584d9b174cc2f992d5dc050d536ac71e20ce1398e7a8529b30f252fe0463cc46531cedcadf0a4436fafa41f18305dc124bfcac7b5b6252ebe3c948ec965870f1fc0d3e5a3cdfd4e8a6c3cac7894361fb06d05b3525a3aa96423c0b5ff107412ad53f5838aeeb992bfa46e5d5e564cf8ee3a35b890cce92fdb7631ae6adf0ab6df26efd6894570fc575a30f4d0112464b26b563321ae64f9f5055dd92e3076d20871c6f257745d9feb223f25872c990627bae6224d6427be6e57e6872d0cf9910c410803518acd3345cb30ae3835067110dd085880f241f39872f5b479c89823c0d4487f56a91d5116f38d4bcfc840023c25f73dbca1f10d2d0e0967b1795b245fe6e35b00000007910aaa4fc2f2496f7ebcec8c0e74e58888660a92a77fda1897310b8624edd773b84cfb43b4df50ecf308b38a09d61fe7aa5cfb791047ff6e913ed4b95f12cbb4a29853020ae381e59f7febd654a8d48b168781d9898f7b4179e757fcbe7089b68785970923045ca9ff89df45d88ab2cc3517d90f268b00c2b9815f3dc01acb164b0835e1ca878a373769d9c05d243fbcb8e88238e8672b4784f6a4247de9e9dfa3abef46312a78fcd19b093e7820115c3116dabb19a203ef0a8057c9daa94a4b90ab74d4b7629615eb92124b09b2560db4014f7c4ae2f308f4d10b85f6feefa41bd0eed8ea60d70d296211c461b9fceda803e494319b69e4433bf610c1d190561e72b595d7918d7c03a41f4ea6391a611610fe7a788f9726c18c3e49f16e4fb6802ba5164c2ac927d1ed67e3d6c50db4ddf8e73c5496830cecf9d647b6436e272fe559d79892961610d0830befc49fa9b11176ce37057e2a490d96bbc242ef65cf9c22c2d25aaba0356926119eef7b0005660a0248f5a954b3a3b6f942df520d94c84ae59b76aca3e264ccb565a1426e71aa18816fc7cdcdee5c75560c1640ac926890f8739ec11895e29996befe38a38519264a65f4b1fb72e8a785278e7b638000f693feb2a5726ae86c9c7211b63cf570c6a3b3b037011d264c9729b0f094b976e92619615febb741969840f326c6fa021ddf602be20c1d9abc772c0cebf9b1542c6c327145a348ec0d87d77003c3b9b405be1b786eb2e66bfd58c2063a3ab1144dbee7cfce83a648a63a64baf8be10553e54aa538bca2793006914bdb55f89dbd3634d6a383942483c61001edc1ba1da554b68e537321caeaee59b6919cdef0bca9b0b0b37d256587302bf8ee6588082c7b2eb4a337912c0c2c7f2935b848586e5fe58581c2e18f5d01c4faf85e3ff5945f65203a08c8c85303ab0671e8b51fb4450ecd7de5c4d7b4864fcf53570708849097ad214179988d7f9b855ef413dd4c0c5b9037bc12b4e8382fbf4d4bd1820e40f8a0e60b16d9d70d8d20bdf72",
+              "proof": "b88f478605769d1548cd2f2793cb28d32a8551cd0f5c182c655af40d1c9b59bd28ade9776b754249ae8f6c8aed632e8698b0a5c804d746ea6037eec874fd1154193c178c7ccee512bf14e9cc314950457320c7bcee75752990f2bc66b684e75fb1c80e7cd89e01c9242efcde33c53bb6a2c8d7334175b5cbcb069c47636000b351ad942f5e90a697976a7908583994ab98b595a4ab388c3b02447a9ea1df40fbf48621a73ef112e040925774a24aa1d888459649ac6ce9e6bacda26dc4a5a64025d740ccc27bc460ea8de1820cceb035e868c7414fe3c4bf27f5af5e5284bfa61d47841aec9d28373f5f6ce6f3c81910ee3a987433e901f77c23a65fb5332f9b394562e04c260f829b267f71116ad28f8c6e5a3ffc302137475c58266626928e00000007885033420a7f64541eb4dc8d89aa32daa1f245c1b6aa8c643d313cceed84b029142a5ab21a5007799d9152cc6cce7f5a80c4c2b32c55c0bf57c71fa87b2473c1d0f96d7f7942bfc0784ccc1bc0447a7aa96953366ded0f014314db95fd68ebd7a511c9c488f8e29c29c5147404c1be6f69d3b233d64586b3d46fde08d88920e09ab3e88f187e6a5b51f9e4d4956179c7ab38236b3d59648be8c44d06e006ea05290f8b5f9ebbf537f127637e4bab81d044511233c4398834019b68d529808cdca44a919b78ccc29bec5a6a06004a99727b11d19df7105988448ff7c96aef84b2aa4a1b033f563ef99da03ec7a11d51508dc8d869d1c070af1b365dd6fec9c2bd0c3d7bfb8e24044a27fb6df4a9cc3f35ff4280bfe5df1c9d7d1d698f2459ed90b696f2d7af8f2ef247bbb410ecad10c7fd8be6e5b5e0350f7341ab783fc706ee3c93cda8f5ba83456d8bfc6feb3eeda2b042361e9a223e41e69d2ab2988b491b5e2527f78e19c843b27e70157318db0659a1fceb913173432f89833cd6051f02b533a08fee16185a9f4d0b83ed49bd9340eba77fb4d9646762d4c0ae96ef41bdcfd4e1b05bbf943f47190ff55e9d355f862fd4dfb0448960623bfc0c8550adf6093787b5ebf41456224240c4cc51ab65e3566df9d65e3ec6e665daa1855c0d91b70e8f23ff3c5b74142dad5137b88e91cc0f8f94ae82a746b709ff00352abbceb304788a00774e1a5029b5ae88c4f1b5849e30999a85d4820ec5bb5bb5ea46bc2b263d9e4d73c28425fdc289494f17dc9ba046ad14d8fe698a888253386858daabd0c4820cc39b7865063bb71979a048b374f2744ed863f479805bd66d44720b139a84fa7dee3808f44a242867dd320b8aa4248f900e9a83ccc4ce2e4608085ee57650451259f62234d6947c331fe480e43ca438ee6dd47bc446ec5ec19ff1fd5ddce700f7da870aa0f8bb12b7a6dc1780f73a312e1142888138d7f18a0461de1287763fc8be3fa3d43d8a6d3d6050efb0049e43dfdb1c7a90ed716656a8dbf1",
               "type": "AttributeInRange"
+            },
+            {
+              "proof": "ab55aaaf3ab5a759d8c71d13e7898310b3784fc4c6c8ada9ec909eccd38b9d40b73043428b4ae65be93c0442c3e3ba0ba0d68e0ab83af8ce6e5c2ea172ee0bd80d67f1620b92e86dacffd5b898130897d65a9a9355ce2b9ea51e668bec09945eb62d5cc55b18bad8ca41bf27e6173b23115d7ede12ddf3ce08ec19bb203216924cda455aba8b8a9c3c3a42d15b79daf4b57c9023549e8fe2269d0703c013164d27354506bfaf1da4000a50dded7e98a27259bc3f38526f20d2e182fd40da91ca3f4a2c2e715fcd911e091056d896246a8ceb3ff9649ffad269e9402e5005f3725e84739f2f3c0ce432e3a46e5129472b11aed524e08b81190a52994e75fc58191fd63592c02ca020815b6f2bd33b25366bce92c99a68f1abbc2c16d51140a8c700000002b0c94b4d02db076510bdaeb2aea3e09a0337d12137528a66e01e83781f6b35d2280e50bf07c10afcfecc3b9d50d78c9d8185c6dcd6db2eb3dfc700e3cb41c64f000f1e8e61afe55b0e875d8177c61c1a54790816d27ffb2e66ee04411a9cd9b7983b8e6725b5b175ba515705feb34911276763a96fade764d08097f9ba1cd2b98c188a2e39ba7074b32a4e3769e056d3846fbb3a62c306621945698bb4b7035e58539e99a2800a5a0a83d6fbff7a1694a2e8b67e3de34a3c1bc7000187b45c7563e5909ee8b29607c81890fc24fae6bc9bf5f0b01e41144c00b6fd99d023b7d618bd8bb7aa3a4259fe6f8679c5682d402db30a9572febc8c9bee97aa7ff57335",
+              "type": "AttributeInSet"
+            },
+            {
+              "proof": "ad019a1114ca11054347f80e5a0cb0433761a285456e5412a0a8a636681a0084b507a9e47ec7f45a94562d323085f1fc97349b1aaf71bff9f6463d7dbde0ee1a22d67ad94cd833fbed098db3ad73626a229c2a1fc91bd3a49e965021a68f16cca11835c2e3b6dc6632c3b0db3c154f277ae56803cbbacce5acd16eedec189b2ffa9e824f8062489059c642cb594010f6a7c42f756bf75fa40d47bb62654087e692089789c2d17bb6acf084ab46794819939554a0cd50f2d433483eaadcb1bbd14cd7eec6b29f86c6bcc704ea110d20b26cf9c44d89c974da31d5fafff9e46407016437111abf301253e9ed3a585740a5419db13baadaec7718223395865c8fb518cba9eb52509ab099476b3945eeb5cc5bb77adb6ff375760ffdaedc01afae8a00000002b26f1d85c9a5d6da3e05bcf2a8e81ea4623bd7f1d70e8d36241ae706713ee48245048c90864a22c62d3a0921eda2b70084e2f61260773e2e6cbab5022c868f1a228b652e1e19ad11e42e260e05f08b708423dcd0035bbeeb491a51d9a5bebb50849db1248de073213212e4ebfa7c2270f7c1452b3f8aae39d805e1bdac47039dbac66a734b117ea794dba4f51ec161898116e7a41cd043b4cd04d4f1f500fda04b12820346972653002bb1141bfcd1f4b62820e6cb17c324d1b9509feccd099a5ea3463a889e4c2eb865306c11937ee12c6d5c519e90587052e042ab20b549a6379654d209ae2f61ba657b5b94eb1cf90dfe7e661c770983e1f02741bdff7b25",
+              "type": "AttributeNotInSet"
+            },
+            {
+              "attribute": "testvalue",
+              "proof": "4ea7503e43982ac82dc8d7ed87308572b63aef46167d8566a7e8efcdd572e4b22799c2303e27e3f1a83ee0f9d9df708af9a9029c41e285d2589256f2f55446ce",
+              "type": "RevealAttribute"
             }
           ],
           "type": "ConcordiumZKProofV3"
         },
         "statement": [
           {
-            "attributeTag": "17",
+            "attributeTag": "3",
             "lower": 80,
             "type": "AttributeInRange",
             "upper": 1237
+          },
+          {
+            "attributeTag": "2",
+            "set": [
+              "aa",
+              "ff",
+              "zz"
+            ],
+            "type": "AttributeInSet"
+          },
+          {
+            "attributeTag": "1",
+            "set": [
+              "aa",
+              "ff",
+              "zz"
+            ],
+            "type": "AttributeNotInSet"
+          },
+          {
+            "attributeTag": "5",
+            "type": "RevealAttribute"
           }
         ]
       },
@@ -1617,5 +1780,5 @@ mod tests {
             .expect("verify");
     }
 
-    // todo ar test stability all types of proofs
+
 }
