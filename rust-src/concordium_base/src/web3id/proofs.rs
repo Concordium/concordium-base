@@ -510,26 +510,26 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use std::marker::PhantomData;
 
-    struct AccountCredentialsFixture {
+    struct AccountCredentialsFixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> {
         commitment_inputs:
-            OwnedCommitmentInputs<IpPairing, ArCurve, Web3IdAttribute, ed25519_dalek::SigningKey>,
+            OwnedCommitmentInputs<IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>,
         credential_inputs: CredentialsInputs<IpPairing, ArCurve>,
         cred_id: CredentialRegistrationID,
     }
 
-    impl AccountCredentialsFixture {
+    impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> AccountCredentialsFixture<AttributeType> {
         fn commitment_inputs(
             &self,
-        ) -> CommitmentInputs<'_, IpPairing, ArCurve, Web3IdAttribute, ed25519_dalek::SigningKey>
+        ) -> CommitmentInputs<'_, IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>
         {
             CommitmentInputs::from(&self.commitment_inputs)
         }
     }
 
-    fn account_credentials_fixture(
-        attrs: BTreeMap<AttributeTag, Web3IdAttribute>,
+    fn account_credentials_fixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(
+        attrs: BTreeMap<AttributeTag, AttributeType>,
         global_context: &GlobalContext<ArCurve>,
-    ) -> AccountCredentialsFixture {
+    ) -> AccountCredentialsFixture<AttributeType> {
         let cred_id_exp = ArCurve::generate_scalar(&mut seed0());
         let cred_id = CredentialRegistrationID::from_exponent(&global_context, cred_id_exp);
 
@@ -1250,6 +1250,71 @@ mod tests {
         }];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
+            challenge,
+            credential_statements,
+        };
+
+        let proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [acc_cred_fixture.commitment_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        let public = vec![acc_cred_fixture.credential_inputs];
+        assert_eq!(
+            proof
+                .verify(&global_context, public.iter())
+                .expect("verify"),
+            request,
+            "verify request"
+        );
+    }
+
+    /// Test prove and verify presentation for account credentials.
+    #[test]
+    fn test_completeness_account_attribute_kind() {
+        let mut rng = rand::thread_rng();
+        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let acc_cred_fixture = account_credentials_fixture(
+            [
+                (3.into(), AttributeKind::from(137)),
+                (1.into(), AttributeKind("bb".into())),
+            ]
+            .into_iter()
+            .collect(),
+            &global_context,
+        );
+
+        let credential_statements = vec![CredentialStatement::Account {
+            network: Network::Testnet,
+            cred_id: acc_cred_fixture.cred_id,
+            statement: vec![
+                // AtomicStatement::AttributeInRange {
+                //     statement: AttributeInRangeStatement {
+                //         attribute_tag: 3.into(),
+                //         lower: AttributeKind::from(80),
+                //         upper: AttributeKind::from(1237),
+                //         _phantom: PhantomData,
+                //     },
+                // },
+                AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: 1.into(),
+                        lower: AttributeKind("aa".into()),
+                        upper: AttributeKind("cca".into()),
+                        _phantom: PhantomData,
+                    },
+                },
+
+            ],
+        }];
+
+        let request = Request::<ArCurve, AttributeKind> {
             challenge,
             credential_statements,
         };
