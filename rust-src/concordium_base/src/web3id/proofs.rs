@@ -881,7 +881,7 @@ mod tests {
         >,
     ) {
         let CommitmentInputs::Web3Issuer { signer, .. } = cmm_input else {
-            panic!("should be web3 proof");
+            panic!("should be web3 inputs");
         };
         let to_sign = linking_proof_message_to_sign(challenge, &proof.verifiable_credential);
         let signature = signer.sign(&to_sign);
@@ -1031,7 +1031,7 @@ mod tests {
             .prove(&global_context, [web3_cred.commitment_inputs()].into_iter())
             .expect("prove");
 
-        // change statement to be invalid
+        // remove linking proof
         let CredentialProof::Web3Id { proofs, .. } = &mut proof.verifiable_credential[0] else {
             panic!("should be web3 proof");
         };
@@ -1043,6 +1043,21 @@ mod tests {
             .verify(&global_context, public.iter())
             .expect_err("verify");
         assert_eq!(err, PresentationVerificationError::MissingLinkingProof);
+
+        // add invalid linking proof
+        let CredentialProof::Web3Id { proofs, .. } = &mut proof.verifiable_credential[0] else {
+            panic!("should be web3 proof");
+        };
+        let CommitmentInputs::Web3Issuer { signer, .. } = CommitmentInputs::from(&web3_cred.commitment_inputs) else {
+            panic!("should be web3 inputs");
+        };
+        let signature = signer.sign(&[0, 1, 2]);
+        proof.linking_proof.proof_value.push(WeakLinkingProof { signature });
+
+        let err = proof
+            .verify(&global_context, public.iter())
+            .expect_err("verify");
+        assert_eq!(err, PresentationVerificationError::InvalidLinkinProof);
     }
 
     /// Test that constructing proofs for a mixed (both web3 and account credentials
@@ -1405,7 +1420,6 @@ mod tests {
         assert_eq!(err, PresentationVerificationError::InvalidCredential);
     }
 
-    // todo ar test web3 soundness, signature + linking proof
 
     // todo ar test new stuff
 
