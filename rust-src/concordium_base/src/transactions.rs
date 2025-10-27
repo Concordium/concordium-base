@@ -1967,7 +1967,7 @@ pub enum BlockItem<PayloadType> {
     ),
     UpdateInstruction(updates::UpdateInstruction),
     // Account transactions v1 are messages which are signed and paid for by
-    // either the sender account or a sponsor account..
+    // either the sender account or a sponsor account.
     AccountTransactionV1(AccountTransactionV1<PayloadType>),
     // A raw block item encoded as a byte string.
     RawBlockItem(Vec<u8>),
@@ -3763,7 +3763,7 @@ mod tests {
             })
             .collect::<BTreeMap<_, _>>();
         let mut access_structure = AccountAccessStructure {
-            threshold: threshold,
+            threshold,
             keys: pub_keys,
         };
         assert!(
