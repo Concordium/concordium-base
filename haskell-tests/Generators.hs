@@ -957,13 +957,13 @@ genTransactionSignature = do
 genTransactionSignaturesV1 :: Gen TransactionSignaturesV1
 genTransactionSignaturesV1 = do
     tsv1Sender <- genTransactionSignature
-    tsv1Sponsor <- frequency [(1, Just <$> genTransactionSignature), (2, return Nothing)]
+    tsv1Sponsor <- oneof [Just <$> genTransactionSignature, return Nothing]
     return TransactionSignaturesV1{..}
 
 genTransactionHeaderV1 :: Gen TransactionHeaderV1
 genTransactionHeaderV1 = do
     thv1HeaderV0 <- genTransactionHeader
-    thv1Sponsor <- frequency [(1, Just <$> genAccountAddress), (2, return Nothing)]
+    thv1Sponsor <- oneof [Just <$> genAccountAddress, return Nothing]
     return TransactionHeaderV1{..}
 
 genAccountTransactionV1 :: Gen AccountTransactionV1

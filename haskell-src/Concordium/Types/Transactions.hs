@@ -6,6 +6,7 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -43,15 +44,15 @@ import Data.Bits
 --  * @SPEC: <$DOCS/Transactions#transaction-header>
 data TransactionHeader = TransactionHeader
     { -- | Sender account.
-      thSender :: AccountAddress,
+      thSender :: !AccountAddress,
       -- | Account nonce.
       thNonce :: !Nonce,
       -- | Amount of energy dedicated for the execution of this transaction.
       thEnergyAmount :: !Energy,
       -- | Size of the payload in bytes.
-      thPayloadSize :: PayloadSize,
+      thPayloadSize :: !PayloadSize,
       -- | Absolute expiration time after which transaction will not be executed
-      thExpiry :: TransactionExpiryTime
+      thExpiry :: !TransactionExpiryTime
     }
     deriving (Show, Eq)
 
@@ -198,7 +199,7 @@ data TransactionSignaturesV1 = TransactionSignaturesV1
       tsv1Sender :: !TransactionSignature,
       -- | The signatures for the sponsor account. These must be present if a sponsor
       -- is specified for the transaction in the corresponding transaction header.
-      tsv1Sponsor :: Maybe TransactionSignature
+      tsv1Sponsor :: !(Maybe TransactionSignature)
     }
     deriving (Show, Eq)
 
@@ -214,7 +215,7 @@ instance S.Serialize TransactionSignaturesV1 where
 -- | Data common to all v1 transaction types.
 data TransactionHeaderV1 = TransactionHeaderV1
     { -- | V0 transaction header
-      thv1HeaderV0 :: TransactionHeader,
+      thv1HeaderV0 :: !TransactionHeader,
       -- | An optional sponsor account which pays the transaction fees for the
       --  transaction execution
       thv1Sponsor :: !(Maybe AccountAddress)
@@ -234,7 +235,7 @@ instance S.Serialize TransactionHeaderV1 where
     get = S.label "transaction header v1" $ do
         bitmap <- S.label "bitmap" S.getWord16be
         -- check that only the supported fields in the bitmap are set
-        unless (bitmap .&. 0b1111111111111110 == 0) $
+        unless (bitmap .&. 0b1111_1111_1111_1110 == 0) $
             fail "Unsupported bitmap fields"
         thv1HeaderV0 <- S.label "v0 header" S.get
         thv1Sponsor <- maybeGet bitmap 0 "sponsor"
