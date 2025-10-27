@@ -16,30 +16,13 @@ import qualified Concordium.Genesis.Data.BaseV1 as BaseV1
 import Concordium.Types
 import Concordium.Types.Updates
 
--- | Parameters data type for the 'P9' to 'P10' protocol update.
---  This is provided as a parameter to the protocol update chain update instruction.
-data ProtocolUpdateData = ProtocolUpdateData
-    { -- | Access structure defining the keys and threshold for CreatePLT chain update.
-      updateCreatePLTAccessStructure :: !AccessStructure
-    }
-    deriving (Eq, Show)
-
-instance Serialize ProtocolUpdateData where
-    put ProtocolUpdateData{..} = put updateCreatePLTAccessStructure
-    get = do
-        updateCreatePLTAccessStructure <- get
-        return ProtocolUpdateData{..}
-
 -- | Parameters used to migrate state from 'P9' to 'P10'.
 data StateMigrationData = StateMigrationData
     deriving (Eq, Show)
 
 instance Serialize StateMigrationData where
-    put StateMigrationData{..} = do
-        put migrationProtocolUpdateData
-    get = do
-        migrationProtocolUpdateData <- get
-        return StateMigrationData{..}
+    put StateMigrationData = return ()
+    get = return StateMigrationData
 
 -- | Initial genesis data for the P10 protocol version.
 data GenesisDataP10 = GDP10Initial
