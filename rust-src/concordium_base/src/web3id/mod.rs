@@ -1587,11 +1587,15 @@ mod tests {
         values.insert("0".into(), Web3IdAttribute::Numeric(1234));
         values.insert(
             "3".into(),
-            Web3IdAttribute::String(AttributeKind("Hello".into())),
+            Web3IdAttribute::String(
+                AttributeKind::try_new("Hello".into()).expect("attribute kind"),
+            ),
         );
         values.insert(
             "17".into(),
-            Web3IdAttribute::String(AttributeKind("World".into())),
+            Web3IdAttribute::String(
+                AttributeKind::try_new("World".into()).expect("attribute kind"),
+            ),
         );
 
         let cred = Web3IdCredential::<ArCurve, Web3IdAttribute> {

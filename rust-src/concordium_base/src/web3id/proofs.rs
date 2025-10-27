@@ -433,9 +433,9 @@ mod tests {
                         statement: AttributeInSetStatement {
                             attribute_tag: "23".into(),
                             set: [
-                                Web3IdAttribute::String(AttributeKind("ff".into())),
-                                Web3IdAttribute::String(AttributeKind("aa".into())),
-                                Web3IdAttribute::String(AttributeKind("zz".into())),
+                                Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                                Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                             ]
                             .into_iter()
                             .collect(),
@@ -468,9 +468,9 @@ mod tests {
                         statement: AttributeNotInSetStatement {
                             attribute_tag: 1u8.to_string(),
                             set: [
-                                Web3IdAttribute::String(AttributeKind("ff".into())),
-                                Web3IdAttribute::String(AttributeKind("aa".into())),
-                                Web3IdAttribute::String(AttributeKind("zz".into())),
+                                Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                                Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                             ]
                             .into_iter()
                             .collect(),
@@ -502,7 +502,7 @@ mod tests {
         values_1.insert(17.to_string(), Web3IdAttribute::Numeric(137));
         values_1.insert(
             23.to_string(),
-            Web3IdAttribute::String(AttributeKind("ff".into())),
+            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
         );
         let mut randomness_1 = BTreeMap::new();
         randomness_1.insert(
@@ -534,7 +534,7 @@ mod tests {
         values_2.insert(0.to_string(), Web3IdAttribute::Numeric(137));
         values_2.insert(
             1.to_string(),
-            Web3IdAttribute::String(AttributeKind("xkcd".into())),
+            Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
         );
         values_2.insert(
             2.to_string(),
@@ -642,9 +642,9 @@ mod tests {
                         statement: AttributeInSetStatement {
                             attribute_tag: 23u8.to_string(),
                             set: [
-                                Web3IdAttribute::String(AttributeKind("ff".into())),
-                                Web3IdAttribute::String(AttributeKind("aa".into())),
-                                Web3IdAttribute::String(AttributeKind("zz".into())),
+                                Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                                Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                             ]
                             .into_iter()
                             .collect(),
@@ -669,9 +669,9 @@ mod tests {
                         statement: AttributeNotInSetStatement {
                             attribute_tag: 1u8.into(),
                             set: [
-                                Web3IdAttribute::String(AttributeKind("ff".into())),
-                                Web3IdAttribute::String(AttributeKind("aa".into())),
-                                Web3IdAttribute::String(AttributeKind("zz".into())),
+                                Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                                Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                             ]
                             .into_iter()
                             .collect(),
@@ -690,7 +690,7 @@ mod tests {
         values_1.insert(17.to_string(), Web3IdAttribute::Numeric(137));
         values_1.insert(
             23.to_string(),
-            Web3IdAttribute::String(AttributeKind("ff".into())),
+            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
         );
         let mut randomness_1 = BTreeMap::new();
         randomness_1.insert(
@@ -721,7 +721,7 @@ mod tests {
         values_2.insert(3.into(), Web3IdAttribute::Numeric(137));
         values_2.insert(
             1.into(),
-            Web3IdAttribute::String(AttributeKind("xkcd".into())),
+            Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
         );
         let mut randomness_2 = BTreeMap::new();
         for tag in values_2.keys() {
@@ -848,9 +848,9 @@ mod tests {
                     statement: AttributeNotInSetStatement {
                         attribute_tag: 1u8.into(),
                         set: [
-                            Web3IdAttribute::String(AttributeKind("ff".into())),
-                            Web3IdAttribute::String(AttributeKind("aa".into())),
-                            Web3IdAttribute::String(AttributeKind("zz".into())),
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                         ]
                         .into_iter()
                         .collect(),
@@ -869,7 +869,7 @@ mod tests {
         values.insert(3.into(), Web3IdAttribute::Numeric(137));
         values.insert(
             1.into(),
-            Web3IdAttribute::String(AttributeKind("xkcd".into())),
+            Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
         );
         let mut randomness = BTreeMap::new();
         for tag in values.keys() {
