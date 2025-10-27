@@ -675,6 +675,10 @@ mod tests {
                     2.to_string(),
                     Web3IdAttribute::Timestamp(Timestamp::from_timestamp_millis(min_timestamp * 2)),
                 ),
+                (
+                    5.to_string(),
+                    Web3IdAttribute::String(AttributeKind("testvalue".into())),
+                ),
             ]
             .into_iter()
             .collect(),
@@ -715,6 +719,11 @@ mod tests {
                             _phantom: PhantomData,
                         },
                     },
+                            AtomicStatement::RevealAttribute {
+                                statement: RevealAttributeStatement {
+                                    attribute_tag: "5".into(),
+                                },
+                            },
                 ],
             },
             CredentialStatement::Web3Id {
@@ -1215,6 +1224,14 @@ mod tests {
                     1.into(),
                     Web3IdAttribute::String(AttributeKind("xkcd".into())),
                 ),
+                (
+                    2.into(),
+                    Web3IdAttribute::String(AttributeKind("aa".into())),
+                ),
+                (
+                    5.into(),
+                    Web3IdAttribute::String(AttributeKind("testvalue".into())),
+                ),
             ]
             .into_iter()
             .collect(),
@@ -1225,27 +1242,46 @@ mod tests {
             network: Network::Testnet,
             cred_id: acc_cred_fixture.cred_id,
             statement: vec![
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: 3.into(),
-                        lower: Web3IdAttribute::Numeric(80),
-                        upper: Web3IdAttribute::Numeric(1237),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeNotInSet {
-                    statement: AttributeNotInSetStatement {
-                        attribute_tag: 1u8.into(),
-                        set: [
-                            Web3IdAttribute::String(AttributeKind("ff".into())),
-                            Web3IdAttribute::String(AttributeKind("aa".into())),
-                            Web3IdAttribute::String(AttributeKind("zz".into())),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        _phantom: PhantomData,
-                    },
-                },
+                        AtomicStatement::AttributeInRange {
+                            statement: AttributeInRangeStatement {
+                                attribute_tag: 3.into(),
+                                lower: Web3IdAttribute::Numeric(80),
+                                upper: Web3IdAttribute::Numeric(1237),
+                                _phantom: PhantomData,
+                            },
+                        },
+                        AtomicStatement::AttributeInSet {
+                            statement: AttributeInSetStatement {
+                                attribute_tag: 2.into(),
+                                set: [
+                                    Web3IdAttribute::String(AttributeKind("ff".into())),
+                                    Web3IdAttribute::String(AttributeKind("aa".into())),
+                                    Web3IdAttribute::String(AttributeKind("zz".into())),
+                                ]
+                                .into_iter()
+                                .collect(),
+                                _phantom: PhantomData,
+                            },
+                        },
+                        AtomicStatement::AttributeNotInSet {
+                            statement: AttributeNotInSetStatement {
+                                attribute_tag: 1.into(),
+                                set: [
+                                    Web3IdAttribute::String(AttributeKind("ff".into())),
+                                    Web3IdAttribute::String(AttributeKind("aa".into())),
+                                    Web3IdAttribute::String(AttributeKind("zz".into())),
+                                ]
+                                    .into_iter()
+                                    .collect(),
+                                _phantom: PhantomData,
+                            },
+                        },
+                        AtomicStatement::RevealAttribute {
+                            statement: RevealAttributeStatement {
+                                attribute_tag: 5.into(),
+                            },
+                        },
+
             ],
         }];
 
