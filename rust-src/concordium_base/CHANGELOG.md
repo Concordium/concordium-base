@@ -4,6 +4,15 @@
 - Removed `ChainParameterVersionX` types and the `MintDistributionFamily`, `GASRewardsFamily` and `AuthorizationsFamily` traits and their implementations.
 - Revised `UpdateSigner` implementations not to use references, since the one method (`sign_update_hash`) already takes a reference (`&self`).
 - Made `find_authorized_keys` public for easier re-use.
+- Added `Eq` and `PartialEq` instances for
+  - `UpdateKeysThreshold`
+  - `InclusiveRange<T>`
+  - `LeverageFactor`
+  - `MintRate`
+  - `CapitalBound`
+  - `Ratio`
+  - `HigherLevelAccessStructure<Kind>`
+  - `AccessStructure`
 
 ## 8.0.0-alpha.3 (2025-10-08)
 
