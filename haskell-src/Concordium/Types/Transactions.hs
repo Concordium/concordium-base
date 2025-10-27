@@ -168,7 +168,7 @@ makeAccountTransaction atrSignature atrHeader atrPayload = AccountTransaction{..
   where
     atrSignHash = transactionSignHashFromHeaderPayload atrHeader atrPayload
 
--- | @SPEC: <$DOCS/Transactions#serialization-format-v1-transactions>
+-- | @SPEC: <$DOCS/Transactions#serialization-format-transactions>
 instance S.Serialize AccountTransaction where
     put AccountTransaction{..} =
         S.put atrSignature
@@ -192,8 +192,6 @@ instance HashableTo TransactionSignHashV0 AccountTransaction where
     getHash = atrSignHash
 
 -- | The signatures for an 'AccountTransactionV1'.
---
---  * @SPEC: <$DOCS/Transactions#transaction-signatures-v1>
 data TransactionSignaturesV1 = TransactionSignaturesV1
     { -- | The signatures for the sender account
       tsv1Sender :: !TransactionSignature,
@@ -205,56 +203,38 @@ data TransactionSignaturesV1 = TransactionSignaturesV1
 
 instance S.Serialize TransactionSignaturesV1 where
     put TransactionSignaturesV1{..} =
-        S.put tsv1Sender <> S.put tsv1Sponsor
+        S.put tsv1Sender <> putMaybe S.put tsv1Sponsor
 
     get = S.label "transaction signatures v1" $ do
         tsv1Sender <- S.label "sender" S.get
-        tsv1Sponsor <- S.label "sponsor" S.get
+        tsv1Sponsor <- S.label "sponsor" (getMaybe S.get)
         return $! TransactionSignaturesV1{..}
 
 -- | Data common to all v1 transaction types.
---
---  * @SPEC: <$DOCS/Transactions#transaction-header-v1>
 data TransactionHeaderV1 = TransactionHeaderV1
-    { -- | Sender account.
-      thv1Sender :: AccountAddress,
-      -- | Account nonce.
-      thv1Nonce :: !Nonce,
-      -- | Amount of energy dedicated for the execution of this transaction.
-      thv1EnergyAmount :: !Energy,
-      -- | Size of the payload in bytes.
-      thv1PayloadSize :: PayloadSize,
-      -- | Absolute expiration time after which transaction will not be executed
-      thv1Expiry :: TransactionExpiryTime,
+    { -- | V0 transaction header
+      thv1HeaderV0 :: TransactionHeader,
       -- | An optional sponsor account which pays the transaction fees for the
-      --  transtaction execution
-      thv1Sponsor :: Maybe AccountAddress
+      --  transaction execution
+      thv1Sponsor :: !(Maybe AccountAddress)
     }
     deriving (Show, Eq)
 
-toTransactionHeader :: TransactionHeaderV1 -> TransactionHeader
-toTransactionHeader TransactionHeaderV1{..} =
-    TransactionHeader{thSender = thv1Sender, thNonce = thv1Nonce, thEnergyAmount = thv1EnergyAmount, thPayloadSize = thv1PayloadSize, thExpiry = thv1Expiry}
-
 instance S.Serialize TransactionHeaderV1 where
-    put TransactionHeaderV1{..} =
-        let bitmap = S.putWord16be $ bitFor 0 thv1Sponsor
-            v0header = S.put thv1Sender <> S.put thv1Nonce <> S.put thv1EnergyAmount <> S.put thv1PayloadSize <> S.put thv1Expiry
-            optionals = maybe mempty S.put thv1Sponsor
-        in  bitmap <> v0header <> optionals
+    put TransactionHeaderV1{..} = do
+        S.putWord16be $ bitFor 0 thv1Sponsor
+        S.put thv1HeaderV0
+        mapM_ S.put thv1Sponsor
       where
-        -- \| Set the given bit if the value is a 'Just'.
         bitFor :: (Bits b) => Int -> Maybe a -> b
         bitFor _ Nothing = zeroBits
         bitFor i (Just _) = bit i
 
     get = S.label "transaction header v1" $ do
         bitmap <- S.label "bitmap" S.getWord16be
-        thv1Sender <- S.label "sender" S.get
-        thv1Nonce <- S.label "nonce" S.get
-        thv1EnergyAmount <- S.label "energy amount" S.get
-        thv1PayloadSize <- S.label "payload size" S.get
-        thv1Expiry <- S.label "expiry" S.get
+        unless (bitmap .&. 0b0000000000000001 == bitmap) $
+            fail "Unsupported bitmap fields"
+        thv1HeaderV0 <- S.label "v0 header" S.get
         thv1Sponsor <- maybeGet bitmap 0 "sponsor"
         return $! TransactionHeaderV1{..}
       where
@@ -280,10 +260,13 @@ data AccountTransactionV1 = AccountTransactionV1
       -- | Serialized payload
       atrv1Payload :: !EncodedPayload,
       -- | Hash used for signing
-      atrv1SignHash :: !TransactionSignHashV0
+      atrv1SignHash :: !TransactionSignHash
     }
     deriving (Eq, Show)
 
+-- | A prefix used for the hash signed for v1 account transactions. This is used to distinguish
+-- signatures produced for any v1 account transaction from those produced for any v0 transaction,
+-- as the first 32 bytes of those will always be the sender account address.
 v1TransactionSignHashPrefix :: BS.ByteString
 v1TransactionSignHashPrefix = BS.pack [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
 
@@ -295,12 +278,15 @@ makeAccountTransactionV1 atrv1Signature atrv1Header atrv1Payload = AccountTransa
     atrv1SignHash = transactionV1SignHashFromHeaderPayload atrv1Header atrv1Payload
 
 -- | Construct a 'TransactionSignHash' from a 'TransactionHeaderV1' and 'EncodedPayload'.
-transactionV1SignHashFromHeaderPayload :: TransactionHeaderV1 -> EncodedPayload -> TransactionSignHashV0
-transactionV1SignHashFromHeaderPayload atrv1Header atrv1Payload = transactionSignHashFromBytes $ v1TransactionSignHashPrefix <> bodyBytes
+transactionV1SignHashFromHeaderPayload :: TransactionHeaderV1 -> EncodedPayload -> TransactionSignHash
+transactionV1SignHashFromHeaderPayload atrv1Header atrv1Payload =
+    transactionSignHashFromBytes bytes
   where
-    bodyBytes = S.runPut $ S.put atrv1Header <> putEncodedPayload atrv1Payload
+    bytes = S.runPut $ do
+        S.putByteString v1TransactionSignHashPrefix
+        S.put atrv1Header
+        putEncodedPayload atrv1Payload
 
--- | @SPEC: <$DOCS/TransactionsV1#serialization-format-transactions>
 instance S.Serialize AccountTransactionV1 where
     put AccountTransactionV1{..} =
         S.put atrv1Signature
@@ -311,7 +297,7 @@ instance S.Serialize AccountTransactionV1 where
         atrv1Signature <- S.label "signature" S.get
         ((atrv1Header, atrv1Payload), bodyBytes) <- getWithBytes $ do
             atrv1Header <- S.label "header" S.get
-            atrv1Payload <- S.label "payload" $ getEncodedPayload (thv1PayloadSize atrv1Header)
+            atrv1Payload <- S.label "payload" $ getEncodedPayload (thPayloadSize $ thv1HeaderV0 atrv1Header)
             return (atrv1Header, atrv1Payload)
         let atrv1SignHash = transactionSignHashFromBytes $ v1TransactionSignHashPrefix <> bodyBytes
         return $! AccountTransactionV1{..}
@@ -527,7 +513,7 @@ instance HasMessageExpiry UpdateInstruction where
 
 instance HasMessageExpiry AccountTransactionV1 where
     {-# INLINE msgExpiry #-}
-    msgExpiry = thv1Expiry . atrv1Header
+    msgExpiry = thExpiry . thv1HeaderV0 . atrv1Header
 
 instance HasMessageExpiry BareBlockItem where
     msgExpiry (NormalTransaction t) = msgExpiry t
@@ -753,6 +739,8 @@ class TransactionData t where
     transactionSignature :: t -> TransactionSignature
     transactionSignHash :: t -> TransactionSignHash
     transactionHash :: t -> TransactionHash
+    transactionSponsor :: t -> Maybe AccountAddress
+    transactionSponsorSignature :: t -> Maybe TransactionSignature
 
 transactionSize :: Transaction -> Int
 transactionSize = wmdSize
@@ -766,6 +754,8 @@ instance TransactionData AccountTransaction where
     transactionSignature = atrSignature
     transactionSignHash = atrSignHash
     transactionHash = getHash
+    transactionSponsor _ = Nothing
+    transactionSponsorSignature _ = Nothing
 
 instance TransactionData Transaction where
     transactionHeader = atrHeader . wmdData
@@ -776,16 +766,20 @@ instance TransactionData Transaction where
     transactionSignature = atrSignature . wmdData
     transactionSignHash = atrSignHash . wmdData
     transactionHash = wmdHash
+    transactionSponsor _ = Nothing
+    transactionSponsorSignature _ = Nothing
 
 instance TransactionData AccountTransactionV1 where
-    transactionHeader = toTransactionHeader . atrv1Header
-    transactionSender = thv1Sender . atrv1Header
-    transactionNonce = thv1Nonce . atrv1Header
-    transactionGasAmount = thv1EnergyAmount . atrv1Header
+    transactionHeader = thv1HeaderV0 . atrv1Header
+    transactionSender = thSender . thv1HeaderV0 . atrv1Header
+    transactionNonce = thNonce . thv1HeaderV0 . atrv1Header
+    transactionGasAmount = thEnergyAmount . thv1HeaderV0 . atrv1Header
     transactionPayload = atrv1Payload
     transactionSignature = tsv1Sender . atrv1Signature
     transactionSignHash = atrv1SignHash
     transactionHash = getHash
+    transactionSponsor = thv1Sponsor . atrv1Header
+    transactionSponsorSignature = tsv1Sponsor . atrv1Signature
 
 instance TransactionData TransactionV1 where
     transactionHeader = transactionHeader . wmdData
@@ -796,6 +790,8 @@ instance TransactionData TransactionV1 where
     transactionSignature = transactionSignature . wmdData
     transactionSignHash = transactionSignHash . wmdData
     transactionHash = wmdHash
+    transactionSponsor = transactionSponsor . wmdData
+    transactionSponsorSignature = transactionSponsorSignature . wmdData
 
 --------------------------
 

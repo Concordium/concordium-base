@@ -2038,10 +2038,10 @@ instance ToProto Transactions.TransactionHeaderV1 where
     type Output Transactions.TransactionHeaderV1 = Proto.AccountTransactionHeaderV1
 
     toProto Transactions.TransactionHeaderV1{..} = Proto.make $ do
-        ProtoFields.sender .= toProto thv1Sender
-        ProtoFields.sequenceNumber .= toProto thv1Nonce
-        ProtoFields.energyAmount .= toProto thv1EnergyAmount
-        ProtoFields.expiry .= toProto thv1Expiry
+        ProtoFields.sender .= toProto (Transactions.thSender thv1HeaderV0)
+        ProtoFields.sequenceNumber .= toProto (Transactions.thNonce thv1HeaderV0)
+        ProtoFields.energyAmount .= toProto (Transactions.thEnergyAmount thv1HeaderV0)
+        ProtoFields.expiry .= toProto (Transactions.thExpiry thv1HeaderV0)
         ProtoFields.maybe'sponsor .= fmap toProto thv1Sponsor
 
 instance ToProto Transactions.AccountTransactionV1 where
