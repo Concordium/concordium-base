@@ -14,7 +14,6 @@ import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Genesis.Data.Base as Base
 import qualified Concordium.Genesis.Data.BaseV1 as BaseV1
 import Concordium.Types
-import Concordium.Types.Updates
 
 -- | Parameters used to migrate state from 'P9' to 'P10'.
 data StateMigrationData = StateMigrationData
