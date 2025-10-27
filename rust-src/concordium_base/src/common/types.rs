@@ -436,12 +436,24 @@ impl Deserial for TransactionSignature {
 }
 
 /// Transaction signatures v1 structure, to match the one on the Haskell side.
-#[derive(SerdeDeserialize, SerdeSerialize, Clone, PartialEq, Eq, Debug, Serialize)]
+#[derive(SerdeDeserialize, SerdeSerialize, Clone, PartialEq, Eq, Debug)]
 pub struct TransactionSignaturesV1 {
     // The signature of the sender of the transaction.
     pub sender: TransactionSignature,
     // The optional signature of the sponsor of the transaction.
     pub sponsor: Option<TransactionSignature>,
+}
+
+// Custom serial implementation for TransactionSignaturesV1. The serialization
+// of the sponsor field encodes the None case as empty signature map.
+impl Serial for TransactionSignaturesV1 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        self.sender.serial(out);
+        match self.sponsor.as_ref() {
+            Some(s) => s.serial(out),
+            None => 0u8.serial(out),
+        }
+    }
 }
 
 /// Datatype used to indicate transaction expiry.
