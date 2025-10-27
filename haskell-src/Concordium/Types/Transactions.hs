@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -232,7 +233,8 @@ instance S.Serialize TransactionHeaderV1 where
 
     get = S.label "transaction header v1" $ do
         bitmap <- S.label "bitmap" S.getWord16be
-        unless (bitmap .&. 0b0000000000000001 == bitmap) $
+        -- check that only the supported fields in the bitmap are set
+        unless (bitmap .&. 0b1111111111111110 == 0) $
             fail "Unsupported bitmap fields"
         thv1HeaderV0 <- S.label "v0 header" S.get
         thv1Sponsor <- maybeGet bitmap 0 "sponsor"

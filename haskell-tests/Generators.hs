@@ -962,18 +962,14 @@ genTransactionSignaturesV1 = do
 
 genTransactionHeaderV1 :: Gen TransactionHeaderV1
 genTransactionHeaderV1 = do
-    thv1Sender <- genAccountAddress
-    thv1Nonce <- Nonce <$> arbitrary
-    thv1EnergyAmount <- Energy <$> arbitrary
-    thv1PayloadSize <- PayloadSize <$> chooseBoundedIntegral (0, maxPayloadSize SP4)
-    thv1Expiry <- TransactionTime <$> arbitrary
+    thv1HeaderV0 <- genTransactionHeader
     thv1Sponsor <- frequency [(1, Just <$> genAccountAddress), (2, return Nothing)]
     return TransactionHeaderV1{..}
 
 genAccountTransactionV1 :: Gen AccountTransactionV1
 genAccountTransactionV1 = do
     atrv1Header <- genTransactionHeaderV1
-    atrv1Payload <- EncodedPayload <$> genShortByteStringLen (fromIntegral (thv1PayloadSize atrv1Header))
+    atrv1Payload <- EncodedPayload <$> genShortByteStringLen (fromIntegral (thPayloadSize $ thv1HeaderV0 atrv1Header))
     atrv1Signature <- genTransactionSignaturesV1
     return $! makeAccountTransactionV1 atrv1Signature atrv1Header atrv1Payload
 
