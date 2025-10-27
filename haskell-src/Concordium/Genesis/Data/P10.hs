@@ -31,11 +31,7 @@ instance Serialize ProtocolUpdateData where
         return ProtocolUpdateData{..}
 
 -- | Parameters used to migrate state from 'P9' to 'P10'.
-newtype StateMigrationData = StateMigrationData
-    { -- | Data provided by the protocol update to be used
-      --  in the migration.
-      migrationProtocolUpdateData :: ProtocolUpdateData
-    }
+data StateMigrationData = StateMigrationData
     deriving (Eq, Show)
 
 instance Serialize StateMigrationData where
