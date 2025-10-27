@@ -494,7 +494,11 @@ getBareBlockItem spv =
             AccountTransactionKind -> NormalTransaction <$> S.get
             CredentialDeploymentKind -> CredentialDeployment <$> S.get
             UpdateInstructionKind -> ChainUpdate <$> getUpdateInstruction spv
-            AccountTransactionV1Kind -> ExtendedTransaction <$> S.get
+            AccountTransactionV1Kind -> do
+                unless (pv >= 10) $ fail "Extended transactions are not supported prior to p10"
+                ExtendedTransaction <$> S.get
+  where
+    pv = protocolVersionToWord64 (demoteProtocolVersion spv)
 
 -- | Datatypes which have an expiry, which here we set to mean the latest time
 --  the item can be included in a block.

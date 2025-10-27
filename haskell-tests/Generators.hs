@@ -979,6 +979,12 @@ genTransaction = do
     wmdArrivalTime <- TransactionTime <$> arbitrary
     return $ addMetadata NormalTransaction wmdArrivalTime wmdData
 
+genTransactionV1 :: Gen TransactionV1
+genTransactionV1 = do
+    wmdData <- genAccountTransactionV1
+    wmdArrivalTime <- TransactionTime <$> arbitrary
+    return $ addMetadata ExtendedTransaction wmdArrivalTime wmdData
+
 genInitialCredentialDeploymentInformation :: Gen InitialCredentialDeploymentInfo
 genInitialCredentialDeploymentInformation = do
     icdvAccount <- genCredentialPublicKeys
@@ -1009,6 +1015,9 @@ genBlockItem =
         [ normalTransaction <$> genTransaction,
           credentialDeployment <$> genCredentialDeploymentWithMeta
         ]
+
+genBlockItemTransactionExt :: Gen BlockItem
+genBlockItemTransactionExt = extendedTransaction <$> genTransactionV1
 
 genElectionDifficulty :: Gen ElectionDifficulty
 genElectionDifficulty = makeElectionDifficulty <$> chooseBoundedIntegral (0, 99999)
