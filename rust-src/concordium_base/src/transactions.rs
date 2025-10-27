@@ -263,7 +263,7 @@ pub struct TransactionHeader {
     pub expiry: TransactionTime,
 }
 
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 /// Header V1 of an account transaction. Same as TransactionHeader but contains
 /// an additional optional sponsor address.
@@ -307,7 +307,7 @@ impl Serial for TransactionHeaderV1 {
 
 impl Deserial for TransactionHeaderV1 {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let bitmap: u8 = source.get()?;
+        let bitmap: u16 = source.get()?;
         let header_v0: TransactionHeader = source.get()?;
         let sponsor = if (bitmap & 0b0000000000000001) != 0 {
             Some(source.get()?)
@@ -326,7 +326,7 @@ impl Deserial for TransactionHeaderV1 {
     }
 }
 
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize, Into, AsRef)]
+#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize, Into, PartialEq, Eq, AsRef)]
 #[serde(transparent)]
 /// An account transaction payload that has not yet been deserialized.
 /// This is a simple wrapper around [`Vec<u8>`](Vec) with bespoke serialization.
@@ -485,7 +485,7 @@ impl<P: PayloadLike> AccountTransaction<P> {
     }
 }
 
-#[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize)]
+#[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 /// An account transaction v1 signed and paid for by a sender or sponsor
 /// account. The payload type is a generic parameter to support two kinds of
@@ -3644,22 +3644,31 @@ mod tests {
         hashes::TransactionSignHash,
         id::types::{SignatureThreshold, VerifyKey},
     };
-    use rand::Rng;
+    use rand::{rngs::ThreadRng, Rng};
     use std::convert::TryFrom;
 
     use super::*;
 
-    #[test]
-    fn test_transaction_header_v1_serialization() {
-        unimplemented!("TODO(drsk)")
+    // Create a dummy TransactionHeaderV1 structure.
+    const fn dummy_header_v1() -> TransactionHeaderV1 {
+        TransactionHeaderV1 {
+            sender: AccountAddress([42u8; ACCOUNT_ADDRESS_SIZE]),
+            nonce: Nonce { nonce: 1u64 },
+            energy_amount: Energy {
+                energy: 18446744073709551615u64,
+            },
+            payload_size: PayloadSize {
+                size: MAX_PAYLOAD_SIZE,
+            },
+            expiry: TransactionTime {
+                seconds: 18446744073709551615u64,
+            },
+            sponsor: Some(AccountAddress([43u8; ACCOUNT_ADDRESS_SIZE])),
+        }
     }
-    #[test]
-    fn test_account_transaction_v1_serialization() {
-        unimplemented!("TODO(drsk)")
-    }
-    #[test]
-    fn test_transaction_signature_check() {
-        let mut rng = rand::thread_rng();
+
+    // Create random keys given a random number generator.
+    fn create_keys(rng: &mut ThreadRng) -> BTreeMap<CredentialIndex, BTreeMap<KeyIndex, KeyPair>> {
         let mut keys = BTreeMap::<CredentialIndex, BTreeMap<KeyIndex, KeyPair>>::new();
         let bound: usize = rng.gen_range(1..20);
         for _ in 0..bound {
@@ -3669,11 +3678,74 @@ mod tests {
                 let mut cred_keys = BTreeMap::new();
                 for _ in 0..inner_bound {
                     let k_idx = KeyIndex::from(rng.gen::<u8>());
-                    cred_keys.insert(k_idx, KeyPair::generate(&mut rng));
+                    cred_keys.insert(k_idx, KeyPair::generate(rng));
                 }
                 keys.insert(c_idx, cred_keys);
             }
         }
+        keys
+    }
+    #[test]
+    fn test_transaction_header_v1_serialization() {
+        let header0 = dummy_header_v1();
+        let mut buf = Vec::<u8>::new();
+        // The fixed serialization we expect.
+        let buf0: Vec<u8> = [
+            0, 1, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42,
+            42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 0, 0, 0, 0, 0, 0, 0, 1, 255, 255, 255,
+            255, 255, 255, 255, 255, 0, 8, 0, 9, 255, 255, 255, 255, 255, 255, 255, 255, 43, 43,
+            43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43,
+            43, 43, 43, 43, 43, 43, 43, 43,
+        ]
+        .to_vec();
+        header0.serial(&mut buf);
+
+        assert_eq!(
+            buf0, buf,
+            "The serialization of TransactionHeaderV1 is not equal to the expected one."
+        );
+
+        let header1: TransactionHeaderV1 =
+            Deserial::deserial(&mut std::io::Cursor::new(buf.clone())).unwrap();
+        assert_eq!(
+            header0,
+            header1,
+            "Serializing, then deserializing a transaction header v1 should yield the original transaction header.");
+    }
+    #[test]
+    fn test_account_transaction_v1_serialization() {
+        let mut rng = rand::thread_rng();
+        let hash = TransactionSignHash::new(rng.gen());
+        let sender_keys = create_keys(&mut rng);
+        let sponsor_keys = create_keys(&mut rng);
+        let sender_sig = sender_keys.sign_transaction_hash(&hash);
+        let sponsor_sig = sponsor_keys.sign_transaction_hash(&hash);
+        let sigs = TransactionSignaturesV1 {
+            sender: sender_sig,
+            sponsor: Some(sponsor_sig),
+        };
+        const HEADER: TransactionHeaderV1 = dummy_header_v1();
+        const PAYLOAD_SIZE: usize = HEADER.payload_size.size as usize;
+        let at = AccountTransactionV1 {
+            signatures: sigs,
+            header: HEADER,
+            payload: EncodedPayload {
+                payload: [0; PAYLOAD_SIZE].to_vec(),
+            },
+        };
+        let mut buf = Vec::<u8>::new();
+        at.serial(&mut buf);
+        let at1: AccountTransactionV1<EncodedPayload> =
+            Deserial::deserial(&mut std::io::Cursor::new(buf)).unwrap();
+        assert_eq!(
+            at,
+            at1,
+            "Serializing, then deserializing an account transaction v1 should yield the original transaction.")
+    }
+    #[test]
+    fn test_transaction_signature_check() {
+        let mut rng = rand::thread_rng();
+        let keys = create_keys(&mut rng);
         let hash = TransactionSignHash::new(rng.gen());
         let sig = keys.sign_transaction_hash(&hash);
         let threshold =
@@ -3710,34 +3782,8 @@ mod tests {
     #[test]
     fn test_sponsored_transaction_signature_check() {
         let mut rng = rand::thread_rng();
-        let mut sender_keys = BTreeMap::<CredentialIndex, BTreeMap<KeyIndex, KeyPair>>::new();
-        let mut sponsor_keys = BTreeMap::<CredentialIndex, BTreeMap<KeyIndex, KeyPair>>::new();
-        let sender_bound: usize = rng.gen_range(1..20);
-        for _ in 0..sender_bound {
-            let c_idx = CredentialIndex::from(rng.gen::<u8>());
-            if sender_keys.get(&c_idx).is_none() {
-                let inner_bound: usize = rng.gen_range(1..20);
-                let mut cred_keys = BTreeMap::new();
-                for _ in 0..inner_bound {
-                    let k_idx = KeyIndex::from(rng.gen::<u8>());
-                    cred_keys.insert(k_idx, KeyPair::generate(&mut rng));
-                }
-                sender_keys.insert(c_idx, cred_keys);
-            }
-        }
-        let sponsor_bound: usize = rng.gen_range(1..20);
-        for _ in 0..sponsor_bound {
-            let c_idx = CredentialIndex::from(rng.gen::<u8>());
-            if sponsor_keys.get(&c_idx).is_none() {
-                let inner_bound: usize = rng.gen_range(1..20);
-                let mut cred_keys = BTreeMap::new();
-                for _ in 0..inner_bound {
-                    let k_idx = KeyIndex::from(rng.gen::<u8>());
-                    cred_keys.insert(k_idx, KeyPair::generate(&mut rng));
-                }
-                sponsor_keys.insert(c_idx, cred_keys);
-            }
-        }
+        let sender_keys = create_keys(&mut rng);
+        let sponsor_keys = create_keys(&mut rng);
         let hash = TransactionSignHash::new(rng.gen());
         let sender_sig = sender_keys.sign_transaction_hash(&hash);
         let sender_and_sponsor_sigs = TransactionSignaturesV1 {
