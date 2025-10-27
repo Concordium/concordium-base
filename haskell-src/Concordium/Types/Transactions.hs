@@ -281,13 +281,12 @@ makeAccountTransactionV1 atrv1Signature atrv1Header atrv1Payload = AccountTransa
 
 -- | Construct a 'TransactionSignHash' from a 'TransactionHeaderV1' and 'EncodedPayload'.
 transactionV1SignHashFromHeaderPayload :: TransactionHeaderV1 -> EncodedPayload -> TransactionSignHash
-transactionV1SignHashFromHeaderPayload atrv1Header atrv1Payload =
-    transactionSignHashFromBytes bytes
-  where
-    bytes = S.runPut $ do
-        S.putByteString v1TransactionSignHashPrefix
-        S.put atrv1Header
-        putEncodedPayload atrv1Payload
+transactionV1SignHashFromHeaderPayload atrv1Header atrv1Payload = TransactionSignHashV0 $
+    H.hashLazy $
+        S.runPutLazy $ do
+            S.putByteString v1TransactionSignHashPrefix
+            S.put atrv1Header
+            putEncodedPayload atrv1Payload
 
 instance S.Serialize AccountTransactionV1 where
     put AccountTransactionV1{..} =
