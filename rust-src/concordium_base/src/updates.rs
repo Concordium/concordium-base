@@ -320,7 +320,7 @@ pub enum RootKeysKind {}
 /// type-level marker.
 pub enum Level1KeysKind {}
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serial, Clone)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serial, Clone, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 #[serde(bound = "Kind: Sized")]
 /// Either root, level1, or level 2 access structure. They all have the same
@@ -352,7 +352,7 @@ impl<Kind> Deserial for HigherLevelAccessStructure<Kind> {
     }
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serial, Clone)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serial, Clone, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 /// And access structure for performing chain updates. The access structure is
 /// only meaningful in the context of a list of update keys to which the indices
