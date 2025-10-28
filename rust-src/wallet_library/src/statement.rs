@@ -163,9 +163,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AcceptableRequest<C, Attribu
                 }
                 Ok(())
             }
-            CredentialStatement::Identity { .. } => Err(RequestCheckError::UnsupportedCredentials(
-                "Identity".to_string(),
-            )),
+            CredentialStatement::Identity { .. } => {
+                // There should be nothing wrong with implementing support for identity credentials.
+                // It is just not implemented currently.
+                Err(RequestCheckError::UnsupportedCredentials(
+                    "Identity".to_string(),
+                ))
+            }
         }
     }
 }
