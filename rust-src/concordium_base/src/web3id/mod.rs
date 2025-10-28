@@ -1351,6 +1351,27 @@ impl<C: Curve, AttributeType> Web3IdCredential<C, AttributeType> {
     }
 }
 
+/// An owned version of [`CommitmentInputs`] that can be deserialized.
+#[derive(serde::Deserialize)]
+#[serde(bound(deserialize = "AttributeType: DeserializeOwned"))]
+#[serde(rename_all = "camelCase")]
+pub struct OwnedIdentityCommitmentInputs<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    /// Identity provider information
+    pub ip_info: IpInfo<P>,
+    /// Public information on the __supported__ anonymity revokers.
+    /// Must include at least the anonymity revokers supported by the identity provider.
+    /// This is used to create and validate credential.
+    pub ar_infos: ArInfos<C>,
+    /// Identity object. Together with `id_object_use_data`, it constitutes the identity credentials
+    pub id_object: IdentityObjectV1<P, C, AttributeType>,
+    /// Identity credentials
+    pub id_object_use_data: IdObjectUseData<P, C>,
+}
+
 #[serde_with::serde_as]
 #[derive(serde::Deserialize)]
 #[serde(bound(deserialize = "AttributeType: DeserializeOwned, Web3IdSigner: DeserializeOwned"))]
@@ -1370,19 +1391,7 @@ pub enum OwnedCommitmentInputs<
         #[serde_as(as = "BTreeMap<serde_with::DisplayFromStr, _>")]
         randomness: BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
     },
-    #[serde(rename_all = "camelCase")]
-    Identity {
-        /// Identity provider information
-        ip_info: IpInfo<P>,
-        /// Public information on the __supported__ anonymity revokers.
-        /// Must include at least the anonymity revokers supported by the identity provider.
-        /// This is used to create and validate credential.
-        ar_infos: ArInfos<C>,
-        /// Identity object. Together with `id_object_use_data`, it constitutes the identity credentials
-        id_object: IdentityObjectV1<P, C, AttributeType>,
-        /// Identity credentials
-        id_object_use_data: IdObjectUseData<P, C>,
-    },
+    Identity(Box<OwnedIdentityCommitmentInputs<P, C, AttributeType>>),
     #[serde(rename_all = "camelCase")]
     Web3Issuer {
         signer: Web3IdSigner,
@@ -1423,19 +1432,22 @@ impl<
                 values,
                 randomness,
             },
-            OwnedCommitmentInputs::Identity {
-                ip_info,
-                ar_infos,
-                id_object,
-                id_object_use_data,
-            } => CommitmentInputs::Identity {
-                ip_context: IpContextOnly {
+            OwnedCommitmentInputs::Identity(inputs) => {
+                let OwnedIdentityCommitmentInputs {
                     ip_info,
-                    ars_infos: &ar_infos.anonymity_revokers,
-                },
-                id_object,
-                id_object_use_data,
-            },
+                    ar_infos,
+                    id_object,
+                    id_object_use_data,
+                } = &**inputs;
+                CommitmentInputs::Identity {
+                    ip_context: IpContextOnly {
+                        ip_info,
+                        ars_infos: &ar_infos.anonymity_revokers,
+                    },
+                    id_object,
+                    id_object_use_data,
+                }
+            }
             OwnedCommitmentInputs::Web3Issuer {
                 signer,
                 values,
@@ -1452,7 +1464,7 @@ impl<
 }
 
 #[derive(thiserror::Error, Debug)]
-/// An error that can occurr when attempting to produce a proof.
+/// An error that can occur when attempting to produce a proof.
 pub enum ProofError {
     #[error("Too many attributes to produce a proof.")]
     TooManyAttributes,
@@ -1468,6 +1480,8 @@ pub enum ProofError {
     CommitmentsStatementsMismatch,
     #[error("The ID in the statement and in the provided signer do not match.")]
     InconsistentIds,
+    #[error("Cannot prove identity attribute credentials: {0}")]
+    IdentityAttributeCredentials(String),
 }
 
 /// Public inputs to the verification function. These are the public commitments

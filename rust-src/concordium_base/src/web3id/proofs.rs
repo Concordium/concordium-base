@@ -192,7 +192,7 @@ fn verify_single_credential<
                 .attributes
                 .iter()
                 .filter_map(|(tag, attr)| match attr {
-                    IdentityAttribute::Committed(cmm) => Some((*tag, cmm.clone())),
+                    IdentityAttribute::Committed(cmm) => Some((*tag, *cmm)),
                     _ => None,
                 })
                 .collect();
@@ -322,7 +322,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                         &attributes_handling,
                         ro,
                     )
-                    .expect("todo");
+                    .map_err(|err| ProofError::IdentityAttributeCredentials(err.to_string()))?;
 
                 let mut proofs = Vec::new();
                 for statement in statement {
@@ -505,8 +505,8 @@ mod tests {
     use crate::id::{identity_provider, test};
     use crate::web3id::did::Network;
     use crate::web3id::{
-        Context, ContextProperty, CredentialHolderId, OwnedCommitmentInputs, Sha256Challenge,
-        Web3IdAttribute,
+        Context, ContextProperty, CredentialHolderId, OwnedCommitmentInputs,
+        OwnedIdentityCommitmentInputs, Sha256Challenge, Web3IdAttribute,
     };
     use concordium_contracts_common::{ContractAddress, Timestamp};
     use rand::{Rng, SeedableRng};
@@ -583,12 +583,13 @@ mod tests {
             signature: ip_sig,
         };
 
-        let commitment_inputs = OwnedCommitmentInputs::Identity {
-            ip_info: ip_info.clone(),
-            ar_infos: ars_infos.clone(),
-            id_object,
-            id_object_use_data,
-        };
+        let commitment_inputs =
+            OwnedCommitmentInputs::Identity(Box::new(OwnedIdentityCommitmentInputs {
+                ip_info: ip_info.clone(),
+                ar_infos: ars_infos.clone(),
+                id_object,
+                id_object_use_data,
+            }));
 
         let credential_inputs = CredentialsInputs::Identity { ip_info, ars_infos };
 
@@ -1626,15 +1627,21 @@ mod tests {
 
         let id_cred_fixture = identity_credentials_fixture(
             [
-                (3.into(), Web3IdAttribute::Numeric(137)),
+                // attribute we prove commitment to
                 (
                     1.into(),
                     Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
                 ),
+                // attribute we prove commitment to
                 (
                     2.into(),
                     Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
                 ),
+                // attribute we prove commitment to
+                (3.into(), Web3IdAttribute::Numeric(137)),
+                // unused attribute (proven known)
+                (4.into(), Web3IdAttribute::Numeric(1000)),
+                // revealed attribute
                 (
                     5.into(),
                     Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
@@ -1648,11 +1655,16 @@ mod tests {
         let credential_statements = vec![CredentialStatement::Identity {
             network: Network::Testnet,
             statement: vec![
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: 3.into(),
-                        lower: Web3IdAttribute::Numeric(80),
-                        upper: Web3IdAttribute::Numeric(1237),
+                AtomicStatement::AttributeNotInSet {
+                    statement: AttributeNotInSetStatement {
+                        attribute_tag: 1.into(),
+                        set: [
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                        ]
+                        .into_iter()
+                        .collect(),
                         _phantom: PhantomData,
                     },
                 },
@@ -1669,16 +1681,11 @@ mod tests {
                         _phantom: PhantomData,
                     },
                 },
-                AtomicStatement::AttributeNotInSet {
-                    statement: AttributeNotInSetStatement {
-                        attribute_tag: 1.into(),
-                        set: [
-                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                        ]
-                        .into_iter()
-                        .collect(),
+                AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: 3.into(),
+                        lower: Web3IdAttribute::Numeric(80),
+                        upper: Web3IdAttribute::Numeric(1237),
                         _phantom: PhantomData,
                     },
                 },
@@ -1807,9 +1814,7 @@ mod tests {
     /// Test prove and verify presentation for identity credentials where
     /// verification fails because verification of attribute credentials fails.
     #[test]
-    fn test_soundness_identity_attribute_crednetials() {
-        let mut rng = rand::thread_rng();
-
+    fn test_soundness_identity_attribute_credentials() {
         let context = Context {
             given: vec![ContextProperty {
                 label: "prop1".to_string(),
@@ -1856,27 +1861,27 @@ mod tests {
             )
             .expect("prove");
 
-        // change attribute comitment to be invalid
+        // change attribute credentials proof to be invalid
         let CredentialProof::Identity {
             id_attr_cred_info, ..
         } = &mut proof.verifiable_credential[0]
         else {
             panic!("should be account proof");
         };
-
-        let IdentityAttribute::Committed(attr_cmm) = id_attr_cred_info
-            .values
-            .attributes
-            .values_mut()
-            .next()
-            .unwrap()
-        else {
-            panic!("expected comitted attribute");
-        };
-        *attr_cmm = global_context
-            .on_chain_commitment_key
-            .commit(&Value::<ArCurve>::generate(&mut rng), &mut rng)
-            .0;
+        let mut ar_keys = id_attr_cred_info.proofs.proof_id_cred_pub.keys();
+        let ar1 = *ar_keys.next().unwrap();
+        let ar2 = *ar_keys.next().unwrap();
+        let tmp = id_attr_cred_info.proofs.proof_id_cred_pub[&ar1].clone();
+        *id_attr_cred_info
+            .proofs
+            .proof_id_cred_pub
+            .get_mut(&ar1)
+            .unwrap() = id_attr_cred_info.proofs.proof_id_cred_pub[&ar2].clone();
+        *id_attr_cred_info
+            .proofs
+            .proof_id_cred_pub
+            .get_mut(&ar2)
+            .unwrap() = tmp;
 
         let public = vec![id_cred_fixture.credential_inputs];
         let err = proof
