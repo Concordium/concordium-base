@@ -1165,7 +1165,7 @@ pub struct ArInfo<C: Curve> {
 }
 
 /// Collection of anonymity revokers.
-#[derive(Debug, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 #[serde(transparent)]
 pub struct ArInfos<C: Curve> {

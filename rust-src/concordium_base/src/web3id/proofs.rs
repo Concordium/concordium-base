@@ -493,7 +493,6 @@ mod tests {
     use super::*;
     use crate::base::CredentialRegistrationID;
 
-    use crate::common;
     use crate::curve_arithmetic::Value;
     use crate::hashes::BlockHash;
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
@@ -501,7 +500,8 @@ mod tests {
         AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement,
         AttributeNotInSetStatement, RevealAttributeStatement,
     };
-    use crate::id::types::{AttributeTag, IpIdentity};
+    use crate::id::types::{ArInfos, AttributeList, AttributeTag, IdentityObjectV1, IpData, IpIdentity, YearMonth};
+    use crate::id::{identity_provider, test};
     use crate::web3id::did::Network;
     use crate::web3id::{
         CredentialHolderId, GivenContext, OwnedCommitmentInputs, Sha256Challenge, Web3IdAttribute,
@@ -509,6 +509,86 @@ mod tests {
     use concordium_contracts_common::{ContractAddress, Timestamp};
     use rand::{Rng, SeedableRng};
     use std::marker::PhantomData;
+
+    struct IdentityCredentialsFixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> {
+        commitment_inputs:
+            OwnedCommitmentInputs<IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>,
+        credential_inputs: CredentialsInputs<IpPairing, ArCurve>,
+
+    }
+
+    impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> IdentityCredentialsFixture<AttributeType> {
+        fn commitment_inputs(
+            &self,
+        ) -> CommitmentInputs<'_, IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>
+        {
+            CommitmentInputs::from(&self.commitment_inputs)
+        }
+    }
+
+
+    fn test_create_attributes<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(alist: BTreeMap<AttributeTag, AttributeType>) -> AttributeList<<ArCurve as Curve>::Scalar, AttributeType> {
+        let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+        let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+        AttributeList {
+            valid_to,
+            created_at,
+            max_accounts: 237,
+            alist,
+            _phantom: Default::default(),
+        }
+    }
+
+    fn identity_credentials_fixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(
+        attrs: BTreeMap<AttributeTag, AttributeType>,
+        global_context: &GlobalContext<ArCurve>,
+    ) -> IdentityCredentialsFixture<AttributeType> {
+
+        let max_attrs = 10;
+        let num_ars = 5;
+        let IpData {
+            public_ip_info: ip_info,
+            ip_secret_key,
+            ..
+        } = test::test_create_ip_info(&mut seed0(), num_ars, max_attrs);
+
+        let (ars_infos, _ars_secret) =
+            test::test_create_ars(&global_context.on_chain_commitment_key.g, num_ars, &mut seed0());
+        let ars_infos = ArInfos {
+            anonymity_revokers: ars_infos,
+        };
+
+        let id_object_use_data = test::test_create_id_use_data(&mut seed0());
+        let (context, pio, _randomness) =
+            test::test_create_pio_v1(&id_object_use_data, &ip_info, &ars_infos.anonymity_revokers, &global_context, num_ars);
+        let alist = test_create_attributes(attrs);
+        let ip_sig =
+            identity_provider::verify_credentials_v1(&pio, context, &alist, &ip_secret_key)
+                .expect("verify credentials");
+
+        let id_object = IdentityObjectV1 {
+            pre_identity_object: pio,
+            alist: alist.clone(),
+            signature: ip_sig,
+        };
+
+        let commitment_inputs = OwnedCommitmentInputs::Identity {
+            ip_info: ip_info.clone(),
+            ar_infos: ars_infos.clone(),
+            id_object,
+            id_object_use_data,
+        };
+
+        let credential_inputs = CredentialsInputs::Identity {
+            ip_info,
+            ars_infos,
+        };
+
+        IdentityCredentialsFixture {
+            commitment_inputs,
+            credential_inputs,
+        }
+    }
 
     struct AccountCredentialsFixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> {
         commitment_inputs:
@@ -656,7 +736,7 @@ mod tests {
                 (17.to_string(), Web3IdAttribute::Numeric(137)),
                 (
                     23.to_string(),
-                    Web3IdAttribute::String(AttributeKind("ff".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
                 ),
             ]
             .into_iter()
@@ -669,7 +749,7 @@ mod tests {
                 (0.to_string(), Web3IdAttribute::Numeric(137)),
                 (
                     1.to_string(),
-                    Web3IdAttribute::String(AttributeKind("xkcd".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
                 ),
                 (
                     2.to_string(),
@@ -677,7 +757,7 @@ mod tests {
                 ),
                 (
                     5.to_string(),
-                    Web3IdAttribute::String(AttributeKind("testvalue".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
                 ),
             ]
             .into_iter()
@@ -710,9 +790,9 @@ mod tests {
                         statement: AttributeInSetStatement {
                             attribute_tag: "23".into(),
                             set: [
-                                Web3IdAttribute::String(AttributeKind("ff".into())),
-                                Web3IdAttribute::String(AttributeKind("aa".into())),
-                                Web3IdAttribute::String(AttributeKind("zz".into())),
+                                Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                                Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                             ]
                             .into_iter()
                             .collect(),
@@ -750,9 +830,9 @@ mod tests {
                         statement: AttributeNotInSetStatement {
                             attribute_tag: 1u8.to_string(),
                             set: [
-                                Web3IdAttribute::String(AttributeKind("ff".into())),
-                                Web3IdAttribute::String(AttributeKind("aa".into())),
-                                Web3IdAttribute::String(AttributeKind("zz".into())),
+                                Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                                Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                             ]
                             .into_iter()
                             .collect(),
@@ -906,7 +986,7 @@ mod tests {
                 (17.to_string(), Web3IdAttribute::Numeric(137)),
                 (
                     23.to_string(),
-                    Web3IdAttribute::String(AttributeKind("ff".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
                 ),
             ]
             .into_iter()
@@ -930,9 +1010,9 @@ mod tests {
                     statement: AttributeInSetStatement {
                         attribute_tag: "23".into(),
                         set: [
-                            Web3IdAttribute::String(AttributeKind("ff".into())),
-                            Web3IdAttribute::String(AttributeKind("aa".into())),
-                            Web3IdAttribute::String(AttributeKind("zz".into())),
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                         ]
                         .into_iter()
                         .collect(),
@@ -1030,9 +1110,6 @@ mod tests {
             .expect("prove");
 
         // remove linking proof
-        let CredentialProof::Web3Id { proofs, .. } = &mut proof.verifiable_credential[0] else {
-            panic!("should be web3 proof");
-        };
         proof.linking_proof.proof_value.pop();
 
         let public = vec![web3_cred.credential_inputs];
@@ -1043,9 +1120,6 @@ mod tests {
         assert_eq!(err, PresentationVerificationError::MissingLinkingProof);
 
         // add invalid linking proof
-        let CredentialProof::Web3Id { proofs, .. } = &mut proof.verifiable_credential[0] else {
-            panic!("should be web3 proof");
-        };
         let CommitmentInputs::Web3Issuer { signer, .. } =
             CommitmentInputs::from(&web3_cred.commitment_inputs)
         else {
@@ -1079,7 +1153,7 @@ mod tests {
                 (17.to_string(), Web3IdAttribute::Numeric(137)),
                 (
                     23.to_string(),
-                    Web3IdAttribute::String(AttributeKind("ff".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
                 ),
             ]
             .into_iter()
@@ -1092,7 +1166,7 @@ mod tests {
                 (3.into(), Web3IdAttribute::Numeric(137)),
                 (
                     1.into(),
-                    Web3IdAttribute::String(AttributeKind("xkcd".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
                 ),
             ]
             .into_iter()
@@ -1125,9 +1199,9 @@ mod tests {
                         statement: AttributeInSetStatement {
                             attribute_tag: 23u8.to_string(),
                             set: [
-                                Web3IdAttribute::String(AttributeKind("ff".into())),
-                                Web3IdAttribute::String(AttributeKind("aa".into())),
-                                Web3IdAttribute::String(AttributeKind("zz".into())),
+                                Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                                Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                             ]
                             .into_iter()
                             .collect(),
@@ -1152,9 +1226,9 @@ mod tests {
                         statement: AttributeNotInSetStatement {
                             attribute_tag: 1u8.into(),
                             set: [
-                                Web3IdAttribute::String(AttributeKind("ff".into())),
-                                Web3IdAttribute::String(AttributeKind("aa".into())),
-                                Web3IdAttribute::String(AttributeKind("zz".into())),
+                                Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                                Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                             ]
                             .into_iter()
                             .collect(),
@@ -1222,15 +1296,15 @@ mod tests {
                 (3.into(), Web3IdAttribute::Numeric(137)),
                 (
                     1.into(),
-                    Web3IdAttribute::String(AttributeKind("xkcd".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
                 ),
                 (
                     2.into(),
-                    Web3IdAttribute::String(AttributeKind("aa".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
                 ),
                 (
                     5.into(),
-                    Web3IdAttribute::String(AttributeKind("testvalue".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
                 ),
             ]
             .into_iter()
@@ -1254,9 +1328,9 @@ mod tests {
                             statement: AttributeInSetStatement {
                                 attribute_tag: 2.into(),
                                 set: [
-                                    Web3IdAttribute::String(AttributeKind("ff".into())),
-                                    Web3IdAttribute::String(AttributeKind("aa".into())),
-                                    Web3IdAttribute::String(AttributeKind("zz".into())),
+                                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                                 ]
                                 .into_iter()
                                 .collect(),
@@ -1267,9 +1341,9 @@ mod tests {
                             statement: AttributeNotInSetStatement {
                                 attribute_tag: 1.into(),
                                 set: [
-                                    Web3IdAttribute::String(AttributeKind("ff".into())),
-                                    Web3IdAttribute::String(AttributeKind("aa".into())),
-                                    Web3IdAttribute::String(AttributeKind("zz".into())),
+                                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                                 ]
                                     .into_iter()
                                     .collect(),
@@ -1308,71 +1382,6 @@ mod tests {
         );
     }
 
-    /// Test prove and verify presentation for account credentials.
-    #[test]
-    fn test_completeness_account_attribute_kind() {
-        let mut rng = rand::thread_rng();
-        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
-
-        let global_context = GlobalContext::generate("Test".into());
-
-        let acc_cred_fixture = account_credentials_fixture(
-            [
-                (3.into(), AttributeKind::from(137)),
-                (1.into(), AttributeKind("bb".into())),
-            ]
-            .into_iter()
-            .collect(),
-            &global_context,
-        );
-
-        let credential_statements = vec![CredentialStatement::Account {
-            network: Network::Testnet,
-            cred_id: acc_cred_fixture.cred_id,
-            statement: vec![
-                // AtomicStatement::AttributeInRange {
-                //     statement: AttributeInRangeStatement {
-                //         attribute_tag: 3.into(),
-                //         lower: AttributeKind::from(80),
-                //         upper: AttributeKind::from(1237),
-                //         _phantom: PhantomData,
-                //     },
-                // },
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: 1.into(),
-                        lower: AttributeKind("aa".into()),
-                        upper: AttributeKind("cca".into()),
-                        _phantom: PhantomData,
-                    },
-                },
-
-            ],
-        }];
-
-        let request = Request::<ArCurve, AttributeKind> {
-            challenge,
-            credential_statements,
-        };
-
-        let proof = request
-            .clone()
-            .prove(
-                &global_context,
-                [acc_cred_fixture.commitment_inputs()].into_iter(),
-            )
-            .expect("prove");
-
-        let public = vec![acc_cred_fixture.credential_inputs];
-        assert_eq!(
-            proof
-                .verify(&global_context, public.iter())
-                .expect("verify"),
-            request,
-            "verify request"
-        );
-    }
-
     /// Test prove and verify presentation for account credentials where
     /// verification fails.
     #[test]
@@ -1387,7 +1396,7 @@ mod tests {
                 (3.into(), Web3IdAttribute::Numeric(137)),
                 (
                     1.into(),
-                    Web3IdAttribute::String(AttributeKind("xkcd".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
                 ),
             ]
             .into_iter()
@@ -1403,9 +1412,9 @@ mod tests {
                     statement: AttributeNotInSetStatement {
                         attribute_tag: 1u8.into(),
                         set: [
-                            Web3IdAttribute::String(AttributeKind("ff".into())),
-                            Web3IdAttribute::String(AttributeKind("aa".into())),
-                            Web3IdAttribute::String(AttributeKind("zz".into())),
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                         ]
                         .into_iter()
                         .collect(),
@@ -1491,7 +1500,7 @@ mod tests {
             credential_statements,
         };
 
-        let mut proof = request
+        let proof = request
             .clone()
             .prove(
                 &global_context,
@@ -1499,7 +1508,7 @@ mod tests {
             )
             .expect("prove");
 
-        // use mismatching type of credential inptus
+        // use mismatching type of credential inputs
         let web3_cred_fixture = web3_credentials_fixture(
             [(3.to_string(), Web3IdAttribute::Numeric(137))]
                 .into_iter()
@@ -1549,7 +1558,7 @@ mod tests {
             credential_statements,
         };
 
-        let mut proof = request
+        let proof = request
             .clone()
             .prove(
                 &global_context,
@@ -1574,20 +1583,20 @@ mod tests {
 
         let global_context = GlobalContext::generate("Test".into());
 
-        let acc_cred_fixture = account_credentials_fixture(
+        let id_cred_fixture = identity_credentials_fixture(
             [
                 (3.into(), Web3IdAttribute::Numeric(137)),
                 (
                     1.into(),
-                    Web3IdAttribute::String(AttributeKind("xkcd".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
                 ),
                 (
                     2.into(),
-                    Web3IdAttribute::String(AttributeKind("aa".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
                 ),
                 (
                     5.into(),
-                    Web3IdAttribute::String(AttributeKind("testvalue".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
                 ),
             ]
                 .into_iter()
@@ -1595,9 +1604,8 @@ mod tests {
             &global_context,
         );
 
-        let credential_statements = vec![CredentialStatement::Account {
+        let credential_statements = vec![CredentialStatement::Identity {
             network: Network::Testnet,
-            cred_id: acc_cred_fixture.cred_id,
             statement: vec![
                 AtomicStatement::AttributeInRange {
                     statement: AttributeInRangeStatement {
@@ -1611,9 +1619,9 @@ mod tests {
                     statement: AttributeInSetStatement {
                         attribute_tag: 2.into(),
                         set: [
-                            Web3IdAttribute::String(AttributeKind("ff".into())),
-                            Web3IdAttribute::String(AttributeKind("aa".into())),
-                            Web3IdAttribute::String(AttributeKind("zz".into())),
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                         ]
                             .into_iter()
                             .collect(),
@@ -1624,9 +1632,9 @@ mod tests {
                     statement: AttributeNotInSetStatement {
                         attribute_tag: 1.into(),
                         set: [
-                            Web3IdAttribute::String(AttributeKind("ff".into())),
-                            Web3IdAttribute::String(AttributeKind("aa".into())),
-                            Web3IdAttribute::String(AttributeKind("zz".into())),
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                         ]
                             .into_iter()
                             .collect(),
@@ -1651,11 +1659,11 @@ mod tests {
             .clone()
             .prove(
                 &global_context,
-                [acc_cred_fixture.commitment_inputs()].into_iter(),
+                [id_cred_fixture.commitment_inputs()].into_iter(),
             )
             .expect("prove");
 
-        let public = vec![acc_cred_fixture.credential_inputs];
+        let public = vec![id_cred_fixture.credential_inputs];
         assert_eq!(
             proof
                 .verify(&global_context, public.iter())
@@ -1666,7 +1674,7 @@ mod tests {
     }
 
 
-    // todo ar test new stuff
+    // todo ar identity soundness
 
     /// Test that constructing proofs for a account credential
     /// request works with a `Context` in the sense that the proof verifies.
@@ -1726,9 +1734,9 @@ mod tests {
                     statement: AttributeNotInSetStatement {
                         attribute_tag: 1u8.into(),
                         set: [
-                            Web3IdAttribute::String(AttributeKind("ff".into())),
-                            Web3IdAttribute::String(AttributeKind("aa".into())),
-                            Web3IdAttribute::String(AttributeKind("zz".into())),
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                         ]
                         .into_iter()
                         .collect(),
@@ -1747,7 +1755,7 @@ mod tests {
         values.insert(3.into(), Web3IdAttribute::Numeric(137));
         values.insert(
             1.into(),
-            Web3IdAttribute::String(AttributeKind("xkcd".into())),
+            Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
         );
         let mut randomness = BTreeMap::new();
         for tag in values.keys() {
@@ -1837,15 +1845,15 @@ mod tests {
                 (3.into(), Web3IdAttribute::Numeric(137)),
                 (
                     1.into(),
-                    Web3IdAttribute::String(AttributeKind("xkcd".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
                 ),
                 (
                     2.into(),
-                    Web3IdAttribute::String(AttributeKind("aa".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
                 ),
                 (
                     5.into(),
-                    Web3IdAttribute::String(AttributeKind("testvalue".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
                 ),
             ]
             .into_iter()
@@ -1869,9 +1877,9 @@ mod tests {
         //             statement: AttributeInSetStatement {
         //                 attribute_tag: 2.into(),
         //                 set: [
-        //                     Web3IdAttribute::String(AttributeKind("ff".into())),
-        //                     Web3IdAttribute::String(AttributeKind("aa".into())),
-        //                     Web3IdAttribute::String(AttributeKind("zz".into())),
+        //                     Web3IdAttribute::String(AttributeKind::try_new("ff".into())),
+        //                     Web3IdAttribute::String(AttributeKind::try_new("aa".into())),
+        //                     Web3IdAttribute::String(AttributeKind::try_new("zz".into())),
         //                 ]
         //                 .into_iter()
         //                 .collect(),
@@ -1882,9 +1890,9 @@ mod tests {
         //             statement: AttributeNotInSetStatement {
         //                 attribute_tag: 1.into(),
         //                 set: [
-        //                     Web3IdAttribute::String(AttributeKind("ff".into())),
-        //                     Web3IdAttribute::String(AttributeKind("aa".into())),
-        //                     Web3IdAttribute::String(AttributeKind("zz".into())),
+        //                     Web3IdAttribute::String(AttributeKind::try_new("ff".into())),
+        //                     Web3IdAttribute::String(AttributeKind::try_new("aa".into())),
+        //                     Web3IdAttribute::String(AttributeKind::try_new("zz".into())),
         //                 ]
         //                     .into_iter()
         //                     .collect(),
@@ -2013,15 +2021,15 @@ mod tests {
                 (3.to_string(), Web3IdAttribute::Numeric(137)),
                 (
                     1.to_string(),
-                    Web3IdAttribute::String(AttributeKind("xkcd".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
                 ),
                 (
                     2.to_string(),
-                    Web3IdAttribute::String(AttributeKind("aa".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
                 ),
                 (
                     5.to_string(),
-                    Web3IdAttribute::String(AttributeKind("testvalue".into())),
+                    Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
                 ),
             ]
             .into_iter()
@@ -2053,9 +2061,9 @@ mod tests {
         //                     statement: AttributeInSetStatement {
         //                         attribute_tag: 2.to_string(),
         //                         set: [
-        //                             Web3IdAttribute::String(AttributeKind("ff".into())),
-        //                             Web3IdAttribute::String(AttributeKind("aa".into())),
-        //                             Web3IdAttribute::String(AttributeKind("zz".into())),
+        //                             Web3IdAttribute::String(AttributeKind::try_new("ff".into())),
+        //                             Web3IdAttribute::String(AttributeKind::try_new("aa".into())),
+        //                             Web3IdAttribute::String(AttributeKind::try_new("zz".into())),
         //                         ]
         //                         .into_iter()
         //                         .collect(),
@@ -2066,9 +2074,9 @@ mod tests {
         //                     statement: AttributeNotInSetStatement {
         //                         attribute_tag: 1.to_string(),
         //                         set: [
-        //                             Web3IdAttribute::String(AttributeKind("ff".into())),
-        //                             Web3IdAttribute::String(AttributeKind("aa".into())),
-        //                             Web3IdAttribute::String(AttributeKind("zz".into())),
+        //                             Web3IdAttribute::String(AttributeKind::try_new("ff".into())),
+        //                             Web3IdAttribute::String(AttributeKind::try_new("aa".into())),
+        //                             Web3IdAttribute::String(AttributeKind::try_new("zz".into())),
         //                         ]
         //                             .into_iter()
         //                             .collect(),
