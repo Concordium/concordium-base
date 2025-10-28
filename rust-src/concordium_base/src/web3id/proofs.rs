@@ -500,10 +500,15 @@ mod tests {
         AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement,
         AttributeNotInSetStatement, RevealAttributeStatement,
     };
-    use crate::id::types::{ArInfos, AttributeList, AttributeTag, IdentityObjectV1, IpData, IpIdentity, YearMonth};
+    use crate::id::types::{
+        ArInfos, AttributeList, AttributeTag, IdentityObjectV1, IpData, IpIdentity, YearMonth,
+    };
     use crate::id::{identity_provider, test};
     use crate::web3id::did::Network;
-    use crate::web3id::{Context, CredentialHolderId, ContextProperty, OwnedCommitmentInputs, Sha256Challenge, Web3IdAttribute};
+    use crate::web3id::{
+        Context, ContextProperty, CredentialHolderId, OwnedCommitmentInputs, Sha256Challenge,
+        Web3IdAttribute,
+    };
     use concordium_contracts_common::{ContractAddress, Timestamp};
     use rand::{Rng, SeedableRng};
     use std::marker::PhantomData;
@@ -512,10 +517,11 @@ mod tests {
         commitment_inputs:
             OwnedCommitmentInputs<IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>,
         credential_inputs: CredentialsInputs<IpPairing, ArCurve>,
-
     }
 
-    impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> IdentityCredentialsFixture<AttributeType> {
+    impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>
+        IdentityCredentialsFixture<AttributeType>
+    {
         fn commitment_inputs(
             &self,
         ) -> CommitmentInputs<'_, IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>
@@ -524,8 +530,9 @@ mod tests {
         }
     }
 
-
-    fn test_create_attributes<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(alist: BTreeMap<AttributeTag, AttributeType>) -> AttributeList<<ArCurve as Curve>::Scalar, AttributeType> {
+    fn test_create_attributes<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(
+        alist: BTreeMap<AttributeTag, AttributeType>,
+    ) -> AttributeList<<ArCurve as Curve>::Scalar, AttributeType> {
         let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
         let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
         AttributeList {
@@ -541,7 +548,6 @@ mod tests {
         attrs: BTreeMap<AttributeTag, AttributeType>,
         global_context: &GlobalContext<ArCurve>,
     ) -> IdentityCredentialsFixture<AttributeType> {
-
         let max_attrs = 10;
         let num_ars = 5;
         let IpData {
@@ -550,15 +556,23 @@ mod tests {
             ..
         } = test::test_create_ip_info(&mut seed0(), num_ars, max_attrs);
 
-        let (ars_infos, _ars_secret) =
-            test::test_create_ars(&global_context.on_chain_commitment_key.g, num_ars, &mut seed0());
+        let (ars_infos, _ars_secret) = test::test_create_ars(
+            &global_context.on_chain_commitment_key.g,
+            num_ars,
+            &mut seed0(),
+        );
         let ars_infos = ArInfos {
             anonymity_revokers: ars_infos,
         };
 
         let id_object_use_data = test::test_create_id_use_data(&mut seed0());
-        let (context, pio, _randomness) =
-            test::test_create_pio_v1(&id_object_use_data, &ip_info, &ars_infos.anonymity_revokers, &global_context, num_ars);
+        let (context, pio, _randomness) = test::test_create_pio_v1(
+            &id_object_use_data,
+            &ip_info,
+            &ars_infos.anonymity_revokers,
+            &global_context,
+            num_ars,
+        );
         let alist = test_create_attributes(attrs);
         let ip_sig =
             identity_provider::verify_credentials_v1(&pio, context, &alist, &ip_secret_key)
@@ -577,10 +591,7 @@ mod tests {
             id_object_use_data,
         };
 
-        let credential_inputs = CredentialsInputs::Identity {
-            ip_info,
-            ars_infos,
-        };
+        let credential_inputs = CredentialsInputs::Identity { ip_info, ars_infos };
 
         IdentityCredentialsFixture {
             commitment_inputs,
@@ -595,7 +606,9 @@ mod tests {
         cred_id: CredentialRegistrationID,
     }
 
-    impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> AccountCredentialsFixture<AttributeType> {
+    impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>
+        AccountCredentialsFixture<AttributeType>
+    {
         fn commitment_inputs(
             &self,
         ) -> CommitmentInputs<'_, IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>
@@ -788,20 +801,26 @@ mod tests {
                         statement: AttributeInSetStatement {
                             attribute_tag: "23".into(),
                             set: [
-                                Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                                Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("ff".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("aa".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("zz".into()).unwrap(),
+                                ),
                             ]
                             .into_iter()
                             .collect(),
                             _phantom: PhantomData,
                         },
                     },
-                            AtomicStatement::RevealAttribute {
-                                statement: RevealAttributeStatement {
-                                    attribute_tag: "5".into(),
-                                },
-                            },
+                    AtomicStatement::RevealAttribute {
+                        statement: RevealAttributeStatement {
+                            attribute_tag: "5".into(),
+                        },
+                    },
                 ],
             },
             CredentialStatement::Web3Id {
@@ -828,9 +847,15 @@ mod tests {
                         statement: AttributeNotInSetStatement {
                             attribute_tag: 1u8.to_string(),
                             set: [
-                                Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                                Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("ff".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("aa".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("zz".into()).unwrap(),
+                                ),
                             ]
                             .into_iter()
                             .collect(),
@@ -1197,9 +1222,15 @@ mod tests {
                         statement: AttributeInSetStatement {
                             attribute_tag: 23u8.to_string(),
                             set: [
-                                Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                                Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("ff".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("aa".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("zz".into()).unwrap(),
+                                ),
                             ]
                             .into_iter()
                             .collect(),
@@ -1224,9 +1255,15 @@ mod tests {
                         statement: AttributeNotInSetStatement {
                             attribute_tag: 1u8.into(),
                             set: [
-                                Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                                Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("ff".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("aa".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("zz".into()).unwrap(),
+                                ),
                             ]
                             .into_iter()
                             .collect(),
@@ -1314,46 +1351,45 @@ mod tests {
             network: Network::Testnet,
             cred_id: acc_cred_fixture.cred_id,
             statement: vec![
-                        AtomicStatement::AttributeInRange {
-                            statement: AttributeInRangeStatement {
-                                attribute_tag: 3.into(),
-                                lower: Web3IdAttribute::Numeric(80),
-                                upper: Web3IdAttribute::Numeric(1237),
-                                _phantom: PhantomData,
-                            },
-                        },
-                        AtomicStatement::AttributeInSet {
-                            statement: AttributeInSetStatement {
-                                attribute_tag: 2.into(),
-                                set: [
-                                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                                ]
-                                .into_iter()
-                                .collect(),
-                                _phantom: PhantomData,
-                            },
-                        },
-                        AtomicStatement::AttributeNotInSet {
-                            statement: AttributeNotInSetStatement {
-                                attribute_tag: 1.into(),
-                                set: [
-                                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                                ]
-                                    .into_iter()
-                                    .collect(),
-                                _phantom: PhantomData,
-                            },
-                        },
-                        AtomicStatement::RevealAttribute {
-                            statement: RevealAttributeStatement {
-                                attribute_tag: 5.into(),
-                            },
-                        },
-
+                AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: 3.into(),
+                        lower: Web3IdAttribute::Numeric(80),
+                        upper: Web3IdAttribute::Numeric(1237),
+                        _phantom: PhantomData,
+                    },
+                },
+                AtomicStatement::AttributeInSet {
+                    statement: AttributeInSetStatement {
+                        attribute_tag: 2.into(),
+                        set: [
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                        ]
+                        .into_iter()
+                        .collect(),
+                        _phantom: PhantomData,
+                    },
+                },
+                AtomicStatement::AttributeNotInSet {
+                    statement: AttributeNotInSetStatement {
+                        attribute_tag: 1.into(),
+                        set: [
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                        ]
+                        .into_iter()
+                        .collect(),
+                        _phantom: PhantomData,
+                    },
+                },
+                AtomicStatement::RevealAttribute {
+                    statement: RevealAttributeStatement {
+                        attribute_tag: 5.into(),
+                    },
+                },
             ],
         }];
 
@@ -1572,7 +1608,6 @@ mod tests {
         assert_eq!(err, PresentationVerificationError::InconsistentPublicData);
     }
 
-
     /// Test prove and verify presentation for identity credentials.
     #[test]
     fn test_completeness_identity() {
@@ -1608,8 +1643,8 @@ mod tests {
                     Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
                 ),
             ]
-                .into_iter()
-                .collect(),
+            .into_iter()
+            .collect(),
             &global_context,
         );
 
@@ -1632,8 +1667,8 @@ mod tests {
                             Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
                             Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                         ]
-                            .into_iter()
-                            .collect(),
+                        .into_iter()
+                        .collect(),
                         _phantom: PhantomData,
                     },
                 },
@@ -1645,8 +1680,8 @@ mod tests {
                             Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
                             Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                         ]
-                            .into_iter()
-                            .collect(),
+                        .into_iter()
+                        .collect(),
                         _phantom: PhantomData,
                     },
                 },
@@ -1655,7 +1690,6 @@ mod tests {
                         attribute_tag: 5.into(),
                     },
                 },
-
             ],
         }];
 
@@ -1682,10 +1716,7 @@ mod tests {
         );
     }
 
-
-
     // todo ar identity soundness
-
 
     /// Test that the verifier can verify previously generated proofs.
     #[test]
