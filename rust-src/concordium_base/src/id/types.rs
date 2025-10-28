@@ -2783,7 +2783,7 @@ pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::
 }
 
 /// Describes the time period for which a credential is valid
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeSerialize, SerdeDeserialize)]
 pub struct CredentialValidity {
     /// When credential is valid until
     #[serde(rename = "validTo")]
