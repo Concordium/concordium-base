@@ -1716,6 +1716,99 @@ mod tests {
         );
     }
 
+    /// Test prove and verify presentation for identiy credentials where
+    /// verification fails because statements are false.
+    #[test]
+    fn test_soundness_identity_statements() {
+        let mut rng = rand::thread_rng();
+
+        let context = Context {
+            given: vec![ContextProperty {
+                label: "prop1".to_string(),
+                context: "val1".to_string(),
+            }],
+            requested: vec![ContextProperty {
+                label: "prop2".to_string(),
+                context: "val2".to_string(),
+            }],
+        };
+        let challenge = Challenge::V1(context);
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let id_cred_fixture = identity_credentials_fixture(
+            [
+                (3.into(), Web3IdAttribute::Numeric(137)),
+                (
+                    1.into(),
+                    Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
+                ),
+            ]
+                .into_iter()
+                .collect(),
+            &global_context,
+        );
+
+        let credential_statements = vec![CredentialStatement::Identity {
+            network: Network::Testnet,
+            statement: vec![
+                AtomicStatement::AttributeNotInSet {
+                    statement: AttributeNotInSetStatement {
+                        attribute_tag: 1u8.into(),
+                        set: [
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                        ]
+                            .into_iter()
+                            .collect(),
+                        _phantom: PhantomData,
+                    },
+                },
+                AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: 3.into(),
+                        lower: Web3IdAttribute::Numeric(80),
+                        upper: Web3IdAttribute::Numeric(1237),
+                        _phantom: PhantomData,
+                    },
+                },
+            ],
+        }];
+
+        let request = Request::<ArCurve, Web3IdAttribute> {
+            challenge,
+            credential_statements,
+        };
+
+        let mut proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [id_cred_fixture.commitment_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        // change statement to be invalid
+        let CredentialProof::Identity { proofs, .. } = &mut proof.verifiable_credential[0] else {
+            panic!("should be account proof");
+        };
+        proofs[1].0 = AtomicStatement::AttributeInRange {
+            statement: AttributeInRangeStatement {
+                attribute_tag: 3.into(),
+                lower: Web3IdAttribute::Numeric(200),
+                upper: Web3IdAttribute::Numeric(1237),
+                _phantom: PhantomData,
+            },
+        };
+
+        let public = vec![id_cred_fixture.credential_inputs];
+        let err = proof
+            .verify(&global_context, public.iter())
+            .expect_err("verify");
+        assert_eq!(err, PresentationVerificationError::InvalidCredential);
+    }
+
     // todo ar identity soundness
 
     /// Test that the verifier can verify previously generated proofs.
