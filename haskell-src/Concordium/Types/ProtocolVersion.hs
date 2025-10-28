@@ -51,6 +51,7 @@ module Concordium.Types.ProtocolVersion (
     SomeProtocolVersion (..),
     promoteProtocolVersion,
     demoteProtocolVersion,
+    protocolVersionToWord64,
     MonadProtocolVersion (..),
 
     -- * Chain parameters version

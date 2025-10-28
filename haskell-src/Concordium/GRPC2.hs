@@ -2027,6 +2027,33 @@ instance ToProto Updates.UpdateInstruction where
             .= Proto.make
                 (ProtoFields.rawPayload .= S.runPut (Updates.putUpdatePayload uiPayload))
 
+instance ToProto Transactions.TransactionSignaturesV1 where
+    type Output Transactions.TransactionSignaturesV1 = Proto.AccountTransactionV1Signatures
+
+    toProto Transactions.TransactionSignaturesV1{..} = Proto.make $ do
+        ProtoFields.senderSignatures .= toProto tsv1Sender
+        ProtoFields.maybe'sponsorSignatures .= fmap toProto tsv1Sponsor
+
+instance ToProto Transactions.TransactionHeaderV1 where
+    type Output Transactions.TransactionHeaderV1 = Proto.AccountTransactionHeaderV1
+
+    toProto Transactions.TransactionHeaderV1{..} = Proto.make $ do
+        ProtoFields.sender .= toProto (Transactions.thSender thv1HeaderV0)
+        ProtoFields.sequenceNumber .= toProto (Transactions.thNonce thv1HeaderV0)
+        ProtoFields.energyAmount .= toProto (Transactions.thEnergyAmount thv1HeaderV0)
+        ProtoFields.expiry .= toProto (Transactions.thExpiry thv1HeaderV0)
+        ProtoFields.maybe'sponsor .= fmap toProto thv1Sponsor
+
+instance ToProto Transactions.AccountTransactionV1 where
+    type Output Transactions.AccountTransactionV1 = Proto.AccountTransactionV1
+
+    toProto Transactions.AccountTransactionV1{..} = Proto.make $ do
+        ProtoFields.signatures .= toProto atrv1Signature
+        ProtoFields.header .= toProto atrv1Header
+        ProtoFields.payload
+            .= Proto.make
+                (ProtoFields.rawPayload .= BSS.fromShort (_spayload atrv1Payload))
+
 instance ToProto Transactions.BlockItem where
     type Output Transactions.BlockItem = Proto.BlockItem
     toProto bi = Proto.make $ do
@@ -2038,6 +2065,8 @@ instance ToProto Transactions.BlockItem where
                 ProtoFields.credentialDeployment .= toProto cred
             Transactions.ChainUpdate cu ->
                 ProtoFields.updateInstruction .= toProto cu
+            Transactions.ExtendedTransaction extTx -> do
+                ProtoFields.accountTransactionV1 .= toProto extTx
 
 instance ToProto TxTypes.AccountAmounts where
     type Output TxTypes.AccountAmounts = Proto.BlockSpecialEvent'AccountAmounts
@@ -2381,6 +2410,8 @@ instance ToProto Transactions.BareBlockItem where
                 ProtoFields.credentialDeployment .= toProto aCreation
             Transactions.ChainUpdate uInstruction ->
                 ProtoFields.updateInstruction .= toProto uInstruction
+            Transactions.ExtendedTransaction extTransaction ->
+                ProtoFields.accountTransactionV1 .= toProto extTransaction
 
 instance ToProto BlockHashInput where
     type Output BlockHashInput = Proto.BlockHashInput
