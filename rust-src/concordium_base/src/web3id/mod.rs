@@ -670,9 +670,9 @@ pub type Sha256Challenge = HashBytes<Web3IdChallengeMarker>;
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, serde::Deserialize, serde::Serialize, Debug)]
 pub struct Context {
     /// This part of the challenge is supposed to be provided by the dapp backend (e.g. merchant backend).
-    pub given: Vec<GivenContext>,
+    pub given: Vec<ContextProperty>,
     /// This part of the challenge is supposed to be provided by the wallet or ID app.
-    pub requested: Vec<GivenContext>,
+    pub requested: Vec<ContextProperty>,
 }
 
 #[derive(
@@ -687,7 +687,7 @@ pub struct Context {
     crate::common::Deserial,
     Debug,
 )]
-pub struct GivenContext {
+pub struct ContextProperty {
     pub label: String,
     pub context: String,
 }
