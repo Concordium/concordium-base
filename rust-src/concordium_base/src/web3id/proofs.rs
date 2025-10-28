@@ -1893,8 +1893,6 @@ mod tests {
     /// Test that the verifier can verify previously generated proofs.
     #[test]
     fn test_stability_account() {
-        // let challenge = Challenge::Sha256(Sha256Challenge::new(seed0().gen()));
-
         let global_context = GlobalContext::generate("Test".into());
 
         let acc_cred_fixture = account_credentials_fixture(
@@ -1917,68 +1915,6 @@ mod tests {
             .collect(),
             &global_context,
         );
-
-        // let credential_statements = vec![CredentialStatement::Account {
-        //     network: Network::Testnet,
-        //     cred_id: acc_cred_fixture.cred_id,
-        //     statement: vec![
-        //         AtomicStatement::AttributeInRange {
-        //             statement: AttributeInRangeStatement {
-        //                 attribute_tag: 3.into(),
-        //                 lower: Web3IdAttribute::Numeric(80),
-        //                 upper: Web3IdAttribute::Numeric(1237),
-        //                 _phantom: PhantomData,
-        //             },
-        //         },
-        //         AtomicStatement::AttributeInSet {
-        //             statement: AttributeInSetStatement {
-        //                 attribute_tag: 2.into(),
-        //                 set: [
-        //                     Web3IdAttribute::String(AttributeKind::try_new("ff".into())),
-        //                     Web3IdAttribute::String(AttributeKind::try_new("aa".into())),
-        //                     Web3IdAttribute::String(AttributeKind::try_new("zz".into())),
-        //                 ]
-        //                 .into_iter()
-        //                 .collect(),
-        //                 _phantom: PhantomData,
-        //             },
-        //         },
-        //         AtomicStatement::AttributeNotInSet {
-        //             statement: AttributeNotInSetStatement {
-        //                 attribute_tag: 1.into(),
-        //                 set: [
-        //                     Web3IdAttribute::String(AttributeKind::try_new("ff".into())),
-        //                     Web3IdAttribute::String(AttributeKind::try_new("aa".into())),
-        //                     Web3IdAttribute::String(AttributeKind::try_new("zz".into())),
-        //                 ]
-        //                     .into_iter()
-        //                     .collect(),
-        //                 _phantom: PhantomData,
-        //             },
-        //         },
-        //         AtomicStatement::RevealAttribute {
-        //             statement: RevealAttributeStatement {
-        //                 attribute_tag: 5.into(),
-        //             },
-        //         },
-        //     ],
-        // }];
-
-        // let request = Request::<ArCurve, Web3IdAttribute> {
-        //     challenge,
-        //     credential_statements,
-        // };
-        //
-        // let proof = request
-        //     .clone()
-        //     .prove(
-        //         &global_context,
-        //         [acc_cred_fixture.commitment_inputs()].into_iter(),
-        //     )
-        //     .expect("prove");
-        //
-        // let proof_json = serde_json::to_string_pretty(&proof).unwrap();
-        // println!("proof_json:\n{}", proof_json);
 
         let proof_json = r#"
 {
@@ -2069,8 +2005,6 @@ mod tests {
     /// Test that the verifier can verify previously generated proofs.
     #[test]
     fn test_stability_web3() {
-        // let challenge = Challenge::Sha256(Sha256Challenge::new(seed0().gen()));
-
         let global_context = GlobalContext::generate("Test".into());
 
         let web3_cred = web3_credentials_fixture(
@@ -2093,74 +2027,6 @@ mod tests {
             .collect(),
             &global_context,
         );
-
-        // let credential_statements = vec![CredentialStatement::Web3Id {
-        //     ty: [
-        //         "VerifiableCredential".into(),
-        //         "ConcordiumVerifiableCredential".into(),
-        //         "TestCredential".into(),
-        //     ]
-        //     .into_iter()
-        //     .collect(),
-        //     network: Network::Testnet,
-        //     contract: web3_cred.contract,
-        //     credential: web3_cred.cred_id,
-        //     statement: vec![
-        //                 AtomicStatement::AttributeInRange {
-        //                     statement: AttributeInRangeStatement {
-        //                         attribute_tag: 3.to_string(),
-        //                         lower: Web3IdAttribute::Numeric(80),
-        //                         upper: Web3IdAttribute::Numeric(1237),
-        //                         _phantom: PhantomData,
-        //                     },
-        //                 },
-        //                 AtomicStatement::AttributeInSet {
-        //                     statement: AttributeInSetStatement {
-        //                         attribute_tag: 2.to_string(),
-        //                         set: [
-        //                             Web3IdAttribute::String(AttributeKind::try_new("ff".into())),
-        //                             Web3IdAttribute::String(AttributeKind::try_new("aa".into())),
-        //                             Web3IdAttribute::String(AttributeKind::try_new("zz".into())),
-        //                         ]
-        //                         .into_iter()
-        //                         .collect(),
-        //                         _phantom: PhantomData,
-        //                     },
-        //                 },
-        //                 AtomicStatement::AttributeNotInSet {
-        //                     statement: AttributeNotInSetStatement {
-        //                         attribute_tag: 1.to_string(),
-        //                         set: [
-        //                             Web3IdAttribute::String(AttributeKind::try_new("ff".into())),
-        //                             Web3IdAttribute::String(AttributeKind::try_new("aa".into())),
-        //                             Web3IdAttribute::String(AttributeKind::try_new("zz".into())),
-        //                         ]
-        //                             .into_iter()
-        //                             .collect(),
-        //                         _phantom: PhantomData,
-        //                     },
-        //                 },
-        //                 AtomicStatement::RevealAttribute {
-        //                     statement: RevealAttributeStatement {
-        //                         attribute_tag: 5.to_string(),
-        //                     },
-        //                 },
-        //
-        //     ],
-        // }];
-        //
-        // let request = Request::<ArCurve, Web3IdAttribute> {
-        //     challenge,
-        //     credential_statements,
-        // };
-        //
-        // let proof = request
-        //     .clone()
-        //     .prove(&global_context, [web3_cred.commitment_inputs()].into_iter())
-        //     .expect("prove");
-        //
-        // let proof_json = serde_json::to_string_pretty(&proof).unwrap();
-        // println!("proof_json:\n{}", proof_json);
 
         let proof_json = r#"
 {
