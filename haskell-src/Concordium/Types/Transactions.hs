@@ -1,10 +1,12 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -33,6 +35,8 @@ import Concordium.Types
 import Concordium.Types.HashableTo
 import Concordium.Types.Updates
 import Concordium.Utils
+import Control.Applicative
+import Data.Bits
 
 -- * Account transactions
 
@@ -41,15 +45,15 @@ import Concordium.Utils
 --  * @SPEC: <$DOCS/Transactions#transaction-header>
 data TransactionHeader = TransactionHeader
     { -- | Sender account.
-      thSender :: AccountAddress,
+      thSender :: !AccountAddress,
       -- | Account nonce.
       thNonce :: !Nonce,
       -- | Amount of energy dedicated for the execution of this transaction.
       thEnergyAmount :: !Energy,
       -- | Size of the payload in bytes.
-      thPayloadSize :: PayloadSize,
+      thPayloadSize :: !PayloadSize,
       -- | Absolute expiration time after which transaction will not be executed
-      thExpiry :: TransactionExpiryTime
+      thExpiry :: !TransactionExpiryTime
     }
     deriving (Show, Eq)
 
@@ -190,6 +194,134 @@ instance HashableTo TransactionHashV0 AccountTransaction where
 instance HashableTo TransactionSignHashV0 AccountTransaction where
     getHash = atrSignHash
 
+-- | The signatures for an 'AccountTransactionV1'.
+data TransactionSignaturesV1 = TransactionSignaturesV1
+    { -- | The signatures for the sender account
+      tsv1Sender :: !TransactionSignature,
+      -- | The signatures for the sponsor account. These must be present if a sponsor
+      -- is specified for the transaction in the corresponding transaction header.
+      -- If a sponsor is not set, the signature map should be empty.
+      tsv1Sponsor :: !(Maybe TransactionSignature)
+    }
+    deriving (Show, Eq)
+
+instance S.Serialize TransactionSignaturesV1 where
+    put TransactionSignaturesV1{..} = do
+        S.put tsv1Sender
+        case tsv1Sponsor of
+            Nothing -> S.putWord8 0
+            Just sponsorSignature -> S.put sponsorSignature
+
+    get = S.label "transaction signatures v1" $ do
+        tsv1Sender <- S.label "sender" S.get
+        tsv1Sponsor <- S.label "sponsor" (noSponsor <|> sponsor)
+        return $! TransactionSignaturesV1{..}
+      where
+        noSponsor = do
+            tag <- S.getWord8
+            guard (tag == 0)
+            return Nothing
+        sponsor = Just <$> S.get
+
+-- | Data common to all v1 transaction types.
+data TransactionHeaderV1 = TransactionHeaderV1
+    { -- | V0 transaction header
+      thv1HeaderV0 :: !TransactionHeader,
+      -- | An optional sponsor account which pays the transaction fees for the
+      --  transaction execution
+      thv1Sponsor :: !(Maybe AccountAddress)
+    }
+    deriving (Show, Eq)
+
+instance S.Serialize TransactionHeaderV1 where
+    put TransactionHeaderV1{..} = do
+        S.putWord16be $ bitFor 0 thv1Sponsor
+        S.put thv1HeaderV0
+        mapM_ S.put thv1Sponsor
+      where
+        bitFor :: (Bits b) => Int -> Maybe a -> b
+        bitFor _ Nothing = zeroBits
+        bitFor i (Just _) = bit i
+
+    get = S.label "transaction header v1" $ do
+        bitmap <- S.label "bitmap" S.getWord16be
+        -- check that only the supported fields in the bitmap are set
+        unless (bitmap .&. 0b1111_1111_1111_1110 == 0) $
+            fail "Unsupported bitmap fields"
+        thv1HeaderV0 <- S.label "v0 header" S.get
+        thv1Sponsor <- maybeGet bitmap 0 "sponsor"
+        return $! TransactionHeaderV1{..}
+      where
+        maybeGet bitmap bitNum label
+            | testBit bitmap bitNum = Just <$> S.label label S.get
+            | otherwise = return Nothing
+
+-- | An 'AccountTransactionV1' is a transaction that originates from
+--  a specific account (the sender), and is paid for by either the sender
+--  or a sponsor account.
+--
+--  The representation includes a 'TransactionSignHash' which is
+--  the value that is signed. This is derived from the header and
+--  payload, and so does not form part of the serialization.
+--
+--  The payload is stored in serialized form. Deserializing the
+--  payload is considered part of the transaction execution.
+data AccountTransactionV1 = AccountTransactionV1
+    { -- | Signature
+      atrv1Signature :: !TransactionSignaturesV1,
+      -- | Header
+      atrv1Header :: !TransactionHeaderV1,
+      -- | Serialized payload
+      atrv1Payload :: !EncodedPayload,
+      -- | Hash used for signing
+      atrv1SignHash :: !TransactionSignHash
+    }
+    deriving (Eq, Show)
+
+-- | A prefix used for the hash signed for v1 account transactions. This is used to distinguish
+-- signatures produced for any v1 account transaction from those produced for any v0 transaction,
+-- as the first 32 bytes of those will always be the sender account address.
+v1TransactionSignHashPrefix :: BS.ByteString
+v1TransactionSignHashPrefix = BS.pack [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+
+-- | Construct an 'AccountTransactionV1', computing the correct
+--  'TransactionSignHash'.
+makeAccountTransactionV1 :: TransactionSignaturesV1 -> TransactionHeaderV1 -> EncodedPayload -> AccountTransactionV1
+makeAccountTransactionV1 atrv1Signature atrv1Header atrv1Payload = AccountTransactionV1{..}
+  where
+    atrv1SignHash = transactionV1SignHashFromHeaderPayload atrv1Header atrv1Payload
+
+-- | Construct a 'TransactionSignHash' from a 'TransactionHeaderV1' and 'EncodedPayload'.
+transactionV1SignHashFromHeaderPayload :: TransactionHeaderV1 -> EncodedPayload -> TransactionSignHash
+transactionV1SignHashFromHeaderPayload atrv1Header atrv1Payload = TransactionSignHashV0 $
+    H.hashLazy $
+        S.runPutLazy $ do
+            S.putByteString v1TransactionSignHashPrefix
+            S.put atrv1Header
+            putEncodedPayload atrv1Payload
+
+instance S.Serialize AccountTransactionV1 where
+    put AccountTransactionV1{..} =
+        S.put atrv1Signature
+            <> S.put atrv1Header
+            <> putEncodedPayload atrv1Payload
+
+    get = S.label "account transaction" $ do
+        atrv1Signature <- S.label "signature" S.get
+        ((atrv1Header, atrv1Payload), bodyBytes) <- getWithBytes $ do
+            atrv1Header <- S.label "header" S.get
+            atrv1Payload <- S.label "payload" $ getEncodedPayload (thPayloadSize $ thv1HeaderV0 atrv1Header)
+            return (atrv1Header, atrv1Payload)
+        let atrv1SignHash = transactionSignHashFromBytes $ v1TransactionSignHashPrefix <> bodyBytes
+        return $! AccountTransactionV1{..}
+
+instance HashableTo TransactionHashV0 AccountTransactionV1 where
+    getHash = transactionHashFromBareBlockItem . ExtendedTransaction
+    {-# INLINE getHash #-}
+
+instance HashableTo TransactionSignHashV0 AccountTransactionV1 where
+    getHash = atrv1SignHash
+
 -- | An 'AccountCreation' is a credential together with an expiry. It is a
 --  message that is included in a block, if valid, but it is not paid for
 --  directly by the sender.
@@ -257,6 +389,7 @@ instance HashableTo TransactionHash (WithMetadata value) where
 
 type Transaction = WithMetadata AccountTransaction
 type CredentialDeploymentWithMeta = WithMetadata AccountCreation
+type TransactionV1 = WithMetadata AccountTransactionV1
 
 addMetadata :: (a -> BareBlockItem) -> TransactionTime -> a -> WithMetadata a
 addMetadata f time a =
@@ -271,6 +404,12 @@ addMetadata f time a =
 
 fromAccountTransaction :: TransactionTime -> AccountTransaction -> Transaction
 fromAccountTransaction wmdArrivalTime wmdData =
+    let wmdHash = getHash wmdData
+        wmdSize = BS.length (S.encode wmdData) + 1
+    in  WithMetadata{..}
+
+fromAccountTransactionV1 :: TransactionTime -> AccountTransactionV1 -> TransactionV1
+fromAccountTransactionV1 wmdArrivalTime wmdData =
     let wmdHash = getHash wmdData
         wmdSize = BS.length (S.encode wmdData) + 1
     in  WithMetadata{..}
@@ -313,18 +452,22 @@ data BlockItemKind
     = AccountTransactionKind
     | CredentialDeploymentKind
     | UpdateInstructionKind
+    | AccountTransactionV1Kind
     deriving (Eq, Ord, Show)
 
+-- | @SPEC: <$DOCS/BlockItems#serialization-format-block-item>
 instance S.Serialize BlockItemKind where
     put AccountTransactionKind = S.putWord8 0
     put CredentialDeploymentKind = S.putWord8 1
     put UpdateInstructionKind = S.putWord8 2
+    put AccountTransactionV1Kind = S.putWord8 3
     {-# INLINE put #-}
     get =
         S.getWord8 >>= \case
             0 -> return AccountTransactionKind
             1 -> return CredentialDeploymentKind
             2 -> return UpdateInstructionKind
+            3 -> return AccountTransactionV1Kind
             _ -> fail "unknown block item kind"
     {-# INLINE get #-}
 
@@ -339,6 +482,9 @@ data BareBlockItem
     | ChainUpdate
         { biUpdate :: !UpdateInstruction
         }
+    | ExtendedTransaction
+        { biTransactionV1 :: !AccountTransactionV1
+        }
     deriving (Eq, Show)
 
 instance HashableTo TransactionHash BareBlockItem where
@@ -350,6 +496,7 @@ putBareBlockItem :: S.Putter BareBlockItem
 putBareBlockItem NormalTransaction{..} = S.put AccountTransactionKind <> S.put biTransaction
 putBareBlockItem CredentialDeployment{..} = S.put CredentialDeploymentKind <> S.put biCred
 putBareBlockItem ChainUpdate{..} = S.put UpdateInstructionKind <> putUpdateInstruction biUpdate
+putBareBlockItem ExtendedTransaction{..} = S.put AccountTransactionV1Kind <> S.put biTransactionV1
 
 getBareBlockItem :: SProtocolVersion pv -> S.Get BareBlockItem
 getBareBlockItem spv =
@@ -358,6 +505,11 @@ getBareBlockItem spv =
             AccountTransactionKind -> NormalTransaction <$> S.get
             CredentialDeploymentKind -> CredentialDeployment <$> S.get
             UpdateInstructionKind -> ChainUpdate <$> getUpdateInstruction spv
+            AccountTransactionV1Kind -> do
+                unless (pv >= 10) $ fail "Extended transactions are not supported prior to p10"
+                ExtendedTransaction <$> S.get
+  where
+    pv = protocolVersionToWord64 (demoteProtocolVersion spv)
 
 -- | Datatypes which have an expiry, which here we set to mean the latest time
 --  the item can be included in a block.
@@ -376,10 +528,15 @@ instance HasMessageExpiry UpdateInstruction where
     {-# INLINE msgExpiry #-}
     msgExpiry = updateTimeout . uiHeader
 
+instance HasMessageExpiry AccountTransactionV1 where
+    {-# INLINE msgExpiry #-}
+    msgExpiry = thExpiry . thv1HeaderV0 . atrv1Header
+
 instance HasMessageExpiry BareBlockItem where
     msgExpiry (NormalTransaction t) = msgExpiry t
     msgExpiry (CredentialDeployment t) = msgExpiry t
     msgExpiry (ChainUpdate t) = msgExpiry t
+    msgExpiry (ExtendedTransaction t) = msgExpiry t
 
 instance (HasMessageExpiry a) => HasMessageExpiry (WithMetadata a) where
     {-# INLINE msgExpiry #-}
@@ -427,6 +584,10 @@ credentialDeployment WithMetadata{..} = WithMetadata{wmdData = CredentialDeploym
 
 chainUpdate :: WithMetadata UpdateInstruction -> BlockItem
 chainUpdate WithMetadata{..} = WithMetadata{wmdData = ChainUpdate wmdData, wmdSize = wmdSize + 1, ..}
+
+-- | Embed a v1 transaction as a block item.
+extendedTransaction :: TransactionV1 -> BlockItem
+extendedTransaction WithMetadata{..} = WithMetadata{wmdData = ExtendedTransaction wmdData, wmdSize = wmdSize + 1, ..}
 
 -- | Serialize a block item according to V0 format, without the metadata.
 putBlockItemV0 :: BlockItem -> S.Put
@@ -595,6 +756,8 @@ class TransactionData t where
     transactionSignature :: t -> TransactionSignature
     transactionSignHash :: t -> TransactionSignHash
     transactionHash :: t -> TransactionHash
+    transactionSponsor :: t -> Maybe AccountAddress
+    transactionSponsorSignature :: t -> Maybe TransactionSignature
 
 transactionSize :: Transaction -> Int
 transactionSize = wmdSize
@@ -608,6 +771,8 @@ instance TransactionData AccountTransaction where
     transactionSignature = atrSignature
     transactionSignHash = atrSignHash
     transactionHash = getHash
+    transactionSponsor _ = Nothing
+    transactionSponsorSignature _ = Nothing
 
 instance TransactionData Transaction where
     transactionHeader = atrHeader . wmdData
@@ -618,6 +783,32 @@ instance TransactionData Transaction where
     transactionSignature = atrSignature . wmdData
     transactionSignHash = atrSignHash . wmdData
     transactionHash = wmdHash
+    transactionSponsor _ = Nothing
+    transactionSponsorSignature _ = Nothing
+
+instance TransactionData AccountTransactionV1 where
+    transactionHeader = thv1HeaderV0 . atrv1Header
+    transactionSender = thSender . thv1HeaderV0 . atrv1Header
+    transactionNonce = thNonce . thv1HeaderV0 . atrv1Header
+    transactionGasAmount = thEnergyAmount . thv1HeaderV0 . atrv1Header
+    transactionPayload = atrv1Payload
+    transactionSignature = tsv1Sender . atrv1Signature
+    transactionSignHash = atrv1SignHash
+    transactionHash = getHash
+    transactionSponsor = thv1Sponsor . atrv1Header
+    transactionSponsorSignature = tsv1Sponsor . atrv1Signature
+
+instance TransactionData TransactionV1 where
+    transactionHeader = transactionHeader . wmdData
+    transactionSender = transactionSender . wmdData
+    transactionNonce = transactionNonce . wmdData
+    transactionGasAmount = transactionGasAmount . wmdData
+    transactionPayload = transactionPayload . wmdData
+    transactionSignature = transactionSignature . wmdData
+    transactionSignHash = transactionSignHash . wmdData
+    transactionHash = wmdHash
+    transactionSponsor = transactionSponsor . wmdData
+    transactionSponsorSignature = transactionSponsorSignature . wmdData
 
 --------------------------
 

@@ -23,15 +23,18 @@ groupIntoSize s =
                 in  show lb ++ " -- " ++ show ub ++ "B"
 
 -- | Check that a transaction can be serialized and deserialized.
-checkTransaction :: AccountTransaction -> Property
+checkTransaction :: (Eq a, Show a, Serialize a) => a -> Property
 checkTransaction tx =
     let bs = encode tx
     in  case decode bs of
             Left err -> counterexample err False
             Right tx' -> QC.label (groupIntoSize (BS.length bs)) $ tx === tx'
 
-testTransaction :: Property
-testTransaction = forAll genAccountTransaction checkTransaction
+testAccountTransaction :: Property
+testAccountTransaction = forAll genAccountTransaction checkTransaction
+
+testAccountTransactionV1 :: Property
+testAccountTransactionV1 = forAll genAccountTransactionV1 checkTransaction
 
 dummyTime :: TransactionTime
 dummyTime = 37
@@ -47,9 +50,30 @@ checkBlockItem spv bi =
 
 testBlockItem :: SProtocolVersion pv -> Property
 testBlockItem spv = forAll genBlockItem $ checkBlockItem spv
+
+checkBlockItemExtendedTransaction :: SProtocolVersion pv -> BlockItem -> Property
+checkBlockItemExtendedTransaction spv bi =
+    case runGet (getBlockItemV0 spv (wmdArrivalTime bi)) bs of
+        Left err ->
+            if (pv < 10)
+                then property True
+                else counterexample err False
+        Right bi' ->
+            if (pv >= 10)
+                then checkBlockItem spv bi'
+                else counterexample "Expected deserialization to fail but it succeeded" False
+  where
+    bs = runPut . putBareBlockItemV0 $ wmdData bi
+    pv = protocolVersionToWord64 $ demoteProtocolVersion spv
+
+testBlockItemExtendedTransaction :: SProtocolVersion pv -> Property
+testBlockItemExtendedTransaction spv = forAll genBlockItemTransactionExt $ checkBlockItemExtendedTransaction spv
+
 tests :: Spec
 tests = parallel $ do
-    specify "Transaction serialization." $ withMaxSuccess 1000 testTransaction
+    specify "Transaction serialization." $ withMaxSuccess 1000 testAccountTransaction
+    specify "TransactionV1 serialization." $ withMaxSuccess 1000 testAccountTransactionV1
+
     specify "BlockItem serialization in P1." $ withMaxSuccess 100 $ testBlockItem SP1
     specify "BlockItem serialization in P2." $ withMaxSuccess 100 $ testBlockItem SP2
     specify "BlockItem serialization in P3." $ withMaxSuccess 100 $ testBlockItem SP3
@@ -59,3 +83,13 @@ tests = parallel $ do
     specify "BlockItem serialization in P7." $ withMaxSuccess 100 $ testBlockItem SP7
     specify "BlockItem serialization in P8." $ withMaxSuccess 100 $ testBlockItem SP8
     specify "BlockItem serialization in P9." $ withMaxSuccess 100 $ testBlockItem SP9
+
+    specify "BlockItem ExtendedTransaction serialization in P1." $ withMaxSuccess 100 $ testBlockItemExtendedTransaction SP1
+    specify "BlockItem ExtendedTransaction serialization in P2." $ withMaxSuccess 100 $ testBlockItemExtendedTransaction SP2
+    specify "BlockItem ExtendedTransaction serialization in P3." $ withMaxSuccess 100 $ testBlockItemExtendedTransaction SP3
+    specify "BlockItem ExtendedTransaction serialization in P4." $ withMaxSuccess 100 $ testBlockItemExtendedTransaction SP4
+    specify "BlockItem ExtendedTransaction serialization in P5." $ withMaxSuccess 100 $ testBlockItemExtendedTransaction SP5
+    specify "BlockItem ExtendedTransaction serialization in P6." $ withMaxSuccess 100 $ testBlockItemExtendedTransaction SP6
+    specify "BlockItem ExtendedTransaction serialization in P7." $ withMaxSuccess 100 $ testBlockItemExtendedTransaction SP7
+    specify "BlockItem ExtendedTransaction serialization in P8." $ withMaxSuccess 100 $ testBlockItemExtendedTransaction SP8
+    specify "BlockItem ExtendedTransaction serialization in P9." $ withMaxSuccess 100 $ testBlockItemExtendedTransaction SP9
