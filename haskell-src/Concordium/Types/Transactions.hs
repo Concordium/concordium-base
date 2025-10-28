@@ -199,17 +199,19 @@ data TransactionSignaturesV1 = TransactionSignaturesV1
       tsv1Sender :: !TransactionSignature,
       -- | The signatures for the sponsor account. These must be present if a sponsor
       -- is specified for the transaction in the corresponding transaction header.
-      tsv1Sponsor :: !(Maybe TransactionSignature)
+      -- If a sponsor is not set, the signature map should be empty.
+      tsv1Sponsor :: !TransactionSignature
     }
     deriving (Show, Eq)
 
 instance S.Serialize TransactionSignaturesV1 where
-    put TransactionSignaturesV1{..} =
-        S.put tsv1Sender <> putMaybe S.put tsv1Sponsor
+    put TransactionSignaturesV1{..} = do
+        S.put tsv1Sender
+        S.put tsv1Sponsor
 
     get = S.label "transaction signatures v1" $ do
         tsv1Sender <- S.label "sender" S.get
-        tsv1Sponsor <- S.label "sponsor" (getMaybe S.get)
+        tsv1Sponsor <- S.label "sponsor" S.get
         return $! TransactionSignaturesV1{..}
 
 -- | Data common to all v1 transaction types.
@@ -785,7 +787,7 @@ instance TransactionData AccountTransactionV1 where
     transactionSignHash = atrv1SignHash
     transactionHash = getHash
     transactionSponsor = thv1Sponsor . atrv1Header
-    transactionSponsorSignature = tsv1Sponsor . atrv1Signature
+    transactionSponsorSignature = pure . tsv1Sponsor . atrv1Signature
 
 instance TransactionData TransactionV1 where
     transactionHeader = transactionHeader . wmdData

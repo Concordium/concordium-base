@@ -8,7 +8,6 @@ import Data.Serialize
 import qualified Data.ByteString as BS
 
 import Concordium.Types
-import Concordium.Types.ProtocolVersion
 import Concordium.Types.Transactions
 import Generators
 
