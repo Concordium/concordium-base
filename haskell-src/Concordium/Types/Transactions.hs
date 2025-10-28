@@ -35,6 +35,7 @@ import Concordium.Types
 import Concordium.Types.HashableTo
 import Concordium.Types.Updates
 import Concordium.Utils
+import Control.Applicative
 import Data.Bits
 
 -- * Account transactions
@@ -200,19 +201,27 @@ data TransactionSignaturesV1 = TransactionSignaturesV1
       -- | The signatures for the sponsor account. These must be present if a sponsor
       -- is specified for the transaction in the corresponding transaction header.
       -- If a sponsor is not set, the signature map should be empty.
-      tsv1Sponsor :: !TransactionSignature
+      tsv1Sponsor :: !(Maybe TransactionSignature)
     }
     deriving (Show, Eq)
 
 instance S.Serialize TransactionSignaturesV1 where
     put TransactionSignaturesV1{..} = do
         S.put tsv1Sender
-        S.put tsv1Sponsor
+        case tsv1Sponsor of
+            Nothing -> S.putWord8 0
+            Just sponsorSignature -> S.put sponsorSignature
 
     get = S.label "transaction signatures v1" $ do
         tsv1Sender <- S.label "sender" S.get
-        tsv1Sponsor <- S.label "sponsor" S.get
+        tsv1Sponsor <- S.label "sponsor" (noSponsor <|> sponsor)
         return $! TransactionSignaturesV1{..}
+      where
+        noSponsor = do
+            tag <- S.getWord8
+            guard (tag == 0)
+            return Nothing
+        sponsor = Just <$> S.get
 
 -- | Data common to all v1 transaction types.
 data TransactionHeaderV1 = TransactionHeaderV1
@@ -787,7 +796,7 @@ instance TransactionData AccountTransactionV1 where
     transactionSignHash = atrv1SignHash
     transactionHash = getHash
     transactionSponsor = thv1Sponsor . atrv1Header
-    transactionSponsorSignature = pure . tsv1Sponsor . atrv1Signature
+    transactionSponsorSignature = tsv1Sponsor . atrv1Signature
 
 instance TransactionData TransactionV1 where
     transactionHeader = transactionHeader . wmdData
