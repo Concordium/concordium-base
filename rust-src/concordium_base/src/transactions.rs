@@ -315,7 +315,7 @@ impl Deserial for TransactionHeaderV1 {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let bitmap: u16 = source.get()?;
         anyhow::ensure!(
-            (bitmap & !DEFINED_FEATURES_MASK) != 0,
+            (bitmap & !DEFINED_FEATURES_MASK) == 0,
             "Unknown feature bit set in transaction header."
         );
         let header_v0: TransactionHeader = source.get()?;
