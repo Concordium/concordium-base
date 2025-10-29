@@ -12,7 +12,8 @@ pub mod v1;
 mod test;
 
 use crate::id::types::{
-    ArInfos, HasIdentityObjectFields, IdObjectUseData, IdentityObjectV1, IpContextOnly, IpInfo,
+    ArInfos, CredentialValidity, HasIdentityObjectFields, IdObjectUseData,
+    IdentityAttributesCredentialsInfo, IdentityObjectV1, IpContextOnly, IpInfo,
 };
 use crate::{
     base::CredentialRegistrationID,
@@ -59,6 +60,14 @@ pub struct AccountCredentialStatement<C: Curve, AttributeType: Attribute<C::Scal
     pub statement: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
 }
 
+/// A statement about a single identity credential
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdentityCredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    pub network: Network,
+    /// Attribute statements
+    pub statement: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
+}
+
 /// A statement about a single Web3 credential
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Web3IdCredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
@@ -74,7 +83,7 @@ pub struct Web3IdCredentialStatement<C: Curve, AttributeType: Attribute<C::Scala
     pub statement: Vec<AtomicStatement<C, String, AttributeType>>,
 }
 
-/// A statement about a single credential, either an identity credential or a
+/// A statement about a single credential, either an account credential or a
 /// Web3 credential.
 #[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
 #[serde(
@@ -177,19 +186,33 @@ pub type StatementWithProof<C, TagType, AttributeType> = (
     AtomicProof<C, AttributeType>,
 );
 
+/// Metadata of an account credentials derived from an identity issued by an
+/// identity provider.
+pub struct AccountCredentialMetadata {
+    pub issuer: IpIdentity,
+    pub cred_id: CredentialRegistrationID,
+}
+
+/// Metadata of identity attributes derived directly from an identity issued by an
+/// identity provider.
+pub struct IdentityCredentialMetadata {
+    pub issuer: IpIdentity,
+    pub validity: CredentialValidity,
+}
+
+/// Metadata of a Web3Id credential.
+pub struct Web3idCredentialMetadata {
+    pub contract: ContractAddress,
+    pub holder: CredentialHolderId,
+}
+
 /// Metadata of a single credential.
 pub enum CredentialMetadata {
     /// Metadata of an account credential, i.e., a credential derived from an
     /// identity object.
-    Account {
-        issuer: IpIdentity,
-        cred_id: CredentialRegistrationID,
-    },
+    Account(AccountCredentialMetadata),
     /// Metadata of a Web3Id credential.
-    Web3Id {
-        contract: ContractAddress,
-        holder: CredentialHolderId,
-    },
+    Web3Id(Web3idCredentialMetadata),
 }
 
 /// Metadata about a single [`CredentialProof`].
@@ -202,68 +225,135 @@ pub struct ProofMetadata {
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, AttributeType> {
-    pub fn metadata(&self) -> ProofMetadata {
+    pub fn network(&self) -> Network {
         match self {
-            CredentialProof::Account(AccountCredentialProof {
-                created,
-                network,
-                cred_id,
-                issuer,
-                proofs: _,
-            }) => ProofMetadata {
-                created: *created,
-                network: *network,
-                cred_metadata: CredentialMetadata::Account {
-                    issuer: *issuer,
-                    cred_id: *cred_id,
-                },
-            },
-            CredentialProof::Web3Id(Web3IdCredentialProof {
-                created,
-                holder,
-                network,
-                contract,
-                ty: _,
-                commitments: _,
-                proofs: _,
-            }) => ProofMetadata {
-                created: *created,
-                network: *network,
-                cred_metadata: CredentialMetadata::Web3Id {
-                    contract: *contract,
-                    holder: *holder,
-                },
-            },
+            CredentialProof::Account(acc) => acc.network,
+            CredentialProof::Web3Id(web3) => web3.network,
+        }
+    }
+
+    pub fn created(&self) -> chrono::DateTime<chrono::Utc> {
+        match self {
+            CredentialProof::Account(acc) => acc.created,
+            CredentialProof::Web3Id(web3) => web3.created,
+        }
+    }
+
+    pub fn metadata(&self) -> ProofMetadata {
+        let cred_metadata = match self {
+            CredentialProof::Account(cred_proof) => {
+                CredentialMetadata::Account(cred_proof.metadata())
+            }
+            CredentialProof::Web3Id(cred_proof) => {
+                CredentialMetadata::Web3Id(cred_proof.metadata())
+            }
+        };
+
+        ProofMetadata {
+            created: self.created(),
+            network: self.network(),
+            cred_metadata,
         }
     }
 
     /// Extract the statement from the proof.
     pub fn statement(&self) -> CredentialStatement<C, AttributeType> {
         match self {
-            CredentialProof::Account(AccountCredentialProof {
-                network,
-                cred_id,
-                proofs,
-                ..
-            }) => CredentialStatement::Account(AccountCredentialStatement {
-                network: *network,
-                cred_id: *cred_id,
-                statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
-            }),
-            CredentialProof::Web3Id(Web3IdCredentialProof {
-                holder,
-                network,
-                contract,
-                ty,
-                proofs,
-                ..
-            }) => CredentialStatement::Web3Id(Web3IdCredentialStatement {
-                ty: ty.clone(),
-                network: *network,
-                contract: *contract,
-                credential: *holder,
-                statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
-            }),
+            CredentialProof::Account(cred_proof) => {
+                CredentialStatement::Account(cred_proof.statement())
+            }
+            CredentialProof::Web3Id(cred_proof) => {
+                CredentialStatement::Web3Id(cred_proof.statement())
+            }
+        }
+    }
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialProof<C, AttributeType> {
+    pub fn metadata(&self) -> AccountCredentialMetadata {
+        let AccountCredentialProof {
+            cred_id, issuer, ..
+        } = self;
+
+        AccountCredentialMetadata {
+            issuer: *issuer,
+            cred_id: *cred_id,
+        }
+    }
+
+    /// Extract the statement from the proof.
+    pub fn statement(&self) -> AccountCredentialStatement<C, AttributeType> {
+        let AccountCredentialProof {
+            network,
+            cred_id,
+            proofs,
+            ..
+        } = self;
+
+        AccountCredentialStatement {
+            network: *network,
+            cred_id: *cred_id,
+            statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
+        }
+    }
+}
+
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
+    IdentityCredentialProof<P, C, AttributeType>
+{
+    pub fn metadata(&self) -> IdentityCredentialMetadata {
+        let IdentityCredentialProof {
+            id_attr_cred_info, ..
+        } = self;
+
+        IdentityCredentialMetadata {
+            issuer: id_attr_cred_info.values.ip_identity,
+            validity: id_attr_cred_info.values.validity.clone(),
+        }
+    }
+
+    /// Extract the statement from the proof.
+    pub fn statement(&self) -> IdentityCredentialStatement<C, AttributeType> {
+        let IdentityCredentialProof {
+            network, proofs, ..
+        } = self;
+
+        IdentityCredentialStatement {
+            network: *network,
+            statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
+        }
+    }
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdCredentialProof<C, AttributeType> {
+    pub fn metadata(&self) -> Web3idCredentialMetadata {
+        let Web3IdCredentialProof {
+            holder, contract, ..
+        } = self;
+
+        Web3idCredentialMetadata {
+            contract: *contract,
+            holder: *holder,
+        }
+    }
+
+    /// Extract the statement from the proof.
+    pub fn statement(&self) -> Web3IdCredentialStatement<C, AttributeType> {
+        let Web3IdCredentialProof {
+            holder,
+            network,
+            contract,
+            ty,
+            proofs,
+            ..
+        } = self;
+
+        Web3IdCredentialStatement {
+            ty: ty.clone(),
+            network: *network,
+            contract: *contract,
+            credential: *holder,
+            statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
         }
     }
 }
@@ -280,6 +370,22 @@ pub struct AccountCredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>>
     /// Issuer of this credential, the identity provider index on the
     /// relevant network.
     pub issuer: IpIdentity,
+    pub proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
+}
+
+/// A proof of identity credentials. This contains almost
+/// all the information needed to verify it, except the public commitments.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IdentityCredentialProof<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    /// Creation timestamp of the proof.
+    pub created: chrono::DateTime<chrono::Utc>,
+    pub network: Network,
+    /// Commitments to attribute values and their proofs
+    pub id_attr_cred_info: IdentityAttributesCredentialsInfo<P, C, AttributeType>,
     pub proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
 }
 
@@ -574,6 +680,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
     for CredentialProof<C, AttributeType>
 {
     fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
+        // todo ar proof ser
         match self {
             CredentialProof::Account(AccountCredentialProof {
                 created,
@@ -1353,6 +1460,7 @@ impl<
                     id_object,
                     id_object_use_data,
                 } = &**inputs;
+
                 CommitmentInputs::Identity {
                     ip_context: IpContextOnly {
                         ip_info,

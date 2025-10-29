@@ -8,18 +8,22 @@ use crate::{
 
 use crate::web3id::{
     AccountCredentialProof, AccountCredentialStatement, CommitmentInputs, CredentialHolderId,
-    CredentialProof, CredentialStatement, CredentialsInputs, LinkingProof, Presentation,
-    PresentationVerificationError, ProofError, ProofMetadata, Request, Sha256Challenge,
-    SignedCommitments, StatementWithProof, WeakLinkingProof, Web3IdCredentialProof,
-    Web3IdCredentialStatement, Web3IdSigner, COMMITMENT_SIGNATURE_DOMAIN_STRING,
-    LINKING_DOMAIN_STRING,
+    CredentialProof, CredentialStatement, CredentialsInputs, IdentityCredentialProof,
+    IdentityCredentialStatement, LinkingProof, Presentation, PresentationVerificationError,
+    ProofError, ProofMetadata, Request, Sha256Challenge, SignedCommitments, StatementWithProof,
+    WeakLinkingProof, Web3IdCredentialProof, Web3IdCredentialStatement, Web3IdSigner,
+    COMMITMENT_SIGNATURE_DOMAIN_STRING, LINKING_DOMAIN_STRING,
 };
 use ed25519_dalek::Verifier;
 
 use crate::cis4_types::IssuerKey;
 use crate::curve_arithmetic::Pairing;
 use crate::id::id_proof_types::{AtomicStatement, ProofVersion};
-use crate::id::types::{HasAttributeRandomness, HasAttributeValues};
+use crate::id::identity_attributes_credentials;
+use crate::id::identity_attributes_credentials::IdentityAttributeHandling;
+use crate::id::types::{
+    HasAttributeRandomness, HasAttributeValues, IdentityAttribute, IpContextOnly,
+};
 use crate::pedersen_commitment::Commitment;
 use concordium_contracts_common::ContractAddress;
 use rand::{CryptoRng, Rng};
@@ -110,7 +114,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialProof<C, AttributeType> {
-    fn verify<P: Pairing<ScalarField = C::Scalar>>(
+    pub fn verify<P: Pairing<ScalarField = C::Scalar>>(
         &self,
         global_context: &GlobalContext<C>,
         transcript: &mut RandomOracle,
@@ -125,8 +129,51 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialProof<C, At
     }
 }
 
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
+    IdentityCredentialProof<P, C, AttributeType>
+{
+    pub fn verify(
+        &self,
+        global_context: &GlobalContext<C>,
+        transcript: &mut RandomOracle,
+        input: &CredentialsInputs<P, C>,
+    ) -> bool {
+        let CredentialsInputs::Identity { ip_info, ars_infos } = input else {
+            // mismatch in types
+            return false;
+        };
+
+        if identity_attributes_credentials::verify_identity_attributes(
+            global_context,
+            IpContextOnly {
+                ip_info,
+                ars_infos: &ars_infos.anonymity_revokers,
+            },
+            &self.id_attr_cred_info,
+            transcript,
+        )
+        .is_err()
+        {
+            return false;
+        }
+
+        let cmm_attributes: BTreeMap<_, _> = self
+            .id_attr_cred_info
+            .values
+            .attributes
+            .iter()
+            .filter_map(|(tag, attr)| match attr {
+                IdentityAttribute::Committed(cmm) => Some((*tag, *cmm)),
+                _ => None,
+            })
+            .collect();
+
+        verify_statements(&self.proofs, &cmm_attributes, global_context, transcript)
+    }
+}
+
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdCredentialProof<C, AttributeType> {
-    fn verify<P: Pairing<ScalarField = C::Scalar>>(
+    pub fn verify<P: Pairing<ScalarField = C::Scalar>>(
         &self,
         global_context: &GlobalContext<C>,
         transcript: &mut RandomOracle,
@@ -194,14 +241,14 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatement<C, AttributeType> {
-    fn prove<P: Pairing<ScalarField = C::Scalar>, Signer: Web3IdSigner>(
+    pub fn prove<P: Pairing<ScalarField = C::Scalar>, Signer: Web3IdSigner>(
         self,
         global_context: &GlobalContext<C>,
         transcript: &mut RandomOracle,
         csprng: &mut impl rand::Rng,
         now: chrono::DateTime<chrono::Utc>,
         input: CommitmentInputs<P, C, AttributeType, Signer>,
-    ) -> Result<CredentialProof<C, AttributeType>, ProofError> {
+    ) -> Result<AccountCredentialProof<C, AttributeType>, ProofError> {
         let CommitmentInputs::Account {
             values,
             randomness,
@@ -220,25 +267,91 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatement<C
             csprng,
         )?;
 
-        Ok(CredentialProof::Account(AccountCredentialProof {
+        Ok(AccountCredentialProof {
             cred_id: self.cred_id,
             proofs,
             network: self.network,
             created: now,
             issuer,
-        }))
+        })
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdCredentialStatement<C, AttributeType> {
-    fn prove<P: Pairing<ScalarField = C::Scalar>, Signer: Web3IdSigner>(
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityCredentialStatement<C, AttributeType> {
+    pub fn prove<P: Pairing<ScalarField = C::Scalar>, Signer: Web3IdSigner>(
         self,
         global_context: &GlobalContext<C>,
         transcript: &mut RandomOracle,
         csprng: &mut impl rand::Rng,
         now: chrono::DateTime<chrono::Utc>,
         input: CommitmentInputs<P, C, AttributeType, Signer>,
-    ) -> Result<CredentialProof<C, AttributeType>, ProofError> {
+    ) -> Result<IdentityCredentialProof<P, C, AttributeType>, ProofError> {
+        let CommitmentInputs::Identity {
+            ip_context,
+            id_object,
+            id_object_use_data,
+        } = input
+        else {
+            return Err(ProofError::CommitmentsStatementsMismatch);
+        };
+
+        let attributes_handling: BTreeMap<_, _> = self
+            .statement
+            .iter()
+            .map(|stmt| match stmt {
+                AtomicStatement::RevealAttribute { statement } => {
+                    (statement.attribute_tag, IdentityAttributeHandling::Commit)
+                }
+                AtomicStatement::AttributeInRange { statement } => {
+                    (statement.attribute_tag, IdentityAttributeHandling::Commit)
+                }
+                AtomicStatement::AttributeInSet { statement } => {
+                    (statement.attribute_tag, IdentityAttributeHandling::Commit)
+                }
+                AtomicStatement::AttributeNotInSet { statement } => {
+                    (statement.attribute_tag, IdentityAttributeHandling::Commit)
+                }
+            })
+            .collect();
+
+        let (id_attr_cred_info, id_attr_cmm_rand) =
+            identity_attributes_credentials::prove_identity_attributes(
+                global_context,
+                ip_context,
+                id_object,
+                id_object_use_data,
+                &attributes_handling,
+                transcript,
+            )
+            .map_err(|err| ProofError::IdentityAttributeCredentials(err.to_string()))?;
+
+        let proofs = prove_statements(
+            self.statement,
+            &id_object.get_attribute_list().alist,
+            &id_attr_cmm_rand.attributes_rand,
+            global_context,
+            transcript,
+            csprng,
+        )?;
+
+        Ok(IdentityCredentialProof {
+            proofs,
+            network: self.network,
+            created: now,
+            id_attr_cred_info,
+        })
+    }
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdCredentialStatement<C, AttributeType> {
+    pub fn prove<P: Pairing<ScalarField = C::Scalar>, Signer: Web3IdSigner>(
+        self,
+        global_context: &GlobalContext<C>,
+        transcript: &mut RandomOracle,
+        csprng: &mut impl rand::Rng,
+        now: chrono::DateTime<chrono::Utc>,
+        input: CommitmentInputs<P, C, AttributeType, Signer>,
+    ) -> Result<Web3IdCredentialProof<C, AttributeType>, ProofError> {
         let CommitmentInputs::Web3Issuer {
             signature,
             signer,
@@ -290,7 +403,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdCredentialStatement<C,
             csprng,
         )?;
 
-        Ok(CredentialProof::Web3Id(Web3IdCredentialProof {
+        Ok(Web3IdCredentialProof {
             commitments,
             proofs,
             network: self.network,
@@ -298,7 +411,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdCredentialStatement<C,
             created: now,
             holder: signer.id().into(),
             ty: self.ty,
-        }))
+        })
     }
 }
 
@@ -342,12 +455,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
         input: CommitmentInputs<P, C, AttributeType, Signer>,
     ) -> Result<CredentialProof<C, AttributeType>, ProofError> {
         match self {
-            CredentialStatement::Account(cred_stmt) => {
-                cred_stmt.prove(global, ro, csprng, now, input)
-            }
-            CredentialStatement::Web3Id(cred_stmt) => {
-                cred_stmt.prove(global, ro, csprng, now, input)
-            }
+            CredentialStatement::Account(cred_stmt) => cred_stmt
+                .prove(global, ro, csprng, now, input)
+                .map(CredentialProof::Account),
+            CredentialStatement::Web3Id(cred_stmt) => cred_stmt
+                .prove(global, ro, csprng, now, input)
+                .map(CredentialProof::Web3Id),
         }
     }
 }
@@ -1249,7 +1362,7 @@ pub mod tests {
     /// Test verify fails if the credentials and credential inputs have
     /// mismatching types.
     #[test]
-    fn test_soundness_mismatching_credential_types() {
+    fn test_soundness_account_mismatching_credential_types() {
         let challenge = Sha256Challenge::new(fixtures::seed0().gen());
 
         let global_context = GlobalContext::generate("Test".into());
@@ -1297,6 +1410,71 @@ pub mod tests {
         );
 
         let public = vec![web3_cred_fixture.credential_inputs];
+
+        let err = proof
+            .verify(&global_context, public.iter())
+            .expect_err("verify");
+        assert_eq!(err, PresentationVerificationError::InvalidCredential);
+    }
+
+    /// Test verify fails if the credentials and credential inputs have
+    /// mismatching types.
+    #[test]
+    fn test_soundness_web3_mismatching_credential_types() {
+        let challenge = Sha256Challenge::new(fixtures::seed0().gen());
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let web3_cred_fixture = fixtures::web3_credentials_fixture(
+            [(3.to_string(), Web3IdAttribute::Numeric(137))]
+                .into_iter()
+                .collect(),
+            &global_context,
+        );
+
+        let credential_statements = vec![CredentialStatement::Web3Id(Web3IdCredentialStatement {
+            ty: [
+                "VerifiableCredential".into(),
+                "ConcordiumVerifiableCredential".into(),
+                "TestCredential".into(),
+            ]
+            .into_iter()
+            .collect(),
+            network: Network::Testnet,
+            contract: web3_cred_fixture.contract,
+            credential: web3_cred_fixture.cred_id,
+            statement: vec![AtomicStatement::AttributeInRange {
+                statement: AttributeInRangeStatement {
+                    attribute_tag: "3".into(),
+                    lower: Web3IdAttribute::Numeric(80),
+                    upper: Web3IdAttribute::Numeric(1237),
+                    _phantom: PhantomData,
+                },
+            }],
+        })];
+
+        let request = Request::<ArCurve, Web3IdAttribute> {
+            challenge,
+            credential_statements,
+        };
+
+        let proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [web3_cred_fixture.commitment_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        // use mismatching type of credential inputs
+        let acc_cred_fixture = fixtures::account_credentials_fixture(
+            [(3.into(), Web3IdAttribute::Numeric(137))]
+                .into_iter()
+                .collect(),
+            &global_context,
+        );
+
+        let public = vec![acc_cred_fixture.credential_inputs];
 
         let err = proof
             .verify(&global_context, public.iter())
