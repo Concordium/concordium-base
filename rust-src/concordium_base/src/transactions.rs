@@ -3693,6 +3693,36 @@ mod tests {
         keys
     }
     #[test]
+    fn test_transaction_signature_v1_serialization() {
+        let mut rng = rand::thread_rng();
+        let hash = TransactionSignHash::new(rng.gen());
+        let sender_keys = create_keys(&mut rng);
+        let sponsor_keys = create_keys(&mut rng);
+        let sender_sig = sender_keys.sign_transaction_hash(&hash);
+        let sponsor_sig = sponsor_keys.sign_transaction_hash(&hash);
+        let sigs = TransactionSignaturesV1 {
+            sender: sender_sig.clone(),
+            sponsor: Some(sponsor_sig),
+        };
+        let mut buf = Vec::new();
+        sigs.serial(&mut buf);
+        let sigs1: TransactionSignaturesV1 =
+            Deserial::deserial(&mut std::io::Cursor::new(buf)).unwrap();
+        assert_eq!(sigs, sigs1, "Serializing, then deserializing a transaction signature v1 should yield the original transaction.");
+
+        let sigs2 = TransactionSignaturesV1 {
+            sender: sender_sig,
+            sponsor: None,
+        };
+
+        let mut buf1 = Vec::new();
+        sigs2.serial(&mut buf1);
+        let sigs3: TransactionSignaturesV1 =
+            Deserial::deserial(&mut std::io::Cursor::new(buf1)).unwrap();
+        assert_eq!(sigs2, sigs3, "Serializing, then deserializing a transaction signature v1 should yield the original transaction.");
+    }
+
+    #[test]
     fn test_transaction_header_v1_serialization() {
         let header0 = dummy_header_v1();
         let mut buf = Vec::<u8>::new();
@@ -3719,6 +3749,7 @@ mod tests {
             header1,
             "Serializing, then deserializing a transaction header v1 should yield the original transaction header.");
     }
+
     #[test]
     fn test_account_transaction_v1_serialization() {
         let mut rng = rand::thread_rng();
@@ -3734,13 +3765,13 @@ mod tests {
         const HEADER: TransactionHeaderV1 = dummy_header_v1();
         const PAYLOAD_SIZE: usize = HEADER.payload_size.size as usize;
         let at = AccountTransactionV1 {
-            signatures: sigs,
+            signatures: sigs.clone(),
             header: HEADER,
             payload: EncodedPayload {
                 payload: [0; PAYLOAD_SIZE].to_vec(),
             },
         };
-        let mut buf = Vec::<u8>::new();
+        let mut buf = Vec::new();
         at.serial(&mut buf);
         let at1: AccountTransactionV1<EncodedPayload> =
             Deserial::deserial(&mut std::io::Cursor::new(buf)).unwrap();
@@ -3749,6 +3780,7 @@ mod tests {
             at1,
             "Serializing, then deserializing an account transaction v1 should yield the original transaction.")
     }
+
     #[test]
     fn test_transaction_signature_check() {
         let mut rng = rand::thread_rng();
