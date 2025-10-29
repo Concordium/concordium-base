@@ -450,7 +450,7 @@ pub struct TransactionSignaturesV1 {
 }
 
 // Custom serial implementation for TransactionSignaturesV1. The serialization
-// of the sponsor field encodes the None case as empty signature map.
+// of the sponsor field encodes the None case as zero byte.
 impl Serial for TransactionSignaturesV1 {
     fn serial<B: Buffer>(&self, out: &mut B) {
         self.sender.serial(out);
@@ -466,19 +466,20 @@ impl Deserial for TransactionSignaturesV1 {
         let sender = TransactionSignature::deserial(source)?;
         let mut buf = Vec::new();
         source.read_to_end(&mut buf)?;
+        // use a cursor to peek the next byte to determine whether a sponsor is present or not.
         let mut cursor = Cursor::new(buf);
         let has_sponsor = cursor.read_u8()?;
         // reset the cursor after reading one byte.
         cursor.seek(SeekFrom::Current(-1))?;
         match has_sponsor {
             0u8 => Ok(TransactionSignaturesV1 {
-                sender: sender,
+                sender,
                 sponsor: None,
             }),
             _other => {
                 let sponsor = TransactionSignature::deserial(&mut cursor)?;
                 Ok(TransactionSignaturesV1 {
-                    sender: sender,
+                    sender,
                     sponsor: Some(sponsor),
                 })
             }
