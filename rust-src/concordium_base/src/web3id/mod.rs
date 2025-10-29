@@ -5,6 +5,7 @@
 //! data, and the [`prove`](Request::prove) function for constructing a proof.
 
 pub mod did;
+pub mod v1;
 
 // TODO:
 // - Documentation.
