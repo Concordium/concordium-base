@@ -283,8 +283,12 @@ pub struct TransactionHeaderV1 {
     pub sponsor: Option<AccountAddress>,
 }
 
-// Bitmask constant to indicate the presence of a sponsor in the TransactionHeaderV1
+// Bitmask for all defined features in a transaction header. This is the bitwise
+// `or` of all following feature masks below.
+const DEFINED_FEATURES_MASK: u16 = SPONSOR_MASK;
+// Bitmask constant to indicate the presence of a sponsor in the transaction header.
 const SPONSOR_MASK: u16 = 1 << 0;
+
 impl Serial for TransactionHeaderV1 {
     fn serial<B: Buffer>(&self, out: &mut B) {
         let bitmap: u16 = if self.sponsor.is_some() {
@@ -310,6 +314,10 @@ impl Serial for TransactionHeaderV1 {
 impl Deserial for TransactionHeaderV1 {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let bitmap: u16 = source.get()?;
+        anyhow::ensure!(
+            (bitmap & !DEFINED_FEATURES_MASK) != 0,
+            "Unknown feature bit set in transaction header."
+        );
         let header_v0: TransactionHeader = source.get()?;
         let sponsor = if (bitmap & SPONSOR_MASK) != 0 {
             Some(source.get()?)
