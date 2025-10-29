@@ -1,6 +1,6 @@
 ## Unreleased
 
-## 9.0.0 (2025-10-229)
+## 9.0.0 (2025-10-29)
 
 - Changed `Debug` implementation of secret keys and cleartext values to not print the key or value.
 - Removed `ChainParameterVersionX` types and the `MintDistributionFamily`, `GASRewardsFamily` and `AuthorizationsFamily` traits and their implementations.
