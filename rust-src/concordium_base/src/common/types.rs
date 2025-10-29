@@ -15,7 +15,12 @@ pub use concordium_contracts_common::{
 };
 use derive_more::{Display, From, FromStr, Into};
 use ed25519_dalek::Signer;
-use std::{collections::BTreeMap, num::ParseIntError, str::FromStr};
+use std::{
+    collections::BTreeMap,
+    io::{Cursor, Seek, SeekFrom},
+    num::ParseIntError,
+    str::FromStr,
+};
 /// Index of an account key that is to be used.
 #[derive(
     Debug,
@@ -452,6 +457,31 @@ impl Serial for TransactionSignaturesV1 {
         match self.sponsor.as_ref() {
             Some(s) => s.serial(out),
             None => 0u8.serial(out),
+        }
+    }
+}
+
+impl Deserial for TransactionSignaturesV1 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let sender = TransactionSignature::deserial(source)?;
+        let mut buf = Vec::new();
+        source.read_to_end(&mut buf)?;
+        let mut cursor = Cursor::new(buf);
+        let has_sponsor = cursor.read_u8()?;
+        // reset the cursor after reading one byte.
+        cursor.seek(SeekFrom::Current(-1))?;
+        match has_sponsor {
+            0u8 => Ok(TransactionSignaturesV1 {
+                sender: sender,
+                sponsor: None,
+            }),
+            _other => {
+                let sponsor = TransactionSignature::deserial(&mut cursor)?;
+                Ok(TransactionSignaturesV1 {
+                    sender: sender,
+                    sponsor: Some(sponsor),
+                })
+            }
         }
     }
 }
