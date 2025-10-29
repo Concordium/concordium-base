@@ -283,12 +283,14 @@ pub struct TransactionHeaderV1 {
     pub sponsor: Option<AccountAddress>,
 }
 
+// Bitmask constant to indicate the presence of a sponsor in the TransactionHeaderV1
+const SPONSOR_MASK: u16 = 1 << 0;
 impl Serial for TransactionHeaderV1 {
     fn serial<B: Buffer>(&self, out: &mut B) {
         let bitmap: u16 = if self.sponsor.is_some() {
-            0b0000000000000001
+            SPONSOR_MASK
         } else {
-            0b0000000000000000
+            0
         };
         let header_v0 = TransactionHeader {
             sender: self.sender,
@@ -309,7 +311,7 @@ impl Deserial for TransactionHeaderV1 {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let bitmap: u16 = source.get()?;
         let header_v0: TransactionHeader = source.get()?;
-        let sponsor = if (bitmap & 0b0000000000000001) != 0 {
+        let sponsor = if (bitmap & SPONSOR_MASK) != 0 {
             Some(source.get()?)
         } else {
             None
