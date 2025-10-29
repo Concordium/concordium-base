@@ -456,7 +456,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
     }
 
     /// Construct a proof for the [`Request`] using the provided cryptographic
-    /// parameters and secrets.
+    /// parameters and secrets. The source of randomness and "now" are given
+    /// as arguments.
     pub fn prove_with_rng<'a, P: Pairing<ScalarField = C::Scalar>, Signer: 'a + Web3IdSigner>(
         self,
         params: &GlobalContext<C>,
