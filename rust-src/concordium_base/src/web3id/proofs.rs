@@ -314,21 +314,22 @@ fn prove_statements<
     transcript: &mut RandomOracle,
     csprng: &mut impl rand::Rng,
 ) -> Result<Vec<StatementWithProof<C, TagType, AttributeType>>, ProofError> {
-    let mut proofs = Vec::new();
-    for statement in statements {
-        let proof = statement
-            .prove(
-                ProofVersion::Version2,
-                global_context,
-                transcript,
-                csprng,
-                attribute_values,
-                attribute_randomness,
-            )
-            .ok_or(ProofError::MissingAttribute)?;
-        proofs.push((statement, proof));
-    }
-    Ok(proofs)
+    statements
+        .into_iter()
+        .map(|statement| {
+            statement
+                .prove(
+                    ProofVersion::Version2,
+                    global_context,
+                    transcript,
+                    csprng,
+                    attribute_values,
+                    attribute_randomness,
+                )
+                .ok_or(ProofError::MissingAttribute)
+                .map(|proof| (statement, proof))
+        })
+        .collect()
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, AttributeType> {
