@@ -915,7 +915,9 @@ impl From<&UpdateKeyPair> for UpdatePublicKey {
     }
 }
 
-#[derive(Debug, Clone, Copy, SerdeSerialize, SerdeDeserialize, Serialize, Into, Display, Eq, PartialEq)]
+#[derive(
+    Debug, Clone, Copy, SerdeSerialize, SerdeDeserialize, Serialize, Into, Display, Eq, PartialEq,
+)]
 #[serde(transparent)]
 /// A lower bound on the number of signatures needed to sign a valid update
 /// message of a particular type. This is never 0.
@@ -1240,7 +1242,7 @@ impl Deserial for MintDistributionV1 {
 ///
 /// The representation is base-10 floating point number representation.
 /// The value is `mantissa * 10^(-exponent)`.
-/// 
+///
 /// Note that the `Eq` instance is representational, so it is possible for
 /// two `MintRate`s that represent the same number not be be equal. (For
 /// example, 1 * 10^(-1) and 10 * 10^(-2).)
@@ -1293,7 +1295,9 @@ impl AmountFraction {
 }
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, SerdeSerialize, SerdeDeserialize, Serialize, FromStr, Eq, PartialEq)]
+#[derive(
+    Debug, Clone, Copy, SerdeSerialize, SerdeDeserialize, Serialize, FromStr, Eq, PartialEq,
+)]
 #[serde(transparent)]
 /// A bound on the relative share of the total staked capital that a baker can
 /// have as its stake. This is required to be greater than 0.
