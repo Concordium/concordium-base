@@ -802,7 +802,7 @@ pub mod tests {
     }
 
     /// Prove and verify where verification fails because
-    /// linking proof is missing or invalid.
+    /// linking proof is missing or invalid or too many.
     #[test]
     fn test_soundness_web3_linking_proof() {
         let challenge = Sha256Challenge::new(fixtures::seed0().gen());
@@ -847,10 +847,27 @@ pub mod tests {
             .prove(&global_context, [web3_cred.commitment_inputs()].into_iter())
             .expect("prove");
 
-        // remove linking proof
-        proof.linking_proof.proof_value.pop();
-
         let public = vec![web3_cred.credential_inputs];
+        let CommitmentInputs::Web3Issuer { signer, .. } =
+            CommitmentInputs::from(&web3_cred.commitment_inputs)
+        else {
+            panic!("should be web3 inputs");
+        };
+
+        // add additional linking proof
+        let signature = signer.sign(&[0, 1, 2]);
+        proof
+            .linking_proof
+            .proof_value
+            .push(WeakLinkingProof { signature });
+
+        let err = proof
+            .verify(&global_context, public.iter())
+            .expect_err("verify");
+        assert_eq!(err, PresentationVerificationError::ExcessiveLinkingProof);
+
+        // remove linking proofs
+        proof.linking_proof.proof_value.clear();
 
         let err = proof
             .verify(&global_context, public.iter())
@@ -858,11 +875,6 @@ pub mod tests {
         assert_eq!(err, PresentationVerificationError::MissingLinkingProof);
 
         // add invalid linking proof
-        let CommitmentInputs::Web3Issuer { signer, .. } =
-            CommitmentInputs::from(&web3_cred.commitment_inputs)
-        else {
-            panic!("should be web3 inputs");
-        };
         let signature = signer.sign(&[0, 1, 2]);
         proof
             .linking_proof
