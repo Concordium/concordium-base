@@ -1711,6 +1711,13 @@ mod tests {
     use crate::web3id::did::Network;
     use crate::web3id::{Web3IdAttribute, Web3IdCredential};
     use chrono::TimeZone;
+    use rand::Rng;
+    use crate::id::constants::IpPairing;
+    use crate::id::id_proof_types::{AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement, RevealAttributeStatement};
+
+    fn remove_whitespace(str: &str) -> String {
+        str.chars().filter(|c| !c.is_whitespace()).collect()
+    }
 
     #[test]
     /// Basic test that conversion of Web3IdCredential from/to JSON works.
@@ -1771,6 +1778,7 @@ mod tests {
         assert_eq!(value, cred, "Credential and parsed credential differ.");
     }
 
+    /// Tests JSON serialization of the `Timestamp` variant of `Web3IdAttribute`.
     #[test]
     fn test_web3_id_attribute_timestamp_serde() {
         let date_time = chrono::DateTime::parse_from_rfc3339("2023-08-28T00:00:00.000Z")
@@ -1790,5 +1798,454 @@ mod tests {
             ser, value,
             "Expected deserialized value to serialize into its origin"
         );
+    }
+
+    /// Tests JSON serialization and deserialization of request and presentation.
+    #[test]
+    fn test_request_and_presentation_json() {
+        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let acc_cred_fixture = fixtures::account_credentials_fixture(
+            [
+                (3.into(), Web3IdAttribute::Numeric(137)),
+                (
+                    1.into(),
+                    Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
+                ),
+                (
+                    2.into(),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                ),
+                (
+                    5.into(),
+                    Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
+                ),
+            ]
+                .into_iter()
+                .collect(),
+            &global_context,
+        );
+
+        let credential_statements = vec![CredentialStatement::Account {
+            network: Network::Testnet,
+            cred_id: acc_cred_fixture.cred_id,
+            statement: vec![
+                AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: 3.into(),
+                        lower: Web3IdAttribute::Numeric(80),
+                        upper: Web3IdAttribute::Numeric(1237),
+                        _phantom: PhantomData,
+                    },
+                },
+                AtomicStatement::AttributeInSet {
+                    statement: AttributeInSetStatement {
+                        attribute_tag: 2.into(),
+                        set: [
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                        ]
+                            .into_iter()
+                            .collect(),
+                        _phantom: PhantomData,
+                    },
+                },
+                AtomicStatement::AttributeNotInSet {
+                    statement: AttributeNotInSetStatement {
+                        attribute_tag: 1.into(),
+                        set: [
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                        ]
+                            .into_iter()
+                            .collect(),
+                        _phantom: PhantomData,
+                    },
+                },
+                AtomicStatement::RevealAttribute {
+                    statement: RevealAttributeStatement {
+                        attribute_tag: 5.into(),
+                    },
+                },
+            ],
+        }];
+
+        let request = Request::<ArCurve, Web3IdAttribute> {
+            challenge,
+            credential_statements,
+        };
+
+        let request_json = serde_json::to_string_pretty(&request).unwrap();
+        println!("request:\n{}", request_json);
+        let expected_request_json = r#"
+{
+  "challenge": "7fb27b941602d01d11542211134fc71aacae54e37e7d007bbb7b55eff062a284",
+  "credentialStatements": [
+    {
+      "id": "did:ccd:testnet:cred:856793e4ba5d058cea0b5c3a1c8affb272efcf53bbab77ee28d3e2270d5041d220c1e1a9c6c8619c84e40ebd70fb583e",
+      "statement": [
+        {
+          "attributeTag": "dob",
+          "lower": 80,
+          "type": "AttributeInRange",
+          "upper": 1237
+        },
+        {
+          "attributeTag": "sex",
+          "set": [
+            "aa",
+            "ff",
+            "zz"
+          ],
+          "type": "AttributeInSet"
+        },
+        {
+          "attributeTag": "lastName",
+          "set": [
+            "aa",
+            "ff",
+            "zz"
+          ],
+          "type": "AttributeNotInSet"
+        },
+        {
+          "attributeTag": "nationality",
+          "type": "RevealAttribute"
+        }
+      ]
+    }
+  ]
+}
+"#;
+        assert_eq!(remove_whitespace(&request_json), remove_whitespace(expected_request_json), "request json");
+        let request_deserialized: Request<ArCurve, Web3IdAttribute> = serde_json::from_str(&request_json).unwrap();
+        assert_eq!(request_deserialized, request);
+
+        // the easiest way to construct a presentation, is just to run the prover on a request
+        let proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [acc_cred_fixture.commitment_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        let proof_json = serde_json::to_string_pretty(&proof).unwrap();
+        println!("proof:\n{}", proof_json);
+        let expected_proof_json = r#"
+{
+  "presentationContext": "7fb27b941602d01d11542211134fc71aacae54e37e7d007bbb7b55eff062a284",
+  "proof": {
+    "created": "2025-10-29T07:15:11.147432Z",
+    "proofValue": [],
+    "type": "ConcordiumWeakLinkingProofV1"
+  },
+  "type": "VerifiablePresentation",
+  "verifiableCredential": [
+    {
+      "credentialSubject": {
+        "id": "did:ccd:testnet:cred:856793e4ba5d058cea0b5c3a1c8affb272efcf53bbab77ee28d3e2270d5041d220c1e1a9c6c8619c84e40ebd70fb583e",
+        "proof": {
+          "created": "2025-10-29T07:15:11.143263Z",
+          "proofValue": [
+            {
+              "proof": "99ccd3f86795b59a3d08a30dc856d26e323cfca58a164fd728c9324f3b60c81a706c8d3539f7b40daef0553f6dbb8bc18287af1628e3f7b4e2c2accfadbaefddefcbdf28b5c273149855f69315b5dac2a3f9060b9af03c92f89bb04da4f72271924634f60ad6134e1136c3c29c8847caf432e17342e6db304e35a75956d3f7894a850f5b1bef523692bb951b7cc6e6ce8b98070f579697cee918c3beb92046475e69195057584e966b349c814ca36aa9cf55ee3f8528e9532e0c6f61a93d8a795b358beb8b7bee8af393dfa87446b8fe84bd591e574ac45dfda2da40a97d72df07697a0b5e75c73bd0180356ab8c52242f12ca06a5a31b1097af2fb2b75594ee1c2712ea2156c1e87487a570f78a3b52a3221208774e98bfbe296b944eed528a0000000791cabffd3f1a80832eae0b6e33d32016794b4fca67da8074bea27ee96bfce96bf9b73c8596e74409de3ea1f82e68ca349395329a02f3980c0bb2b0f5955409484357374ba640627f33e9d39b5442f4c7d9d0c5142a064408adad5e49c8c10223aa0f38795b47c2b04a4616956ae09bfeb87b16a4088e9fbda03928e93210ceb4de54548cc8246ad3c1939625fc350770a91f8a101dc601abb8e4db53675476169396f80efaedec25822c92fcffe9e685f98b4359710b85ae525cc7143b7193bd8d249c752aa2e7a8c5bc076b71e6cd09f9bd1eb23c696db26a244b2865cc7331c40b5c5916bb9fe44b52d01980db965db395a3b43a7a098e5ebdfa1094d3fdd1a48a951b8b32af319f08d40411340a5903996a266c225f11dc8b7c2d792d8689ae0f193183adcfaf4ec81d3c7f2faf44cdf0927f42275e7ce2d2c2d01e1ff72e2f91989bcb80c58b112ed6f772ea8cd284327c9a5046d22f7a5f1a931bb0e512643f66b35738d1575080f6139756b8d5d77ab64f356bf849bf23af583f04bdb5af1e60cb2d79752ca4c466d098fa17a0aa171e2aef443476befc766de3d02c67f00337900049487146f2a902ba2c4e0aa76a79552639e6646db995005d9244b6b25d85d8c33b040dc89478d238646552d4bee669bcdafe1702350fc12af343ccb0524b8753422c7a71e70f394c358f38c4903ae0a6ba3cdaf76a52aba85dd311bdf74ea9af9700709b9a385fd7bfc17299dec889b3b3cd8f2ea1dae82a16b9c0f1922efa8af86ea0582442075388efd37c016c0366f566dbb3b077106a29fc2292b9a2f587d5b1b64932459ff3332c0f15feefcff4cd90aeb1701025d73c8d48cbb8b86ef233b43472b77b53cd71857ab3f49ec635dfb9d8de2c556814f9cf1af2636dbe5888e8fe6df25887c313d1d980423888866db379fcbc05af545312571d40891c354667ebfa8bd9c6436ba78aff9cad97c46ec34abeb8b8c644949cea2622409db5eeb501cf6e6d3465a560abd7005464a5af8469151b9a25d2cf8144",
+              "type": "AttributeInRange"
+            },
+            {
+              "proof": "89b851c6800184c0712153fee55c84df819bd1558c9e0ed42167bd09ee2e8f86fe53706fd54052cc530b9f01fb93b1a182a1b308a62d7d3a2f288c52f2273f23ead5b31f1914bf588778372a073b5aacf9001c457241f0641526a3e222a5febfacdbaf6a2bfd4fbbe232db4e11a0f6b5870f50ff6ebd07a9fe7d3be19c4b54f4769c12038bd739bd1c10b425c557d4438ab4e7f2485ddf9e95b497fca792488072cfc4b3b1c26c732e5f29d53acfd5f6407f18e58345800456de36b0e6f0ea1257a96d6dba20a122ebd224fe08a5d8c7a6758d5b6c9c1ece98e47755f0dd117b1ffc52b6aa946da7a23561f134adefbd1546e565ea1c8be393f83a2d211933c11d0bbdb00f8daf2345ae1d1c7c46552bfed957cae6b510087c3bd047851deb65000000029366bfbb11f95fe5fc222f9aa863882609fccf5dec9e34f1255e914b37ab545cad7b185216f8fd0c2399c89930b4129e844274b0ea74141422a4a4c9f4843ad2bc57e9eda0ba5902134b81668816c1d83329f690a798889ac030b4896583fc328b2c29fc9df5d4d341153a003b3cb4fa894d75a6e25671af5cfeb961a41c6df0afc13db5d9c0d3c7d1147ba62a5429baa3a026ffea8a07a677db3737fdea457387582b36a873fda9b05e319c15fa56777f939003c89c03e51acb69a7999f9f400696d77dc003e5c1ce3b7403f9815fe5b707166e8cb559c2ae94d07e00683f2c46a7362e5266bab1a188190e40ae15c4e765103394bc0fe5bcbdc39c3ebe38bb",
+              "type": "AttributeInSet"
+            },
+            {
+              "proof": "886ae46aeadebfe039fb28b66eca4dadafaa38aacc925028ad113a31d1c631125bfdfc4e02817aff4bde3c2ad2fc2c1d815ae32c5b8f4fd63eaaa97d9a1d48df5eb9a6b07e23772e48033b716084af54da798edbcbb0e7e67f331c62aa4c35fea5987168ab121fc0823a2c83a87cc4bc1304292f9bc7662dfccf1d035308fc9dd9b1f6c5f41caea298099caec7ef08708587b6ee12eee9cff7f5181bc12f44936337cf916119a36a2a1abb56ff822ca9635c06a80a82bdc958489ab46042047b2f7fc627adba6274c0574f5ad11e8f9c74feed4e332ebf610a1837843c8198e210d8a31c013c74fbd71edba7b2c0e862b811eb89b48bf058d694e443019cbbad5c0c3c14d376a9b321470402ee300fdfb0240920b0643f58f8aa3a43cf173f740000000291f244b3b7041177de79e0ceed19d272f1debb01e01287e97251d811f969ce22cc5c6cf75e988983c31ba12c903886b1b08c893d56800e348ecc325f1410ae4c0a820014bfd53f63e44b98257b43e8969339631df0c556d2289aa2586f2661be9131ed71e9a727e7f887b8d964ab2b1b77bc967a4232d5629d2da7b1e9d947d66cf65ca0664b7c9cb908edd21f25278eb1b823836c7434145bc206f5bd542d4f428b7bdf5e325ce57fffd148502c2d989b2bd3a670df696f6f1a38573a5206586d7127c5f1f27adbd4fb4740bba6397146161495f8afde713ac2f27fcecb98a16e3a74dd360d59d4d3d1dda39b4647ac0a972177ad7f17dc69a72e41423f95a5",
+              "type": "AttributeNotInSet"
+            },
+            {
+              "attribute": "testvalue",
+              "proof": "01be44926efee98fd7cef69373dfe54d93a828b7f1c6f74656b2890027d555251ab34d5f999073f32e5fecee9398527caf19a4c328a80028471b8faef40edf6d",
+              "type": "RevealAttribute"
+            }
+          ],
+          "type": "ConcordiumZKProofV3"
+        },
+        "statement": [
+          {
+            "attributeTag": "dob",
+            "lower": 80,
+            "type": "AttributeInRange",
+            "upper": 1237
+          },
+          {
+            "attributeTag": "sex",
+            "set": [
+              "aa",
+              "ff",
+              "zz"
+            ],
+            "type": "AttributeInSet"
+          },
+          {
+            "attributeTag": "lastName",
+            "set": [
+              "aa",
+              "ff",
+              "zz"
+            ],
+            "type": "AttributeNotInSet"
+          },
+          {
+            "attributeTag": "nationality",
+            "type": "RevealAttribute"
+          }
+        ]
+      },
+      "issuer": "did:ccd:testnet:idp:17",
+      "type": [
+        "VerifiableCredential",
+        "ConcordiumVerifiableCredential"
+      ]
+    }
+  ]
+}
+        "#;
+        assert_eq!(remove_whitespace(&proof_json), remove_whitespace(expected_proof_json), "proof json");
+        let proof_deserialized: Presentation<IpPairing, ArCurve, Web3IdAttribute> = serde_json::from_str(&proof_json).unwrap();
+        assert_eq!(proof_deserialized, proof);
+    }
+}
+
+#[cfg(test)]
+mod fixtures {
+    use super::*;
+    use crate::base::CredentialRegistrationID;
+
+    use crate::curve_arithmetic::Value;
+    use crate::id::constants::{ArCurve, IpPairing};
+    use crate::id::types::{
+        ArInfos, AttributeList, AttributeTag, IdentityObjectV1, IpData, IpIdentity, YearMonth,
+    };
+    use crate::id::{identity_provider, test};
+    use crate::web3id::{
+        CredentialHolderId, OwnedCommitmentInputs,
+        OwnedIdentityCommitmentInputs, Web3IdAttribute,
+    };
+    use concordium_contracts_common::ContractAddress;
+    use rand::SeedableRng;
+
+    pub struct IdentityCredentialsFixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> {
+        pub commitment_inputs:
+            OwnedCommitmentInputs<IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>,
+        pub credential_inputs: CredentialsInputs<IpPairing, ArCurve>,
+    }
+
+    impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>
+    IdentityCredentialsFixture<AttributeType>
+    {
+        pub fn commitment_inputs(
+            &self,
+        ) -> CommitmentInputs<'_, IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>
+        {
+            CommitmentInputs::from(&self.commitment_inputs)
+        }
+    }
+
+    fn create_attribute_list<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(
+        alist: BTreeMap<AttributeTag, AttributeType>,
+    ) -> AttributeList<<ArCurve as Curve>::Scalar, AttributeType> {
+        let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+        let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+        AttributeList {
+            valid_to,
+            created_at,
+            max_accounts: 237,
+            alist,
+            _phantom: Default::default(),
+        }
+    }
+
+    pub fn identity_credentials_fixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(
+        attrs: BTreeMap<AttributeTag, AttributeType>,
+        global_context: &GlobalContext<ArCurve>,
+    ) -> IdentityCredentialsFixture<AttributeType> {
+        let max_attrs = 10;
+        let num_ars = 5;
+        let IpData {
+            public_ip_info: ip_info,
+            ip_secret_key,
+            ..
+        } = test::test_create_ip_info(&mut seed0(), num_ars, max_attrs);
+
+        let (ars_infos, _ars_secret) = test::test_create_ars(
+            &global_context.on_chain_commitment_key.g,
+            num_ars,
+            &mut seed0(),
+        );
+        let ars_infos = ArInfos {
+            anonymity_revokers: ars_infos,
+        };
+
+        let id_object_use_data = test::test_create_id_use_data(&mut seed0());
+        let (context, pio, _randomness) = test::test_create_pio_v1(
+            &id_object_use_data,
+            &ip_info,
+            &ars_infos.anonymity_revokers,
+            &global_context,
+            num_ars,
+        );
+        let alist = create_attribute_list(attrs);
+        let ip_sig =
+            identity_provider::verify_credentials_v1(&pio, context, &alist, &ip_secret_key)
+                .expect("verify credentials");
+
+        let id_object = IdentityObjectV1 {
+            pre_identity_object: pio,
+            alist: alist.clone(),
+            signature: ip_sig,
+        };
+
+        let commitment_inputs =
+            OwnedCommitmentInputs::Identity(Box::new(OwnedIdentityCommitmentInputs {
+                ip_info: ip_info.clone(),
+                ar_infos: ars_infos.clone(),
+                id_object,
+                id_object_use_data,
+            }));
+
+        let credential_inputs = CredentialsInputs::Identity { ip_info, ars_infos };
+
+        IdentityCredentialsFixture {
+            commitment_inputs,
+            credential_inputs,
+        }
+    }
+
+    pub struct AccountCredentialsFixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> {
+        pub commitment_inputs:
+            OwnedCommitmentInputs<IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>,
+        pub credential_inputs: CredentialsInputs<IpPairing, ArCurve>,
+        pub cred_id: CredentialRegistrationID,
+    }
+
+    impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>
+    AccountCredentialsFixture<AttributeType>
+    {
+        pub fn commitment_inputs(
+            &self,
+        ) -> CommitmentInputs<'_, IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>
+        {
+            CommitmentInputs::from(&self.commitment_inputs)
+        }
+    }
+
+    pub fn account_credentials_fixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(
+        attrs: BTreeMap<AttributeTag, AttributeType>,
+        global_context: &GlobalContext<ArCurve>,
+    ) -> AccountCredentialsFixture<AttributeType> {
+        let cred_id_exp = ArCurve::generate_scalar(&mut seed0());
+        let cred_id = CredentialRegistrationID::from_exponent(&global_context, cred_id_exp);
+
+        let mut attr_rand = BTreeMap::new();
+        let mut attr_cmm = BTreeMap::new();
+        for (tag, attr) in &attrs {
+            let attr_scalar = Value::<ArCurve>::new(attr.to_field_element());
+            let (cmm, cmm_rand) = global_context
+                .on_chain_commitment_key
+                .commit(&attr_scalar, &mut seed0());
+            attr_rand.insert(*tag, cmm_rand);
+            attr_cmm.insert(*tag, cmm);
+        }
+
+        let commitment_inputs = OwnedCommitmentInputs::Account {
+            values: attrs,
+            randomness: attr_rand,
+            issuer: IpIdentity::from(17u32),
+        };
+
+        let credential_inputs = CredentialsInputs::Account {
+            commitments: attr_cmm,
+        };
+
+        AccountCredentialsFixture {
+            commitment_inputs,
+            credential_inputs,
+            cred_id,
+        }
+    }
+
+    pub struct Web3CredentialsFixture {
+        pub commitment_inputs:
+            OwnedCommitmentInputs<IpPairing, ArCurve, Web3IdAttribute, ed25519_dalek::SigningKey>,
+        pub credential_inputs: CredentialsInputs<IpPairing, ArCurve>,
+        pub cred_id: CredentialHolderId,
+        pub contract: ContractAddress,
+        pub issuer_key: ed25519_dalek::SigningKey,
+    }
+
+    impl Web3CredentialsFixture {
+        pub fn commitment_inputs(
+            &self,
+        ) -> CommitmentInputs<'_, IpPairing, ArCurve, Web3IdAttribute, ed25519_dalek::SigningKey>
+        {
+            CommitmentInputs::from(&self.commitment_inputs)
+        }
+    }
+
+    pub fn seed0() -> rand::rngs::StdRng {
+        rand::rngs::StdRng::seed_from_u64(0)
+    }
+
+    pub fn web3_credentials_fixture(
+        attrs: BTreeMap<String, Web3IdAttribute>,
+        global_context: &GlobalContext<ArCurve>,
+    ) -> Web3CredentialsFixture {
+        let signer_key = ed25519_dalek::SigningKey::generate(&mut seed0());
+        let cred_id = CredentialHolderId::new(signer_key.verifying_key());
+
+        let issuer_key = ed25519_dalek::SigningKey::generate(&mut seed0());
+        let contract = ContractAddress::new(1337, 42);
+
+        let mut attr_rand = BTreeMap::new();
+        let mut attr_cmm = BTreeMap::new();
+        for (tag, attr) in &attrs {
+            let attr_scalar = Value::<ArCurve>::new(attr.to_field_element());
+            let (cmm, cmm_rand) = global_context
+                .on_chain_commitment_key
+                .commit(&attr_scalar, &mut seed0());
+            attr_rand.insert(tag.clone(), cmm_rand);
+            attr_cmm.insert(tag.clone(), cmm);
+        }
+
+        let signed_cmms = SignedCommitments::from_secrets(
+            &global_context,
+            &attrs,
+            &attr_rand,
+            &cred_id,
+            &issuer_key,
+            contract,
+        )
+            .unwrap();
+
+        let commitment_inputs = OwnedCommitmentInputs::Web3Issuer {
+            signer: signer_key,
+            values: attrs,
+            randomness: attr_rand,
+            signature: signed_cmms.signature,
+        };
+
+        let credential_inputs = CredentialsInputs::Web3 {
+            issuer_pk: issuer_key.verifying_key().into(),
+        };
+
+        Web3CredentialsFixture {
+            commitment_inputs,
+            credential_inputs,
+            cred_id,
+            contract,
+            issuer_key,
+        }
     }
 }

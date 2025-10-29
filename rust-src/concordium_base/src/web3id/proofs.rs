@@ -489,241 +489,21 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
-    use crate::base::CredentialRegistrationID;
 
-    use crate::curve_arithmetic::Value;
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
     use crate::id::id_proof_types::{
         AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement,
         AttributeNotInSetStatement, RevealAttributeStatement,
     };
-    use crate::id::types::{
-        ArInfos, AttributeList, AttributeTag, IdentityObjectV1, IpData, IpIdentity, YearMonth,
-    };
-    use crate::id::{identity_provider, test};
+    use crate::id::test;
     use crate::web3id::did::Network;
-    use crate::web3id::{
-        Context, ContextProperty, CredentialHolderId, OwnedCommitmentInputs,
-        OwnedIdentityCommitmentInputs, Sha256Challenge, Web3IdAttribute,
-    };
-    use concordium_contracts_common::{ContractAddress, Timestamp};
-    use rand::{Rng, SeedableRng};
+    use crate::web3id::{fixtures, Context, ContextProperty, Sha256Challenge, Web3IdAttribute};
+    use concordium_contracts_common::Timestamp;
+    use rand::Rng;
     use std::marker::PhantomData;
 
-    struct IdentityCredentialsFixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> {
-        commitment_inputs:
-            OwnedCommitmentInputs<IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>,
-        credential_inputs: CredentialsInputs<IpPairing, ArCurve>,
-    }
-
-    impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>
-        IdentityCredentialsFixture<AttributeType>
-    {
-        fn commitment_inputs(
-            &self,
-        ) -> CommitmentInputs<'_, IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>
-        {
-            CommitmentInputs::from(&self.commitment_inputs)
-        }
-    }
-
-    fn test_create_attributes<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(
-        alist: BTreeMap<AttributeTag, AttributeType>,
-    ) -> AttributeList<<ArCurve as Curve>::Scalar, AttributeType> {
-        let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
-        let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
-        AttributeList {
-            valid_to,
-            created_at,
-            max_accounts: 237,
-            alist,
-            _phantom: Default::default(),
-        }
-    }
-
-    fn identity_credentials_fixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(
-        attrs: BTreeMap<AttributeTag, AttributeType>,
-        global_context: &GlobalContext<ArCurve>,
-    ) -> IdentityCredentialsFixture<AttributeType> {
-        let max_attrs = 10;
-        let num_ars = 5;
-        let IpData {
-            public_ip_info: ip_info,
-            ip_secret_key,
-            ..
-        } = test::test_create_ip_info(&mut seed0(), num_ars, max_attrs);
-
-        let (ars_infos, _ars_secret) = test::test_create_ars(
-            &global_context.on_chain_commitment_key.g,
-            num_ars,
-            &mut seed0(),
-        );
-        let ars_infos = ArInfos {
-            anonymity_revokers: ars_infos,
-        };
-
-        let id_object_use_data = test::test_create_id_use_data(&mut seed0());
-        let (context, pio, _randomness) = test::test_create_pio_v1(
-            &id_object_use_data,
-            &ip_info,
-            &ars_infos.anonymity_revokers,
-            &global_context,
-            num_ars,
-        );
-        let alist = test_create_attributes(attrs);
-        let ip_sig =
-            identity_provider::verify_credentials_v1(&pio, context, &alist, &ip_secret_key)
-                .expect("verify credentials");
-
-        let id_object = IdentityObjectV1 {
-            pre_identity_object: pio,
-            alist: alist.clone(),
-            signature: ip_sig,
-        };
-
-        let commitment_inputs =
-            OwnedCommitmentInputs::Identity(Box::new(OwnedIdentityCommitmentInputs {
-                ip_info: ip_info.clone(),
-                ar_infos: ars_infos.clone(),
-                id_object,
-                id_object_use_data,
-            }));
-
-        let credential_inputs = CredentialsInputs::Identity { ip_info, ars_infos };
-
-        IdentityCredentialsFixture {
-            commitment_inputs,
-            credential_inputs,
-        }
-    }
-
-    struct AccountCredentialsFixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> {
-        commitment_inputs:
-            OwnedCommitmentInputs<IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>,
-        credential_inputs: CredentialsInputs<IpPairing, ArCurve>,
-        cred_id: CredentialRegistrationID,
-    }
-
-    impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>
-        AccountCredentialsFixture<AttributeType>
-    {
-        fn commitment_inputs(
-            &self,
-        ) -> CommitmentInputs<'_, IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>
-        {
-            CommitmentInputs::from(&self.commitment_inputs)
-        }
-    }
-
-    fn account_credentials_fixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(
-        attrs: BTreeMap<AttributeTag, AttributeType>,
-        global_context: &GlobalContext<ArCurve>,
-    ) -> AccountCredentialsFixture<AttributeType> {
-        let cred_id_exp = ArCurve::generate_scalar(&mut seed0());
-        let cred_id = CredentialRegistrationID::from_exponent(&global_context, cred_id_exp);
-
-        let mut attr_rand = BTreeMap::new();
-        let mut attr_cmm = BTreeMap::new();
-        for (tag, attr) in &attrs {
-            let attr_scalar = Value::<ArCurve>::new(attr.to_field_element());
-            let (cmm, cmm_rand) = global_context
-                .on_chain_commitment_key
-                .commit(&attr_scalar, &mut seed0());
-            attr_rand.insert(*tag, cmm_rand);
-            attr_cmm.insert(*tag, cmm);
-        }
-
-        let commitment_inputs = OwnedCommitmentInputs::Account {
-            values: attrs,
-            randomness: attr_rand,
-            issuer: IpIdentity::from(17u32),
-        };
-
-        let credential_inputs = CredentialsInputs::Account {
-            commitments: attr_cmm,
-        };
-
-        AccountCredentialsFixture {
-            commitment_inputs,
-            credential_inputs,
-            cred_id,
-        }
-    }
-
-    struct Web3CredentialsFixture {
-        commitment_inputs:
-            OwnedCommitmentInputs<IpPairing, ArCurve, Web3IdAttribute, ed25519_dalek::SigningKey>,
-        credential_inputs: CredentialsInputs<IpPairing, ArCurve>,
-        cred_id: CredentialHolderId,
-        contract: ContractAddress,
-        issuer_key: ed25519_dalek::SigningKey,
-    }
-
-    impl Web3CredentialsFixture {
-        fn commitment_inputs(
-            &self,
-        ) -> CommitmentInputs<'_, IpPairing, ArCurve, Web3IdAttribute, ed25519_dalek::SigningKey>
-        {
-            CommitmentInputs::from(&self.commitment_inputs)
-        }
-    }
-
-    fn seed0() -> rand::rngs::StdRng {
-        rand::rngs::StdRng::seed_from_u64(0)
-    }
-
-    fn web3_credentials_fixture(
-        attrs: BTreeMap<String, Web3IdAttribute>,
-        global_context: &GlobalContext<ArCurve>,
-    ) -> Web3CredentialsFixture {
-        let signer_key = ed25519_dalek::SigningKey::generate(&mut seed0());
-        let cred_id = CredentialHolderId::new(signer_key.verifying_key());
-
-        let issuer_key = ed25519_dalek::SigningKey::generate(&mut seed0());
-        let contract = ContractAddress::new(1337, 42);
-
-        let mut attr_rand = BTreeMap::new();
-        let mut attr_cmm = BTreeMap::new();
-        for (tag, attr) in &attrs {
-            let attr_scalar = Value::<ArCurve>::new(attr.to_field_element());
-            let (cmm, cmm_rand) = global_context
-                .on_chain_commitment_key
-                .commit(&attr_scalar, &mut seed0());
-            attr_rand.insert(tag.clone(), cmm_rand);
-            attr_cmm.insert(tag.clone(), cmm);
-        }
-
-        let signed_cmms = SignedCommitments::from_secrets(
-            &global_context,
-            &attrs,
-            &attr_rand,
-            &cred_id,
-            &issuer_key,
-            contract,
-        )
-        .unwrap();
-
-        let commitment_inputs = OwnedCommitmentInputs::Web3Issuer {
-            signer: signer_key,
-            values: attrs,
-            randomness: attr_rand,
-            signature: signed_cmms.signature,
-        };
-
-        let credential_inputs = CredentialsInputs::Web3 {
-            issuer_pk: issuer_key.verifying_key().into(),
-        };
-
-        Web3CredentialsFixture {
-            commitment_inputs,
-            credential_inputs,
-            cred_id,
-            contract,
-            issuer_key,
-        }
-    }
 
     /// Test that constructing proofs for web3 only credentials works in the
     /// sense that the proof verifies.
@@ -731,8 +511,7 @@ mod tests {
     /// JSON serialization of requests and presentations is also tested.
     #[test]
     fn test_completeness_web3() {
-        let mut rng = rand::thread_rng();
-        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
+        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
 
         let min_timestamp = chrono::Duration::try_days(Web3IdAttribute::TIMESTAMP_DATE_OFFSET)
             .unwrap()
@@ -742,7 +521,7 @@ mod tests {
 
         let global_context = GlobalContext::generate("Test".into());
 
-        let web3_cred_1 = web3_credentials_fixture(
+        let web3_cred_1 = fixtures::web3_credentials_fixture(
             [
                 (17.to_string(), Web3IdAttribute::Numeric(137)),
                 (
@@ -759,7 +538,7 @@ mod tests {
             &global_context,
         );
 
-        let web3_cred_2 = web3_credentials_fixture(
+        let web3_cred_2 = fixtures::web3_credentials_fixture(
             [
                 (0.to_string(), Web3IdAttribute::Numeric(137)),
                 (
@@ -923,12 +702,11 @@ mod tests {
     /// signature on commitments in invalid.
     #[test]
     fn test_soundness_web3_commitments_signature() {
-        let mut rng = rand::thread_rng();
-        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
+        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
 
         let global_context = GlobalContext::generate("Test".into());
 
-        let web3_cred = web3_credentials_fixture(
+        let web3_cred = fixtures::web3_credentials_fixture(
             [(17.to_string(), Web3IdAttribute::Numeric(137))]
                 .into_iter()
                 .collect(),
@@ -999,12 +777,11 @@ mod tests {
     /// a statements is invalid.
     #[test]
     fn test_soundness_web3_statements() {
-        let mut rng = rand::thread_rng();
-        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
+        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
 
         let global_context = GlobalContext::generate("Test".into());
 
-        let web3_cred = web3_credentials_fixture(
+        let web3_cred = fixtures::web3_credentials_fixture(
             [
                 (17.to_string(), Web3IdAttribute::Numeric(137)),
                 (
@@ -1089,12 +866,11 @@ mod tests {
     /// linking proof is missing or invalid.
     #[test]
     fn test_soundness_web3_linking_proof() {
-        let mut rng = rand::thread_rng();
-        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
+        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
 
         let global_context = GlobalContext::generate("Test".into());
 
-        let web3_cred = web3_credentials_fixture(
+        let web3_cred = fixtures::web3_credentials_fixture(
             [(17.to_string(), Web3IdAttribute::Numeric(137))]
                 .into_iter()
                 .collect(),
@@ -1166,12 +942,11 @@ mod tests {
     /// JSON serialization of requests and presentations is also tested.
     #[test]
     fn test_completeness_web3_and_account() {
-        let mut rng = rand::thread_rng();
-        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
+        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
 
         let global_context = GlobalContext::generate("Test".into());
 
-        let web3_cred_fixture = web3_credentials_fixture(
+        let web3_cred_fixture = fixtures::web3_credentials_fixture(
             [
                 (17.to_string(), Web3IdAttribute::Numeric(137)),
                 (
@@ -1184,7 +959,7 @@ mod tests {
             &global_context,
         );
 
-        let acc_cred_fixture = account_credentials_fixture(
+        let acc_cred_fixture = fixtures::account_credentials_fixture(
             [
                 (3.into(), Web3IdAttribute::Numeric(137)),
                 (
@@ -1321,12 +1096,11 @@ mod tests {
     /// Test prove and verify presentation for account credentials.
     #[test]
     fn test_completeness_account() {
-        let mut rng = rand::thread_rng();
-        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
+        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
 
         let global_context = GlobalContext::generate("Test".into());
 
-        let acc_cred_fixture = account_credentials_fixture(
+        let acc_cred_fixture = fixtures::account_credentials_fixture(
             [
                 (3.into(), Web3IdAttribute::Numeric(137)),
                 (
@@ -1420,12 +1194,11 @@ mod tests {
     /// verification fails.
     #[test]
     fn test_soundness_account() {
-        let mut rng = rand::thread_rng();
-        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
+        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
 
         let global_context = GlobalContext::generate("Test".into());
 
-        let acc_cred_fixture = account_credentials_fixture(
+        let acc_cred_fixture = fixtures::account_credentials_fixture(
             [
                 (3.into(), Web3IdAttribute::Numeric(137)),
                 (
@@ -1504,12 +1277,11 @@ mod tests {
     /// mismatching types.
     #[test]
     fn test_soundness_mismatching_credential_types() {
-        let mut rng = rand::thread_rng();
-        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
+        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
 
         let global_context = GlobalContext::generate("Test".into());
 
-        let acc_cred_fixture = account_credentials_fixture(
+        let acc_cred_fixture = fixtures::account_credentials_fixture(
             [(3.into(), Web3IdAttribute::Numeric(137))]
                 .into_iter()
                 .collect(),
@@ -1543,7 +1315,7 @@ mod tests {
             .expect("prove");
 
         // use mismatching type of credential inputs
-        let web3_cred_fixture = web3_credentials_fixture(
+        let web3_cred_fixture = fixtures::web3_credentials_fixture(
             [(3.to_string(), Web3IdAttribute::Numeric(137))]
                 .into_iter()
                 .collect(),
@@ -1562,12 +1334,11 @@ mod tests {
     /// mismatching lengths.
     #[test]
     fn test_soundness_mismatching_credential_length() {
-        let mut rng = rand::thread_rng();
-        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
+        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
 
         let global_context = GlobalContext::generate("Test".into());
 
-        let acc_cred_fixture = account_credentials_fixture(
+        let acc_cred_fixture = fixtures::account_credentials_fixture(
             [(3.into(), Web3IdAttribute::Numeric(137))]
                 .into_iter()
                 .collect(),
@@ -1625,7 +1396,7 @@ mod tests {
 
         let global_context = GlobalContext::generate("Test".into());
 
-        let id_cred_fixture = identity_credentials_fixture(
+        let id_cred_fixture = fixtures::identity_credentials_fixture(
             [
                 // attribute we prove commitment to
                 (
@@ -1738,7 +1509,7 @@ mod tests {
 
         let global_context = GlobalContext::generate("Test".into());
 
-        let id_cred_fixture = identity_credentials_fixture(
+        let id_cred_fixture = fixtures::identity_credentials_fixture(
             [
                 (3.into(), Web3IdAttribute::Numeric(137)),
                 (
@@ -1829,7 +1600,7 @@ mod tests {
 
         let global_context = GlobalContext::generate("Test".into());
 
-        let id_cred_fixture = identity_credentials_fixture(
+        let id_cred_fixture = fixtures::identity_credentials_fixture(
             [(3.into(), Web3IdAttribute::Numeric(137))]
                 .into_iter()
                 .collect(),
@@ -1895,7 +1666,7 @@ mod tests {
     fn test_stability_account() {
         let global_context = GlobalContext::generate("Test".into());
 
-        let acc_cred_fixture = account_credentials_fixture(
+        let acc_cred_fixture = fixtures::account_credentials_fixture(
             [
                 (3.into(), Web3IdAttribute::Numeric(137)),
                 (
@@ -2007,7 +1778,7 @@ mod tests {
     fn test_stability_web3() {
         let global_context = GlobalContext::generate("Test".into());
 
-        let web3_cred = web3_credentials_fixture(
+        let web3_cred = fixtures::web3_credentials_fixture(
             [
                 (3.to_string(), Web3IdAttribute::Numeric(137)),
                 (
