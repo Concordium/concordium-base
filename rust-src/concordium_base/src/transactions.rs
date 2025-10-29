@@ -1969,8 +1969,6 @@ pub enum BlockItem<PayloadType> {
     // Account transactions v1 are messages which are signed and paid for by
     // either the sender account or a sponsor account.
     AccountTransactionV1(AccountTransactionV1<PayloadType>),
-    // A raw block item encoded as a byte string.
-    RawBlockItem(Vec<u8>),
 }
 
 impl<PayloadType> From<AccountTransaction<PayloadType>> for BlockItem<PayloadType> {
@@ -2136,10 +2134,6 @@ impl<P: PayloadLike> Serial for BlockItem<P> {
             BlockItem::AccountTransactionV1(atv1) => {
                 out.put(&3u8);
                 out.put(atv1);
-            }
-            BlockItem::RawBlockItem(bytes) => {
-                out.put(&4u8);
-                out.put(bytes);
             }
         }
     }
