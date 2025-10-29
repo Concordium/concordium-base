@@ -13,7 +13,7 @@ use rand::*;
 use std::iter::once;
 
 /// Bulletproof style range proof
-#[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
+#[derive(Clone, Eq, PartialEq, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
 pub struct RangeProof<C: Curve> {
     /// Commitments to the bits `a_i` of the value, and `a_i - 1`

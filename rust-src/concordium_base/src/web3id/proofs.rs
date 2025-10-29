@@ -497,13 +497,11 @@ pub mod tests {
         AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement,
         AttributeNotInSetStatement, RevealAttributeStatement,
     };
-    use crate::id::test;
     use crate::web3id::did::Network;
     use crate::web3id::{fixtures, Context, ContextProperty, Sha256Challenge, Web3IdAttribute};
     use concordium_contracts_common::Timestamp;
     use rand::Rng;
     use std::marker::PhantomData;
-
 
     /// Test that constructing proofs for web3 only credentials works in the
     /// sense that the proof verifies.

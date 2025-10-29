@@ -12,7 +12,7 @@ use rand::*;
 use std::{convert::TryInto, iter::once};
 
 /// Bulletproof style set-membership proof
-#[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
+#[derive(Clone, Eq, PartialEq, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
 pub struct SetMembershipProof<C: Curve> {
     /// Commitments to the evaluation of the indicator function `I_{v}` on

@@ -2743,7 +2743,7 @@ pub struct IdentityAttributesCredentialsRandomness<C: Curve> {
 
 /// This structure contains all proofs, which are required to prove identity attributes credentials created
 /// from identity credential.
-#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+#[derive(Debug, Eq, PartialEq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
 pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// (Blinded) Signature derived from the signature on the pre-identity
     /// object by the IP
@@ -2871,7 +2871,7 @@ pub struct IdentityAttributesCredentialsValues<C: Curve, AttributeType: Attribut
 
 /// Identity attributes credentials created from identity credential, and proofs that it is
 /// well-formed.
-#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+#[derive(Debug, Eq, PartialEq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
 pub struct IdentityAttributesCredentialsInfo<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,

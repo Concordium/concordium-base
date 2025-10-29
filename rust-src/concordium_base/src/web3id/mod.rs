@@ -297,7 +297,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     }
 }
 
-#[derive(Clone, serde::Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
 #[serde(bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"))]
 #[serde(try_from = "serde_json::Value")]
 /// A proof corresponding to one [`CredentialStatement`]. This contains almost
@@ -348,7 +348,9 @@ pub enum CredentialProof<
 }
 
 /// Commitments signed by the issuer.
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, crate::common::Serialize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Eq, PartialEq, Debug, crate::common::Serialize,
+)]
 #[serde(bound = "C: Curve")]
 pub struct SignedCommitments<C: Curve> {
     #[serde(
@@ -878,7 +880,7 @@ pub enum CredentialHolderIdRole {}
 /// The owner of a Web3Id credential.
 pub type CredentialHolderId = Ed25519PublicKey<CredentialHolderIdRole>;
 
-#[derive(serde::Deserialize)]
+#[derive(Debug, PartialEq, Eq, serde::Deserialize)]
 #[serde(bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"))]
 #[serde(try_from = "serde_json::Value")]
 /// A presentation is the response to a [`Request`]. It contains proofs for
@@ -955,7 +957,7 @@ impl<
     }
 }
 
-#[derive(Debug, crate::common::SerdeBase16Serialize, crate::common::Serialize)]
+#[derive(Debug, Eq, PartialEq, crate::common::SerdeBase16Serialize, crate::common::Serialize)]
 /// A proof that establishes that the owner of the credential itself produced
 /// the proof. Technically this means that there is a signature on the entire
 /// rest of the presentation using the public key that is associated with the
@@ -966,7 +968,7 @@ struct WeakLinkingProof {
     signature: ed25519_dalek::Signature,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Eq, PartialEq, serde::Deserialize)]
 #[serde(try_from = "serde_json::Value")]
 /// A proof that establishes that the owner of the credential has indeed created
 /// the presentation. At present this is a list of signatures.
@@ -1708,12 +1710,15 @@ impl Attribute<<ArCurve as Curve>::Scalar> for Web3IdAttribute {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::id::constants::IpPairing;
+    use crate::id::id_proof_types::{
+        AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
+        RevealAttributeStatement,
+    };
     use crate::web3id::did::Network;
     use crate::web3id::{Web3IdAttribute, Web3IdCredential};
     use chrono::TimeZone;
     use rand::Rng;
-    use crate::id::constants::IpPairing;
-    use crate::id::id_proof_types::{AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement, RevealAttributeStatement};
 
     fn remove_whitespace(str: &str) -> String {
         str.chars().filter(|c| !c.is_whitespace()).collect()
@@ -1823,8 +1828,8 @@ mod tests {
                     Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
                 ),
             ]
-                .into_iter()
-                .collect(),
+            .into_iter()
+            .collect(),
             &global_context,
         );
 
@@ -1848,8 +1853,8 @@ mod tests {
                             Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
                             Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                         ]
-                            .into_iter()
-                            .collect(),
+                        .into_iter()
+                        .collect(),
                         _phantom: PhantomData,
                     },
                 },
@@ -1861,8 +1866,8 @@ mod tests {
                             Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
                             Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
                         ]
-                            .into_iter()
-                            .collect(),
+                        .into_iter()
+                        .collect(),
                         _phantom: PhantomData,
                     },
                 },
@@ -1921,8 +1926,13 @@ mod tests {
   ]
 }
 "#;
-        assert_eq!(remove_whitespace(&request_json), remove_whitespace(expected_request_json), "request json");
-        let request_deserialized: Request<ArCurve, Web3IdAttribute> = serde_json::from_str(&request_json).unwrap();
+        assert_eq!(
+            remove_whitespace(&request_json),
+            remove_whitespace(expected_request_json),
+            "request json"
+        );
+        let request_deserialized: Request<ArCurve, Web3IdAttribute> =
+            serde_json::from_str(&request_json).unwrap();
         assert_eq!(request_deserialized, request);
 
         // the easiest way to construct a presentation, is just to run the prover on a request
@@ -2012,8 +2022,13 @@ mod tests {
   ]
 }
         "#;
-        assert_eq!(remove_whitespace(&proof_json), remove_whitespace(expected_proof_json), "proof json");
-        let proof_deserialized: Presentation<IpPairing, ArCurve, Web3IdAttribute> = serde_json::from_str(&proof_json).unwrap();
+        assert_eq!(
+            remove_whitespace(&proof_json),
+            remove_whitespace(expected_proof_json),
+            "proof json"
+        );
+        let proof_deserialized: Presentation<IpPairing, ArCurve, Web3IdAttribute> =
+            serde_json::from_str(&proof_json).unwrap();
         assert_eq!(proof_deserialized, proof);
     }
 }
@@ -2030,8 +2045,7 @@ mod fixtures {
     };
     use crate::id::{identity_provider, test};
     use crate::web3id::{
-        CredentialHolderId, OwnedCommitmentInputs,
-        OwnedIdentityCommitmentInputs, Web3IdAttribute,
+        CredentialHolderId, OwnedCommitmentInputs, OwnedIdentityCommitmentInputs, Web3IdAttribute,
     };
     use concordium_contracts_common::ContractAddress;
     use rand::SeedableRng;
@@ -2043,7 +2057,7 @@ mod fixtures {
     }
 
     impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>
-    IdentityCredentialsFixture<AttributeType>
+        IdentityCredentialsFixture<AttributeType>
     {
         pub fn commitment_inputs(
             &self,
@@ -2131,7 +2145,7 @@ mod fixtures {
     }
 
     impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>
-    AccountCredentialsFixture<AttributeType>
+        AccountCredentialsFixture<AttributeType>
     {
         pub fn commitment_inputs(
             &self,
@@ -2227,7 +2241,7 @@ mod fixtures {
             &issuer_key,
             contract,
         )
-            .unwrap();
+        .unwrap();
 
         let commitment_inputs = OwnedCommitmentInputs::Web3Issuer {
             signer: signer_key,
