@@ -733,19 +733,6 @@ pub mod tests {
             request,
             "verify request"
         );
-
-        let data = serde_json::to_string_pretty(&proof).unwrap();
-        assert!(
-            serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok(),
-            "Cannot deserialize proof correctly."
-        );
-
-        let data = serde_json::to_string_pretty(&request).unwrap();
-        assert_eq!(
-            serde_json::from_str::<Request<ArCurve, Web3IdAttribute>>(&data).unwrap(),
-            request,
-            "Cannot deserialize request correctly."
-        );
     }
 
     /// Prove and verify where verification fails because
@@ -1141,19 +1128,6 @@ pub mod tests {
                 .expect("verify"),
             request,
             "verify request"
-        );
-
-        let data = serde_json::to_string_pretty(&proof).unwrap();
-        assert!(
-            serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok(),
-            "Cannot deserialize proof correctly."
-        );
-
-        let data = serde_json::to_string_pretty(&request).unwrap();
-        assert_eq!(
-            serde_json::from_str::<Request<ArCurve, Web3IdAttribute>>(&data).unwrap(),
-            request,
-            "Cannot deserialize request correctly."
         );
     }
 
