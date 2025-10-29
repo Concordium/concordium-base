@@ -493,7 +493,7 @@ pub mod tests {
         );
 
         let credential_statements = vec![
-            CredentialStatement::Web3Id {
+            CredentialStatement::Web3Id(Web3IdCredentialStatement {
                 ty: [
                     "VerifiableCredential".into(),
                     "ConcordiumVerifiableCredential".into(),
@@ -538,8 +538,8 @@ pub mod tests {
                         },
                     },
                 ],
-            },
-            CredentialStatement::Web3Id {
+            }),
+            CredentialStatement::Web3Id(Web3IdCredentialStatement {
                 ty: [
                     "VerifiableCredential".into(),
                     "ConcordiumVerifiableCredential".into(),
@@ -591,7 +591,7 @@ pub mod tests {
                         },
                     },
                 ],
-            },
+            }),
         ];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
@@ -649,7 +649,7 @@ pub mod tests {
             &global_context,
         );
 
-        let credential_statements = vec![CredentialStatement::Web3Id {
+        let credential_statements = vec![CredentialStatement::Web3Id(Web3IdCredentialStatement {
             ty: [
                 "VerifiableCredential".into(),
                 "ConcordiumVerifiableCredential".into(),
@@ -668,7 +668,7 @@ pub mod tests {
                     _phantom: PhantomData,
                 },
             }],
-        }];
+        })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
             challenge: challenge.clone(),
@@ -681,7 +681,8 @@ pub mod tests {
             .expect("prove");
 
         // change commitments signature to be invalid
-        let CredentialProof::Web3Id { commitments, .. } = &mut proof.verifiable_credential[0]
+        let CredentialProof::Web3Id(Web3IdCredentialProof { commitments, .. }) =
+            &mut proof.verifiable_credential[0]
         else {
             panic!("should be web3 proof");
         };
@@ -730,7 +731,7 @@ pub mod tests {
             &global_context,
         );
 
-        let credential_statements = vec![CredentialStatement::Web3Id {
+        let credential_statements = vec![CredentialStatement::Web3Id(Web3IdCredentialStatement {
             ty: [
                 "VerifiableCredential".into(),
                 "ConcordiumVerifiableCredential".into(),
@@ -764,7 +765,7 @@ pub mod tests {
                     },
                 },
             ],
-        }];
+        })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
             challenge: challenge.clone(),
@@ -777,7 +778,9 @@ pub mod tests {
             .expect("prove");
 
         // change statement to be invalid
-        let CredentialProof::Web3Id { proofs, .. } = &mut proof.verifiable_credential[0] else {
+        let CredentialProof::Web3Id(Web3IdCredentialProof { proofs, .. }) =
+            &mut proof.verifiable_credential[0]
+        else {
             panic!("should be web3 proof");
         };
         proofs[1].0 = AtomicStatement::AttributeInRange {
@@ -813,7 +816,7 @@ pub mod tests {
             &global_context,
         );
 
-        let credential_statements = vec![CredentialStatement::Web3Id {
+        let credential_statements = vec![CredentialStatement::Web3Id(Web3IdCredentialStatement {
             ty: [
                 "VerifiableCredential".into(),
                 "ConcordiumVerifiableCredential".into(),
@@ -832,7 +835,7 @@ pub mod tests {
                     _phantom: PhantomData,
                 },
             }],
-        }];
+        })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
             challenge: challenge.clone(),
@@ -909,7 +912,7 @@ pub mod tests {
         );
 
         let credential_statements = vec![
-            CredentialStatement::Web3Id {
+            CredentialStatement::Web3Id(Web3IdCredentialStatement {
                 ty: [
                     "VerifiableCredential".into(),
                     "ConcordiumVerifiableCredential".into(),
@@ -949,8 +952,8 @@ pub mod tests {
                         },
                     },
                 ],
-            },
-            CredentialStatement::Account {
+            }),
+            CredentialStatement::Account(AccountCredentialStatement {
                 network: Network::Testnet,
                 cred_id: acc_cred_fixture.cred_id,
                 statement: vec![
@@ -982,7 +985,7 @@ pub mod tests {
                         },
                     },
                 ],
-            },
+            }),
         ];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
@@ -1056,51 +1059,64 @@ pub mod tests {
             &global_context,
         );
 
-        let credential_statements = vec![CredentialStatement::Account {
-            network: Network::Testnet,
-            cred_id: acc_cred_fixture.cred_id,
-            statement: vec![
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: 3.into(),
-                        lower: Web3IdAttribute::Numeric(80),
-                        upper: Web3IdAttribute::Numeric(1237),
-                        _phantom: PhantomData,
+        let credential_statements =
+            vec![CredentialStatement::Account(AccountCredentialStatement {
+                network: Network::Testnet,
+                cred_id: acc_cred_fixture.cred_id,
+                statement: vec![
+                    AtomicStatement::AttributeInRange {
+                        statement: AttributeInRangeStatement {
+                            attribute_tag: 3.into(),
+                            lower: Web3IdAttribute::Numeric(80),
+                            upper: Web3IdAttribute::Numeric(1237),
+                            _phantom: PhantomData,
+                        },
                     },
-                },
-                AtomicStatement::AttributeInSet {
-                    statement: AttributeInSetStatement {
-                        attribute_tag: 2.into(),
-                        set: [
-                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        _phantom: PhantomData,
+                    AtomicStatement::AttributeInSet {
+                        statement: AttributeInSetStatement {
+                            attribute_tag: 2.into(),
+                            set: [
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("ff".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("aa".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("zz".into()).unwrap(),
+                                ),
+                            ]
+                            .into_iter()
+                            .collect(),
+                            _phantom: PhantomData,
+                        },
                     },
-                },
-                AtomicStatement::AttributeNotInSet {
-                    statement: AttributeNotInSetStatement {
-                        attribute_tag: 1.into(),
-                        set: [
-                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        _phantom: PhantomData,
+                    AtomicStatement::AttributeNotInSet {
+                        statement: AttributeNotInSetStatement {
+                            attribute_tag: 1.into(),
+                            set: [
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("ff".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("aa".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("zz".into()).unwrap(),
+                                ),
+                            ]
+                            .into_iter()
+                            .collect(),
+                            _phantom: PhantomData,
+                        },
                     },
-                },
-                AtomicStatement::RevealAttribute {
-                    statement: RevealAttributeStatement {
-                        attribute_tag: 5.into(),
+                    AtomicStatement::RevealAttribute {
+                        statement: RevealAttributeStatement {
+                            attribute_tag: 5.into(),
+                        },
                     },
-                },
-            ],
-        }];
+                ],
+            })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
             challenge,
@@ -1146,33 +1162,40 @@ pub mod tests {
             &global_context,
         );
 
-        let credential_statements = vec![CredentialStatement::Account {
-            network: Network::Testnet,
-            cred_id: acc_cred_fixture.cred_id,
-            statement: vec![
-                AtomicStatement::AttributeNotInSet {
-                    statement: AttributeNotInSetStatement {
-                        attribute_tag: 1u8.into(),
-                        set: [
-                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        _phantom: PhantomData,
+        let credential_statements =
+            vec![CredentialStatement::Account(AccountCredentialStatement {
+                network: Network::Testnet,
+                cred_id: acc_cred_fixture.cred_id,
+                statement: vec![
+                    AtomicStatement::AttributeNotInSet {
+                        statement: AttributeNotInSetStatement {
+                            attribute_tag: 1u8.into(),
+                            set: [
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("ff".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("aa".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("zz".into()).unwrap(),
+                                ),
+                            ]
+                            .into_iter()
+                            .collect(),
+                            _phantom: PhantomData,
+                        },
                     },
-                },
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: 3.into(),
-                        lower: Web3IdAttribute::Numeric(80),
-                        upper: Web3IdAttribute::Numeric(1237),
-                        _phantom: PhantomData,
+                    AtomicStatement::AttributeInRange {
+                        statement: AttributeInRangeStatement {
+                            attribute_tag: 3.into(),
+                            lower: Web3IdAttribute::Numeric(80),
+                            upper: Web3IdAttribute::Numeric(1237),
+                            _phantom: PhantomData,
+                        },
                     },
-                },
-            ],
-        }];
+                ],
+            })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
             challenge,
@@ -1188,7 +1211,9 @@ pub mod tests {
             .expect("prove");
 
         // change statement to be invalid
-        let CredentialProof::Account { proofs, .. } = &mut proof.verifiable_credential[0] else {
+        let CredentialProof::Account(AccountCredentialProof { proofs, .. }) =
+            &mut proof.verifiable_credential[0]
+        else {
             panic!("should be account proof");
         };
         proofs[1].0 = AtomicStatement::AttributeInRange {
@@ -1223,18 +1248,19 @@ pub mod tests {
             &global_context,
         );
 
-        let credential_statements = vec![CredentialStatement::Account {
-            network: Network::Testnet,
-            cred_id: acc_cred_fixture.cred_id,
-            statement: vec![AtomicStatement::AttributeInRange {
-                statement: AttributeInRangeStatement {
-                    attribute_tag: 3.into(),
-                    lower: Web3IdAttribute::Numeric(80),
-                    upper: Web3IdAttribute::Numeric(1237),
-                    _phantom: PhantomData,
-                },
-            }],
-        }];
+        let credential_statements =
+            vec![CredentialStatement::Account(AccountCredentialStatement {
+                network: Network::Testnet,
+                cred_id: acc_cred_fixture.cred_id,
+                statement: vec![AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: 3.into(),
+                        lower: Web3IdAttribute::Numeric(80),
+                        upper: Web3IdAttribute::Numeric(1237),
+                        _phantom: PhantomData,
+                    },
+                }],
+            })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
             challenge,
@@ -1280,18 +1306,19 @@ pub mod tests {
             &global_context,
         );
 
-        let credential_statements = vec![CredentialStatement::Account {
-            network: Network::Testnet,
-            cred_id: acc_cred_fixture.cred_id,
-            statement: vec![AtomicStatement::AttributeInRange {
-                statement: AttributeInRangeStatement {
-                    attribute_tag: 3.into(),
-                    lower: Web3IdAttribute::Numeric(80),
-                    upper: Web3IdAttribute::Numeric(1237),
-                    _phantom: PhantomData,
-                },
-            }],
-        }];
+        let credential_statements =
+            vec![CredentialStatement::Account(AccountCredentialStatement {
+                network: Network::Testnet,
+                cred_id: acc_cred_fixture.cred_id,
+                statement: vec![AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: 3.into(),
+                        lower: Web3IdAttribute::Numeric(80),
+                        upper: Web3IdAttribute::Numeric(1237),
+                        _phantom: PhantomData,
+                    },
+                }],
+            })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
             challenge,

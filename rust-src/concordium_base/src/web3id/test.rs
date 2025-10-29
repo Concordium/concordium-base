@@ -3,8 +3,8 @@ mod tests {
     use crate::id::constants::IpPairing;
     use crate::id::{account_holder, chain, identity_provider};
     use crate::web3id::{
-        CommitmentInputs, CredentialStatement, CredentialsInputs, Request, Sha256Challenge,
-        Web3IdAttribute,
+        AccountCredentialStatement, CommitmentInputs, CredentialStatement, CredentialsInputs,
+        Request, Sha256Challenge, Web3IdAttribute,
     };
     use crate::{
         base::CredentialRegistrationID,
@@ -151,18 +151,19 @@ mod tests {
 
         let cred_id = CredentialRegistrationID::new(cdi.values.cred_id);
 
-        let credential_statements = vec![CredentialStatement::Account {
-            network: Network::Testnet,
-            cred_id,
-            statement: vec![AtomicStatement::AttributeInRange {
-                statement: AttributeInRangeStatement {
-                    attribute_tag,
-                    lower: Web3IdAttribute::Numeric(0),
-                    upper: Web3IdAttribute::Numeric(1237),
-                    _phantom: PhantomData,
-                },
-            }],
-        }];
+        let credential_statements =
+            vec![CredentialStatement::Account(AccountCredentialStatement {
+                network: Network::Testnet,
+                cred_id,
+                statement: vec![AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag,
+                        lower: Web3IdAttribute::Numeric(0),
+                        upper: Web3IdAttribute::Numeric(1237),
+                        _phantom: PhantomData,
+                    },
+                }],
+            })];
 
         let request = Request {
             challenge,
