@@ -3705,22 +3705,24 @@ mod tests {
             sender: sender_sig.clone(),
             sponsor: Some(sponsor_sig),
         };
-        let mut buf = Vec::new();
-        sigs.serial(&mut buf);
-        let sigs1: TransactionSignaturesV1 =
-            Deserial::deserial(&mut std::io::Cursor::new(buf)).unwrap();
-        assert_eq!(sigs, sigs1, "Serializing, then deserializing a transaction signature v1 should yield the original transaction.");
+        let binary_result = crate::common::serialize_deserialize(&sigs)
+            .expect("Binary transaction signature v1  serialization is not invertible.");
+        assert_eq!(
+            binary_result, sigs,
+            "Binary transaction signature v1 parses incorrectly."
+        );
 
-        let sigs2 = TransactionSignaturesV1 {
+        let sigs1 = TransactionSignaturesV1 {
             sender: sender_sig,
             sponsor: None,
         };
 
-        let mut buf1 = Vec::new();
-        sigs2.serial(&mut buf1);
-        let sigs3: TransactionSignaturesV1 =
-            Deserial::deserial(&mut std::io::Cursor::new(buf1)).unwrap();
-        assert_eq!(sigs2, sigs3, "Serializing, then deserializing a transaction signature v1 should yield the original transaction.");
+        let binary_result = crate::common::serialize_deserialize(&sigs1)
+            .expect("Binary transaction signature v1 serialization is not invertible.");
+        assert_eq!(
+            binary_result, sigs1,
+            "Binary tranasction signature v1 parses incorrectly."
+        );
     }
 
     #[test]
@@ -3743,12 +3745,12 @@ mod tests {
             "The serialization of TransactionHeaderV1 is not equal to the expected one."
         );
 
-        let header1: TransactionHeaderV1 =
-            Deserial::deserial(&mut std::io::Cursor::new(buf.clone())).unwrap();
+        let binary_result = crate::common::serialize_deserialize(&header0)
+            .expect("Binary transaction header v1 serialization is not invertible.");
         assert_eq!(
-            header0,
-            header1,
-            "Serializing, then deserializing a transaction header v1 should yield the original transaction header.");
+            binary_result, header0,
+            "Binary transaction header v1 parses incorrectly."
+        );
     }
 
     #[test]
@@ -3772,14 +3774,12 @@ mod tests {
                 payload: [0; PAYLOAD_SIZE].to_vec(),
             },
         };
-        let mut buf = Vec::new();
-        at.serial(&mut buf);
-        let at1: AccountTransactionV1<EncodedPayload> =
-            Deserial::deserial(&mut std::io::Cursor::new(buf)).unwrap();
+        let binary_result = crate::common::serialize_deserialize(&at)
+            .expect("Binary account transaction v1 serialization is not invertible.");
         assert_eq!(
-            at,
-            at1,
-            "Serializing, then deserializing an account transaction v1 should yield the original transaction.")
+            binary_result, at,
+            "Binary account tranasction v1 parses incorrectly."
+        );
     }
 
     #[test]
