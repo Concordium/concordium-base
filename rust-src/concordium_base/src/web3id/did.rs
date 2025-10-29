@@ -1,5 +1,6 @@
 //! Definition of Concordium DIDs and their parser.
 
+use crate::web3id::v1::IdentityCredentialId;
 use crate::{base::CredentialRegistrationID, common::base16_decode_string, id::types::IpIdentity};
 use concordium_contracts_common::{
     AccountAddress, ContractAddress, EntrypointName, OwnedEntrypointName, OwnedParameter,
@@ -78,8 +79,10 @@ impl crate::common::Deserial for Network {
 pub enum IdentifierType {
     /// Reference to an account via an address.
     Account { address: AccountAddress },
-    /// Reference to a specific credential via its ID.
-    Credential { cred_id: CredentialRegistrationID },
+    /// Reference to an account credential via its the account credential registration ID.
+    AccountCredential { cred_id: CredentialRegistrationID },
+    /// Reference to an identity credential via the IdCredSec encryption.
+    IdentityCredential { cred_id: IdentityCredentialId }, // todo ar test
     /// Reference to a specific smart contract instance.
     ContractData {
         address: ContractAddress,
@@ -180,8 +183,11 @@ impl std::fmt::Display for Method {
             IdentifierType::Account { address } => {
                 write!(f, "did:ccd:{}:acc:{address}", self.network)
             }
-            IdentifierType::Credential { cred_id } => {
+            IdentifierType::AccountCredential { cred_id } => {
                 write!(f, "did:ccd:{}:cred:{cred_id}", self.network)
+            }
+            IdentifierType::IdentityCredential { .. } => {
+                todo!()
             }
             IdentifierType::ContractData {
                 address,
@@ -256,7 +262,7 @@ fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
         let cred_id = data.parse::<CredentialRegistrationID>().map_err(|_| {
             nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify))
         })?;
-        Ok((input, IdentifierType::Credential { cred_id }))
+        Ok((input, IdentifierType::AccountCredential { cred_id }))
     };
     let contract = |input| {
         let (input, _) = tag("sci:")(input)?;
@@ -475,7 +481,7 @@ mod tests {
         let cred_id = "a5bedc6d92d6cc8333684aa69091095c425d0b5971f554964a6ac8e297a3074748d25268f1d217234c400f3103669f90".parse()?;
         let target = Method {
             network: Network::Mainnet,
-            ty: IdentifierType::Credential { cred_id },
+            ty: IdentifierType::AccountCredential { cred_id },
         };
         assert_eq!(format!("did:ccd:cred:{cred_id}").parse::<Method>()?, target);
         assert_eq!(

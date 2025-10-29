@@ -7,45 +7,19 @@ use crate::{
 };
 
 use crate::web3id::{
-    Challenge, CommitmentInputs, CredentialHolderId, CredentialProof, CredentialStatement,
-    CredentialsInputs, LinkingProof, Presentation, PresentationVerificationError, ProofError,
-    ProofMetadata, Request, SignedCommitments, WeakLinkingProof, Web3IdSigner,
+    CommitmentInputs, CredentialHolderId, CredentialProof, CredentialStatement, CredentialsInputs,
+    LinkingProof, Presentation, PresentationVerificationError, ProofError, ProofMetadata, Request,
+    Sha256Challenge, SignedCommitments, WeakLinkingProof, Web3IdSigner,
     COMMITMENT_SIGNATURE_DOMAIN_STRING, LINKING_DOMAIN_STRING,
 };
 use ed25519_dalek::Verifier;
 
 use crate::cis4_types::IssuerKey;
 use crate::curve_arithmetic::Pairing;
-use crate::id::id_proof_types::{AtomicStatement, ProofVersion};
-use crate::id::identity_attributes_credentials;
-use crate::id::identity_attributes_credentials::IdentityAttributeHandling;
-use crate::id::types::{IdentityAttribute, IpContextOnly};
+use crate::id::id_proof_types::ProofVersion;
 use concordium_contracts_common::ContractAddress;
 use rand::{CryptoRng, Rng};
 use std::collections::BTreeMap;
-
-/// Append a `web3id::Challenge` to the state of the random oracle.
-/// Newly added challenge variants should use a tag/version, as well as labels for each struct field
-/// as domain name separators to ensure every part of the challenge is accounted for.
-/// Each challenge variant should contribute uniquely to the random oracle.
-fn append_challenge(digest: &mut impl StructuredDigest, challenge: &Challenge) {
-    match challenge {
-        Challenge::Sha256(hash_bytes) => {
-            // No tag/version `V0` is added to be backward compatible with old proofs and requests.
-            digest.add_bytes(hash_bytes);
-        }
-        Challenge::V1(context) => {
-            // A zero sha256 hash is prepended to ensure this output
-            // is different to any `Sha256` challenge.
-            digest.add_bytes([0u8; 32]);
-            // Add tag/version `V1` to the random oracle.
-            digest.add_bytes("V1");
-            digest.add_bytes("Context");
-            digest.append_message("given", &context.given);
-            digest.append_message("requested", &context.requested);
-        }
-    }
-}
 
 impl<C: Curve> SignedCommitments<C> {
     /// Verify signatures on the commitments in the context of the holder's
@@ -65,9 +39,7 @@ impl<C: Curve> SignedCommitments<C> {
     }
 }
 
-impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
-    Presentation<P, C, AttributeType>
-{
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeType> {
     /// Get an iterator over the metadata for each of the verifiable credentials
     /// in the order they appear in the presentation.
     pub fn metadata(&self) -> impl ExactSizeIterator<Item = ProofMetadata> + '_ {
@@ -83,13 +55,13 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     /// **NB:** This only verifies the cryptographic consistentcy of the data.
     /// It does not check metadata, such as expiry. This should be checked
     /// separately by the verifier.
-    pub fn verify<'a>(
+    pub fn verify<'a, P: Pairing<ScalarField = C::Scalar>>(
         &self,
         params: &GlobalContext<C>,
         public: impl ExactSizeIterator<Item = &'a CredentialsInputs<P, C>>,
     ) -> Result<Request<C, AttributeType>, PresentationVerificationError> {
         let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
-        append_challenge(&mut transcript, &self.presentation_context);
+        transcript.add_bytes(self.presentation_context);
         transcript.append_message(b"ctx", &params);
 
         let mut request = Request {
@@ -99,7 +71,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 
         // Compute the data that the linking proof signed.
         let to_sign =
-            linking_proof_message_to_sign(&self.presentation_context, &self.verifiable_credential);
+            linking_proof_message_to_sign(self.presentation_context, &self.verifiable_credential);
 
         let mut linking_proof_iter = self.linking_proof.proof_value.iter();
 
@@ -117,7 +89,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
                     return Err(PresentationVerificationError::InvalidLinkinProof);
                 }
             }
-            if !verify_single_credential(params, &mut transcript, cred_proof, cred_public) {
+            if !cred_proof.verify(params, &mut transcript, cred_public) {
                 return Err(PresentationVerificationError::InvalidCredential);
             }
         }
@@ -131,115 +103,69 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     }
 }
 
-/// Verify a single credential. This only checks the cryptographic parts and
-/// ignores the metadata such as issuance date.
-fn verify_single_credential<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
->(
-    global: &GlobalContext<C>,
-    transcript: &mut RandomOracle,
-    cred_proof: &CredentialProof<P, C, AttributeType>,
-    public: &CredentialsInputs<P, C>,
-) -> bool {
-    match (&cred_proof, public) {
-        (
-            CredentialProof::Account {
-                network: _,
-                cred_id: _,
-                proofs,
-                created: _,
-                issuer: _,
-            },
-            CredentialsInputs::Account { commitments },
-        ) => {
-            for (statement, proof) in proofs.iter() {
-                if !statement.verify(
-                    ProofVersion::Version2,
-                    global,
-                    transcript,
-                    commitments,
-                    proof,
-                ) {
-                    return false;
-                }
-            }
-        }
-        (
-            CredentialProof::Identity {
-                proofs,
-                id_attr_cred_info,
-                ..
-            },
-            CredentialsInputs::Identity { ip_info, ars_infos },
-        ) => {
-            if identity_attributes_credentials::verify_identity_attributes(
-                global,
-                IpContextOnly {
-                    ip_info,
-                    ars_infos: &ars_infos.anonymity_revokers,
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, AttributeType> {
+    /// Verify a single credential. This only checks the cryptographic parts and
+    /// ignores the metadata such as issuance date.
+    fn verify<P: Pairing<ScalarField = C::Scalar>>(
+        &self,
+        global: &GlobalContext<C>,
+        transcript: &mut RandomOracle,
+        public: &CredentialsInputs<P, C>,
+    ) -> bool {
+        match (self, public) {
+            (
+                CredentialProof::Account {
+                    network: _,
+                    cred_id: _,
+                    proofs,
+                    created: _,
+                    issuer: _,
                 },
-                id_attr_cred_info,
-                transcript,
-            )
-            .is_err()
-            {
-                return false;
-            }
-
-            let cmm_attributes: BTreeMap<_, _> = id_attr_cred_info
-                .values
-                .attributes
-                .iter()
-                .filter_map(|(tag, attr)| match attr {
-                    IdentityAttribute::Committed(cmm) => Some((*tag, *cmm)),
-                    _ => None,
-                })
-                .collect();
-
-            for (statement, proof) in proofs.iter() {
-                if !statement.verify(
-                    ProofVersion::Version2,
-                    global,
-                    transcript,
-                    &cmm_attributes,
-                    proof,
-                ) {
-                    return false;
+                CredentialsInputs::Account { commitments },
+            ) => {
+                for (statement, proof) in proofs.iter() {
+                    if !statement.verify(
+                        ProofVersion::Version2,
+                        global,
+                        transcript,
+                        commitments,
+                        proof,
+                    ) {
+                        return false;
+                    }
                 }
             }
-        }
-        (
-            CredentialProof::Web3Id {
-                network: _proof_network,
-                contract: proof_contract,
-                commitments,
-                proofs,
-                created: _,
-                holder: owner,
-                ty: _,
-            },
-            CredentialsInputs::Web3 { issuer_pk },
-        ) => {
-            if !commitments.verify_signature(owner, issuer_pk, *proof_contract) {
-                return false;
-            }
-            for (statement, proof) in proofs.iter() {
-                if !statement.verify(
-                    ProofVersion::Version2,
-                    global,
-                    transcript,
-                    &commitments.commitments,
-                    proof,
-                ) {
+            (
+                CredentialProof::Web3Id {
+                    network: _proof_network,
+                    contract: proof_contract,
+                    commitments,
+                    proofs,
+                    created: _,
+                    holder: owner,
+                    ty: _,
+                },
+                CredentialsInputs::Web3 { issuer_pk },
+            ) => {
+                if !commitments.verify_signature(owner, issuer_pk, *proof_contract) {
                     return false;
                 }
+                for (statement, proof) in proofs.iter() {
+                    if !statement.verify(
+                        ProofVersion::Version2,
+                        global,
+                        transcript,
+                        &commitments.commitments,
+                        proof,
+                    ) {
+                        return false;
+                    }
+                }
             }
+            _ => return false, // mismatch in data
         }
-        _ => return false, // mismatch in data
+        true
     }
-    true
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, AttributeType> {
@@ -250,7 +176,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
         csprng: &mut impl rand::Rng,
         now: chrono::DateTime<chrono::Utc>,
         input: CommitmentInputs<P, C, AttributeType, Signer>,
-    ) -> Result<CredentialProof<P, C, AttributeType>, ProofError> {
+    ) -> Result<CredentialProof<C, AttributeType>, ProofError> {
         match (self, input) {
             (
                 CredentialStatement::Account {
@@ -284,66 +210,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                     network,
                     created: now,
                     issuer,
-                })
-            }
-            (
-                CredentialStatement::Identity {
-                    network, statement, ..
-                },
-                CommitmentInputs::Identity {
-                    ip_context,
-                    id_object,
-                    id_object_use_data,
-                },
-            ) => {
-                let attributes_handling: BTreeMap<_, _> = statement
-                    .iter()
-                    .map(|stmt| match stmt {
-                        AtomicStatement::RevealAttribute { statement } => {
-                            (statement.attribute_tag, IdentityAttributeHandling::Commit)
-                        }
-                        AtomicStatement::AttributeInRange { statement } => {
-                            (statement.attribute_tag, IdentityAttributeHandling::Commit)
-                        }
-                        AtomicStatement::AttributeInSet { statement } => {
-                            (statement.attribute_tag, IdentityAttributeHandling::Commit)
-                        }
-                        AtomicStatement::AttributeNotInSet { statement } => {
-                            (statement.attribute_tag, IdentityAttributeHandling::Commit)
-                        }
-                    })
-                    .collect();
-
-                let (id_attr_cred_info, id_attr_cmm_rand) =
-                    identity_attributes_credentials::prove_identity_attributes(
-                        global,
-                        ip_context,
-                        id_object,
-                        id_object_use_data,
-                        &attributes_handling,
-                        ro,
-                    )
-                    .map_err(|err| ProofError::IdentityAttributeCredentials(err.to_string()))?;
-
-                let mut proofs = Vec::new();
-                for statement in statement {
-                    let proof = statement
-                        .prove(
-                            ProofVersion::Version2,
-                            global,
-                            ro,
-                            csprng,
-                            &id_object.get_attribute_list().alist,
-                            &id_attr_cmm_rand.attributes_rand,
-                        )
-                        .ok_or(ProofError::MissingAttribute)?;
-                    proofs.push((statement, proof));
-                }
-                Ok(CredentialProof::Identity {
-                    proofs,
-                    network,
-                    created: now,
-                    id_attr_cred_info,
                 })
             }
             (
@@ -422,19 +288,15 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
     }
 }
 
-fn linking_proof_message_to_sign<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
->(
-    challenge: &Challenge,
-    proofs: &[CredentialProof<P, C, AttributeType>],
+fn linking_proof_message_to_sign<C: Curve, AttributeType: Attribute<C::Scalar>>(
+    challenge: Sha256Challenge,
+    proofs: &[CredentialProof<C, AttributeType>],
 ) -> Vec<u8> {
     use crate::common::Serial;
     use sha2::Digest;
     // hash the context and proof.
     let mut out = sha2::Sha512::new();
-    append_challenge(&mut out, challenge);
+    challenge.serial(&mut out);
     proofs.serial(&mut out);
     let mut msg = LINKING_DOMAIN_STRING.to_vec();
     msg.extend_from_slice(&out.finalize());
@@ -448,7 +310,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
         self,
         params: &GlobalContext<C>,
         attrs: impl ExactSizeIterator<Item = CommitmentInputs<'a, P, C, AttributeType, Signer>>,
-    ) -> Result<Presentation<P, C, AttributeType>, ProofError>
+    ) -> Result<Presentation<C, AttributeType>, ProofError>
     where
         AttributeType: 'a,
     {
@@ -464,13 +326,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
         attrs: impl ExactSizeIterator<Item = CommitmentInputs<'a, P, C, AttributeType, Signer>>,
         csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
-    ) -> Result<Presentation<P, C, AttributeType>, ProofError>
+    ) -> Result<Presentation<C, AttributeType>, ProofError>
     where
         AttributeType: 'a,
     {
         let mut proofs = Vec::with_capacity(attrs.len());
         let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
-        append_challenge(&mut transcript, &self.challenge);
+        transcript.add_bytes(self.challenge);
         transcript.append_message(b"ctx", &params);
         if self.credential_statements.len() != attrs.len() {
             return Err(ProofError::CommitmentsStatementsMismatch);
@@ -483,7 +345,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
             let proof = cred_statement.prove(params, &mut transcript, csprng, now, attributes)?;
             proofs.push(proof);
         }
-        let to_sign = linking_proof_message_to_sign(&self.challenge, &proofs);
+        let to_sign = linking_proof_message_to_sign(self.challenge, &proofs);
         // Linking proof
         let mut proof_value = Vec::new();
         for signer in signers {
@@ -512,7 +374,7 @@ pub mod tests {
         AttributeNotInSetStatement, RevealAttributeStatement,
     };
     use crate::web3id::did::Network;
-    use crate::web3id::{fixtures, Context, ContextProperty, Sha256Challenge, Web3IdAttribute};
+    use crate::web3id::{fixtures, Sha256Challenge, Web3IdAttribute};
     use concordium_contracts_common::Timestamp;
     use rand::Rng;
     use std::marker::PhantomData;
@@ -523,7 +385,7 @@ pub mod tests {
     /// JSON serialization of requests and presentations is also tested.
     #[test]
     fn test_completeness_web3() {
-        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
+        let challenge = Sha256Challenge::new(fixtures::seed0().gen());
 
         let min_timestamp = chrono::Duration::try_days(Web3IdAttribute::TIMESTAMP_DATE_OFFSET)
             .unwrap()
@@ -697,8 +559,7 @@ pub mod tests {
 
         let data = serde_json::to_string_pretty(&proof).unwrap();
         assert!(
-            serde_json::from_str::<Presentation<IpPairing, ArCurve, Web3IdAttribute>>(&data)
-                .is_ok(),
+            serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok(),
             "Cannot deserialize proof correctly."
         );
 
@@ -714,7 +575,7 @@ pub mod tests {
     /// signature on commitments in invalid.
     #[test]
     fn test_soundness_web3_commitments_signature() {
-        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
+        let challenge = Sha256Challenge::new(fixtures::seed0().gen());
 
         let global_context = GlobalContext::generate("Test".into());
 
@@ -762,7 +623,7 @@ pub mod tests {
             panic!("should be web3 proof");
         };
         commitments.signature = web3_cred.issuer_key.sign(&[0, 1, 2]);
-        fix_weak_link_proof(&mut proof, &challenge, web3_cred.commitment_inputs());
+        fix_weak_link_proof(&mut proof, challenge, web3_cred.commitment_inputs());
 
         let public = vec![web3_cred.credential_inputs];
 
@@ -773,8 +634,8 @@ pub mod tests {
     }
 
     fn fix_weak_link_proof(
-        proof: &mut Presentation<IpPairing, ArCurve, Web3IdAttribute>,
-        challenge: &Challenge,
+        proof: &mut Presentation<ArCurve, Web3IdAttribute>,
+        challenge: Sha256Challenge,
         cmm_input: CommitmentInputs<IpPairing, ArCurve, Web3IdAttribute, ed25519_dalek::SigningKey>,
     ) {
         let CommitmentInputs::Web3Issuer { signer, .. } = cmm_input else {
@@ -789,7 +650,7 @@ pub mod tests {
     /// a statements is invalid.
     #[test]
     fn test_soundness_web3_statements() {
-        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
+        let challenge = Sha256Challenge::new(fixtures::seed0().gen());
 
         let global_context = GlobalContext::generate("Test".into());
 
@@ -864,7 +725,7 @@ pub mod tests {
                 _phantom: PhantomData,
             },
         };
-        fix_weak_link_proof(&mut proof, &challenge, web3_cred.commitment_inputs());
+        fix_weak_link_proof(&mut proof, challenge, web3_cred.commitment_inputs());
 
         let public = vec![web3_cred.credential_inputs];
 
@@ -878,7 +739,7 @@ pub mod tests {
     /// linking proof is missing or invalid.
     #[test]
     fn test_soundness_web3_linking_proof() {
-        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
+        let challenge = Sha256Challenge::new(fixtures::seed0().gen());
 
         let global_context = GlobalContext::generate("Test".into());
 
@@ -954,7 +815,7 @@ pub mod tests {
     /// JSON serialization of requests and presentations is also tested.
     #[test]
     fn test_completeness_web3_and_account() {
-        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
+        let challenge = Sha256Challenge::new(fixtures::seed0().gen());
 
         let global_context = GlobalContext::generate("Test".into());
 
@@ -1092,8 +953,7 @@ pub mod tests {
 
         let data = serde_json::to_string_pretty(&proof).unwrap();
         assert!(
-            serde_json::from_str::<Presentation<IpPairing, ArCurve, Web3IdAttribute>>(&data)
-                .is_ok(),
+            serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok(),
             "Cannot deserialize proof correctly."
         );
 
@@ -1108,7 +968,7 @@ pub mod tests {
     /// Test prove and verify presentation for account credentials.
     #[test]
     fn test_completeness_account() {
-        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
+        let challenge = Sha256Challenge::new(fixtures::seed0().gen());
 
         let global_context = GlobalContext::generate("Test".into());
 
@@ -1206,7 +1066,7 @@ pub mod tests {
     /// verification fails.
     #[test]
     fn test_soundness_account() {
-        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
+        let challenge = Sha256Challenge::new(fixtures::seed0().gen());
 
         let global_context = GlobalContext::generate("Test".into());
 
@@ -1289,7 +1149,7 @@ pub mod tests {
     /// mismatching types.
     #[test]
     fn test_soundness_mismatching_credential_types() {
-        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
+        let challenge = Sha256Challenge::new(fixtures::seed0().gen());
 
         let global_context = GlobalContext::generate("Test".into());
 
@@ -1346,7 +1206,7 @@ pub mod tests {
     /// mismatching lengths.
     #[test]
     fn test_soundness_mismatching_credential_length() {
-        let challenge = Challenge::Sha256(Sha256Challenge::new(fixtures::seed0().gen()));
+        let challenge = Sha256Challenge::new(fixtures::seed0().gen());
 
         let global_context = GlobalContext::generate("Test".into());
 
@@ -1386,292 +1246,292 @@ pub mod tests {
         let public = vec![];
 
         let err = proof
-            .verify(&global_context, public.iter())
+            .verify::<IpPairing>(&global_context, public.iter())
             .expect_err("verify");
         assert_eq!(err, PresentationVerificationError::InconsistentPublicData);
     }
 
-    /// Test prove and verify presentation for identity credentials.
-    #[test]
-    fn test_completeness_identity() {
-        let context = Context {
-            given: vec![ContextProperty {
-                label: "prop1".to_string(),
-                context: "val1".to_string(),
-            }],
-            requested: vec![ContextProperty {
-                label: "prop2".to_string(),
-                context: "val2".to_string(),
-            }],
-        };
-        let challenge = Challenge::V1(context);
-
-        let global_context = GlobalContext::generate("Test".into());
-
-        let id_cred_fixture = fixtures::identity_credentials_fixture(
-            [
-                // attribute we prove commitment to
-                (
-                    1.into(),
-                    Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
-                ),
-                // attribute we prove commitment to
-                (
-                    2.into(),
-                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                ),
-                // attribute we prove commitment to
-                (3.into(), Web3IdAttribute::Numeric(137)),
-                // unused attribute (proven known)
-                (4.into(), Web3IdAttribute::Numeric(1000)),
-                // revealed attribute
-                (
-                    5.into(),
-                    Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
-                ),
-            ]
-            .into_iter()
-            .collect(),
-            &global_context,
-        );
-
-        let credential_statements = vec![CredentialStatement::Identity {
-            network: Network::Testnet,
-            statement: vec![
-                AtomicStatement::AttributeNotInSet {
-                    statement: AttributeNotInSetStatement {
-                        attribute_tag: 1.into(),
-                        set: [
-                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeInSet {
-                    statement: AttributeInSetStatement {
-                        attribute_tag: 2.into(),
-                        set: [
-                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: 3.into(),
-                        lower: Web3IdAttribute::Numeric(80),
-                        upper: Web3IdAttribute::Numeric(1237),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::RevealAttribute {
-                    statement: RevealAttributeStatement {
-                        attribute_tag: 5.into(),
-                    },
-                },
-            ],
-        }];
-
-        let request = Request::<ArCurve, Web3IdAttribute> {
-            challenge,
-            credential_statements,
-        };
-
-        let proof = request
-            .clone()
-            .prove(
-                &global_context,
-                [id_cred_fixture.commitment_inputs()].into_iter(),
-            )
-            .expect("prove");
-
-        let public = vec![id_cred_fixture.credential_inputs];
-        assert_eq!(
-            proof
-                .verify(&global_context, public.iter())
-                .expect("verify"),
-            request,
-            "verify request"
-        );
-    }
-
-    /// Test prove and verify presentation for identity credentials where
-    /// verification fails because statements are false.
-    #[test]
-    fn test_soundness_identity_statements() {
-        let context = Context {
-            given: vec![ContextProperty {
-                label: "prop1".to_string(),
-                context: "val1".to_string(),
-            }],
-            requested: vec![ContextProperty {
-                label: "prop2".to_string(),
-                context: "val2".to_string(),
-            }],
-        };
-        let challenge = Challenge::V1(context);
-
-        let global_context = GlobalContext::generate("Test".into());
-
-        let id_cred_fixture = fixtures::identity_credentials_fixture(
-            [
-                (3.into(), Web3IdAttribute::Numeric(137)),
-                (
-                    1.into(),
-                    Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
-                ),
-            ]
-            .into_iter()
-            .collect(),
-            &global_context,
-        );
-
-        let credential_statements = vec![CredentialStatement::Identity {
-            network: Network::Testnet,
-            statement: vec![
-                AtomicStatement::AttributeNotInSet {
-                    statement: AttributeNotInSetStatement {
-                        attribute_tag: 1u8.into(),
-                        set: [
-                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: 3.into(),
-                        lower: Web3IdAttribute::Numeric(80),
-                        upper: Web3IdAttribute::Numeric(1237),
-                        _phantom: PhantomData,
-                    },
-                },
-            ],
-        }];
-
-        let request = Request::<ArCurve, Web3IdAttribute> {
-            challenge,
-            credential_statements,
-        };
-
-        let mut proof = request
-            .clone()
-            .prove(
-                &global_context,
-                [id_cred_fixture.commitment_inputs()].into_iter(),
-            )
-            .expect("prove");
-
-        // change statement to be invalid
-        let CredentialProof::Identity { proofs, .. } = &mut proof.verifiable_credential[0] else {
-            panic!("should be account proof");
-        };
-        proofs[1].0 = AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
-                attribute_tag: 3.into(),
-                lower: Web3IdAttribute::Numeric(200),
-                upper: Web3IdAttribute::Numeric(1237),
-                _phantom: PhantomData,
-            },
-        };
-
-        let public = vec![id_cred_fixture.credential_inputs];
-        let err = proof
-            .verify(&global_context, public.iter())
-            .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential);
-    }
-
-    /// Test prove and verify presentation for identity credentials where
-    /// verification fails because verification of attribute credentials fails.
-    #[test]
-    fn test_soundness_identity_attribute_credentials() {
-        let context = Context {
-            given: vec![ContextProperty {
-                label: "prop1".to_string(),
-                context: "val1".to_string(),
-            }],
-            requested: vec![ContextProperty {
-                label: "prop2".to_string(),
-                context: "val2".to_string(),
-            }],
-        };
-        let challenge = Challenge::V1(context);
-
-        let global_context = GlobalContext::generate("Test".into());
-
-        let id_cred_fixture = fixtures::identity_credentials_fixture(
-            [(3.into(), Web3IdAttribute::Numeric(137))]
-                .into_iter()
-                .collect(),
-            &global_context,
-        );
-
-        let credential_statements = vec![CredentialStatement::Identity {
-            network: Network::Testnet,
-            statement: vec![AtomicStatement::AttributeInRange {
-                statement: AttributeInRangeStatement {
-                    attribute_tag: 3.into(),
-                    lower: Web3IdAttribute::Numeric(80),
-                    upper: Web3IdAttribute::Numeric(1237),
-                    _phantom: PhantomData,
-                },
-            }],
-        }];
-
-        let request = Request::<ArCurve, Web3IdAttribute> {
-            challenge,
-            credential_statements,
-        };
-
-        let mut proof = request
-            .clone()
-            .prove(
-                &global_context,
-                [id_cred_fixture.commitment_inputs()].into_iter(),
-            )
-            .expect("prove");
-
-        // change attribute credentials proof to be invalid
-        let CredentialProof::Identity {
-            id_attr_cred_info, ..
-        } = &mut proof.verifiable_credential[0]
-        else {
-            panic!("should be account proof");
-        };
-        let mut ar_keys = id_attr_cred_info.proofs.proof_id_cred_pub.keys();
-        let ar1 = *ar_keys.next().unwrap();
-        let ar2 = *ar_keys.next().unwrap();
-        let tmp = id_attr_cred_info.proofs.proof_id_cred_pub[&ar1].clone();
-        *id_attr_cred_info
-            .proofs
-            .proof_id_cred_pub
-            .get_mut(&ar1)
-            .unwrap() = id_attr_cred_info.proofs.proof_id_cred_pub[&ar2].clone();
-        *id_attr_cred_info
-            .proofs
-            .proof_id_cred_pub
-            .get_mut(&ar2)
-            .unwrap() = tmp;
-
-        let public = vec![id_cred_fixture.credential_inputs];
-        let err = proof
-            .verify(&global_context, public.iter())
-            .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential);
-    }
+    // /// Test prove and verify presentation for identity credentials.
+    // #[test]
+    // fn test_completeness_identity() {
+    //     let context = Context {
+    //         given: vec![ContextProperty {
+    //             label: "prop1".to_string(),
+    //             context: "val1".to_string(),
+    //         }],
+    //         requested: vec![ContextProperty {
+    //             label: "prop2".to_string(),
+    //             context: "val2".to_string(),
+    //         }],
+    //     };
+    //     let challenge = Challenge::V1(context);
+    //
+    //     let global_context = GlobalContext::generate("Test".into());
+    //
+    //     let id_cred_fixture = fixtures::identity_credentials_fixture(
+    //         [
+    //             // attribute we prove commitment to
+    //             (
+    //                 1.into(),
+    //                 Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
+    //             ),
+    //             // attribute we prove commitment to
+    //             (
+    //                 2.into(),
+    //                 Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+    //             ),
+    //             // attribute we prove commitment to
+    //             (3.into(), Web3IdAttribute::Numeric(137)),
+    //             // unused attribute (proven known)
+    //             (4.into(), Web3IdAttribute::Numeric(1000)),
+    //             // revealed attribute
+    //             (
+    //                 5.into(),
+    //                 Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
+    //             ),
+    //         ]
+    //         .into_iter()
+    //         .collect(),
+    //         &global_context,
+    //     );
+    //
+    //     let credential_statements = vec![CredentialStatement::Identity {
+    //         network: Network::Testnet,
+    //         statement: vec![
+    //             AtomicStatement::AttributeNotInSet {
+    //                 statement: AttributeNotInSetStatement {
+    //                     attribute_tag: 1.into(),
+    //                     set: [
+    //                         Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+    //                         Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+    //                         Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+    //                     ]
+    //                     .into_iter()
+    //                     .collect(),
+    //                     _phantom: PhantomData,
+    //                 },
+    //             },
+    //             AtomicStatement::AttributeInSet {
+    //                 statement: AttributeInSetStatement {
+    //                     attribute_tag: 2.into(),
+    //                     set: [
+    //                         Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+    //                         Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+    //                         Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+    //                     ]
+    //                     .into_iter()
+    //                     .collect(),
+    //                     _phantom: PhantomData,
+    //                 },
+    //             },
+    //             AtomicStatement::AttributeInRange {
+    //                 statement: AttributeInRangeStatement {
+    //                     attribute_tag: 3.into(),
+    //                     lower: Web3IdAttribute::Numeric(80),
+    //                     upper: Web3IdAttribute::Numeric(1237),
+    //                     _phantom: PhantomData,
+    //                 },
+    //             },
+    //             AtomicStatement::RevealAttribute {
+    //                 statement: RevealAttributeStatement {
+    //                     attribute_tag: 5.into(),
+    //                 },
+    //             },
+    //         ],
+    //     }];
+    //
+    //     let request = Request::<ArCurve, Web3IdAttribute> {
+    //         challenge,
+    //         credential_statements,
+    //     };
+    //
+    //     let proof = request
+    //         .clone()
+    //         .prove(
+    //             &global_context,
+    //             [id_cred_fixture.commitment_inputs()].into_iter(),
+    //         )
+    //         .expect("prove");
+    //
+    //     let public = vec![id_cred_fixture.credential_inputs];
+    //     assert_eq!(
+    //         proof
+    //             .verify(&global_context, public.iter())
+    //             .expect("verify"),
+    //         request,
+    //         "verify request"
+    //     );
+    // }
+    //
+    // /// Test prove and verify presentation for identity credentials where
+    // /// verification fails because statements are false.
+    // #[test]
+    // fn test_soundness_identity_statements() {
+    //     let context = Context {
+    //         given: vec![ContextProperty {
+    //             label: "prop1".to_string(),
+    //             context: "val1".to_string(),
+    //         }],
+    //         requested: vec![ContextProperty {
+    //             label: "prop2".to_string(),
+    //             context: "val2".to_string(),
+    //         }],
+    //     };
+    //     let challenge = Challenge::V1(context);
+    //
+    //     let global_context = GlobalContext::generate("Test".into());
+    //
+    //     let id_cred_fixture = fixtures::identity_credentials_fixture(
+    //         [
+    //             (3.into(), Web3IdAttribute::Numeric(137)),
+    //             (
+    //                 1.into(),
+    //                 Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
+    //             ),
+    //         ]
+    //         .into_iter()
+    //         .collect(),
+    //         &global_context,
+    //     );
+    //
+    //     let credential_statements = vec![CredentialStatement::Identity {
+    //         network: Network::Testnet,
+    //         statement: vec![
+    //             AtomicStatement::AttributeNotInSet {
+    //                 statement: AttributeNotInSetStatement {
+    //                     attribute_tag: 1u8.into(),
+    //                     set: [
+    //                         Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+    //                         Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+    //                         Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+    //                     ]
+    //                     .into_iter()
+    //                     .collect(),
+    //                     _phantom: PhantomData,
+    //                 },
+    //             },
+    //             AtomicStatement::AttributeInRange {
+    //                 statement: AttributeInRangeStatement {
+    //                     attribute_tag: 3.into(),
+    //                     lower: Web3IdAttribute::Numeric(80),
+    //                     upper: Web3IdAttribute::Numeric(1237),
+    //                     _phantom: PhantomData,
+    //                 },
+    //             },
+    //         ],
+    //     }];
+    //
+    //     let request = Request::<ArCurve, Web3IdAttribute> {
+    //         challenge,
+    //         credential_statements,
+    //     };
+    //
+    //     let mut proof = request
+    //         .clone()
+    //         .prove(
+    //             &global_context,
+    //             [id_cred_fixture.commitment_inputs()].into_iter(),
+    //         )
+    //         .expect("prove");
+    //
+    //     // change statement to be invalid
+    //     let CredentialProof::Identity { proofs, .. } = &mut proof.verifiable_credential[0] else {
+    //         panic!("should be account proof");
+    //     };
+    //     proofs[1].0 = AtomicStatement::AttributeInRange {
+    //         statement: AttributeInRangeStatement {
+    //             attribute_tag: 3.into(),
+    //             lower: Web3IdAttribute::Numeric(200),
+    //             upper: Web3IdAttribute::Numeric(1237),
+    //             _phantom: PhantomData,
+    //         },
+    //     };
+    //
+    //     let public = vec![id_cred_fixture.credential_inputs];
+    //     let err = proof
+    //         .verify(&global_context, public.iter())
+    //         .expect_err("verify");
+    //     assert_eq!(err, PresentationVerificationError::InvalidCredential);
+    // }
+    //
+    // /// Test prove and verify presentation for identity credentials where
+    // /// verification fails because verification of attribute credentials fails.
+    // #[test]
+    // fn test_soundness_identity_attribute_credentials() {
+    //     let context = Context {
+    //         given: vec![ContextProperty {
+    //             label: "prop1".to_string(),
+    //             context: "val1".to_string(),
+    //         }],
+    //         requested: vec![ContextProperty {
+    //             label: "prop2".to_string(),
+    //             context: "val2".to_string(),
+    //         }],
+    //     };
+    //     let challenge = Challenge::V1(context);
+    //
+    //     let global_context = GlobalContext::generate("Test".into());
+    //
+    //     let id_cred_fixture = fixtures::identity_credentials_fixture(
+    //         [(3.into(), Web3IdAttribute::Numeric(137))]
+    //             .into_iter()
+    //             .collect(),
+    //         &global_context,
+    //     );
+    //
+    //     let credential_statements = vec![CredentialStatement::Identity {
+    //         network: Network::Testnet,
+    //         statement: vec![AtomicStatement::AttributeInRange {
+    //             statement: AttributeInRangeStatement {
+    //                 attribute_tag: 3.into(),
+    //                 lower: Web3IdAttribute::Numeric(80),
+    //                 upper: Web3IdAttribute::Numeric(1237),
+    //                 _phantom: PhantomData,
+    //             },
+    //         }],
+    //     }];
+    //
+    //     let request = Request::<ArCurve, Web3IdAttribute> {
+    //         challenge,
+    //         credential_statements,
+    //     };
+    //
+    //     let mut proof = request
+    //         .clone()
+    //         .prove(
+    //             &global_context,
+    //             [id_cred_fixture.commitment_inputs()].into_iter(),
+    //         )
+    //         .expect("prove");
+    //
+    //     // change attribute credentials proof to be invalid
+    //     let CredentialProof::Identity {
+    //         id_attr_cred_info, ..
+    //     } = &mut proof.verifiable_credential[0]
+    //     else {
+    //         panic!("should be account proof");
+    //     };
+    //     let mut ar_keys = id_attr_cred_info.proofs.proof_id_cred_pub.keys();
+    //     let ar1 = *ar_keys.next().unwrap();
+    //     let ar2 = *ar_keys.next().unwrap();
+    //     let tmp = id_attr_cred_info.proofs.proof_id_cred_pub[&ar1].clone();
+    //     *id_attr_cred_info
+    //         .proofs
+    //         .proof_id_cred_pub
+    //         .get_mut(&ar1)
+    //         .unwrap() = id_attr_cred_info.proofs.proof_id_cred_pub[&ar2].clone();
+    //     *id_attr_cred_info
+    //         .proofs
+    //         .proof_id_cred_pub
+    //         .get_mut(&ar2)
+    //         .unwrap() = tmp;
+    //
+    //     let public = vec![id_cred_fixture.credential_inputs];
+    //     let err = proof
+    //         .verify(&global_context, public.iter())
+    //         .expect_err("verify");
+    //     assert_eq!(err, PresentationVerificationError::InvalidCredential);
+    // }
 
     /// Test that the verifier can verify previously generated proofs.
     #[test]
@@ -1775,7 +1635,7 @@ pub mod tests {
   ]
 }
 "#;
-        let proof: Presentation<IpPairing, ArCurve, Web3IdAttribute> =
+        let proof: Presentation<ArCurve, Web3IdAttribute> =
             serde_json::from_str(proof_json).unwrap();
 
         let public = vec![acc_cred_fixture.credential_inputs];
@@ -1899,7 +1759,7 @@ pub mod tests {
   ]
 }
 "#;
-        let proof: Presentation<IpPairing, ArCurve, Web3IdAttribute> =
+        let proof: Presentation<ArCurve, Web3IdAttribute> =
             serde_json::from_str(proof_json).unwrap();
 
         let public = vec![web3_cred.credential_inputs];

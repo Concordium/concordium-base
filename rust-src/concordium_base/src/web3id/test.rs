@@ -3,8 +3,8 @@ mod tests {
     use crate::id::constants::IpPairing;
     use crate::id::{account_holder, chain, identity_provider};
     use crate::web3id::{
-        Challenge, CommitmentInputs, CredentialStatement, CredentialsInputs, Request,
-        Sha256Challenge, Web3IdAttribute,
+        CommitmentInputs, CredentialStatement, CredentialsInputs, Request, Sha256Challenge,
+        Web3IdAttribute,
     };
     use crate::{
         base::CredentialRegistrationID,
@@ -147,7 +147,7 @@ mod tests {
         let commitment_inputs = [secrets];
 
         // Now generate the proofs with regards to the account credential attribute statements.
-        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
+        let challenge = Sha256Challenge::new(rng.gen());
 
         let cred_id = CredentialRegistrationID::new(cdi.values.cred_id);
 
@@ -175,7 +175,7 @@ mod tests {
             .expect("Cannot prove");
 
         let commitments = cdi.proofs.id_proofs.commitments.cmm_attributes.clone();
-        let public = vec![CredentialsInputs::Account { commitments }];
+        let public = vec![CredentialsInputs::Account::<IpPairing, _> { commitments }];
 
         assert_eq!(
             proof
