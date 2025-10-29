@@ -1593,14 +1593,17 @@ pub fn compute_transaction_sign_hash(
     hashes::HashBytes::new(hasher.result())
 }
 
+// The transaction header prefix for v1.
+const TRANSACTION_HEADER_PREFIX_V1: [u8; 32] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+];
 /// Compute the transaction sign hash from an encoded payload and header for a v1 transaction.
 pub fn compute_transaction_sign_hash_v1(
     header: &TransactionHeaderV1,
     payload: &impl PayloadLike,
 ) -> hashes::TransactionSignHash {
     let mut hasher = sha2::Sha256::new();
-    let prefix: u32 = 0b00000000000000000000000000000001;
-    hasher.put(&prefix);
+    hasher.put(&TRANSACTION_HEADER_PREFIX_V1);
     hasher.put(header);
     payload.encode_to_buffer(&mut hasher);
     hashes::HashBytes::new(hasher.result())
