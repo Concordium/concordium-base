@@ -316,7 +316,8 @@ impl Deserial for TransactionHeaderV1 {
         let bitmap: u16 = source.get()?;
         anyhow::ensure!(
             (bitmap & !DEFINED_FEATURES_MASK) == 0,
-            "Unknown feature bit set in transaction header."
+            "Unknown feature bits set in transaction header: {:b}",
+            bitmap
         );
         let header_v0: TransactionHeader = source.get()?;
         let sponsor = if (bitmap & SPONSOR_MASK) != 0 {
