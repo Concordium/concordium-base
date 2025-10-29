@@ -21,6 +21,7 @@ use crate::id::identity_attributes_credentials;
 use crate::id::identity_attributes_credentials::IdentityAttributeHandling;
 use crate::id::types::{IdentityAttribute, IpContextOnly};
 use concordium_contracts_common::ContractAddress;
+use rand::{CryptoRng, Rng};
 use std::collections::BTreeMap;
 
 /// Append a `web3id::Challenge` to the state of the random oracle.
@@ -247,6 +248,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
         global: &GlobalContext<C>,
         ro: &mut RandomOracle,
         csprng: &mut impl rand::Rng,
+        now: chrono::DateTime<chrono::Utc>,
         input: CommitmentInputs<P, C, AttributeType, Signer>,
     ) -> Result<CredentialProof<P, C, AttributeType>, ProofError> {
         match (self, input) {
@@ -276,12 +278,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                         .ok_or(ProofError::MissingAttribute)?;
                     proofs.push((statement, proof));
                 }
-                let created = chrono::Utc::now();
                 Ok(CredentialProof::Account {
                     cred_id,
                     proofs,
                     network,
-                    created,
+                    created: now,
                     issuer,
                 })
             }
@@ -338,11 +339,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                         .ok_or(ProofError::MissingAttribute)?;
                     proofs.push((statement, proof));
                 }
-                let created = chrono::Utc::now();
                 Ok(CredentialProof::Identity {
                     proofs,
                     network,
-                    created,
+                    created: now,
                     id_attr_cred_info,
                 })
             }
@@ -407,13 +407,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                         .ok_or(ProofError::MissingAttribute)?;
                     proofs.push((statement, proof));
                 }
-                let created = chrono::Utc::now();
                 Ok(CredentialProof::Web3Id {
                     commitments,
                     proofs,
                     network,
                     contract,
-                    created,
+                    created: now,
                     holder: signer.id().into(),
                     ty,
                 })
@@ -453,11 +452,25 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
     where
         AttributeType: 'a,
     {
+        self.prove_with_rng(params, attrs, &mut rand::thread_rng(), chrono::Utc::now())
+    }
+
+    /// Construct a proof for the [`Request`] using the provided cryptographic
+    /// parameters and secrets.
+    pub fn prove_with_rng<'a, P: Pairing<ScalarField = C::Scalar>, Signer: 'a + Web3IdSigner>(
+        self,
+        params: &GlobalContext<C>,
+        attrs: impl ExactSizeIterator<Item = CommitmentInputs<'a, P, C, AttributeType, Signer>>,
+        csprng: &mut (impl Rng + CryptoRng),
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Presentation<P, C, AttributeType>, ProofError>
+    where
+        AttributeType: 'a,
+    {
         let mut proofs = Vec::with_capacity(attrs.len());
         let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
         append_challenge(&mut transcript, &self.challenge);
         transcript.append_message(b"ctx", &params);
-        let mut csprng = rand::thread_rng();
         if self.credential_statements.len() != attrs.len() {
             return Err(ProofError::CommitmentsStatementsMismatch);
         }
@@ -466,7 +479,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
             if let CommitmentInputs::Web3Issuer { signer, .. } = attributes {
                 signers.push(signer);
             }
-            let proof = cred_statement.prove(params, &mut transcript, &mut csprng, attributes)?;
+            let proof = cred_statement.prove(params, &mut transcript, csprng, now, attributes)?;
             proofs.push(proof);
         }
         let to_sign = linking_proof_message_to_sign(&self.challenge, &proofs);
@@ -477,7 +490,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
             proof_value.push(WeakLinkingProof { signature });
         }
         let linking_proof = LinkingProof {
-            created: chrono::Utc::now(),
+            created: now,
             proof_value,
         };
         Ok(Presentation {
