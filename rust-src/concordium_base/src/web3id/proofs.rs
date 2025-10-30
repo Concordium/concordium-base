@@ -625,8 +625,8 @@ pub mod tests {
                 "ConcordiumVerifiableCredential".into(),
                 "TestCredential".into(),
             ]
-                .into_iter()
-                .collect(),
+            .into_iter()
+            .collect(),
             network: Network::Testnet,
             contract: web3_cred_fixture.contract,
             credential: web3_cred_fixture.cred_id,
@@ -640,7 +640,10 @@ pub mod tests {
 
         let mut proof = request
             .clone()
-            .prove(&global_context, [web3_cred_fixture.commitment_inputs()].into_iter())
+            .prove(
+                &global_context,
+                [web3_cred_fixture.commitment_inputs()].into_iter(),
+            )
             .expect("prove");
 
         // change commitments signature to be invalid
@@ -691,8 +694,8 @@ pub mod tests {
                 "ConcordiumVerifiableCredential".into(),
                 "TestCredential".into(),
             ]
-                .into_iter()
-                .collect(),
+            .into_iter()
+            .collect(),
             network: Network::Testnet,
             contract: web3_cred_fixture.contract,
             credential: web3_cred_fixture.cred_id,
@@ -706,7 +709,10 @@ pub mod tests {
 
         let mut proof = request
             .clone()
-            .prove(&global_context, [web3_cred_fixture.commitment_inputs()].into_iter())
+            .prove(
+                &global_context,
+                [web3_cred_fixture.commitment_inputs()].into_iter(),
+            )
             .expect("prove");
 
         // change statement to be invalid
@@ -751,8 +757,8 @@ pub mod tests {
                 "ConcordiumVerifiableCredential".into(),
                 "TestCredential".into(),
             ]
-                .into_iter()
-                .collect(),
+            .into_iter()
+            .collect(),
             network: Network::Testnet,
             contract: web3_cred_fixture.contract,
             credential: web3_cred_fixture.cred_id,
@@ -766,7 +772,10 @@ pub mod tests {
 
         let mut proof = request
             .clone()
-            .prove(&global_context, [web3_cred_fixture.commitment_inputs()].into_iter())
+            .prove(
+                &global_context,
+                [web3_cred_fixture.commitment_inputs()].into_iter(),
+            )
             .expect("prove");
 
         let public = vec![web3_cred_fixture.credential_inputs];
@@ -824,9 +833,7 @@ pub mod tests {
 
         let web3_cred_fixture = fixtures::web3_credentials_fixture(attributes1, &global_context);
 
-        let acc_cred_fixture = fixtures::account_credentials_fixture(
-            attributes2, &global_context
-        );
+        let acc_cred_fixture = fixtures::account_credentials_fixture(attributes2, &global_context);
 
         let credential_statements = vec![
             CredentialStatement::Web3Id(Web3IdCredentialStatement {
