@@ -47,6 +47,7 @@ import qualified Proto.V2.Concordium.ProtocolLevelTokens as Proto
 import qualified Proto.V2.Concordium.ProtocolLevelTokens_Fields as PLTFields
 import qualified Proto.V2.Concordium.Types as Proto
 import qualified Proto.V2.Concordium.Types_Fields as ProtoFields
+import Data.Maybe (isJust)
 
 import Concordium.Crypto.EncryptedTransfers
 import Concordium.ID.Types
@@ -1683,16 +1684,20 @@ convertAccountTransaction ty cost sender mbSponsor result = case ty of
                     Right . Proto.make $
                         ProtoFields.tokenUpdateEffect . ProtoFields.events .= protoEvents
   where
+    (senderCost, sponsorCost)
+        | isJust mbSponsor = (Amount 0, cost)
+        | otherwise  = (cost, Amount 0)
+
     mkSuccess :: Proto.AccountTransactionEffects -> Proto.AccountTransactionDetails
     mkSuccess effects = Proto.make $ do
-        ProtoFields.cost .= toProto cost
+        ProtoFields.cost .= toProto senderCost
         ProtoFields.sender .= toProto sender
         ProtoFields.effects .= effects
         ProtoFields.maybe'sponsor .= fmap mkSponsorDetails mbSponsor
 
     mkNone :: RejectReason -> Proto.AccountTransactionDetails
     mkNone rr = Proto.make $ do
-        ProtoFields.cost .= toProto cost
+        ProtoFields.cost .= toProto senderCost
         ProtoFields.sender .= toProto sender
         ProtoFields.maybe'sponsor .= fmap mkSponsorDetails mbSponsor
         ProtoFields.effects
@@ -1707,7 +1712,7 @@ convertAccountTransaction ty cost sender mbSponsor result = case ty of
     mkSponsorDetails :: AccountAddress -> Proto.SponsorDetails
     mkSponsorDetails sponsor = Proto.make $ do
         ProtoFields.sponsor .= toProto sponsor
-        ProtoFields.cost .= toProto cost
+        ProtoFields.cost .= toProto sponsorCost
 
 instance ToProto TokenParameter where
     type Output TokenParameter = Proto.Cbor
