@@ -353,3 +353,942 @@ pub struct RequestV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub challenge: ContextChallenge,
     pub credential_statements: Vec<CredentialStatementV1<C, AttributeType>>,
 }
+
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::marker::PhantomData;
+    use super::*;
+    use crate::id::id_proof_types::{AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement, RevealAttributeStatement};
+    use crate::web3id::did::Network;
+    use crate::web3id::{fixtures, CredentialStatement, Web3IdAttribute, Web3IdCredential};
+    use chrono::TimeZone;
+    use concordium_contracts_common::Timestamp;
+    use rand::Rng;
+    use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
+    use crate::id::types::{AttributeTag, GlobalContext};
+
+    fn remove_whitespace(str: &str) -> String {
+        str.chars().filter(|c| !c.is_whitespace()).collect()
+    }
+
+
+    /// Tests JSON serialization and deserialization of request and presentation. Test
+    /// uses account credentials.
+    #[test]
+    fn test_request_and_presentation_account_json() {
+        let challenge =    ContextChallenge {
+            given: vec![ContextProperty {
+                label: "prop1".to_string(),
+                context: "val1".to_string(),
+            }],
+            requested: vec![ContextProperty {
+                label: "prop2".to_string(),
+                context: "val2".to_string(),
+            }],
+        };
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let acc_cred_fixture = fixtures::account_credentials_fixture(
+            [
+                (3.into(), Web3IdAttribute::Numeric(137)),
+                (
+                    1.into(),
+                    Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
+                ),
+                (
+                    2.into(),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                ),
+                (
+                    5.into(),
+                    Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
+                ),
+                (
+                    AttributeTag(4).to_string().parse().unwrap(),
+                    Web3IdAttribute::Timestamp(
+                        Timestamp::try_from(
+                            chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
+                                .unwrap()
+                                .to_utc(),
+                        )
+                            .unwrap(),
+                    ),
+                ),
+            ]
+                .into_iter()
+                .collect(),
+            &global_context,
+        );
+
+        let credential_statements =
+            vec![CredentialStatementV1::Account(AccountCredentialStatement {
+                network: Network::Testnet,
+                cred_id: acc_cred_fixture.cred_id,
+                statement: vec![
+                    AtomicStatement::AttributeInRange {
+                        statement: AttributeInRangeStatement {
+                            attribute_tag: 3.into(),
+                            lower: Web3IdAttribute::Numeric(80),
+                            upper: Web3IdAttribute::Numeric(1237),
+                            _phantom: PhantomData,
+                        },
+                    },
+                    AtomicStatement::AttributeInSet {
+                        statement: AttributeInSetStatement {
+                            attribute_tag: 2.into(),
+                            set: [
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("ff".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("aa".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("zz".into()).unwrap(),
+                                ),
+                            ]
+                                .into_iter()
+                                .collect(),
+                            _phantom: PhantomData,
+                        },
+                    },
+                    AtomicStatement::AttributeNotInSet {
+                        statement: AttributeNotInSetStatement {
+                            attribute_tag: 1.into(),
+                            set: [
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("ff".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("aa".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("zz".into()).unwrap(),
+                                ),
+                            ]
+                                .into_iter()
+                                .collect(),
+                            _phantom: PhantomData,
+                        },
+                    },
+                    AtomicStatement::AttributeInRange {
+                        statement: AttributeInRangeStatement {
+                            attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
+                            lower: Web3IdAttribute::Timestamp(
+                                Timestamp::try_from(
+                                    chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                                        .unwrap()
+                                        .to_utc(),
+                                )
+                                    .unwrap(),
+                            ),
+                            upper: Web3IdAttribute::Timestamp(
+                                Timestamp::try_from(
+                                    chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                                        .unwrap()
+                                        .to_utc(),
+                                )
+                                    .unwrap(),
+                            ),
+                            _phantom: PhantomData,
+                        },
+                    },
+                    AtomicStatement::RevealAttribute {
+                        statement: RevealAttributeStatement {
+                            attribute_tag: 5.into(),
+                        },
+                    },
+                ],
+            })];
+
+        let request = RequestV1::<ArCurve, Web3IdAttribute> {
+            challenge,
+            credential_statements,
+        };
+
+        let request_json = serde_json::to_string_pretty(&request).unwrap();
+        println!("request:\n{}", request_json);
+        let expected_request_json = r#"
+{
+  "challenge": {
+    "given": [
+      {
+        "label": "prop1",
+        "context": "val1"
+      }
+    ],
+    "requested": [
+      {
+        "label": "prop2",
+        "context": "val2"
+      }
+    ]
+  },
+  "credential_statements": [
+    {
+      "id": "did:ccd:testnet:cred:856793e4ba5d058cea0b5c3a1c8affb272efcf53bbab77ee28d3e2270d5041d220c1e1a9c6c8619c84e40ebd70fb583e",
+      "statement": [
+        {
+          "attributeTag": "dob",
+          "lower": 80,
+          "type": "AttributeInRange",
+          "upper": 1237
+        },
+        {
+          "attributeTag": "sex",
+          "set": [
+            "aa",
+            "ff",
+            "zz"
+          ],
+          "type": "AttributeInSet"
+        },
+        {
+          "attributeTag": "lastName",
+          "set": [
+            "aa",
+            "ff",
+            "zz"
+          ],
+          "type": "AttributeNotInSet"
+        },
+        {
+          "attributeTag": "countryOfResidence",
+          "lower": {
+            "timestamp": "-262091-08-27T23:12:15Z",
+            "type": "date-time"
+          },
+          "type": "AttributeInRange",
+          "upper": {
+            "timestamp": "-262091-08-29T23:12:15Z",
+            "type": "date-time"
+          }
+        },
+        {
+          "attributeTag": "nationality",
+          "type": "RevealAttribute"
+        }
+      ],
+      "type": [
+        "VerifiableCredential",
+        "ConcordiumVerifiableCredentialV1",
+        "ConcordiumAccountBasedCredential"
+      ]
+    }
+  ]
+}
+"#;
+        assert_eq!(
+            remove_whitespace(&request_json),
+            remove_whitespace(expected_request_json),
+            "request json"
+        );
+        let request_deserialized: RequestV1<ArCurve, Web3IdAttribute> =
+            serde_json::from_str(&request_json).unwrap();
+        assert_eq!(request_deserialized, request);
+
+        // the easiest way to construct a presentation, is just to run the prover on a request
+        let now = chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let proof = request
+            .clone()
+            .prove_with_rng(
+                &global_context,
+                [acc_cred_fixture.commitment_inputs()].into_iter(),
+                &mut fixtures::seed0(),
+                now,
+            )
+            .expect("prove");
+
+        let proof_json = "".to_string(); // todo ar serde_json::to_string_pretty(&proof).unwrap();
+        println!("proof:\n{}", proof_json);
+        let expected_proof_json = r#"
+{
+  "presentationContext": "7fb27b941602d01d11542211134fc71aacae54e37e7d007bbb7b55eff062a284",
+  "proof": {
+    "created": "2023-08-28T23:12:15Z",
+    "proofValue": [],
+    "type": "ConcordiumWeakLinkingProofV1"
+  },
+  "type": "VerifiablePresentation",
+  "verifiableCredential": [
+    {
+      "credentialSubject": {
+        "id": "did:ccd:testnet:cred:856793e4ba5d058cea0b5c3a1c8affb272efcf53bbab77ee28d3e2270d5041d220c1e1a9c6c8619c84e40ebd70fb583e",
+        "proof": {
+          "created": "2023-08-28T23:12:15Z",
+          "proofValue": [
+            {
+              "proof": "b12365d42dbcdda54216b524d94eda74809018b8179d90c747829da5d24df4b2d835d7f77879cf52d5b1809564c5ec49990998db469e5c04553de3f787a3998d660204fe2dd1033a310bfc06ab8a9e5426ff90fdaf554ac11e96bbf18b1e1da8a881ba424d4deb7715880d015d04a64fd37dfef5ec71d48efee4e8d4d640c505f47d6bb75c52545f01889aa503809d06835320bdc1035e9143aea9bffcb12e904549c4f4885ffcb11c4956b362153010506a4d2959a524be07dc01d717c7e3812d41eaf65a6feabe01babf8a7ae81b9726fd6ee688cd241b31c8219b928d2de7073df321c28040aea5820d8e52af2a23d9da963b335a7452473bdda093a4f8103c32680db7441639eac6d1279ed855ba5cd009a5d9999d4f48f2db031c1b2f3d00000007a7e39d70b58b37af8722528536e1ecd898f4b5060d39eeed8713bf28d58e963ab00e9b46cac7f542240515a9b477b6268322f52bafd7bb479c23c68c275b67fba7c7ccd4b386e61ef4b48d6bfbbeba45fcef3da404ea89c7f082838f8c97f6a88fcac670270f88647c325d842badb22aeec2876b956940b27945e5eb93aaf1d1ab8b2881dd8ebeb27a1871fa1a9e02db873c84ae38d0505fe0c40fca21fa757e928af08077716082cced518f315d694b32fe06568e5b3d1602062747b8911947b17f6535323fcb1a11f4e1807f7f10ad7dec744245bf33f4a183d4e1778be73f4f2028cc9b5731f54dc073763776979d96cf54b71d71f22d8035f7f01149bb205044d95c64be878f3d02a17b375df761b4e14f74a810d3e5de4e7790d19fa712a832cf4345394e0dfbf643d36e60cecc57585601fded8a44cde6e43be56c1a679eb0ccf5e66994d8e9b0354d128045eea70257f31a6c934ea4f4465b903d0dc64cacde6219d93500c798a1ad5abe63e067e2a23690bbc865b7aaaa557f782c4fb2cb9b2d4b0a81e8566627d546d21450e38d922c6749900808ddf06e6f01da92d7fcee94c66ebfa3058bcbfdbf655e9cac0bf73d693d0e57ec3d457910110a67e9124ee7814bf8f6c5836e153dd3a95355a8218df1f8aec1cd6213349e7f16d795ccf1d3a28fe24d63136909e5504faf640c2a99b12cb5a39ecc54a0b60081f00235adc9451b0aabfab24fc9d40dffc8ac9b2111f3369e941090b3242ad8334a54b7ec4940ae23ea4ad23bbef2376737977939097918f37c04b989f2d16a7d88b50818a60c730de62214903bfcfce0a45c107fd441f3b0d5da23afe5ad03baa0d6f1bf78aeb8ce94d4852c358c8200919337e4915f9732e74ebf6b0aa99af5f7bd768cacf9acbf70da2cf607f55567de34f263182984ff36a91e9cbb48918ab3483632fc1427ffad3124043b7111a213edda117c81c104a3351260afbc2b00ab567f82d9462916c8101a72e7fd3995b8734f8b8af18e415162ae47313c6bc738",
+              "type": "AttributeInRange"
+            },
+            {
+              "proof": "b39554bf77b9ad30ef725df82bdb6c5456adf9ac3187ffbeaab1b4ce68782829850f10182deb13eaa94edd3640768224a178b8bac224d12711c7d3bec925db4da9bd1424db872757a1f2e10c9dac40483a69972504e5d69163a9f13c5dc8fc60b7897a2f2d1e623b88284ca5eecea172d05bc25e83acd28f5e9e5a4f2637a0762a8a9bcbf052373d26cf38efbb25223ba91c2bff8115180e290bee9ed17b8e3e392b8bfb805f5ad854041d7a9c7669dc193e6e5091fc2fd38ac35eadb755d4b356efb4505072d3ca29c2158af6d2feb1faf939839a9b7d37b384ac3761bb7020319d8e2792cdd20ab483307f0004fa49fc9d9658daf7a7363f05767db6b1f73c344bff03f320bda0fc59a32d165b980c02d21416277a24231c0389b34f502c32000000028c4e5cf1c3505e536b50580d287728d58433e2e471af1500eefffa8d3db7eadbcc4115abcb58bc3cbad27fdd6b22676781235df2401fad1abaf9338f753c4d6606a4a2e04cf89347b398419169238a7fdc1d0ad7f1091db98cf1ea11b082be0a86aa22a16e1e022931fa71e69066894d15cd8525c87dcb1391b0b3502e0b96af9fcf7f6abd60030319137ec20d2d563196d9721142c308f02a8e6ff29fe113a6bc09f67ae02612c7c8b0fba524d7e077efecdbdc26320f10531a4dbd643f1a4e0a08dea12abf4eb723607be444120d6051bea73224fea2c33c3c335db19738536d0a8b7f89664da783709c21068e633e17b8ef6a04ff82235bd11aa73c565e9b",
+              "type": "AttributeInSet"
+            },
+            {
+              "proof": "8b69df7282cd3234e4423e85d15c09d49fc2005e869a4876fec01369c3b0ec0ae6f710797b4e5294a7fdf72c05341b6887da98066400436af27e739c140e3a481df2845cd78df942a2c0fb01429d5b04cd96b18c0b2bbf764b533a6f095edbeaaa72ae5ea7540bd7987ace8571e79822d6cab88b070cabe1d7102a01df2070d244548f1c0ea7524acc3078c9af52cd9295309836a5f188743eec08c2009c9510abdfd2fd67363ba5f4900d91fbe114f3c45fb6202e9f64a65a29c14e30e1986e1dd79a31dacf9f7804ba85b984525fc58be01578a8daef7530f98a6c92bc9a5a461af99e831c4094455010a2c58ed43c485e26733ca9a655a2ad5a9418fcd651130e22e918477fe17d3a1b850a837cdf8c8470025e6ed72b26092e2441580c45000000028f7d1d30615527b6882ac3d2e81d9568c50b64e8a68b233edf6237a891263ba6fd4e553bbf8975286c680ae6b1654989b7ac6688ba61e05683d3ad98b26e5ea8ee4d43d5dbaa91e304f6c38fc20be2801d9f4ec8d7438a14cfc1ea2d5229d90b91f280db6a74a3e6752cb24fa50692fd26948a63b87122ecb0e855f2ed1bb0b4b945766b2b6b7b1ea6473a5d878348099735dcb385a81381d2f4fc1d74bf38f7daa645e3e789f6f54485aebab151868ab2a6c8cdb6668dd7631e891d52dc12974e830668e2e8ef4010eec1b9a0456e0d40497c877abd9276de28b26eb986754217966dd19476ce48af7395bd71d5f98a5db3b8b21df3b8fcfbbc2007ad3ee60d",
+              "type": "AttributeNotInSet"
+            },
+            {
+              "proof": "b2a44460fcbf28d7ce0fce6c677113a88b88ec272d3cfac24d33afc47b6fa15259af84fa6543ef673cbd18a44d47420c8c53d7eaf9272dfa62fadd8d118c2055480b6494a67b0346c9fa0b2ba2cba9c0591224a2ed7b399ea35b89111a53059c96f07725cca3147645f5916af2bec5458283cae75f50727eafd886e5d424eab130bc8230eafae5a346904717454047e7b1507b818338a16dcfe0a757653b7627345101cc445801bfe772eee0fce9466c5d48fa2be31eb72d44630c08c0bfc7e66fda653b5d969f662b3cfd689dffef2a2b244c85113cd551fac1d2383ecc783a6dacbfdf82fac9de1f2e5d37b8b1f4763a2ad6eae207c2602d1ab2975a5217725de4969b544a9072986f73e2636f57aaf5eaeb1b668e15451c3040bbae0179f8000000078e2daf21d82ecce620e819afb2f760a15c40fe0391156787d450b16bcef1fca356c313623a1667e9deee71f5e446a81dae490c45ad8d4864f1bcd9ff375136305596ad874265631a031b962ce09fa5e1c5f7007b37ea1ba0113b360982bfd7fd87b0a56d8f279a5ec05cf0a5c7d7f0feb2458de0029c563b055045d1199358ebdec943ab25ec579a6d2672f843f8096994472e623531d9c4831d176e9ba9c3296cfa8313ea424dcb567d955f23f32fdbc41dee336cdd40aadfb1fe8949e4134297719a926a36727543be39900201bd268543307ee049f1ef2501cd1ce6e15d6db88a7c29347a6d250db12e09d73ccf2583bd8ea6ab048ec85e80b6870a8e0699bb4e996d121dd07254b2462bc0bf36a6b7d068b2475fd2c06b54ee5768b0f953a2a062d94a43f274fe94fd5b0bc842c006e975589497d182908e60744aadddebf2ebd7c5e30b045432d9acd1e464ea12a3f9a68724f60799197a411f20e365df6e46edd6d008a819abbe76db7108b8fa0a8b5e5ab6c4799250021484f23d7a988d35ac179682e0befe03babf06e189db1a03bb9e10155dcaa5b1f50c6dcaae3956a846ec736da6af064409ffbeb4af7897cc404dba40c488d3dcd1505967f669ebfd7ee3b5857e68fa394dd123222c7a8384ed851c134f7d97beffe42e3d92d98e94e1794bcfe6eb8e531b3b0060d213ea23ed5c0b0b65ff1f7dc2c535376cbe417a04401933c5050f8ba3a27e4b4d04b4488223d0762d8490ea4c53e772db1d8deae662f7d24452ad149515dafdd332183dc2385cc2eb449e124c1308fb5a05a35a8b6b755d6f9ef37112fa1dc5c1f1e9e7572a5c1a78634fc9b8a61dbf98e7bf093816b12c0fc38b83ab8e2c3700c19767d885750119a324471bc9641333c7e31b436f8de8dc584a23470da92b27f303270abee804d056a10052324ecc6faf0a0e6c01f7296edfdd1708f4638dc3e0f77d452714f6a7e1ba77f7b74ef725b6406b3e33d3fe28a3e0abc9c6277eab969dba66a29db7b235386bdafdea7c0140",
+              "type": "AttributeInRange"
+            },
+            {
+              "attribute": "testvalue",
+              "proof": "be1f7ff6fc8b97f296136a8f13a783ceacce3666aedf5b273433922afdb2864624da087298d8dcfea00ec619e0f44f72fd5cb0f5145a327d5b294f5da5bea41a",
+              "type": "RevealAttribute"
+            }
+          ],
+          "type": "ConcordiumZKProofV3"
+        },
+        "statement": [
+          {
+            "attributeTag": "dob",
+            "lower": 80,
+            "type": "AttributeInRange",
+            "upper": 1237
+          },
+          {
+            "attributeTag": "sex",
+            "set": [
+              "aa",
+              "ff",
+              "zz"
+            ],
+            "type": "AttributeInSet"
+          },
+          {
+            "attributeTag": "lastName",
+            "set": [
+              "aa",
+              "ff",
+              "zz"
+            ],
+            "type": "AttributeNotInSet"
+          },
+          {
+            "attributeTag": "countryOfResidence",
+            "lower": {
+              "timestamp": "-262091-08-27T23:12:15Z",
+              "type": "date-time"
+            },
+            "type": "AttributeInRange",
+            "upper": {
+              "timestamp": "-262091-08-29T23:12:15Z",
+              "type": "date-time"
+            }
+          },
+          {
+            "attributeTag": "nationality",
+            "type": "RevealAttribute"
+          }
+        ]
+      },
+      "issuer": "did:ccd:testnet:idp:17",
+      "type": [
+        "VerifiableCredential",
+        "ConcordiumVerifiableCredential"
+      ]
+    }
+  ]
+}
+        "#;
+        assert_eq!(
+            remove_whitespace(&proof_json),
+            remove_whitespace(expected_proof_json),
+            "proof json"
+        );
+        // let proof_deserialized: PresentationV1<IpPairing, ArCurve, Web3IdAttribute> =
+        //     serde_json::from_str(&proof_json).unwrap();
+        // assert_eq!(proof_deserialized, proof);// todo ar
+    }
+
+    /// Tests JSON serialization and deserialization of request and presentation. Test
+    /// uses web3 credentials.
+    #[test]
+    fn test_request_and_presentation_web3_json() {
+        let challenge =    ContextChallenge {
+            given: vec![ContextProperty {
+                label: "prop1".to_string(),
+                context: "val1".to_string(),
+            }],
+            requested: vec![ContextProperty {
+                label: "prop2".to_string(),
+                context: "val2".to_string(),
+            }],
+        };
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let web3_cred_fixture = fixtures::web3_credentials_fixture(
+            [
+                ("3".into(), Web3IdAttribute::Numeric(137)),
+                (
+                    "1".into(),
+                    Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
+                ),
+                (
+                    "2".into(),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                ),
+                (
+                    "5".into(),
+                    Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
+                ),
+                (
+                    AttributeTag(4).to_string().parse().unwrap(),
+                    Web3IdAttribute::Timestamp(
+                        Timestamp::try_from(
+                            chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
+                                .unwrap()
+                                .to_utc(),
+                        )
+                            .unwrap(),
+                    ),
+                ),
+            ]
+                .into_iter()
+                .collect(),
+            &global_context,
+        );
+
+        let credential_statements = vec![CredentialStatementV1::Web3Id(Web3IdCredentialStatement {
+            ty: [
+                "VerifiableCredential".into(),
+                "ConcordiumVerifiableCredential".into(),
+                "TestCredential".into(),
+            ]
+                .into_iter()
+                .collect(),
+            network: Network::Testnet,
+            contract: web3_cred_fixture.contract,
+            credential: web3_cred_fixture.cred_id,
+            statement: vec![
+                AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: "3".into(),
+                        lower: Web3IdAttribute::Numeric(80),
+                        upper: Web3IdAttribute::Numeric(1237),
+                        _phantom: PhantomData,
+                    },
+                },
+                AtomicStatement::AttributeInSet {
+                    statement: AttributeInSetStatement {
+                        attribute_tag: "2".into(),
+                        set: [
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                        ]
+                            .into_iter()
+                            .collect(),
+                        _phantom: PhantomData,
+                    },
+                },
+                AtomicStatement::AttributeNotInSet {
+                    statement: AttributeNotInSetStatement {
+                        attribute_tag: "1".into(),
+                        set: [
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                        ]
+                            .into_iter()
+                            .collect(),
+                        _phantom: PhantomData,
+                    },
+                },
+                AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
+                        lower: Web3IdAttribute::Timestamp(
+                            Timestamp::try_from(
+                                chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                                    .unwrap()
+                                    .to_utc(),
+                            )
+                                .unwrap(),
+                        ),
+                        upper: Web3IdAttribute::Timestamp(
+                            Timestamp::try_from(
+                                chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                                    .unwrap()
+                                    .to_utc(),
+                            )
+                                .unwrap(),
+                        ),
+                        _phantom: PhantomData,
+                    },
+                },
+                AtomicStatement::RevealAttribute {
+                    statement: RevealAttributeStatement {
+                        attribute_tag: "5".into(),
+                    },
+                },
+            ],
+        })];
+
+        let request = RequestV1::<ArCurve, Web3IdAttribute> {
+            challenge,
+            credential_statements,
+        };
+
+        let request_json = serde_json::to_string_pretty(&request).unwrap();
+        println!("request:\n{}", request_json);
+        let expected_request_json = r#"
+{
+  "challenge": {
+    "given": [
+      {
+        "label": "prop1",
+        "context": "val1"
+      }
+    ],
+    "requested": [
+      {
+        "label": "prop2",
+        "context": "val2"
+      }
+    ]
+  },
+  "credential_statements": [
+    {
+      "id": "did:ccd:testnet:sci:1337:42/credentialEntry/ee1aa49a4459dfe813a3cf6eb882041230c7b2558469de81f87c9bf23bf10a03",
+      "statement": [
+        {
+          "attributeTag": "3",
+          "lower": 80,
+          "type": "AttributeInRange",
+          "upper": 1237
+        },
+        {
+          "attributeTag": "2",
+          "set": [
+            "aa",
+            "ff",
+            "zz"
+          ],
+          "type": "AttributeInSet"
+        },
+        {
+          "attributeTag": "1",
+          "set": [
+            "aa",
+            "ff",
+            "zz"
+          ],
+          "type": "AttributeNotInSet"
+        },
+        {
+          "attributeTag": "countryOfResidence",
+          "lower": {
+            "timestamp": "-262091-08-27T23:12:15Z",
+            "type": "date-time"
+          },
+          "type": "AttributeInRange",
+          "upper": {
+            "timestamp": "-262091-08-29T23:12:15Z",
+            "type": "date-time"
+          }
+        },
+        {
+          "attributeTag": "5",
+          "type": "RevealAttribute"
+        }
+      ],
+      "type": [
+        "ConcordiumVerifiableCredential",
+        "TestCredential",
+        "VerifiableCredential"
+      ]
+    }
+  ]
+}
+"#;
+        assert_eq!(
+            remove_whitespace(&request_json),
+            remove_whitespace(expected_request_json),
+            "request json"
+        );
+        let request_deserialized: RequestV1<ArCurve, Web3IdAttribute> =
+            serde_json::from_str(&request_json).unwrap();
+        assert_eq!(request_deserialized, request);
+
+        // the easiest way to construct a presentation, is just to run the prover on a request
+        let now = chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let proof = request
+            .clone()
+            .prove_with_rng(
+                &global_context,
+                [web3_cred_fixture.commitment_inputs()].into_iter(),
+                &mut fixtures::seed0(),
+                now,
+            )
+            .expect("prove");
+
+        let proof_json = "".to_string(); // todo ar serde_json::to_string_pretty(&proof).unwrap();
+        println!("proof:\n{}", proof_json);
+        let expected_proof_json = r#"
+{
+  "presentationContext": "7fb27b941602d01d11542211134fc71aacae54e37e7d007bbb7b55eff062a284",
+  "proof": {
+    "created": "2023-08-28T23:12:15Z",
+    "proofValue": [
+      "54dca04d76d817b16fba7b9fa27e86906a3afa2904d1459bee35b795bac50a39a6f216afd5fd4fcf3a48c1f6af9f35d98177c0770f451099bd980c8484b4f800"
+    ],
+    "type": "ConcordiumWeakLinkingProofV1"
+  },
+  "type": "VerifiablePresentation",
+  "verifiableCredential": [
+    {
+      "credentialSubject": {
+        "id": "did:ccd:testnet:pkc:ee1aa49a4459dfe813a3cf6eb882041230c7b2558469de81f87c9bf23bf10a03",
+        "proof": {
+          "commitments": {
+            "commitments": {
+              "1": "9443780e625e360547c5a6a948de645e92b84d91425f4d9c0455bcf6040ef06a741b6977da833a1552e081fb9c4c9318",
+              "2": "83a4e3bc337339a16a97dfa4bfb426f7e660c61168f3ed922dcf26d7711e083faa841d7e70d44a5f090a9a6a67eff5ad",
+              "3": "a26ce49a7a289e68eaa43a0c4c33b2055be159f044eabf7d0282d1d9f6a0109956d7fb7b6d08c9f0f2ac6a42d2c68a47",
+              "5": "8ae7a7fc631dc8566d0db1ce0258ae9b025ac5535bc7206db92775459ba291789ae6c40687763918c6c297b636b3991c",
+              "countryOfResidence": "aa0146cdc6e0bd7ce3d3e9464a5bcde7577ee1fa4738ad761c4cd9c978a732e6d42d88d60887fd13be1ee9c73bc617d0"
+            },
+            "signature": "7d0f13482e21b26930b19a1059e4a5bf71c6e73d086392de9012be74afdd1fe74acfc0ed1a0249b6feaa861b09960f9c51cf63480ba2ee9a9209884a66b96b05"
+          },
+          "created": "2023-08-28T23:12:15Z",
+          "proofValue": [
+            {
+              "proof": "b12365d42dbcdda54216b524d94eda74809018b8179d90c747829da5d24df4b2d835d7f77879cf52d5b1809564c5ec49990998db469e5c04553de3f787a3998d660204fe2dd1033a310bfc06ab8a9e5426ff90fdaf554ac11e96bbf18b1e1da8a881ba424d4deb7715880d015d04a64fd37dfef5ec71d48efee4e8d4d640c505f47d6bb75c52545f01889aa503809d06835320bdc1035e9143aea9bffcb12e904549c4f4885ffcb11c4956b362153010506a4d2959a524be07dc01d717c7e3812d41eaf65a6feabe01babf8a7ae81b9726fd6ee688cd241b31c8219b928d2de7073df321c28040aea5820d8e52af2a23d9da963b335a7452473bdda093a4f8103c32680db7441639eac6d1279ed855ba5cd009a5d9999d4f48f2db031c1b2f3d00000007a7e39d70b58b37af8722528536e1ecd898f4b5060d39eeed8713bf28d58e963ab00e9b46cac7f542240515a9b477b6268322f52bafd7bb479c23c68c275b67fba7c7ccd4b386e61ef4b48d6bfbbeba45fcef3da404ea89c7f082838f8c97f6a88fcac670270f88647c325d842badb22aeec2876b956940b27945e5eb93aaf1d1ab8b2881dd8ebeb27a1871fa1a9e02db873c84ae38d0505fe0c40fca21fa757e928af08077716082cced518f315d694b32fe06568e5b3d1602062747b8911947b17f6535323fcb1a11f4e1807f7f10ad7dec744245bf33f4a183d4e1778be73f4f2028cc9b5731f54dc073763776979d96cf54b71d71f22d8035f7f01149bb205044d95c64be878f3d02a17b375df761b4e14f74a810d3e5de4e7790d19fa712a832cf4345394e0dfbf643d36e60cecc57585601fded8a44cde6e43be56c1a679eb0ccf5e66994d8e9b0354d128045eea70257f31a6c934ea4f4465b903d0dc64cacde6219d93500c798a1ad5abe63e067e2a23690bbc865b7aaaa557f782c4fb2cb9b2d4b0a81e8566627d546d21450e38d922c6749900808ddf06e6f01da92d7fcee94c66ebfa3058bcbfdbf655e9cac0bf73d693d0e57ec3d457910110a67e9124ee7814bf8f6c5836e153dd3a95355a8218df1f8aec1cd6213349e7f16d795ccf1d3a28fe24d63136909e5504faf640c2a99b12cb5a39ecc54a0b60081f00235adc9451b0aabfab24fc9d40dffc8ac9b2111f3369e941090b3242ad8334a54b7ec4940ae23ea4ad23bbef2376737977939097918f37c04b989f2d16a7d88b50818a60c730de62214903bfcfce0a45c107fd441f3b0d5da23afe5ad03baa0d6f1bf78aeb8ce94d4852c358c8200919337e4915f9732e74ebf6b0aa99af5f7bd768cacf9acbf70da2cf607f55567de34f263182984ff36a91e9cbb48918ab3483632fc1427ffad3124043b7111a213edda117c81c104a3351260afbc2b00ab567f82d9462916c8101a72e7fd3995b8734f8b8af18e415162ae47313c6bc738",
+              "type": "AttributeInRange"
+            },
+            {
+              "proof": "b39554bf77b9ad30ef725df82bdb6c5456adf9ac3187ffbeaab1b4ce68782829850f10182deb13eaa94edd3640768224a178b8bac224d12711c7d3bec925db4da9bd1424db872757a1f2e10c9dac40483a69972504e5d69163a9f13c5dc8fc60b7897a2f2d1e623b88284ca5eecea172d05bc25e83acd28f5e9e5a4f2637a0762a8a9bcbf052373d26cf38efbb25223ba91c2bff8115180e290bee9ed17b8e3e392b8bfb805f5ad854041d7a9c7669dc193e6e5091fc2fd38ac35eadb755d4b356efb4505072d3ca29c2158af6d2feb1faf939839a9b7d37b384ac3761bb7020319d8e2792cdd20ab483307f0004fa49fc9d9658daf7a7363f05767db6b1f73c344bff03f320bda0fc59a32d165b980c02d21416277a24231c0389b34f502c32000000028c4e5cf1c3505e536b50580d287728d58433e2e471af1500eefffa8d3db7eadbcc4115abcb58bc3cbad27fdd6b22676781235df2401fad1abaf9338f753c4d6606a4a2e04cf89347b398419169238a7fdc1d0ad7f1091db98cf1ea11b082be0a86aa22a16e1e022931fa71e69066894d15cd8525c87dcb1391b0b3502e0b96af9fcf7f6abd60030319137ec20d2d563196d9721142c308f02a8e6ff29fe113a6bc09f67ae02612c7c8b0fba524d7e077efecdbdc26320f10531a4dbd643f1a4e0a08dea12abf4eb723607be444120d6051bea73224fea2c33c3c335db19738536d0a8b7f89664da783709c21068e633e17b8ef6a04ff82235bd11aa73c565e9b",
+              "type": "AttributeInSet"
+            },
+            {
+              "proof": "8b69df7282cd3234e4423e85d15c09d49fc2005e869a4876fec01369c3b0ec0ae6f710797b4e5294a7fdf72c05341b6887da98066400436af27e739c140e3a481df2845cd78df942a2c0fb01429d5b04cd96b18c0b2bbf764b533a6f095edbeaaa72ae5ea7540bd7987ace8571e79822d6cab88b070cabe1d7102a01df2070d244548f1c0ea7524acc3078c9af52cd9295309836a5f188743eec08c2009c9510abdfd2fd67363ba5f4900d91fbe114f3c45fb6202e9f64a65a29c14e30e1986e1dd79a31dacf9f7804ba85b984525fc58be01578a8daef7530f98a6c92bc9a5a461af99e831c4094455010a2c58ed43c485e26733ca9a655a2ad5a9418fcd651130e22e918477fe17d3a1b850a837cdf8c8470025e6ed72b26092e2441580c45000000028f7d1d30615527b6882ac3d2e81d9568c50b64e8a68b233edf6237a891263ba6fd4e553bbf8975286c680ae6b1654989b7ac6688ba61e05683d3ad98b26e5ea8ee4d43d5dbaa91e304f6c38fc20be2801d9f4ec8d7438a14cfc1ea2d5229d90b91f280db6a74a3e6752cb24fa50692fd26948a63b87122ecb0e855f2ed1bb0b4b945766b2b6b7b1ea6473a5d878348099735dcb385a81381d2f4fc1d74bf38f7daa645e3e789f6f54485aebab151868ab2a6c8cdb6668dd7631e891d52dc12974e830668e2e8ef4010eec1b9a0456e0d40497c877abd9276de28b26eb986754217966dd19476ce48af7395bd71d5f98a5db3b8b21df3b8fcfbbc2007ad3ee60d",
+              "type": "AttributeNotInSet"
+            },
+            {
+              "proof": "b2a44460fcbf28d7ce0fce6c677113a88b88ec272d3cfac24d33afc47b6fa15259af84fa6543ef673cbd18a44d47420c8c53d7eaf9272dfa62fadd8d118c2055480b6494a67b0346c9fa0b2ba2cba9c0591224a2ed7b399ea35b89111a53059c96f07725cca3147645f5916af2bec5458283cae75f50727eafd886e5d424eab130bc8230eafae5a346904717454047e7b1507b818338a16dcfe0a757653b7627345101cc445801bfe772eee0fce9466c5d48fa2be31eb72d44630c08c0bfc7e66fda653b5d969f662b3cfd689dffef2a2b244c85113cd551fac1d2383ecc783a6dacbfdf82fac9de1f2e5d37b8b1f4763a2ad6eae207c2602d1ab2975a5217725de4969b544a9072986f73e2636f57aaf5eaeb1b668e15451c3040bbae0179f8000000078e2daf21d82ecce620e819afb2f760a15c40fe0391156787d450b16bcef1fca356c313623a1667e9deee71f5e446a81dae490c45ad8d4864f1bcd9ff375136305596ad874265631a031b962ce09fa5e1c5f7007b37ea1ba0113b360982bfd7fd87b0a56d8f279a5ec05cf0a5c7d7f0feb2458de0029c563b055045d1199358ebdec943ab25ec579a6d2672f843f8096994472e623531d9c4831d176e9ba9c3296cfa8313ea424dcb567d955f23f32fdbc41dee336cdd40aadfb1fe8949e4134297719a926a36727543be39900201bd268543307ee049f1ef2501cd1ce6e15d6db88a7c29347a6d250db12e09d73ccf2583bd8ea6ab048ec85e80b6870a8e0699bb4e996d121dd07254b2462bc0bf36a6b7d068b2475fd2c06b54ee5768b0f953a2a062d94a43f274fe94fd5b0bc842c006e975589497d182908e60744aadddebf2ebd7c5e30b045432d9acd1e464ea12a3f9a68724f60799197a411f20e365df6e46edd6d008a819abbe76db7108b8fa0a8b5e5ab6c4799250021484f23d7a988d35ac179682e0befe03babf06e189db1a03bb9e10155dcaa5b1f50c6dcaae3956a846ec736da6af064409ffbeb4af7897cc404dba40c488d3dcd1505967f669ebfd7ee3b5857e68fa394dd123222c7a8384ed851c134f7d97beffe42e3d92d98e94e1794bcfe6eb8e531b3b0060d213ea23ed5c0b0b65ff1f7dc2c535376cbe417a04401933c5050f8ba3a27e4b4d04b4488223d0762d8490ea4c53e772db1d8deae662f7d24452ad149515dafdd332183dc2385cc2eb449e124c1308fb5a05a35a8b6b755d6f9ef37112fa1dc5c1f1e9e7572a5c1a78634fc9b8a61dbf98e7bf093816b12c0fc38b83ab8e2c3700c19767d885750119a324471bc9641333c7e31b436f8de8dc584a23470da92b27f303270abee804d056a10052324ecc6faf0a0e6c01f7296edfdd1708f4638dc3e0f77d452714f6a7e1ba77f7b74ef725b6406b3e33d3fe28a3e0abc9c6277eab969dba66a29db7b235386bdafdea7c0140",
+              "type": "AttributeInRange"
+            },
+            {
+              "attribute": "testvalue",
+              "proof": "be1f7ff6fc8b97f296136a8f13a783ceacce3666aedf5b273433922afdb2864624da087298d8dcfea00ec619e0f44f72fd5cb0f5145a327d5b294f5da5bea41a",
+              "type": "RevealAttribute"
+            }
+          ],
+          "type": "ConcordiumZKProofV3"
+        },
+        "statement": [
+          {
+            "attributeTag": "3",
+            "lower": 80,
+            "type": "AttributeInRange",
+            "upper": 1237
+          },
+          {
+            "attributeTag": "2",
+            "set": [
+              "aa",
+              "ff",
+              "zz"
+            ],
+            "type": "AttributeInSet"
+          },
+          {
+            "attributeTag": "1",
+            "set": [
+              "aa",
+              "ff",
+              "zz"
+            ],
+            "type": "AttributeNotInSet"
+          },
+          {
+            "attributeTag": "countryOfResidence",
+            "lower": {
+              "timestamp": "-262091-08-27T23:12:15Z",
+              "type": "date-time"
+            },
+            "type": "AttributeInRange",
+            "upper": {
+              "timestamp": "-262091-08-29T23:12:15Z",
+              "type": "date-time"
+            }
+          },
+          {
+            "attributeTag": "5",
+            "type": "RevealAttribute"
+          }
+        ]
+      },
+      "issuer": "did:ccd:testnet:sci:1337:42/issuer",
+      "type": [
+        "ConcordiumVerifiableCredential",
+        "TestCredential",
+        "VerifiableCredential"
+      ]
+    }
+  ]
+}
+        "#;
+        assert_eq!(
+            remove_whitespace(&proof_json),
+            remove_whitespace(expected_proof_json),
+            "proof json"
+        );
+        // let proof_deserialized: PresentationV1<ArCurve, Web3IdAttribute> =
+        //     serde_json::from_str(&proof_json).unwrap();
+        // assert_eq!(proof_deserialized, proof); // todo ar
+    }
+
+    //     /// Tests JSON serialization and deserialization of request and presentation.
+    //     #[test]
+    //     fn test_request_and_presentation_v1_json() {
+    //         let context = Context {
+    //             given: vec![ContextProperty {
+    //                 label: "prop1".to_string(),
+    //                 context: "val1".to_string(),
+    //             }],
+    //             requested: vec![ContextProperty {
+    //                 label: "prop2".to_string(),
+    //                 context: "val2".to_string(),
+    //             }],
+    //         };
+    //         let challenge = Challenge::V1(context);
+    //
+    //         let global_context = GlobalContext::generate("Test".into());
+    //
+    //         let acc_cred_fixture = fixtures::identity_credentials_fixture(
+    //             [
+    //                 (3.into(), Web3IdAttribute::Numeric(137)),
+    //                 (
+    //                     1.into(),
+    //                     Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
+    //                 ),
+    //                 (
+    //                     2.into(),
+    //                     Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+    //                 ),
+    //                 (
+    //                     5.into(),
+    //                     Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
+    //                 ),
+    //             ]
+    //             .into_iter()
+    //             .collect(),
+    //             &global_context,
+    //         );
+    //
+    //         let credential_statements = vec![CredentialStatement::Identity {
+    //             network: Network::Testnet,
+    //             statement: vec![
+    //                 AtomicStatement::AttributeInRange {
+    //                     statement: AttributeInRangeStatement {
+    //                         attribute_tag: 3.into(),
+    //                         lower: Web3IdAttribute::Numeric(80),
+    //                         upper: Web3IdAttribute::Numeric(1237),
+    //                         _phantom: PhantomData,
+    //                     },
+    //                 },
+    //                 AtomicStatement::AttributeInSet {
+    //                     statement: AttributeInSetStatement {
+    //                         attribute_tag: 2.into(),
+    //                         set: [
+    //                             Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+    //                             Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+    //                             Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+    //                         ]
+    //                         .into_iter()
+    //                         .collect(),
+    //                         _phantom: PhantomData,
+    //                     },
+    //                 },
+    //                 AtomicStatement::AttributeNotInSet {
+    //                     statement: AttributeNotInSetStatement {
+    //                         attribute_tag: 1.into(),
+    //                         set: [
+    //                             Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+    //                             Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+    //                             Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+    //                         ]
+    //                         .into_iter()
+    //                         .collect(),
+    //                         _phantom: PhantomData,
+    //                     },
+    //                 },
+    //                 AtomicStatement::RevealAttribute {
+    //                     statement: RevealAttributeStatement {
+    //                         attribute_tag: 5.into(),
+    //                     },
+    //                 },
+    //             ],
+    //         }];
+    //
+    //         let request = Request::<ArCurve, Web3IdAttribute> {
+    //             challenge,
+    //             credential_statements,
+    //         };
+    //
+    //         let request_json = serde_json::to_string_pretty(&request).unwrap();
+    //         println!("request:\n{}", request_json);
+    //         let expected_request_json = r#"
+    // {
+    //   "challenge": "7fb27b941602d01d11542211134fc71aacae54e37e7d007bbb7b55eff062a284",
+    //   "credentialStatements": [
+    //     {
+    //       "id": "did:ccd:testnet:cred:856793e4ba5d058cea0b5c3a1c8affb272efcf53bbab77ee28d3e2270d5041d220c1e1a9c6c8619c84e40ebd70fb583e",
+    //       "statement": [
+    //         {
+    //           "attributeTag": "dob",
+    //           "lower": 80,
+    //           "type": "AttributeInRange",
+    //           "upper": 1237
+    //         },
+    //         {
+    //           "attributeTag": "sex",
+    //           "set": [
+    //             "aa",
+    //             "ff",
+    //             "zz"
+    //           ],
+    //           "type": "AttributeInSet"
+    //         },
+    //         {
+    //           "attributeTag": "lastName",
+    //           "set": [
+    //             "aa",
+    //             "ff",
+    //             "zz"
+    //           ],
+    //           "type": "AttributeNotInSet"
+    //         },
+    //         {
+    //           "attributeTag": "nationality",
+    //           "type": "RevealAttribute"
+    //         }
+    //       ]
+    //     }
+    //   ]
+    // }
+    // "#;
+    //         assert_eq!(
+    //             remove_whitespace(&request_json),
+    //             remove_whitespace(expected_request_json),
+    //             "request json"
+    //         );
+    //         let request_deserialized: Request<ArCurve, Web3IdAttribute> =
+    //             serde_json::from_str(&request_json).unwrap();
+    //         assert_eq!(request_deserialized, request);
+    //
+    //         // the easiest way to construct a presentation, is just to run the prover on a request
+    //         let now = chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
+    //             .unwrap()
+    //             .with_timezone(&chrono::Utc);
+    //         let proof = request
+    //             .clone()
+    //             .prove_with_rng(
+    //                 &global_context,
+    //                 [acc_cred_fixture.commitment_inputs()].into_iter(),
+    //                 &mut fixtures::seed0(),
+    //                 now,
+    //             )
+    //             .expect("prove");
+    //
+    //         let proof_json = serde_json::to_string_pretty(&proof).unwrap();
+    //         println!("proof:\n{}", proof_json);
+    //         let expected_proof_json = r#"
+    // {
+    //   "presentationContext": "7fb27b941602d01d11542211134fc71aacae54e37e7d007bbb7b55eff062a284",
+    //   "proof": {
+    //     "created": "2023-08-28T23:12:15Z",
+    //     "proofValue": [],
+    //     "type": "ConcordiumWeakLinkingProofV1"
+    //   },
+    //   "type": "VerifiablePresentation",
+    //   "verifiableCredential": [
+    //     {
+    //       "credentialSubject": {
+    //         "id": "did:ccd:testnet:cred:856793e4ba5d058cea0b5c3a1c8affb272efcf53bbab77ee28d3e2270d5041d220c1e1a9c6c8619c84e40ebd70fb583e",
+    //         "proof": {
+    //           "created": "2023-08-28T23:12:15Z",
+    //           "proofValue": [
+    //             {
+    //               "proof": "b12365d42dbcdda54216b524d94eda74809018b8179d90c747829da5d24df4b2d835d7f77879cf52d5b1809564c5ec49990998db469e5c04553de3f787a3998d660204fe2dd1033a310bfc06ab8a9e5426ff90fdaf554ac11e96bbf18b1e1da8a881ba424d4deb7715880d015d04a64fd37dfef5ec71d48efee4e8d4d640c505f47d6bb75c52545f01889aa503809d06835320bdc1035e9143aea9bffcb12e904549c4f4885ffcb11c4956b362153010506a4d2959a524be07dc01d717c7e3812d41eaf65a6feabe01babf8a7ae81b9726fd6ee688cd241b31c8219b928d2de7073df321c28040aea5820d8e52af2a23d9da963b335a7452473bdda093a4f8103c32680db7441639eac6d1279ed855ba5cd009a5d9999d4f48f2db031c1b2f3d00000007a7e39d70b58b37af8722528536e1ecd898f4b5060d39eeed8713bf28d58e963ab00e9b46cac7f542240515a9b477b6268322f52bafd7bb479c23c68c275b67fba7c7ccd4b386e61ef4b48d6bfbbeba45fcef3da404ea89c7f082838f8c97f6a88fcac670270f88647c325d842badb22aeec2876b956940b27945e5eb93aaf1d1ab8b2881dd8ebeb27a1871fa1a9e02db873c84ae38d0505fe0c40fca21fa757e928af08077716082cced518f315d694b32fe06568e5b3d1602062747b8911947b17f6535323fcb1a11f4e1807f7f10ad7dec744245bf33f4a183d4e1778be73f4f2028cc9b5731f54dc073763776979d96cf54b71d71f22d8035f7f01149bb205044d95c64be878f3d02a17b375df761b4e14f74a810d3e5de4e7790d19fa712a832cf4345394e0dfbf643d36e60cecc57585601fded8a44cde6e43be56c1a679eb0ccf5e66994d8e9b0354d128045eea70257f31a6c934ea4f4465b903d0dc64cacde6219d93500c798a1ad5abe63e067e2a23690bbc865b7aaaa557f782c4fb2cb9b2d4b0a81e8566627d546d21450e38d922c6749900808ddf06e6f01da92d7fcee94c66ebfa3058bcbfdbf655e9cac0bf73d693d0e57ec3d457910110a67e9124ee7814bf8f6c5836e153dd3a95355a8218df1f8aec1cd6213349e7f16d795ccf1d3a28fe24d63136909e5504faf640c2a99b12cb5a39ecc54a0b60081f00235adc9451b0aabfab24fc9d40dffc8ac9b2111f3369e941090b3242ad8334a54b7ec4940ae23ea4ad23bbef2376737977939097918f37c04b989f2d16a7d88b50818a60c730de62214903bfcfce0a45c107fd441f3b0d5da23afe5ad03baa0d6f1bf78aeb8ce94d4852c358c8200919337e4915f9732e74ebf6b0aa99af5f7bd768cacf9acbf70da2cf607f55567de34f263182984ff36a91e9cbb48918ab3483632fc1427ffad3124043b7111a213edda117c81c104a3351260afbc2b00ab567f82d9462916c8101a72e7fd3995b8734f8b8af18e415162ae47313c6bc738",
+    //               "type": "AttributeInRange"
+    //             },
+    //             {
+    //               "proof": "b39554bf77b9ad30ef725df82bdb6c5456adf9ac3187ffbeaab1b4ce68782829850f10182deb13eaa94edd3640768224a178b8bac224d12711c7d3bec925db4da9bd1424db872757a1f2e10c9dac40483a69972504e5d69163a9f13c5dc8fc60b7897a2f2d1e623b88284ca5eecea172d05bc25e83acd28f5e9e5a4f2637a0762a8a9bcbf052373d26cf38efbb25223ba91c2bff8115180e290bee9ed17b8e3e392b8bfb805f5ad854041d7a9c7669dc193e6e5091fc2fd38ac35eadb755d4b356efb4505072d3ca29c2158af6d2feb1faf939839a9b7d37b384ac3761bb7020319d8e2792cdd20ab483307f0004fa49fc9d9658daf7a7363f05767db6b1f73c344bff03f320bda0fc59a32d165b980c02d21416277a24231c0389b34f502c32000000028c4e5cf1c3505e536b50580d287728d58433e2e471af1500eefffa8d3db7eadbcc4115abcb58bc3cbad27fdd6b22676781235df2401fad1abaf9338f753c4d6606a4a2e04cf89347b398419169238a7fdc1d0ad7f1091db98cf1ea11b082be0a86aa22a16e1e022931fa71e69066894d15cd8525c87dcb1391b0b3502e0b96af9fcf7f6abd60030319137ec20d2d563196d9721142c308f02a8e6ff29fe113a6bc09f67ae02612c7c8b0fba524d7e077efecdbdc26320f10531a4dbd643f1a4e0a08dea12abf4eb723607be444120d6051bea73224fea2c33c3c335db19738536d0a8b7f89664da783709c21068e633e17b8ef6a04ff82235bd11aa73c565e9b",
+    //               "type": "AttributeInSet"
+    //             },
+    //             {
+    //               "proof": "8b69df7282cd3234e4423e85d15c09d49fc2005e869a4876fec01369c3b0ec0ae6f710797b4e5294a7fdf72c05341b6887da98066400436af27e739c140e3a481df2845cd78df942a2c0fb01429d5b04cd96b18c0b2bbf764b533a6f095edbeaaa72ae5ea7540bd7987ace8571e79822d6cab88b070cabe1d7102a01df2070d244548f1c0ea7524acc3078c9af52cd9295309836a5f188743eec08c2009c9510abdfd2fd67363ba5f4900d91fbe114f3c45fb6202e9f64a65a29c14e30e1986e1dd79a31dacf9f7804ba85b984525fc58be01578a8daef7530f98a6c92bc9a5a461af99e831c4094455010a2c58ed43c485e26733ca9a655a2ad5a9418fcd651130e22e918477fe17d3a1b850a837cdf8c8470025e6ed72b26092e2441580c45000000028f7d1d30615527b6882ac3d2e81d9568c50b64e8a68b233edf6237a891263ba6fd4e553bbf8975286c680ae6b1654989b7ac6688ba61e05683d3ad98b26e5ea8ee4d43d5dbaa91e304f6c38fc20be2801d9f4ec8d7438a14cfc1ea2d5229d90b91f280db6a74a3e6752cb24fa50692fd26948a63b87122ecb0e855f2ed1bb0b4b945766b2b6b7b1ea6473a5d878348099735dcb385a81381d2f4fc1d74bf38f7daa645e3e789f6f54485aebab151868ab2a6c8cdb6668dd7631e891d52dc12974e830668e2e8ef4010eec1b9a0456e0d40497c877abd9276de28b26eb986754217966dd19476ce48af7395bd71d5f98a5db3b8b21df3b8fcfbbc2007ad3ee60d",
+    //               "type": "AttributeNotInSet"
+    //             },
+    //             {
+    //               "attribute": "testvalue",
+    //               "proof": "4ba31824aa47d93bf0978f04b72f9a8cdc097889c4d5a9b0cccf0e0eb6ac2c774d6018d40339331adf9e66342af895e81b66571ed5b85e8952625f3d42d3ac8b",
+    //               "type": "RevealAttribute"
+    //             }
+    //           ],
+    //           "type": "ConcordiumZKProofV3"
+    //         },
+    //         "statement": [
+    //           {
+    //             "attributeTag": "dob",
+    //             "lower": 80,
+    //             "type": "AttributeInRange",
+    //             "upper": 1237
+    //           },
+    //           {
+    //             "attributeTag": "sex",
+    //             "set": [
+    //               "aa",
+    //               "ff",
+    //               "zz"
+    //             ],
+    //             "type": "AttributeInSet"
+    //           },
+    //           {
+    //             "attributeTag": "lastName",
+    //             "set": [
+    //               "aa",
+    //               "ff",
+    //               "zz"
+    //             ],
+    //             "type": "AttributeNotInSet"
+    //           },
+    //           {
+    //             "attributeTag": "nationality",
+    //             "type": "RevealAttribute"
+    //           }
+    //         ]
+    //       },
+    //       "issuer": "did:ccd:testnet:idp:17",
+    //       "type": [
+    //         "VerifiableCredential",
+    //         "ConcordiumVerifiableCredential"
+    //       ]
+    //     }
+    //   ]
+    // }
+    //
+    //         "#;
+    //         assert_eq!(
+    //             remove_whitespace(&proof_json),
+    //             remove_whitespace(expected_proof_json),
+    //             "proof json"
+    //         );
+    //         let proof_deserialized: Presentation<IpPairing, ArCurve, Web3IdAttribute> =
+    //             serde_json::from_str(&proof_json).unwrap();
+    //         assert_eq!(proof_deserialized, proof);
+    //     }
+}
