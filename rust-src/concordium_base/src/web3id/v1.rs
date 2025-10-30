@@ -9,10 +9,11 @@ use crate::web3id::{
     IdentityCredentialStatement, LinkingProof, Web3IdCredentialProof, Web3IdCredentialStatement,
     Web3idCredentialMetadata,
 };
-use anyhow::{bail, Context};
+use anyhow::{bail, ensure, Context};
 use itertools::Itertools;
 use nom::Parser;
 use serde::de::{DeserializeOwned, Error};
+use serde::ser::SerializeMap;
 use serde::Deserializer;
 use std::collections::BTreeSet;
 
@@ -74,11 +75,12 @@ const CONCORDIUM_ACCOUNT_BASED_CREDENTIAL_TYPE: &'static str = "ConcordiumAccoun
 const CONCORDIUM_WEB3_BASED_CREDENTIAL_TYPE: &'static str = "ConcordiumWeb3BasedCredential";
 const CONCORDIUM_IDENTITY_BASED_CREDENTIAL_TYPE: &'static str = "ConcordiumIdBasedCredential";
 
+const CONCORDIUM_REQUEST_TYPE: &'static str = "ConcordiumVerifiablePresentationRequestV1";
+
 const CONCORDIUM_STATEMENT_V1_TYPE: &'static str = "ConcordiumStatementV1";
 const CONCORDIUM_ACCOUNT_BASED_STATEMENT_TYPE: &'static str = "ConcordiumAccountBasedStatement";
 const CONCORDIUM_WEB3_BASED_STATEMENT_TYPE: &'static str = "ConcordiumWeb3BasedStatement";
 const CONCORDIUM_IDENTITY_BASED_STATEMENT_TYPE: &'static str = "ConcordiumIdBasedStatement";
-
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
     for CredentialStatementV1<C, AttributeType>
@@ -93,13 +95,17 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 cred_id,
                 statement,
             }) => {
-                let json = serde_json::json!({
-                    "type": [CONCORDIUM_STATEMENT_V1_TYPE,
-                             CONCORDIUM_ACCOUNT_BASED_STATEMENT_TYPE],
-                    "id": format!("did:ccd:{network}:cred:{cred_id}"),
-                    "statement": statement,
-                });
-                json.serialize(serializer)
+                let mut map = serializer.serialize_map(None)?;
+                map.serialize_entry(
+                    "type",
+                    &[
+                        CONCORDIUM_STATEMENT_V1_TYPE,
+                        CONCORDIUM_ACCOUNT_BASED_STATEMENT_TYPE,
+                    ],
+                )?;
+                map.serialize_entry("id", &format!("did:ccd:{network}:cred:{cred_id}"))?;
+                map.serialize_entry("statement", statement)?;
+                map.end()
             }
             CredentialStatementV1::Web3Id(Web3IdCredentialStatement {
                 network,
@@ -108,12 +114,20 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 statement,
                 ty,
             }) => {
-                let json = serde_json::json!({
-                    "type": ty,  // todo ar what to do about type here
-                    "id": format!("did:ccd:{network}:sci:{}:{}/credentialEntry/{}", contract.index, contract.subindex, credential),
-                    "statement": statement,
-                });
-                json.serialize(serializer)
+                let mut map = serializer.serialize_map(None)?;
+                map.serialize_entry(
+                    "type", // todo ar what to do about type here
+                    ty,
+                )?;
+                map.serialize_entry(
+                    "id",
+                    &format!(
+                        "did:ccd:{network}:sci:{}:{}/credentialEntry/{}",
+                        contract.index, contract.subindex, credential
+                    ),
+                )?;
+                map.serialize_entry("statement", statement)?;
+                map.end()
             }
             CredentialStatementV1::Identity(IdentityCredentialStatement {
                 network,
@@ -127,13 +141,17 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                     },
                 };
 
-                let json = serde_json::json!({
-                    "type": [CONCORDIUM_STATEMENT_V1_TYPE,
-                             CONCORDIUM_IDENTITY_BASED_STATEMENT_TYPE],
-                    "issuer": did,
-                    "statement": statement,
-                });
-                json.serialize(serializer)
+                let mut map = serializer.serialize_map(None)?;
+                map.serialize_entry(
+                    "type",
+                    &[
+                        CONCORDIUM_STATEMENT_V1_TYPE,
+                        CONCORDIUM_IDENTITY_BASED_STATEMENT_TYPE,
+                    ],
+                )?;
+                map.serialize_entry("issuer", &did)?;
+                map.serialize_entry("statement", statement)?;
+                map.end()
             }
         }
     }
@@ -169,7 +187,8 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
                     })
                 } else if types
                     .iter()
-                    .any(|ty| ty == CONCORDIUM_WEB3_BASED_CREDENTIAL_TYPE) // todo ar do something about this type
+                    .any(|ty| ty == CONCORDIUM_WEB3_BASED_CREDENTIAL_TYPE)
+                // todo ar do something about this type
                 {
                     let did: did::Method = serde_json::from_value(take_field(&mut value, "id")?)?;
                     let did::IdentifierType::ContractData {
@@ -398,7 +417,6 @@ pub struct PresentationV1<
     pub linking_proof: LinkingProof,
 }
 
-
 // impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<serde_json::Value>
 // for PresentationV1<P, C, AttributeType>
 // {
@@ -437,19 +455,60 @@ pub struct PresentationV1<
 //     }
 // }
 
-
 /// A request for a proof. This is the statement and challenge. The secret data
 /// comes separately.
-#[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Debug)]
-#[serde(bound(
-    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize",
-    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"
-))]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct RequestV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    #[serde(rename="context")]
     pub challenge: ContextChallenge,
-    #[serde(rename="credentialStatements")]
     pub credential_statements: Vec<CredentialStatementV1<C, AttributeType>>,
+}
+
+// todo ar add type to ContextChallenge context type
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
+    for RequestV1<C, AttributeType>
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut map = serializer.serialize_map(None)?;
+        map.serialize_entry("type", &CONCORDIUM_REQUEST_TYPE)?;
+        map.serialize_entry("context", &self.challenge)?;
+        map.serialize_entry("credentialStatements", &self.credential_statements)?;
+        map.end()
+    }
+}
+
+impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serde::Deserialize<'de>
+    for RequestV1<C, AttributeType>
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let mut value = serde_json::Value::deserialize(deserializer)?;
+
+        let result = (|| -> anyhow::Result<Self> {
+            let ty: String = serde_json::from_value(take_field(&mut value, "type")?)?;
+            ensure!(
+                ty == CONCORDIUM_REQUEST_TYPE,
+                "expected type {}",
+                CONCORDIUM_REQUEST_TYPE
+            );
+
+            let challenge = serde_json::from_value(take_field(&mut value, "context")?)?;
+            let credential_statements =
+                serde_json::from_value(take_field(&mut value, "credentialStatements")?)?;
+
+            Ok(Self {
+                challenge,
+                credential_statements,
+            })
+        })();
+
+        result.map_err(|err| D::Error::custom(format!("{:#}", err)))
+    }
 }
 
 #[cfg(test)]
@@ -603,6 +662,7 @@ mod tests {
         println!("request:\n{}", request_json);
         let expected_request_json = r#"
 {
+  "type": "ConcordiumVerifiablePresentationRequestV1",
   "context": {
     "given": [
       {
@@ -619,52 +679,52 @@ mod tests {
   },
   "credentialStatements": [
     {
+      "type": [
+        "ConcordiumStatementV1",
+        "ConcordiumAccountBasedStatement"
+      ],
       "id": "did:ccd:testnet:cred:856793e4ba5d058cea0b5c3a1c8affb272efcf53bbab77ee28d3e2270d5041d220c1e1a9c6c8619c84e40ebd70fb583e",
       "statement": [
         {
+          "type": "AttributeInRange",
           "attributeTag": "dob",
           "lower": 80,
-          "type": "AttributeInRange",
           "upper": 1237
         },
         {
+          "type": "AttributeInSet",
           "attributeTag": "sex",
           "set": [
             "aa",
             "ff",
             "zz"
-          ],
-          "type": "AttributeInSet"
+          ]
         },
         {
+          "type": "AttributeNotInSet",
           "attributeTag": "lastName",
           "set": [
             "aa",
             "ff",
             "zz"
-          ],
-          "type": "AttributeNotInSet"
+          ]
         },
         {
+          "type": "AttributeInRange",
           "attributeTag": "countryOfResidence",
           "lower": {
-            "timestamp": "2023-08-27T23:12:15Z",
-            "type": "date-time"
+            "type": "date-time",
+            "timestamp": "2023-08-27T23:12:15Z"
           },
-          "type": "AttributeInRange",
           "upper": {
-            "timestamp": "2023-08-29T23:12:15Z",
-            "type": "date-time"
+            "type": "date-time",
+            "timestamp": "2023-08-29T23:12:15Z"
           }
         },
         {
-          "attributeTag": "nationality",
-          "type": "RevealAttribute"
+          "type": "RevealAttribute",
+          "attributeTag": "nationality"
         }
-      ],
-      "type": [
-        "ConcordiumStatementV1",
-        "ConcordiumAccountBasedStatement"
       ]
     }
   ]
@@ -940,6 +1000,7 @@ mod tests {
         println!("request:\n{}", request_json);
         let expected_request_json = r#"
 {
+  "type": "ConcordiumVerifiablePresentationRequestV1",
   "context": {
     "given": [
       {
@@ -956,54 +1017,54 @@ mod tests {
   },
   "credentialStatements": [
     {
-      "id": "did:ccd:testnet:sci:1337:42/credentialEntry/ee1aa49a4459dfe813a3cf6eb882041230c7b2558469de81f87c9bf23bf10a03",
-      "statement": [
-        {
-          "attributeTag": "3",
-          "lower": 80,
-          "type": "AttributeInRange",
-          "upper": 1237
-        },
-        {
-          "attributeTag": "2",
-          "set": [
-            "aa",
-            "ff",
-            "zz"
-          ],
-          "type": "AttributeInSet"
-        },
-        {
-          "attributeTag": "1",
-          "set": [
-            "aa",
-            "ff",
-            "zz"
-          ],
-          "type": "AttributeNotInSet"
-        },
-        {
-          "attributeTag": "countryOfResidence",
-          "lower": {
-            "timestamp": "2023-08-27T23:12:15Z",
-            "type": "date-time"
-          },
-          "type": "AttributeInRange",
-          "upper": {
-            "timestamp": "2023-08-29T23:12:15Z",
-            "type": "date-time"
-          }
-        },
-        {
-          "attributeTag": "5",
-          "type": "RevealAttribute"
-        }
-      ],
       "type": [
         "ConcordiumVerifiableCredentialV1",
         "ConcordiumWeb3BasedCredential",
         "TestCredential",
         "VerifiableCredential"
+      ],
+      "id": "did:ccd:testnet:sci:1337:42/credentialEntry/ee1aa49a4459dfe813a3cf6eb882041230c7b2558469de81f87c9bf23bf10a03",
+      "statement": [
+        {
+          "type": "AttributeInRange",
+          "attributeTag": "3",
+          "lower": 80,
+          "upper": 1237
+        },
+        {
+          "type": "AttributeInSet",
+          "attributeTag": "2",
+          "set": [
+            "aa",
+            "ff",
+            "zz"
+          ]
+        },
+        {
+          "type": "AttributeNotInSet",
+          "attributeTag": "1",
+          "set": [
+            "aa",
+            "ff",
+            "zz"
+          ]
+        },
+        {
+          "type": "AttributeInRange",
+          "attributeTag": "countryOfResidence",
+          "lower": {
+            "type": "date-time",
+            "timestamp": "2023-08-27T23:12:15Z"
+          },
+          "upper": {
+            "type": "date-time",
+            "timestamp": "2023-08-29T23:12:15Z"
+          }
+        },
+        {
+          "type": "RevealAttribute",
+          "attributeTag": "5"
+        }
       ]
     }
   ]
@@ -1283,6 +1344,7 @@ mod tests {
         println!("request:\n{}", request_json);
         let expected_request_json = r#"
 {
+  "type": "ConcordiumVerifiablePresentationRequestV1",
   "context": {
     "given": [
       {
@@ -1299,52 +1361,52 @@ mod tests {
   },
   "credentialStatements": [
     {
+      "type": [
+        "ConcordiumStatementV1",
+        "ConcordiumIdBasedStatement"
+      ],
       "issuer": "did:ccd:testnet:idp:0",
       "statement": [
         {
+          "type": "AttributeInRange",
           "attributeTag": "dob",
           "lower": 80,
-          "type": "AttributeInRange",
           "upper": 1237
         },
         {
+          "type": "AttributeInSet",
           "attributeTag": "sex",
           "set": [
             "aa",
             "ff",
             "zz"
-          ],
-          "type": "AttributeInSet"
+          ]
         },
         {
+          "type": "AttributeNotInSet",
           "attributeTag": "lastName",
           "set": [
             "aa",
             "ff",
             "zz"
-          ],
-          "type": "AttributeNotInSet"
+          ]
         },
         {
+          "type": "AttributeInRange",
           "attributeTag": "countryOfResidence",
           "lower": {
-            "timestamp": "2023-08-27T23:12:15Z",
-            "type": "date-time"
+            "type": "date-time",
+            "timestamp": "2023-08-27T23:12:15Z"
           },
-          "type": "AttributeInRange",
           "upper": {
-            "timestamp": "2023-08-29T23:12:15Z",
-            "type": "date-time"
+            "type": "date-time",
+            "timestamp": "2023-08-29T23:12:15Z"
           }
         },
         {
-          "attributeTag": "nationality",
-          "type": "RevealAttribute"
+          "type": "RevealAttribute",
+          "attributeTag": "nationality"
         }
-      ],
-      "type": [
-        "ConcordiumStatementV1",
-        "ConcordiumIdBasedStatement"
       ]
     }
   ]
