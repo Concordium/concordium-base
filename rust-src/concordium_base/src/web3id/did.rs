@@ -375,11 +375,9 @@ mod tests {
     use super::*;
     use crate::common;
     use crate::elgamal::Cipher;
-    use crate::id::constants::AttributeKind;
     use crate::id::secret_sharing::Threshold;
-    use crate::id::types::{ArIdentity, ChainArData, GlobalContext};
-    use crate::web3id::v1::{CredentialStatementV1, RequestV1};
-    use crate::web3id::{fixtures, CommitmentInputs, IdentityCredentialStatement, Web3IdAttribute};
+    use crate::id::types::{ArIdentity, ChainArData};
+    use crate::web3id::fixtures;
     use std::collections::BTreeMap;
 
     #[test]
