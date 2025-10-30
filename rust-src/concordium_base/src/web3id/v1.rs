@@ -9,11 +9,6 @@ use crate::web3id::{
     Web3IdCredentialProof, Web3IdCredentialStatement, Web3idCredentialMetadata,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct IdentityCredentialId {
-    a: String,
-}
-
 /// Context challenge that serves as a distinguishing context when requesting
 /// proofs.
 #[derive(
@@ -147,18 +142,13 @@ impl<P: Pairing<ScalarField = C::Scalar>, C: Curve, AttributeType: Attribute<C::
                 commitments.serial(out);
                 proofs.serial(out)
             }
-            CredentialProofV1::Identity(IdentityCredentialProof {
-                created,
-                network,
-                id_attr_cred_info,
-                proofs,
-            }) => {
+            CredentialProofV1::Identity(IdentityCredentialProof { .. }) => {
                 // todo ar update
                 2u8.serial(out);
-                created.timestamp_millis().serial(out);
-                network.serial(out);
-                id_attr_cred_info.serial(out);
-                proofs.serial(out)
+                // created.timestamp_millis().serial(out);
+                // network.serial(out);
+                // id_attr_cred_info.serial(out);
+                // proofs.serial(out)
             }
         }
     }

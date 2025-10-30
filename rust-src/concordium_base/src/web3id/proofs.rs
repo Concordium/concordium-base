@@ -8,10 +8,11 @@ use crate::{
 
 use crate::web3id::{
     AccountCredentialProof, AccountCredentialStatement, CommitmentInputs, CredentialHolderId,
-    CredentialProof, CredentialStatement, CredentialsInputs, IdentityCredentialProof,
-    IdentityCredentialStatement, LinkingProof, Presentation, PresentationVerificationError,
-    ProofError, ProofMetadata, Request, Sha256Challenge, SignedCommitments, StatementWithProof,
-    WeakLinkingProof, Web3IdCredentialProof, Web3IdCredentialStatement, Web3IdSigner,
+    CredentialProof, CredentialStatement, CredentialsInputs, IdentityCredentialId,
+    IdentityCredentialProof, IdentityCredentialProofs, IdentityCredentialStatement, LinkingProof,
+    Presentation, PresentationVerificationError, ProofError, ProofMetadata, Request,
+    Sha256Challenge, SignedCommitments, StatementWithProof, WeakLinkingProof,
+    Web3IdCredentialProof, Web3IdCredentialStatement, Web3IdSigner,
     COMMITMENT_SIGNATURE_DOMAIN_STRING, LINKING_DOMAIN_STRING,
 };
 use ed25519_dalek::Verifier;
@@ -22,7 +23,9 @@ use crate::id::id_proof_types::{AtomicStatement, ProofVersion};
 use crate::id::identity_attributes_credentials;
 use crate::id::identity_attributes_credentials::IdentityAttributeHandling;
 use crate::id::types::{
-    HasAttributeRandomness, HasAttributeValues, IdentityAttribute, IpContextOnly,
+    HasAttributeRandomness, HasAttributeValues, IdentityAttribute,
+    IdentityAttributesCredentialsInfo, IdentityAttributesCredentialsProofs,
+    IdentityAttributesCredentialsValues, IpContextOnly,
 };
 use crate::pedersen_commitment::Commitment;
 use concordium_contracts_common::ContractAddress;
@@ -143,13 +146,24 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             return false;
         };
 
+        let id_attr_cred_info = IdentityAttributesCredentialsInfo {
+            values: IdentityAttributesCredentialsValues {
+                ip_identity: self.issuer,
+                threshold: self.cred_id.threshold,
+                ar_data: self.cred_id.ar_data.clone(),
+                attributes: self.attributes.clone(),
+                validity: self.validity.clone(),
+            },
+            proofs: self.proofs.identity_attributes_proofs.clone(),
+        };
+
         if identity_attributes_credentials::verify_identity_attributes(
             global_context,
             IpContextOnly {
                 ip_info,
                 ars_infos: &ars_infos.anonymity_revokers,
             },
-            &self.id_attr_cred_info,
+            &id_attr_cred_info,
             transcript,
         )
         .is_err()
@@ -158,8 +172,6 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         }
 
         let cmm_attributes: BTreeMap<_, _> = self
-            .id_attr_cred_info
-            .values
             .attributes
             .iter()
             .filter_map(|(tag, attr)| match attr {
@@ -168,7 +180,12 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             })
             .collect();
 
-        verify_statements(&self.proofs, &cmm_attributes, global_context, transcript)
+        verify_statements(
+            &self.proofs.statement_proofs,
+            &cmm_attributes,
+            global_context,
+            transcript,
+        )
     }
 }
 
@@ -325,7 +342,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityCredentialStatement<
             )
             .map_err(|err| ProofError::IdentityAttributeCredentials(err.to_string()))?;
 
-        let proofs = prove_statements(
+        let statement_proofs = prove_statements(
             self.statement,
             &id_object.get_attribute_list().alist,
             &id_attr_cmm_rand.attributes_rand,
@@ -334,11 +351,24 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityCredentialStatement<
             csprng,
         )?;
 
+        let proofs = IdentityCredentialProofs {
+            identity_attributes_proofs: id_attr_cred_info.proofs,
+            statement_proofs,
+        };
+
+        let cred_id = IdentityCredentialId {
+            threshold: id_attr_cred_info.values.threshold,
+            ar_data: id_attr_cred_info.values.ar_data,
+        };
+
         Ok(IdentityCredentialProof {
             proofs,
             network: self.network,
+            cred_id,
+            issuer: id_attr_cred_info.values.ip_identity,
+            attributes: id_attr_cred_info.values.attributes,
             created: now,
-            id_attr_cred_info,
+            validity: id_attr_cred_info.values.validity,
         })
     }
 }

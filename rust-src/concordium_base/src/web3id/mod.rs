@@ -12,8 +12,9 @@ pub mod v1;
 mod test;
 
 use crate::id::types::{
-    ArInfos, CredentialValidity, HasIdentityObjectFields, IdObjectUseData,
-    IdentityAttributesCredentialsInfo, IdentityObjectV1, IpContextOnly, IpInfo,
+    ArIdentity, ArInfos, ChainArData, CredentialValidity, HasIdentityObjectFields, IdObjectUseData,
+    IdentityAttribute, IdentityAttributesCredentialsInfo, IdentityAttributesCredentialsProofs,
+    IdentityObjectV1, IpContextOnly, IpInfo,
 };
 use crate::{
     base::CredentialRegistrationID,
@@ -34,6 +35,7 @@ use concordium_contracts_common::{
 use crate::web3id::did::{IdentifierType, Method, Network};
 
 use crate::curve_arithmetic::Pairing;
+use crate::id::secret_sharing::Threshold;
 use serde::de::DeserializeOwned;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -303,12 +305,12 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 {
     pub fn metadata(&self) -> IdentityCredentialMetadata {
         let IdentityCredentialProof {
-            id_attr_cred_info, ..
+            issuer, validity, ..
         } = self;
 
         IdentityCredentialMetadata {
-            issuer: id_attr_cred_info.values.ip_identity,
-            validity: id_attr_cred_info.values.validity.clone(),
+            issuer: issuer.clone(),
+            validity: validity.clone(),
         }
     }
 
@@ -320,7 +322,11 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 
         IdentityCredentialStatement {
             network: *network,
-            statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
+            statement: proofs
+                .statement_proofs
+                .iter()
+                .map(|(x, _)| x.clone())
+                .collect(),
         }
     }
 }
@@ -373,6 +379,19 @@ pub struct AccountCredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>>
     pub proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdentityCredentialId<C: Curve> {
+    /// Anonymity revocation threshold. Must be <= length of ar_data.
+    pub threshold: Threshold,
+    /// Anonymity revocation data. List of anonymity revokers which can revoke
+    /// identity. NB: The order is important since it is the same order as that
+    /// signed by the identity provider, and permuting the list will invalidate
+    /// the signature from the identity provider.
+    // #[map_size_length = 2]
+    // #[serde(rename = "arData", deserialize_with = "deserialize_ar_data")]
+    pub ar_data: BTreeMap<ArIdentity, ChainArData<C>>,
+}
+
 /// A proof of identity credentials. This contains almost
 /// all the information needed to verify it, except the public commitments.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -384,9 +403,29 @@ pub struct IdentityCredentialProof<
     /// Creation timestamp of the proof.
     pub created: chrono::DateTime<chrono::Utc>,
     pub network: Network,
-    /// Commitments to attribute values and their proofs
-    pub id_attr_cred_info: IdentityAttributesCredentialsInfo<P, C, AttributeType>,
-    pub proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
+    pub cred_id: IdentityCredentialId<C>,
+    /// Issuer of this credential, the identity provider index on the
+    /// relevant network.
+    pub issuer: IpIdentity,
+    /// The attributes that are part of the identity credentials
+    // #[map_size_length = 2]
+    // #[serde(rename = "attributes")]
+    pub attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
+    /// Policy of this credential object.
+    // #[serde(rename = "validity")]
+    pub validity: CredentialValidity,
+    // pub id_attr_cred_info: IdentityAttributesCredentialsInfo<P, C, AttributeType>,
+    pub proofs: IdentityCredentialProofs<P, C, AttributeType>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IdentityCredentialProofs<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    pub identity_attributes_proofs: IdentityAttributesCredentialsProofs<P, C>,
+    pub statement_proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
 }
 
 /// A proof of Web3 credentials. This contains almost

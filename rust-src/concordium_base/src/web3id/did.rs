@@ -1,6 +1,7 @@
 //! Definition of Concordium DIDs and their parser.
 
-use crate::web3id::v1::IdentityCredentialId;
+use crate::id::constants::ArCurve;
+use crate::web3id::IdentityCredentialId;
 use crate::{base::CredentialRegistrationID, common::base16_decode_string, id::types::IpIdentity};
 use concordium_contracts_common::{
     AccountAddress, ContractAddress, EntrypointName, OwnedEntrypointName, OwnedParameter,
@@ -82,7 +83,9 @@ pub enum IdentifierType {
     /// Reference to an account credential via its the account credential registration ID.
     AccountCredential { cred_id: CredentialRegistrationID },
     /// Reference to an identity credential via the IdCredSec encryption.
-    IdentityCredential { cred_id: IdentityCredentialId }, // todo ar test
+    IdentityCredential {
+        cred_id: IdentityCredentialId<ArCurve>,
+    }, // todo ar test
     /// Reference to a specific smart contract instance.
     ContractData {
         address: ContractAddress,

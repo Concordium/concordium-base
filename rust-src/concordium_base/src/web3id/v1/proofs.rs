@@ -905,7 +905,7 @@ pub mod tests {
         else {
             panic!("should be account proof");
         };
-        proofs[2].0 = AtomicStatement::AttributeInRange {
+        proofs.statement_proofs[2].0 = AtomicStatement::AttributeInRange {
             statement: AttributeInRangeStatement {
                 attribute_tag: 3.into(),
                 lower: Web3IdAttribute::Numeric(200),
@@ -945,7 +945,7 @@ pub mod tests {
             credential_statements,
         };
 
-        let proof = request
+        let mut proof = request
             .clone()
             .prove(
                 &global_context,
@@ -954,23 +954,22 @@ pub mod tests {
             .expect("prove");
 
         // change attribute credentials proof to be invalid
-        let CredentialProofV1::Identity(IdentityCredentialProof {
-            id_attr_cred_info, ..
-        }) = &mut proof.verifiable_credential[0]
+        let CredentialProofV1::Identity(IdentityCredentialProof { proofs, .. }) =
+            &mut proof.verifiable_credential[0]
         else {
             panic!("should be account proof");
         };
-        let mut ar_keys = id_attr_cred_info.proofs.proof_id_cred_pub.keys();
+        let mut ar_keys = proofs.identity_attributes_proofs.proof_id_cred_pub.keys();
         let ar1 = *ar_keys.next().unwrap();
         let ar2 = *ar_keys.next().unwrap();
-        let tmp = id_attr_cred_info.proofs.proof_id_cred_pub[&ar1].clone();
-        *id_attr_cred_info
-            .proofs
+        let tmp = proofs.identity_attributes_proofs.proof_id_cred_pub[&ar1].clone();
+        *proofs
+            .identity_attributes_proofs
             .proof_id_cred_pub
             .get_mut(&ar1)
-            .unwrap() = id_attr_cred_info.proofs.proof_id_cred_pub[&ar2].clone();
-        *id_attr_cred_info
-            .proofs
+            .unwrap() = proofs.identity_attributes_proofs.proof_id_cred_pub[&ar2].clone();
+        *proofs
+            .identity_attributes_proofs
             .proof_id_cred_pub
             .get_mut(&ar2)
             .unwrap() = tmp;
