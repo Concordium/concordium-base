@@ -2,7 +2,9 @@
 
 use crate::id::constants::ArCurve;
 use crate::web3id::IdentityCredentialId;
-use crate::{base::CredentialRegistrationID, common::base16_decode_string, id::types::IpIdentity};
+use crate::{
+    base::CredentialRegistrationID, common, common::base16_decode_string, id::types::IpIdentity,
+};
 use concordium_contracts_common::{
     AccountAddress, ContractAddress, EntrypointName, OwnedEntrypointName, OwnedParameter,
 };
@@ -12,7 +14,7 @@ use nom::{
     character::complete::{self, anychar},
     combinator::{cut, recognize},
     multi::many_m_n,
-    IResult,
+    AsBytes, IResult,
 };
 
 #[derive(
@@ -189,8 +191,9 @@ impl std::fmt::Display for Method {
             IdentifierType::AccountCredential { cred_id } => {
                 write!(f, "did:ccd:{}:cred:{cred_id}", self.network)
             }
-            IdentifierType::IdentityCredential { .. } => {
-                todo!()
+            IdentifierType::IdentityCredential { cred_id } => {
+                let cred_id_hex = hex::encode(common::to_bytes(&cred_id));
+                write!(f, "did:ccd:{}:idcred:{cred_id_hex}", self.network)
             }
             IdentifierType::ContractData {
                 address,
@@ -259,13 +262,24 @@ fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
         })?;
         Ok((input, IdentifierType::Account { address }))
     };
-    let credential = |input: &'a str| {
+    let account_credential = |input: &'a str| {
         let (input, _) = tag("cred:")(input)?;
         let (input, data) = cut(recognize(many_m_n(96, 96, cut(anychar))))(input)?;
         let cred_id = data.parse::<CredentialRegistrationID>().map_err(|_| {
             nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify))
         })?;
         Ok((input, IdentifierType::AccountCredential { cred_id }))
+    };
+    let identity_credential = |input: &'a str| {
+        let (input, _) = tag("idcred:")(input)?;
+        let bytes = hex::decode(input).map_err(|_| {
+            nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify))
+        })?;
+        let cred_id: IdentityCredentialId<ArCurve> = common::from_bytes(&mut bytes.as_bytes())
+            .map_err(|_| {
+                nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify))
+            })?;
+        Ok(("", IdentifierType::IdentityCredential { cred_id }))
     };
     let contract = |input| {
         let (input, _) = tag("sci:")(input)?;
@@ -337,7 +351,14 @@ fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
         Ok((input, IdentifierType::Idp { idp_identity }))
     };
 
-    alt((account, credential, contract, pkc, idp))(input)
+    alt((
+        account,
+        account_credential,
+        identity_credential,
+        contract,
+        pkc,
+        idp,
+    ))(input)
 }
 
 /// Parse a DID, returning either an error or the parsed method and leftover
@@ -352,6 +373,14 @@ pub fn parse_did(input: &str) -> IResult<&str, Method> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common;
+    use crate::elgamal::Cipher;
+    use crate::id::constants::AttributeKind;
+    use crate::id::secret_sharing::Threshold;
+    use crate::id::types::{ArIdentity, ChainArData, GlobalContext};
+    use crate::web3id::v1::{CredentialStatementV1, RequestV1};
+    use crate::web3id::{fixtures, CommitmentInputs, IdentityCredentialStatement, Web3IdAttribute};
+    use std::collections::BTreeMap;
 
     #[test]
     fn test_account() -> anyhow::Result<()> {
@@ -479,8 +508,9 @@ mod tests {
         Ok(())
     }
 
+    /// On-chain account credential
     #[test]
-    fn test_id_credential() -> anyhow::Result<()> {
+    fn test_account_credential() -> anyhow::Result<()> {
         let cred_id = "a5bedc6d92d6cc8333684aa69091095c425d0b5971f554964a6ac8e297a3074748d25268f1d217234c400f3103669f90".parse()?;
         let target = Method {
             network: Network::Mainnet,
@@ -561,5 +591,68 @@ mod tests {
             .parse::<Method>()
             .is_err());
         Ok(())
+    }
+
+    /// Create an [`IdentityCredentialId`] to use in tests
+    fn identity_cred_id_fixture() -> IdentityCredentialId<ArCurve> {
+        let threshold = Threshold(4);
+        let mut ar_data = BTreeMap::new();
+        ar_data.insert(
+            ArIdentity::try_from(1).unwrap(),
+            ChainArData {
+                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed0()),
+            },
+        );
+        ar_data.insert(
+            ArIdentity::try_from(2).unwrap(),
+            ChainArData {
+                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed0()),
+            },
+        );
+        ar_data.insert(
+            ArIdentity::try_from(3).unwrap(),
+            ChainArData {
+                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed0()),
+            },
+        );
+
+        IdentityCredentialId { threshold, ar_data }
+    }
+
+    #[test]
+    fn test_identity_credential() {
+        let cred_id = identity_cred_id_fixture();
+        let cred_id_hex = hex::encode(common::to_bytes(&cred_id));
+
+        let target = Method {
+            network: Network::Mainnet,
+            ty: IdentifierType::IdentityCredential { cred_id },
+        };
+
+        assert_eq!(
+            format!("did:ccd:idcred:{cred_id_hex}")
+                .parse::<Method>()
+                .unwrap(),
+            target
+        );
+        assert_eq!(
+            format!("did:ccd:mainnet:idcred:{cred_id_hex}")
+                .parse::<Method>()
+                .unwrap(),
+            target
+        );
+        let s = target.to_string();
+        assert_eq!(s, "did:ccd:mainnet:idcred:04000000000000000300000001ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e00000002ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e00000003ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e");
+        assert_eq!(s.parse::<Method>().unwrap(), target);
+        assert_eq!(
+            format!("did:ccd:testnet:idcred:{cred_id_hex}")
+                .parse::<Method>()
+                .unwrap(),
+            Method {
+                network: Network::Testnet,
+                ..target
+            }
+        );
+        assert!("did:ccd:idcred:aaff00dd".parse::<Method>().is_err());
     }
 }

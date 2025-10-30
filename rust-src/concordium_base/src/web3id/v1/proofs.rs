@@ -219,6 +219,7 @@ fn append_context(digest: &mut impl StructuredDigest, context: &ContextChallenge
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use std::collections::BTreeMap;
 
     use crate::id::constants::{ArCurve, IpPairing};
     use crate::id::id_proof_types::{AtomicStatement, AttributeInRangeStatement};
@@ -245,8 +246,6 @@ pub mod tests {
 
     /// Test that constructing proofs for web3 only credentials works in the
     /// sense that the proof verifies.
-    ///
-    /// JSON serialization of requests and presentations is also tested.
     #[test]
     fn test_completeness_web3() {
         let challenge = challenge_fixture();
@@ -270,6 +269,55 @@ pub mod tests {
                 contract: web3_cred_fixture.contract,
                 credential: web3_cred_fixture.cred_id,
                 statement: statements,
+            })];
+
+        let request = RequestV1::<ArCurve, Web3IdAttribute> {
+            challenge,
+            credential_statements,
+        };
+
+        let proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [web3_cred_fixture.commitment_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        let public = vec![web3_cred_fixture.credential_inputs];
+        assert_eq!(
+            proof
+                .verify(&global_context, public.iter())
+                .expect("verify"),
+            request,
+            "verify request"
+        );
+    }
+
+    /// Test that constructing proofs for web3 only credentials works in the
+    /// sense that the proof verifies. Tests empty set of statements.
+    #[test]
+    fn test_completeness_web3_empty() {
+        let challenge = challenge_fixture();
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let web3_cred_fixture =
+            fixtures::web3_credentials_fixture(BTreeMap::default(), &global_context);
+
+        let credential_statements =
+            vec![CredentialStatementV1::Web3Id(Web3IdCredentialStatement {
+                ty: [
+                    "VerifiableCredential".into(),
+                    "ConcordiumVerifiableCredential".into(),
+                    "TestCredential".into(),
+                ]
+                .into_iter()
+                .collect(),
+                network: Network::Testnet,
+                contract: web3_cred_fixture.contract,
+                credential: web3_cred_fixture.cred_id,
+                statement: vec![],
             })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
@@ -519,8 +567,6 @@ pub mod tests {
 
     /// Test that constructing proofs for a mixed (both web3 and account credentials
     /// involved) request works in the sense that the proof verifies.
-    ///
-    /// JSON serialization of requests and presentations is also tested.
     #[test]
     fn test_completeness_web3_and_account() {
         let challenge = challenge_fixture();
@@ -601,6 +647,46 @@ pub mod tests {
                 network: Network::Testnet,
                 cred_id: acc_cred_fixture.cred_id,
                 statement: statements,
+            })];
+
+        let request = RequestV1::<ArCurve, Web3IdAttribute> {
+            challenge,
+            credential_statements,
+        };
+
+        let proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [acc_cred_fixture.commitment_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        let public = vec![acc_cred_fixture.credential_inputs];
+        assert_eq!(
+            proof
+                .verify(&global_context, public.iter())
+                .expect("verify"),
+            request,
+            "verify request"
+        );
+    }
+
+    /// Test prove and verify presentation for account credentials. Tests empty set of statements.
+    #[test]
+    fn test_completeness_account_empty() {
+        let challenge = challenge_fixture();
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let acc_cred_fixture =
+            fixtures::account_credentials_fixture(BTreeMap::default(), &global_context);
+
+        let credential_statements =
+            vec![CredentialStatementV1::Account(AccountCredentialStatement {
+                network: Network::Testnet,
+                cred_id: acc_cred_fixture.cred_id,
+                statement: vec![],
             })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
@@ -841,6 +927,47 @@ pub mod tests {
                 network: Network::Testnet,
                 issuer: id_cred_fixture.issuer,
                 statement: statements,
+            },
+        )];
+
+        let request = RequestV1::<ArCurve, Web3IdAttribute> {
+            challenge,
+            credential_statements,
+        };
+
+        let proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [id_cred_fixture.commitment_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        let public = vec![id_cred_fixture.credential_inputs];
+        assert_eq!(
+            proof
+                .verify(&global_context, public.iter())
+                .expect("verify"),
+            request,
+            "verify request"
+        );
+    }
+
+    /// Test prove and verify presentation for identity credentials. Tests empty set of statements.
+    #[test]
+    fn test_completeness_identity_empty() {
+        let challenge = challenge_fixture();
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let id_cred_fixture =
+            fixtures::identity_credentials_fixture(BTreeMap::default(), &global_context);
+
+        let credential_statements = vec![CredentialStatementV1::Identity(
+            IdentityCredentialStatement {
+                network: Network::Testnet,
+                issuer: id_cred_fixture.issuer,
+                statement: vec![],
             },
         )];
 

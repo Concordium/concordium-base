@@ -583,8 +583,6 @@ pub mod tests {
 
     /// Test that constructing proofs for web3 only credentials works in the
     /// sense that the proof verifies.
-    ///
-    /// JSON serialization of requests and presentations is also tested.
     #[test]
     fn test_completeness_web3() {
         let challenge = Sha256Challenge::new(fixtures::seed0().gen());
@@ -607,6 +605,54 @@ pub mod tests {
             contract: web3_cred_fixture.contract,
             credential: web3_cred_fixture.cred_id,
             statement: statements,
+        })];
+
+        let request = Request::<ArCurve, Web3IdAttribute> {
+            challenge,
+            credential_statements,
+        };
+
+        let proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [web3_cred_fixture.commitment_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        let public = vec![web3_cred_fixture.credential_inputs];
+        assert_eq!(
+            proof
+                .verify(&global_context, public.iter())
+                .expect("verify"),
+            request,
+            "verify request"
+        );
+    }
+
+    /// Test that constructing proofs for web3 only credentials works in the
+    /// sense that the proof verifies. Test empty set of statements
+    #[test]
+    fn test_completeness_web3_empty() {
+        let challenge = Sha256Challenge::new(fixtures::seed0().gen());
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let web3_cred_fixture =
+            fixtures::web3_credentials_fixture(BTreeMap::default(), &global_context);
+
+        let credential_statements = vec![CredentialStatement::Web3Id(Web3IdCredentialStatement {
+            ty: [
+                "VerifiableCredential".into(),
+                "ConcordiumVerifiableCredential".into(),
+                "TestCredential".into(),
+            ]
+            .into_iter()
+            .collect(),
+            network: Network::Testnet,
+            contract: web3_cred_fixture.contract,
+            credential: web3_cred_fixture.cred_id,
+            statement: vec![],
         })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
@@ -845,8 +891,6 @@ pub mod tests {
 
     /// Test that constructing proofs for a mixed (both web3 and account credentials
     /// involved) request works in the sense that the proof verifies.
-    ///
-    /// JSON serialization of requests and presentations is also tested.
     #[test]
     fn test_completeness_web3_and_account() {
         let challenge = Sha256Challenge::new(fixtures::seed0().gen());
@@ -927,6 +971,46 @@ pub mod tests {
                 network: Network::Testnet,
                 cred_id: acc_cred_fixture.cred_id,
                 statement: statements,
+            })];
+
+        let request = Request::<ArCurve, Web3IdAttribute> {
+            challenge,
+            credential_statements,
+        };
+
+        let proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [acc_cred_fixture.commitment_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        let public = vec![acc_cred_fixture.credential_inputs];
+        assert_eq!(
+            proof
+                .verify(&global_context, public.iter())
+                .expect("verify"),
+            request,
+            "verify request"
+        );
+    }
+
+    /// Test prove and verify presentation for account credentials. Test empty set of statements
+    #[test]
+    fn test_completeness_account_empty() {
+        let challenge = Sha256Challenge::new(fixtures::seed0().gen());
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let acc_cred_fixture =
+            fixtures::account_credentials_fixture(BTreeMap::default(), &global_context);
+
+        let credential_statements =
+            vec![CredentialStatement::Account(AccountCredentialStatement {
+                network: Network::Testnet,
+                cred_id: acc_cred_fixture.cred_id,
+                statement: vec![],
             })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
