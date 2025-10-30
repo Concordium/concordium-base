@@ -74,6 +74,12 @@ const CONCORDIUM_ACCOUNT_BASED_CREDENTIAL_TYPE: &'static str = "ConcordiumAccoun
 const CONCORDIUM_WEB3_BASED_CREDENTIAL_TYPE: &'static str = "ConcordiumWeb3BasedCredential";
 const CONCORDIUM_IDENTITY_BASED_CREDENTIAL_TYPE: &'static str = "ConcordiumIdBasedCredential";
 
+const CONCORDIUM_STATEMENT_V1_TYPE: &'static str = "ConcordiumStatementV1";
+const CONCORDIUM_ACCOUNT_BASED_STATEMENT_TYPE: &'static str = "ConcordiumAccountBasedStatement";
+const CONCORDIUM_WEB3_BASED_STATEMENT_TYPE: &'static str = "ConcordiumWeb3BasedStatement";
+const CONCORDIUM_IDENTITY_BASED_STATEMENT_TYPE: &'static str = "ConcordiumIdBasedStatement";
+
+
 impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
     for CredentialStatementV1<C, AttributeType>
 {
@@ -88,9 +94,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 statement,
             }) => {
                 let json = serde_json::json!({
-                    "type": [VERIFIABLE_CREDENTIAL_TYPE,
-                             CONCORDIUM_VERIFIABLE_CREDENTIAL_V1_TYPE,
-                             CONCORDIUM_ACCOUNT_BASED_CREDENTIAL_TYPE],
+                    "type": [CONCORDIUM_STATEMENT_V1_TYPE,
+                             CONCORDIUM_ACCOUNT_BASED_STATEMENT_TYPE],
                     "id": format!("did:ccd:{network}:cred:{cred_id}"),
                     "statement": statement,
                 });
@@ -123,9 +128,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 };
 
                 let json = serde_json::json!({
-                    "type": [VERIFIABLE_CREDENTIAL_TYPE,
-                             CONCORDIUM_VERIFIABLE_CREDENTIAL_V1_TYPE,
-                             CONCORDIUM_IDENTITY_BASED_CREDENTIAL_TYPE],
+                    "type": [CONCORDIUM_STATEMENT_V1_TYPE,
+                             CONCORDIUM_IDENTITY_BASED_STATEMENT_TYPE],
                     "issuer": did,
                     "statement": statement,
                 });
@@ -150,7 +154,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
             Ok(
                 if types
                     .iter()
-                    .any(|ty| ty == CONCORDIUM_ACCOUNT_BASED_CREDENTIAL_TYPE)
+                    .any(|ty| ty == CONCORDIUM_ACCOUNT_BASED_STATEMENT_TYPE)
                 {
                     let did: did::Method = serde_json::from_value(take_field(&mut value, "id")?)?;
                     let did::IdentifierType::AccountCredential { cred_id } = did.ty else {
@@ -165,7 +169,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
                     })
                 } else if types
                     .iter()
-                    .any(|ty| ty == CONCORDIUM_WEB3_BASED_CREDENTIAL_TYPE)
+                    .any(|ty| ty == CONCORDIUM_WEB3_BASED_CREDENTIAL_TYPE) // todo ar do something about this type
                 {
                     let did: did::Method = serde_json::from_value(take_field(&mut value, "id")?)?;
                     let did::IdentifierType::ContractData {
@@ -192,7 +196,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
                     })
                 } else if types
                     .iter()
-                    .any(|ty| ty == CONCORDIUM_IDENTITY_BASED_CREDENTIAL_TYPE)
+                    .any(|ty| ty == CONCORDIUM_IDENTITY_BASED_STATEMENT_TYPE)
                 {
                     let did: did::Method =
                         serde_json::from_value(take_field(&mut value, "issuer")?)?;
@@ -659,9 +663,8 @@ mod tests {
         }
       ],
       "type": [
-        "VerifiableCredential",
-        "ConcordiumVerifiableCredentialV1",
-        "ConcordiumAccountBasedCredential"
+        "ConcordiumStatementV1",
+        "ConcordiumAccountBasedStatement"
       ]
     }
   ]
@@ -1340,9 +1343,8 @@ mod tests {
         }
       ],
       "type": [
-        "VerifiableCredential",
-        "ConcordiumVerifiableCredentialV1",
-        "ConcordiumIdBasedCredential"
+        "ConcordiumStatementV1",
+        "ConcordiumIdBasedStatement"
       ]
     }
   ]
