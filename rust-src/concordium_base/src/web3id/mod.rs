@@ -2576,9 +2576,15 @@ mod tests {
 mod fixtures {
     use super::*;
     use crate::base::CredentialRegistrationID;
+    use std::fmt::Debug;
 
+    use crate::common;
     use crate::curve_arithmetic::Value;
     use crate::id::constants::{ArCurve, IpPairing};
+    use crate::id::id_proof_types::{
+        AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
+        RevealAttributeStatement,
+    };
     use crate::id::types::{
         ArInfos, AttributeList, AttributeTag, IdentityObjectV1, IpData, IpIdentity, YearMonth,
     };
@@ -2587,7 +2593,7 @@ mod fixtures {
         CredentialHolderId, OwnedCommitmentInputs, OwnedIdentityCommitmentInputs, Web3IdAttribute,
     };
     use concordium_contracts_common::ContractAddress;
-    use rand::SeedableRng;
+    use rand::{Rng, SeedableRng};
 
     pub struct IdentityCredentialsFixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> {
         pub commitment_inputs:
@@ -2604,6 +2610,86 @@ mod fixtures {
         {
             CommitmentInputs::from(&self.commitment_inputs)
         }
+    }
+
+
+    pub fn statements_and_attributes<TagType: FromStr + common::Serialize + Ord>() -> (
+        Vec<AtomicStatement<ArCurve, TagType, Web3IdAttribute>>,
+        BTreeMap<TagType, Web3IdAttribute>,
+    )
+    where
+        <TagType as FromStr>::Err: Debug,
+    {
+        let statements = vec![
+            AtomicStatement::AttributeInSet {
+                statement: AttributeInSetStatement {
+                    attribute_tag: AttributeTag(1).to_string().parse().unwrap(),
+                    set: [
+                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    _phantom: PhantomData,
+                },
+            },
+            AtomicStatement::AttributeNotInSet {
+                statement: AttributeNotInSetStatement {
+                    attribute_tag: AttributeTag(2).to_string().parse().unwrap(),
+                    set: [
+                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    _phantom: PhantomData,
+                },
+            },
+            AtomicStatement::AttributeInRange {
+                statement: AttributeInRangeStatement {
+                    attribute_tag: AttributeTag(3).to_string().parse().unwrap(),
+                    lower: Web3IdAttribute::Numeric(80),
+                    upper: Web3IdAttribute::Numeric(1237),
+                    _phantom: PhantomData,
+                },
+            },
+            AtomicStatement::RevealAttribute {
+                statement: RevealAttributeStatement {
+                    attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
+                },
+            },
+        ];
+
+        // todo ar add timestamp
+
+        let attributes = [
+            (
+                AttributeTag(1).to_string().parse().unwrap(),
+                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+            ),
+            (
+                AttributeTag(2).to_string().parse().unwrap(),
+                Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
+            ),
+            (
+                AttributeTag(3).to_string().parse().unwrap(),
+                Web3IdAttribute::Numeric(137),
+            ),
+            (
+                AttributeTag(4).to_string().parse().unwrap(),
+                Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
+            ),
+            (
+                AttributeTag(5).to_string().parse().unwrap(),
+                Web3IdAttribute::String(AttributeKind::try_new("bb".into()).unwrap()),
+            ),
+        ]
+        .into_iter()
+        .collect();
+
+        (statements, attributes)
     }
 
     fn create_attribute_list<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(
