@@ -209,10 +209,10 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
 /// A presentation is the response to a [`RequestV1`]. It contains proofs for
 /// statements, ownership proof for all Web3 credentials, and a context. The
 /// only missing part to verify the proof are the public commitments.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PresentationV1<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -225,9 +225,9 @@ pub struct PresentationV1<
     pub linking_proof: LinkingProof,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
 /// A request for a proof. This is the statement and challenge. The secret data
 /// comes separately.
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct RequestV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub challenge: ContextChallenge,
     pub credential_statements: Vec<CredentialStatementV1<C, AttributeType>>,

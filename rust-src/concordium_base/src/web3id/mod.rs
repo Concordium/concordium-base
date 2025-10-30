@@ -34,9 +34,11 @@ use concordium_contracts_common::{
 
 use crate::web3id::did::{IdentifierType, Method, Network};
 
+use crate::common::{SerdeDeserialize, SerdeSerialize};
 use crate::curve_arithmetic::Pairing;
 use crate::id::secret_sharing::Threshold;
 use serde::de::DeserializeOwned;
+use serde::{Deserializer, Serializer};
 use std::{
     collections::{BTreeMap, BTreeSet},
     marker::PhantomData,
@@ -779,14 +781,44 @@ pub enum Web3IdChallengeMarker {}
 /// proofs.
 pub type Sha256Challenge = HashBytes<Web3IdChallengeMarker>;
 
+/// A request for a proof. This type is an enumeration over the supported request
+/// versions.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum VersionedRequest<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    V0(Request<C, AttributeType>),
+    V1(v1::RequestV1<C, AttributeType>),
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> SerdeSerialize
+    for VersionedRequest<C, AttributeType>
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        todo!()
+    }
+}
+
+impl<'de, C: Curve, AttributeType: Attribute<C::Scalar>> SerdeDeserialize<'de>
+    for VersionedRequest<C, AttributeType>
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        todo!()
+    }
+}
+
+/// A request for a proof. This is the statement and challenge. The secret data
+/// comes separately.
 #[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "camelCase")]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"
 ))]
-/// A request for a proof. This is the statement and challenge. The secret data
-/// comes separately.
 pub struct Request<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub challenge: Sha256Challenge,
     pub credential_statements: Vec<CredentialStatement<C, AttributeType>>,
@@ -955,12 +987,46 @@ pub enum CredentialHolderIdRole {}
 /// The owner of a Web3Id credential.
 pub type CredentialHolderId = Ed25519PublicKey<CredentialHolderIdRole>;
 
-#[derive(Debug, PartialEq, Eq, serde::Deserialize)]
-#[serde(bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"))]
-#[serde(try_from = "serde_json::Value")]
+/// A presentation is the response to a [`VersionedRequest`]. This type is an enumeration
+/// over the supported presentation versions.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum VersionedPresentation<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    V0(Presentation<C, AttributeType>),
+    V1(v1::PresentationV1<P, C, AttributeType>),
+}
+
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
+    SerdeSerialize for VersionedPresentation<P, C, AttributeType>
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        todo!()
+    }
+}
+
+impl<'de, P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
+    SerdeDeserialize<'de> for VersionedPresentation<P, C, AttributeType>
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        todo!()
+    }
+}
+
 /// A presentation is the response to a [`Request`]. It contains proofs for
 /// statements, ownership proof for all Web3 credentials, and a context. The
 /// only missing part to verify the proof are the public commitments.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"))]
+#[serde(try_from = "serde_json::Value")]
 pub struct Presentation<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub presentation_context: Sha256Challenge,
     pub verifiable_credential: Vec<CredentialProof<C, AttributeType>>,
@@ -1022,7 +1088,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
     }
 }
 
-#[derive(Debug, Eq, PartialEq, crate::common::SerdeBase16Serialize, crate::common::Serialize)]
+#[derive(
+    Debug, Clone, Eq, PartialEq, crate::common::SerdeBase16Serialize, crate::common::Serialize,
+)]
 /// A proof that establishes that the owner of the credential itself produced
 /// the proof. Technically this means that there is a signature on the entire
 /// rest of the presentation using the public key that is associated with the
@@ -1033,7 +1101,7 @@ struct WeakLinkingProof {
     signature: ed25519_dalek::Signature,
 }
 
-#[derive(Debug, Eq, PartialEq, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize)]
 #[serde(try_from = "serde_json::Value")]
 /// A proof that establishes that the owner of the credential has indeed created
 /// the presentation. At present this is a list of signatures.

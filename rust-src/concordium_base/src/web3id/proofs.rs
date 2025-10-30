@@ -62,7 +62,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
     /// In case of success returns the [`Request`] for which the presentation
     /// verifies.
     ///
-    /// **NB:** This only verifies the cryptographic consistentcy of the data.
+    /// **NB:** This only verifies the cryptographic consistency of the data.
     /// It does not check metadata, such as expiry. This should be checked
     /// separately by the verifier.
     pub fn verify<'a, P: Pairing<ScalarField = C::Scalar>>(
