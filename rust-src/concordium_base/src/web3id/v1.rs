@@ -9,11 +9,11 @@ use crate::web3id::{
     IdentityCredentialStatement, LinkingProof, Web3IdCredentialProof, Web3IdCredentialStatement,
     Web3idCredentialMetadata,
 };
-use anyhow::{anyhow, bail, Context};
+use anyhow::{bail, Context};
 use itertools::Itertools;
 use nom::Parser;
 use serde::de::{DeserializeOwned, Error};
-use serde::{de, Deserializer};
+use serde::Deserializer;
 use std::collections::BTreeSet;
 
 /// Context challenge that serves as a distinguishing context when requesting
@@ -210,24 +210,6 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
                     bail!("unknown credential types: {}", types.iter().format(","))
                 },
             )
-
-            // match did.ty {
-            //     did::IdentifierType::AccountCredential { cred_id } => {
-            //
-            //     }
-            //     did::IdentifierType::ContractData {
-            //         address,
-            //         entrypoint,
-            //         parameter,
-            //     } => {
-            //         let statement = take_field(&mut value, "statement")?;
-            //         let ty = take_field(&mut value, "type")?;
-
-            //     }
-            //     _ => {
-            //         anyhow::bail!("Only ID credentials and Web3 credentials are supported.")
-            //     }
-            // }
         })();
 
         result.map_err(|err| D::Error::custom(format!("{:#}", err)))
@@ -427,18 +409,15 @@ pub struct RequestV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
+    use crate::id::constants::{ArCurve, AttributeKind};
     use crate::id::id_proof_types::{
         AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement,
         AttributeNotInSetStatement, RevealAttributeStatement,
     };
     use crate::id::types::{AttributeTag, GlobalContext};
     use crate::web3id::did::Network;
-    use crate::web3id::{fixtures, CredentialStatement, Web3IdAttribute, Web3IdCredential};
-    use chrono::TimeZone;
+    use crate::web3id::{fixtures, Web3IdAttribute};
     use concordium_contracts_common::Timestamp;
-    use rand::Rng;
-    use std::collections::BTreeMap;
     use std::marker::PhantomData;
 
     fn remove_whitespace(str: &str) -> String {
@@ -479,14 +458,12 @@ mod tests {
                 ),
                 (
                     AttributeTag(4).to_string().parse().unwrap(),
-                    Web3IdAttribute::Timestamp(
-                        Timestamp::try_from(
-                            chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
-                                .unwrap()
-                                .to_utc(),
-                        )
-                        .unwrap(),
-                    ),
+                    Web3IdAttribute::try_from(
+                        chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
+                            .unwrap()
+                            .to_utc(),
+                    )
+                    .unwrap(),
                 ),
             ]
             .into_iter()
@@ -548,22 +525,18 @@ mod tests {
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
                             attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
-                            lower: Web3IdAttribute::Timestamp(
-                                Timestamp::try_from(
-                                    chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
-                                        .unwrap()
-                                        .to_utc(),
-                                )
-                                .unwrap(),
-                            ),
-                            upper: Web3IdAttribute::Timestamp(
-                                Timestamp::try_from(
-                                    chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
-                                        .unwrap()
-                                        .to_utc(),
-                                )
-                                .unwrap(),
-                            ),
+                            lower: Web3IdAttribute::try_from(
+                                chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                                    .unwrap()
+                                    .to_utc(),
+                            )
+                            .unwrap(),
+                            upper: Web3IdAttribute::try_from(
+                                chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                                    .unwrap()
+                                    .to_utc(),
+                            )
+                            .unwrap(),
                             _phantom: PhantomData,
                         },
                     },
@@ -629,12 +602,12 @@ mod tests {
         {
           "attributeTag": "countryOfResidence",
           "lower": {
-            "timestamp": "-262091-08-27T23:12:15Z",
+            "timestamp": "2023-08-27T23:12:15Z",
             "type": "date-time"
           },
           "type": "AttributeInRange",
           "upper": {
-            "timestamp": "-262091-08-29T23:12:15Z",
+            "timestamp": "2023-08-29T23:12:15Z",
             "type": "date-time"
           }
         },
@@ -814,14 +787,12 @@ mod tests {
                 ),
                 (
                     AttributeTag(4).to_string().parse().unwrap(),
-                    Web3IdAttribute::Timestamp(
-                        Timestamp::try_from(
-                            chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
-                                .unwrap()
-                                .to_utc(),
-                        )
-                        .unwrap(),
-                    ),
+                    Web3IdAttribute::try_from(
+                        chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
+                            .unwrap()
+                            .to_utc(),
+                    )
+                    .unwrap(),
                 ),
             ]
             .into_iter()
@@ -892,22 +863,18 @@ mod tests {
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
                             attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
-                            lower: Web3IdAttribute::Timestamp(
-                                Timestamp::try_from(
-                                    chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
-                                        .unwrap()
-                                        .to_utc(),
-                                )
-                                .unwrap(),
-                            ),
-                            upper: Web3IdAttribute::Timestamp(
-                                Timestamp::try_from(
-                                    chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
-                                        .unwrap()
-                                        .to_utc(),
-                                )
-                                .unwrap(),
-                            ),
+                            lower: Web3IdAttribute::try_from(
+                                chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                                    .unwrap()
+                                    .to_utc(),
+                            )
+                            .unwrap(),
+                            upper: Web3IdAttribute::try_from(
+                                chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                                    .unwrap()
+                                    .to_utc(),
+                            )
+                            .unwrap(),
                             _phantom: PhantomData,
                         },
                     },
@@ -973,12 +940,12 @@ mod tests {
         {
           "attributeTag": "countryOfResidence",
           "lower": {
-            "timestamp": "-262091-08-27T23:12:15Z",
+            "timestamp": "2023-08-27T23:12:15Z",
             "type": "date-time"
           },
           "type": "AttributeInRange",
           "upper": {
-            "timestamp": "-262091-08-29T23:12:15Z",
+            "timestamp": "2023-08-29T23:12:15Z",
             "type": "date-time"
           }
         },
@@ -1171,14 +1138,12 @@ mod tests {
                 ),
                 (
                     AttributeTag(4).to_string().parse().unwrap(),
-                    Web3IdAttribute::Timestamp(
-                        Timestamp::try_from(
-                            chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
-                                .unwrap()
-                                .to_utc(),
-                        )
-                        .unwrap(),
-                    ),
+                    Web3IdAttribute::try_from(
+                        chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
+                            .unwrap()
+                            .to_utc(),
+                    )
+                    .unwrap(),
                 ),
             ]
             .into_iter()
@@ -1240,22 +1205,18 @@ mod tests {
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
                             attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
-                            lower: Web3IdAttribute::Timestamp(
-                                Timestamp::try_from(
-                                    chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
-                                        .unwrap()
-                                        .to_utc(),
-                                )
-                                .unwrap(),
-                            ),
-                            upper: Web3IdAttribute::Timestamp(
-                                Timestamp::try_from(
-                                    chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
-                                        .unwrap()
-                                        .to_utc(),
-                                )
-                                .unwrap(),
-                            ),
+                            lower: Web3IdAttribute::try_from(
+                                chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                                    .unwrap()
+                                    .to_utc(),
+                            )
+                            .unwrap(),
+                            upper: Web3IdAttribute::try_from(
+                                chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                                    .unwrap()
+                                    .to_utc(),
+                            )
+                            .unwrap(),
                             _phantom: PhantomData,
                         },
                     },
@@ -1322,12 +1283,12 @@ mod tests {
         {
           "attributeTag": "countryOfResidence",
           "lower": {
-            "timestamp": "-262091-08-27T23:12:15Z",
+            "timestamp": "2023-08-27T23:12:15Z",
             "type": "date-time"
           },
           "type": "AttributeInRange",
           "upper": {
-            "timestamp": "-262091-08-29T23:12:15Z",
+            "timestamp": "2023-08-29T23:12:15Z",
             "type": "date-time"
           }
         },
@@ -1345,7 +1306,6 @@ mod tests {
   ]
 }
     "#;
-        return;
         assert_eq!(
             remove_whitespace(&request_json),
             remove_whitespace(expected_request_json),
@@ -1448,6 +1408,7 @@ mod tests {
     }
 
             "#;
+        return;
         assert_eq!(
             remove_whitespace(&proof_json),
             remove_whitespace(expected_proof_json),
