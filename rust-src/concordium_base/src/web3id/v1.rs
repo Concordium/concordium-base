@@ -394,6 +394,46 @@ pub struct PresentationV1<
     pub linking_proof: LinkingProof,
 }
 
+
+// impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<serde_json::Value>
+// for PresentationV1<P, C, AttributeType>
+// {
+//     type Error = anyhow::Error;
+//
+//     fn try_from(mut value: serde_json::Value) -> Result<Self, Self::Error> {
+//         let ty: String = serde_json::from_value(get_field(&mut value, "type")?)?;
+//         anyhow::ensure!(ty == "VerifiablePresentation");
+//         let presentation_context =
+//             serde_json::from_value(get_field(&mut value, "presentationContext")?)?;
+//         let verifiable_credential =
+//             serde_json::from_value(get_field(&mut value, "verifiableCredential")?)?;
+//         let linking_proof = serde_json::from_value(get_field(&mut value, "proof")?)?;
+//         Ok(Self {
+//             presentation_context,
+//             verifiable_credential,
+//             linking_proof,
+//         })
+//     }
+// }
+//
+// impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
+// for PresentationV1<P, C, AttributeType>
+// {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: serde::Serializer,
+//     {
+//         let json = serde_json::json!({
+//             "type": "VerifiablePresentation",
+//             "presentationContext": self.presentation_context,
+//             "verifiableCredential": &self.verifiable_credential,
+//             "proof": &self.linking_proof
+//         });
+//         json.serialize(serializer)
+//     }
+// }
+
+
 /// A request for a proof. This is the statement and challenge. The secret data
 /// comes separately.
 #[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Debug)]
@@ -402,7 +442,9 @@ pub struct PresentationV1<
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"
 ))]
 pub struct RequestV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    #[serde(rename="context")]
     pub challenge: ContextChallenge,
+    #[serde(rename="credentialStatements")]
     pub credential_statements: Vec<CredentialStatementV1<C, AttributeType>>,
 }
 
@@ -557,7 +599,7 @@ mod tests {
         println!("request:\n{}", request_json);
         let expected_request_json = r#"
 {
-  "challenge": {
+  "context": {
     "given": [
       {
         "label": "prop1",
@@ -571,7 +613,7 @@ mod tests {
       }
     ]
   },
-  "credential_statements": [
+  "credentialStatements": [
     {
       "id": "did:ccd:testnet:cred:856793e4ba5d058cea0b5c3a1c8affb272efcf53bbab77ee28d3e2270d5041d220c1e1a9c6c8619c84e40ebd70fb583e",
       "statement": [
@@ -895,7 +937,7 @@ mod tests {
         println!("request:\n{}", request_json);
         let expected_request_json = r#"
 {
-  "challenge": {
+  "context": {
     "given": [
       {
         "label": "prop1",
@@ -909,7 +951,7 @@ mod tests {
       }
     ]
   },
-  "credential_statements": [
+  "credentialStatements": [
     {
       "id": "did:ccd:testnet:sci:1337:42/credentialEntry/ee1aa49a4459dfe813a3cf6eb882041230c7b2558469de81f87c9bf23bf10a03",
       "statement": [
@@ -1238,7 +1280,7 @@ mod tests {
         println!("request:\n{}", request_json);
         let expected_request_json = r#"
 {
-  "challenge": {
+  "context": {
     "given": [
       {
         "label": "prop1",
@@ -1252,7 +1294,7 @@ mod tests {
       }
     ]
   },
-  "credential_statements": [
+  "credentialStatements": [
     {
       "issuer": "did:ccd:testnet:idp:0",
       "statement": [
