@@ -4,7 +4,6 @@
 //! The full proof of statements based on identity credential, which uses the proofs in the present module as a "sub-proof",
 //! is implemented in the [`web3id`](crate::web3id) module.
 
-
 use super::{account_holder, types::*, utils};
 use crate::pedersen_commitment::{CommitmentKey, Randomness};
 use crate::random_oracle::StructuredDigest;
