@@ -69,6 +69,11 @@ pub enum CredentialStatementV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     Identity(IdentityCredentialStatement<C, AttributeType>),
 }
 
+const CONCORDIUM_CONTEXT_INFORMATION_TYPE: &'static str = "ConcordiumContextInformationV1";
+
+const VERIFIABLE_PRESENTATION_TYPE: &'static str = "VerifiablePresentation";
+const CONCORDIUM_VERIFIABLE_PRESENTATION_TYPE: &'static str = "ConcordiumVerifiablePresentationV1";
+
 const VERIFIABLE_CREDENTIAL_TYPE: &'static str = "VerifiableCredential";
 const CONCORDIUM_VERIFIABLE_CREDENTIAL_V1_TYPE: &'static str = "ConcordiumVerifiableCredentialV1";
 const CONCORDIUM_ACCOUNT_BASED_CREDENTIAL_TYPE: &'static str = "ConcordiumAccountBasedCredential";
