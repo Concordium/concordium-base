@@ -24,8 +24,7 @@ use crate::id::identity_attributes_credentials;
 use crate::id::identity_attributes_credentials::IdentityAttributeHandling;
 use crate::id::types::{
     HasAttributeRandomness, HasAttributeValues, IdentityAttribute,
-    IdentityAttributesCredentialsInfo, IdentityAttributesCredentialsProofs,
-    IdentityAttributesCredentialsValues, IpContextOnly,
+    IdentityAttributesCredentialsInfo, IdentityAttributesCredentialsValues, IpContextOnly,
 };
 use crate::pedersen_commitment::Commitment;
 use concordium_contracts_common::ContractAddress;
@@ -576,13 +575,9 @@ pub mod tests {
     use super::*;
 
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
-    use crate::id::id_proof_types::{
-        AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement,
-        AttributeNotInSetStatement, RevealAttributeStatement,
-    };
+    use crate::id::id_proof_types::{AtomicStatement, AttributeInRangeStatement};
     use crate::web3id::did::Network;
     use crate::web3id::{fixtures, Sha256Challenge, Web3IdAttribute};
-    use concordium_contracts_common::Timestamp;
     use rand::Rng;
     use std::marker::PhantomData;
 

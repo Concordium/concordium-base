@@ -13,8 +13,8 @@ mod test;
 
 use crate::id::types::{
     ArIdentity, ArInfos, ChainArData, CredentialValidity, HasIdentityObjectFields, IdObjectUseData,
-    IdentityAttribute, IdentityAttributesCredentialsInfo, IdentityAttributesCredentialsProofs,
-    IdentityObjectV1, IpContextOnly, IpInfo,
+    IdentityAttribute, IdentityAttributesCredentialsProofs, IdentityObjectV1, IpContextOnly,
+    IpInfo,
 };
 use crate::{
     base::CredentialRegistrationID,
@@ -66,6 +66,8 @@ pub struct AccountCredentialStatement<C: Curve, AttributeType: Attribute<C::Scal
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IdentityCredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub network: Network,
+    // todo ar should the identity provider be here? document what is here and what is not
+    pub issuer: IpIdentity,
     /// Attribute statements
     pub statement: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
 }
@@ -317,11 +319,15 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     /// Extract the statement from the proof.
     pub fn statement(&self) -> IdentityCredentialStatement<C, AttributeType> {
         let IdentityCredentialProof {
-            network, proofs, ..
+            network,
+            proofs,
+            issuer,
+            ..
         } = self;
 
         IdentityCredentialStatement {
             network: *network,
+            issuer: *issuer,
             statement: proofs
                 .statement_proofs
                 .iter()
@@ -379,6 +385,7 @@ pub struct AccountCredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>>
     pub proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
 }
 
+/// Credential subject id.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IdentityCredentialId<C: Curve> {
     /// Anonymity revocation threshold. Must be <= length of ar_data.
@@ -2754,12 +2761,13 @@ mod fixtures {
         CredentialHolderId, OwnedCommitmentInputs, OwnedIdentityCommitmentInputs, Web3IdAttribute,
     };
     use concordium_contracts_common::ContractAddress;
-    use rand::{Rng, SeedableRng};
+    use rand::SeedableRng;
 
     pub struct IdentityCredentialsFixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> {
         pub commitment_inputs:
             OwnedCommitmentInputs<IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>,
         pub credential_inputs: CredentialsInputs<IpPairing, ArCurve>,
+        pub issuer: IpIdentity,
     }
 
     impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>
@@ -2946,11 +2954,15 @@ mod fixtures {
                 id_object_use_data,
             }));
 
-        let credential_inputs = CredentialsInputs::Identity { ip_info, ars_infos };
+        let credential_inputs = CredentialsInputs::Identity {
+            ip_info: ip_info.clone(),
+            ars_infos,
+        };
 
         IdentityCredentialsFixture {
             commitment_inputs,
             credential_inputs,
+            issuer: ip_info.ip_identity,
         }
     }
 

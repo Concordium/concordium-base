@@ -226,9 +226,8 @@ pub mod tests {
     use crate::web3id::v1::ContextProperty;
     use crate::web3id::{
         fixtures, AccountCredentialProof, AccountCredentialStatement, IdentityCredentialProof,
-        IdentityCredentialStatement, Sha256Challenge, Web3IdAttribute, Web3IdCredentialStatement,
+        IdentityCredentialStatement, Web3IdAttribute, Web3IdCredentialStatement,
     };
-    use rand::Rng;
     use std::marker::PhantomData;
 
     fn challenge_fixture() -> ContextChallenge {
@@ -840,6 +839,7 @@ pub mod tests {
         let credential_statements = vec![CredentialStatementV1::Identity(
             IdentityCredentialStatement {
                 network: Network::Testnet,
+                issuer: id_cred_fixture.issuer,
                 statement: statements,
             },
         )];
@@ -882,6 +882,7 @@ pub mod tests {
         let credential_statements = vec![CredentialStatementV1::Identity(
             IdentityCredentialStatement {
                 network: Network::Testnet,
+                issuer: id_cred_fixture.issuer,
                 statement: statements,
             },
         )];
@@ -936,6 +937,7 @@ pub mod tests {
         let credential_statements = vec![CredentialStatementV1::Identity(
             IdentityCredentialStatement {
                 network: Network::Testnet,
+                issuer: id_cred_fixture.issuer,
                 statement: statements,
             },
         )];
