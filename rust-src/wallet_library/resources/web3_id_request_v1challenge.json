@@ -1,6 +1,31 @@
 {
     "request": {
-        "challenge": "beefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef",
+        "challenge": {
+            "given": [
+                {
+                    "label": "nonce",
+                    "context": "6879bdc6b5798f7bbeb0f47b6abd9a5c5b84bf594b63e64af5a5df0f239299e9"
+                },
+                {
+                    "label": "contextString",
+                    "context": "My great ZK application."
+                },
+                {
+                    "label": "connectionId",
+                    "context": "43eee2b1e5128c9a26c871b7aff2cfe448aee66c5a927d47116e8f0c30f452e1"
+                }
+            ],
+            "requested": [
+                {
+                    "label": "blockHash",
+                    "context": "6879bdc6b5798f7bbeb0f47b6abd9a5c5b84bf594b63e64af5a5df0f239299e9"
+                },
+                {
+                    "label": "resourceId",
+                    "context": "https://my-great-website.com"
+                }
+            ]
+        },
         "credentialStatements": [
             {
                 "statement": [

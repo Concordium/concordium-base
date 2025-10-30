@@ -48,3 +48,11 @@ platform specific limitations though.
 The minimum supported Rust version is stated in the `Cargo.toml` manifest.
 Changes in this minimal supported version are going to be accompanied by at
 least a minor version increase.
+
+### Generating docs
+
+In order to display mathematical typesetting (especially used on crypto modules and types),
+KaTeX headers must be inserted into the generated documentation:
+```sh
+RUSTDOCFLAGS="--html-in-header docs/assets/katex-header.html" cargo doc --no-deps
+```

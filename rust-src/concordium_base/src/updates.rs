@@ -430,12 +430,32 @@ impl AuthorizationsV0 {
     where
         UpdatePublicKey: for<'a> From<&'a K>,
     {
-        construct_update_signer_worker(&self.keys, update_key_indices, actual_keys)
+        find_authorized_keys(&self.keys, update_key_indices, actual_keys)
     }
 }
 
-// See [AuthorizationsV0::construct_update_signer] for documentation.
-fn construct_update_signer_worker<K>(
+/// Constructs a mapping from authorized update key indices to the provided
+/// signing keys.
+///
+/// # Arguments
+///
+/// * `keys` - The list of update public keys. `update_key_indices` refers to
+///   indices in this list.
+/// * `update_key_indices` - The access structure specifying which key indices
+///   are authorized for the particular update.
+/// * `actual_keys` - An iterator of keys that will be used for signing an
+///   update.
+///
+/// # Returns
+///
+/// Returns `Some(BTreeMap<UpdateKeysIndex, K>)` if all provided `actual_keys`
+/// are present in `keys`, are authorized according to `update_key_indices`,
+/// and there are no duplicates. Returns `None` if any key is not authorized,
+/// not present in `keys`, or if there are duplicate keys.
+///
+/// If `K` is [`UpdateKeyPair`], the resulting `BTreeMap` implements
+/// [`UpdateSigner`] and can be used to sign update instructions.
+pub fn find_authorized_keys<K>(
     keys: &[UpdatePublicKey],
     update_key_indices: &AccessStructure,
     actual_keys: impl IntoIterator<Item = K>,
@@ -491,7 +511,7 @@ impl AuthorizationsV1 {
     where
         UpdatePublicKey: for<'a> From<&'a K>,
     {
-        construct_update_signer_worker(&self.v0.keys, update_key_indices, actual_keys)
+        find_authorized_keys(&self.v0.keys, update_key_indices, actual_keys)
     }
 }
 
@@ -537,32 +557,6 @@ impl AuthorizationsV1 {
         })
     }
 }
-
-/// Together with [`Authorizations`] this defines a type family allowing us to
-/// map [`ChainParameterVersion0`] and [`ChainParameterVersion1`] to the
-/// corresponding `Authorizations` version.
-pub trait AuthorizationsFamily {
-    type Output: std::fmt::Debug;
-}
-
-impl AuthorizationsFamily for ChainParameterVersion0 {
-    type Output = AuthorizationsV0;
-}
-
-impl AuthorizationsFamily for ChainParameterVersion1 {
-    type Output = AuthorizationsV1;
-}
-
-impl AuthorizationsFamily for ChainParameterVersion2 {
-    type Output = AuthorizationsV1;
-}
-
-impl AuthorizationsFamily for ChainParameterVersion3 {
-    type Output = AuthorizationsV1;
-}
-
-/// A mapping of chain parameter versions to authorization versions.
-pub type Authorizations<CPV> = <CPV as AuthorizationsFamily>::Output;
 
 #[derive(SerdeSerialize, SerdeDeserialize, common::Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -754,7 +748,7 @@ pub enum UpdatePayload {
     #[serde(rename = "foundationAccount")]
     FoundationAccount(AccountAddress),
     #[serde(rename = "mintDistribution")]
-    MintDistribution(MintDistribution<ChainParameterVersion0>),
+    MintDistribution(MintDistributionV0),
     #[serde(rename = "transactionFeeDistribution")]
     TransactionFeeDistribution(TransactionFeeDistribution),
     #[serde(rename = "gASRewards")]
@@ -776,7 +770,7 @@ pub enum UpdatePayload {
     #[serde(rename = "timeParametersCPV1")]
     TimeParametersCPV1(TimeParameters),
     #[serde(rename = "mintDistributionCPV1")]
-    MintDistributionCPV1(MintDistribution<ChainParameterVersion1>),
+    MintDistributionCPV1(MintDistributionV1),
     #[serde(rename = "gASRewardsCPV2")]
     GASRewardsCPV2(GASRewardsV1),
     #[serde(rename = "TimeoutParametersCPV2")]
@@ -980,7 +974,7 @@ pub trait UpdateSigner {
         -> UpdateInstructionSignature;
 }
 
-impl UpdateSigner for &BTreeMap<UpdateKeysIndex, UpdateKeyPair> {
+impl UpdateSigner for BTreeMap<UpdateKeysIndex, UpdateKeyPair> {
     fn sign_update_hash(
         &self,
         hash_to_sign: &hashes::UpdateSignHash,
@@ -993,7 +987,7 @@ impl UpdateSigner for &BTreeMap<UpdateKeysIndex, UpdateKeyPair> {
     }
 }
 
-impl UpdateSigner for &[(UpdateKeysIndex, UpdateKeyPair)] {
+impl UpdateSigner for [(UpdateKeysIndex, UpdateKeyPair)] {
     fn sign_update_hash(
         &self,
         hash_to_sign: &hashes::UpdateSignHash,
@@ -1003,6 +997,15 @@ impl UpdateSigner for &[(UpdateKeysIndex, UpdateKeyPair)] {
             .map(|(ki, kp)| (*ki, kp.sign(hash_to_sign.as_ref())))
             .collect::<BTreeMap<_, _>>();
         UpdateInstructionSignature { signatures }
+    }
+}
+
+impl<T: UpdateSigner + ?Sized> UpdateSigner for &T {
+    fn sign_update_hash(
+        &self,
+        hash_to_sign: &hashes::UpdateSignHash,
+    ) -> UpdateInstructionSignature {
+        (*self).sign_update_hash(hash_to_sign)
     }
 }
 

@@ -32,7 +32,7 @@ pub fn default_attribute_rules(
     match tag.0 {
         // countryOfResidence | nationality
         4 | 5 => {
-            if !is_iso3166_alpha_2(&value.to_string()) {
+            if !is_iso3166_alpha_2(value.as_ref()) {
                 return Err(RequestCheckError::InvalidValue(
                     "countryOfResidence and nationality attributes must be ISO 3166-1 Alpha-2"
                         .to_owned(),
@@ -41,7 +41,7 @@ pub fn default_attribute_rules(
         }
         // idDocIssuer
         8 => {
-            if !is_iso3166_alpha_2(&value.to_string()) && !is_iso3166_2(&value.to_string()) {
+            if !is_iso3166_alpha_2(value.as_ref()) && !is_iso3166_2(value.as_ref()) {
                 return Err(RequestCheckError::InvalidValue(
                     "idDocIssuer attributes must be ISO 3166-1 Alpha-2 or ISO 3166-2".to_owned(),
                 ));
@@ -49,7 +49,7 @@ pub fn default_attribute_rules(
         }
         // dob, idDocIssuedAt, idDocExpiresAt
         3 | 9 | 10 => {
-            if !is_iso8601(&value.to_string()) {
+            if !is_iso8601(value.as_ref()) {
                 return Err(RequestCheckError::InvalidValue(
                     "dob, idDocIssuedAt and idDocExpiresAt attributes must be ISO 8601".to_owned(),
                 ));

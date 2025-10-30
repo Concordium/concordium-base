@@ -1,5 +1,6 @@
 //! Logarithmic sized inner product proof used as base for the other proofs in
 //! this crate
+use crate::random_oracle::StructuredDigest;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},

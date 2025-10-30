@@ -6,9 +6,11 @@
 
 pub mod did;
 pub mod v1;
+mod proofs;
 
-// TODO:
-// - Documentation.
+#[cfg(test)]
+mod test;
+
 use crate::{
     base::CredentialRegistrationID,
     cis4_types::IssuerKey,
@@ -16,17 +18,17 @@ use crate::{
     curve_arithmetic::Curve,
     id::{
         constants::{ArCurve, AttributeKind},
-        id_proof_types::{AtomicProof, AtomicStatement, ProofVersion},
+        id_proof_types::{AtomicProof, AtomicStatement},
         types::{Attribute, AttributeTag, GlobalContext, IpIdentity},
     },
     pedersen_commitment,
-    random_oracle::RandomOracle,
 };
 use concordium_contracts_common::{
     hashes::HashBytes, ContractAddress, OwnedEntrypointName, OwnedParameter, Timestamp,
 };
-use did::*;
-use ed25519_dalek::Verifier;
+
+use crate::web3id::did::{IdentifierType, Method, Network};
+
 use serde::de::DeserializeOwned;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -83,7 +85,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<s
 
     fn try_from(mut value: serde_json::Value) -> Result<Self, Self::Error> {
         let id_value = get_field(&mut value, "id")?;
-        let Some(Ok((_, id))) = id_value.as_str().map(parse_did) else {
+        let Some(Ok((_, id))) = id_value.as_str().map(did::parse_did) else {
             anyhow::bail!("id field is not a valid DID");
         };
         match id.ty {
@@ -305,22 +307,6 @@ pub struct SignedCommitments<C: Curve> {
 }
 
 impl<C: Curve> SignedCommitments<C> {
-    /// Verify signatures on the commitments in the context of the holder's
-    /// public key, and the issuer contract.
-    pub fn verify_signature(
-        &self,
-        holder: &CredentialHolderId,
-        issuer_pk: &IssuerKey,
-        issuer_contract: ContractAddress,
-    ) -> bool {
-        use crate::common::Serial;
-        let mut data = COMMITMENT_SIGNATURE_DOMAIN_STRING.to_vec();
-        holder.serial(&mut data);
-        issuer_contract.serial(&mut data);
-        self.commitments.serial(&mut data);
-        issuer_pk.public_key.verify(&data, &self.signature).is_ok()
-    }
-
     /// Sign commitments for the owner.
     pub fn from_commitments(
         commitments: BTreeMap<String, pedersen_commitment::Commitment<C>>,
@@ -468,13 +454,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
             ty.contains("VerifiableCredential") && ty.contains("ConcordiumVerifiableCredential")
         );
         let mut credential_subject = get_field(&mut value, "credentialSubject")?;
-        let issuer = parse_did(&issuer)
+        let issuer = did::parse_did(&issuer)
             .map_err(|e| anyhow::anyhow!("Unable to parse issuer: {e}"))?
             .1;
         match issuer.ty {
             IdentifierType::Idp { idp_identity } => {
                 let id = get_field(&mut credential_subject, "id")?;
-                let Some(Ok(id)) = id.as_str().map(parse_did) else {
+                let Some(Ok(id)) = id.as_str().map(did::parse_did) else {
                     anyhow::bail!("Credential ID invalid.")
                 };
                 let IdentifierType::Credential { cred_id } = id.1.ty else {
@@ -517,7 +503,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                     "Issuer must have an empty parameter."
                 );
                 let id = get_field(&mut credential_subject, "id")?;
-                let Some(Ok(id)) = id.as_str().map(parse_did) else {
+                let Some(Ok(id)) = id.as_str().map(did::parse_did) else {
                     anyhow::bail!("Credential ID invalid.")
                 };
                 let IdentifierType::PublicKey { key } = id.1.ty else {
@@ -612,9 +598,46 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
 /// Used as a phantom type to indicate a Web3ID challenge.
 pub enum Web3IdChallengeMarker {}
 
-/// Challenge string that serves as a distinguishing context when requesting
+/// Sha256 challenge string that serves as a distinguishing context when requesting
 /// proofs.
-pub type Challenge = HashBytes<Web3IdChallengeMarker>;
+pub type Sha256Challenge = HashBytes<Web3IdChallengeMarker>;
+
+/// Context challenge that serves as a distinguishing context when requesting
+/// proofs.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, serde::Deserialize, serde::Serialize, Debug)]
+pub struct Context {
+    /// This part of the challenge is supposed to be provided by the dapp backend (e.g. merchant backend).
+    pub given: Vec<GivenContext>,
+    /// This part of the challenge is supposed to be provided by the wallet or ID app.
+    pub requested: Vec<GivenContext>,
+}
+
+#[derive(
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    serde::Deserialize,
+    serde::Serialize,
+    crate::common::Serial,
+    crate::common::Deserial,
+    Debug,
+)]
+pub struct GivenContext {
+    pub label: String,
+    pub context: String,
+}
+
+/// A challenge that can be added to the proof transcript.
+#[derive(serde::Deserialize, serde::Serialize)]
+// The type is `untagged` to be backward compatible with old proofs and requests.
+#[serde(untagged)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub enum Challenge {
+    Sha256(Sha256Challenge),
+    V1(Context),
+}
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -819,80 +842,6 @@ pub enum PresentationVerificationError {
     InconsistentPublicData,
     #[error("The credential was not valid.")]
     InvalidCredential,
-}
-
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeType> {
-    /// Get an iterator over the metadata for each of the verifiable credentials
-    /// in the order they appear in the presentation.
-    pub fn metadata(&self) -> impl ExactSizeIterator<Item = ProofMetadata> + '_ {
-        self.verifiable_credential.iter().map(|cp| cp.metadata())
-    }
-
-    /// Verify a presentation in the context of the provided public data and
-    /// cryptographic parameters.
-    ///
-    /// In case of success returns the [`Request`] for which the presentation
-    /// verifies.
-    ///
-    /// **NB:** This only verifies the cryptographic consistentcy of the data.
-    /// It does not check metadata, such as expiry. This should be checked
-    /// separately by the verifier.
-    pub fn verify<'a>(
-        &self,
-        params: &GlobalContext<C>,
-        public: impl ExactSizeIterator<Item = &'a CredentialsInputs<C>>,
-    ) -> Result<Request<C, AttributeType>, PresentationVerificationError> {
-        let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
-        transcript.add_bytes(self.presentation_context);
-        transcript.append_message(b"ctx", &params);
-
-        let mut request = Request {
-            challenge: self.presentation_context,
-            credential_statements: Vec::new(),
-        };
-
-        // Compute the data that the linking proof signed.
-        let to_sign =
-            linking_proof_message_to_sign(self.presentation_context, &self.verifiable_credential);
-
-        let mut linking_proof_iter = self.linking_proof.proof_value.iter();
-
-        if public.len() != self.verifiable_credential.len() {
-            return Err(PresentationVerificationError::InconsistentPublicData);
-        }
-
-        for (cred_public, cred_proof) in public.zip(&self.verifiable_credential) {
-            request.credential_statements.push(cred_proof.statement());
-            if let CredentialProof::Web3Id { holder: owner, .. } = &cred_proof {
-                let Some(sig) = linking_proof_iter.next() else {
-                    return Err(PresentationVerificationError::MissingLinkingProof);
-                };
-                if owner.public_key.verify(&to_sign, &sig.signature).is_err() {
-                    return Err(PresentationVerificationError::InvalidLinkinProof);
-                }
-            }
-            if !verify_single_credential(params, &mut transcript, cred_proof, cred_public) {
-                return Err(PresentationVerificationError::InvalidCredential);
-            }
-        }
-
-        // No bogus signatures should be left.
-        if linking_proof_iter.next().is_none() {
-            Ok(request)
-        } else {
-            Err(PresentationVerificationError::ExcessiveLinkingProof)
-        }
-    }
-}
-
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
-    for Presentation<C, AttributeType>
-{
-    fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
-        self.presentation_context.serial(out);
-        self.verifiable_credential.serial(out);
-        self.linking_proof.serial(out);
-    }
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<serde_json::Value>
@@ -1175,7 +1124,7 @@ impl<C: Curve, AttributeType: DeserializeOwned> TryFrom<serde_json::Value>
         use anyhow::Context;
 
         let id_value = get_field(&mut value, "id")?;
-        let Some(Ok((_, id))) = id_value.as_str().map(parse_did) else {
+        let Some(Ok((_, id))) = id_value.as_str().map(did::parse_did) else {
             anyhow::bail!("id field is not a valid DID");
         };
         let IdentifierType::ContractData {
@@ -1194,7 +1143,7 @@ impl<C: Curve, AttributeType: DeserializeOwned> TryFrom<serde_json::Value>
         // Just validate the issuer field.
         {
             let issuer_value = get_field(&mut value, "issuer")?;
-            let Some(Ok((_, id))) = issuer_value.as_str().map(parse_did) else {
+            let Some(Ok((_, id))) = issuer_value.as_str().map(did::parse_did) else {
                 anyhow::bail!("issuer field is not a valid DID");
             };
             let IdentifierType::ContractData {
@@ -1225,7 +1174,7 @@ impl<C: Curve, AttributeType: DeserializeOwned> TryFrom<serde_json::Value>
             let mut subject = get_field(&mut value, "credentialSubject")?;
 
             let cred_id = get_field(&mut subject, "id")?;
-            let Some(Ok((_, cred_id))) = cred_id.as_str().map(parse_did) else {
+            let Some(Ok((_, cred_id))) = cred_id.as_str().map(did::parse_did) else {
                 anyhow::bail!("credentialSubject/id field is not a valid DID");
             };
             let IdentifierType::PublicKey { key } = cred_id.ty else {
@@ -1253,7 +1202,7 @@ impl<C: Curve, AttributeType: DeserializeOwned> TryFrom<serde_json::Value>
                 "Only `assertionMethod` purpose is supported."
             );
             let method = get_field(&mut proof, "verificationMethod")?;
-            let Some(Ok((_, method))) = method.as_str().map(parse_did) else {
+            let Some(Ok((_, method))) = method.as_str().map(did::parse_did) else {
                 anyhow::bail!("verificationMethod field is not a valid DID");
             };
             let IdentifierType::PublicKey { key } = method.ty else {
@@ -1394,251 +1343,6 @@ pub enum ProofError {
     CommitmentsStatementsMismatch,
     #[error("The ID in the statement and in the provided signer do not match.")]
     InconsistentIds,
-}
-
-/// Verify a single credential. This only checks the cryptographic parts and
-/// ignores the metadata such as issuance date.
-fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
-    global: &GlobalContext<C>,
-    transcript: &mut RandomOracle,
-    cred_proof: &CredentialProof<C, AttributeType>,
-    public: &CredentialsInputs<C>,
-) -> bool {
-    match (&cred_proof, public) {
-        (
-            CredentialProof::Account {
-                network: _,
-                cred_id: _,
-                proofs,
-                created: _,
-                issuer: _,
-            },
-            CredentialsInputs::Account { commitments },
-        ) => {
-            for (statement, proof) in proofs.iter() {
-                if !statement.verify(
-                    ProofVersion::Version2,
-                    global,
-                    transcript,
-                    commitments,
-                    proof,
-                ) {
-                    return false;
-                }
-            }
-        }
-        (
-            CredentialProof::Web3Id {
-                network: _proof_network,
-                contract: proof_contract,
-                commitments,
-                proofs,
-                created: _,
-                holder: owner,
-                ty: _,
-            },
-            CredentialsInputs::Web3 { issuer_pk },
-        ) => {
-            if !commitments.verify_signature(owner, issuer_pk, *proof_contract) {
-                return false;
-            }
-            for (statement, proof) in proofs.iter() {
-                if !statement.verify(
-                    ProofVersion::Version2,
-                    global,
-                    transcript,
-                    &commitments.commitments,
-                    proof,
-                ) {
-                    return false;
-                }
-            }
-        }
-        _ => return false, // mismatch in data
-    }
-    true
-}
-
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, AttributeType> {
-    fn prove<Signer: Web3IdSigner>(
-        self,
-        global: &GlobalContext<C>,
-        ro: &mut RandomOracle,
-        csprng: &mut impl rand::Rng,
-        input: CommitmentInputs<C, AttributeType, Signer>,
-    ) -> Result<CredentialProof<C, AttributeType>, ProofError> {
-        match (self, input) {
-            (
-                CredentialStatement::Account {
-                    network,
-                    cred_id,
-                    statement,
-                },
-                CommitmentInputs::Account {
-                    values,
-                    randomness,
-                    issuer,
-                },
-            ) => {
-                let mut proofs = Vec::new();
-                for statement in statement {
-                    let proof = statement
-                        .prove(
-                            ProofVersion::Version2,
-                            global,
-                            ro,
-                            csprng,
-                            values,
-                            randomness,
-                        )
-                        .ok_or(ProofError::MissingAttribute)?;
-                    proofs.push((statement, proof));
-                }
-                let created = chrono::Utc::now();
-                Ok(CredentialProof::Account {
-                    cred_id,
-                    proofs,
-                    network,
-                    created,
-                    issuer,
-                })
-            }
-            (
-                CredentialStatement::Web3Id {
-                    network,
-                    contract,
-                    credential,
-                    statement,
-                    ty,
-                },
-                CommitmentInputs::Web3Issuer {
-                    signature,
-                    values,
-                    randomness,
-                    signer,
-                },
-            ) => {
-                let mut proofs = Vec::new();
-                if credential != signer.id().into() {
-                    return Err(ProofError::InconsistentIds);
-                }
-                if values.len() != randomness.len() {
-                    return Err(ProofError::InconsistentValuesAndRandomness);
-                }
-
-                // We use the same commitment key to commit to values for all the different
-                // attributes. TODO: This is not ideal, but is probably fine
-                // since the tags are signed as well, so you cannot switch one
-                // commitment for another. We could instead use bulletproof generators, that
-                // would be cleaner.
-                let cmm_key = &global.on_chain_commitment_key;
-
-                let mut commitments = BTreeMap::new();
-                for ((vi, value), (ri, randomness)) in values.iter().zip(randomness.iter()) {
-                    if vi != ri {
-                        return Err(ProofError::InconsistentValuesAndRandomness);
-                    }
-                    commitments.insert(
-                        ri.clone(),
-                        cmm_key.hide(
-                            &pedersen_commitment::Value::<C>::new(value.to_field_element()),
-                            randomness,
-                        ),
-                    );
-                }
-                // TODO: For better user experience/debugging we could check the signature here.
-                let commitments = SignedCommitments {
-                    signature,
-                    commitments,
-                };
-                for statement in statement {
-                    let proof = statement
-                        .prove(
-                            ProofVersion::Version2,
-                            global,
-                            ro,
-                            csprng,
-                            values,
-                            randomness,
-                        )
-                        .ok_or(ProofError::MissingAttribute)?;
-                    proofs.push((statement, proof));
-                }
-                let created = chrono::Utc::now();
-                Ok(CredentialProof::Web3Id {
-                    commitments,
-                    proofs,
-                    network,
-                    contract,
-                    created,
-                    holder: signer.id().into(),
-                    ty,
-                })
-            }
-            _ => Err(ProofError::CommitmentsStatementsMismatch),
-        }
-    }
-}
-
-fn linking_proof_message_to_sign<C: Curve, AttributeType: Attribute<C::Scalar>>(
-    challenge: Challenge,
-    proofs: &[CredentialProof<C, AttributeType>],
-) -> Vec<u8> {
-    use crate::common::Serial;
-    use sha2::Digest;
-    // hash the context and proof.
-    let mut out = sha2::Sha512::new();
-    challenge.serial(&mut out);
-    proofs.serial(&mut out);
-    let mut msg = LINKING_DOMAIN_STRING.to_vec();
-    msg.extend_from_slice(&out.finalize());
-    msg
-}
-
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
-    /// Construct a proof for the [`Request`] using the provided cryptographic
-    /// parameters and secrets.
-    pub fn prove<'a, Signer: 'a + Web3IdSigner>(
-        self,
-        params: &GlobalContext<C>,
-        attrs: impl ExactSizeIterator<Item = CommitmentInputs<'a, C, AttributeType, Signer>>,
-    ) -> Result<Presentation<C, AttributeType>, ProofError>
-    where
-        AttributeType: 'a,
-    {
-        let mut proofs = Vec::with_capacity(attrs.len());
-        let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
-        transcript.add_bytes(self.challenge);
-        transcript.append_message(b"ctx", &params);
-        let mut csprng = rand::thread_rng();
-        if self.credential_statements.len() != attrs.len() {
-            return Err(ProofError::CommitmentsStatementsMismatch);
-        }
-        let mut signers = Vec::new();
-        for (cred_statement, attributes) in self.credential_statements.into_iter().zip(attrs) {
-            if let CommitmentInputs::Web3Issuer { signer, .. } = attributes {
-                signers.push(signer);
-            }
-            let proof = cred_statement.prove(params, &mut transcript, &mut csprng, attributes)?;
-            proofs.push(proof);
-        }
-        let to_sign = linking_proof_message_to_sign(self.challenge, &proofs);
-        // Linking proof
-        let mut proof_value = Vec::new();
-        for signer in signers {
-            let signature = signer.sign(&to_sign);
-            proof_value.push(WeakLinkingProof { signature });
-        }
-        let linking_proof = LinkingProof {
-            created: chrono::Utc::now(),
-            proof_value,
-        };
-        Ok(Presentation {
-            presentation_context: self.challenge,
-            linking_proof,
-            verifiable_credential: proofs,
-        })
-    }
 }
 
 /// Public inputs to the verification function. These are the public commitments
@@ -1856,415 +1560,9 @@ impl Attribute<<ArCurve as Curve>::Scalar> for Web3IdAttribute {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::id::id_proof_types::{
-        AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
-    };
-    use anyhow::Context;
+    use crate::web3id::did::Network;
+    use crate::web3id::{Web3IdAttribute, Web3IdCredential};
     use chrono::TimeZone;
-    use rand::Rng;
-    use std::marker::PhantomData;
-
-    #[test]
-    /// Test that constructing proofs for web3 only credentials works in the
-    /// sense that the proof verifies.
-    ///
-    /// JSON serialization of requests and presentations is also tested.
-    fn test_web3_only() -> anyhow::Result<()> {
-        let mut rng = rand::thread_rng();
-        let challenge = Challenge::new(rng.gen());
-        let signer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
-        let signer_2 = ed25519_dalek::SigningKey::generate(&mut rng);
-        let issuer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
-        let issuer_2 = ed25519_dalek::SigningKey::generate(&mut rng);
-        let contract_1 = ContractAddress::new(1337, 42);
-        let contract_2 = ContractAddress::new(1338, 0);
-        let min_timestamp = chrono::Duration::try_days(Web3IdAttribute::TIMESTAMP_DATE_OFFSET)
-            .unwrap()
-            .num_milliseconds()
-            .try_into()
-            .unwrap();
-
-        let credential_statements = vec![
-            CredentialStatement::Web3Id {
-                ty: [
-                    "VerifiableCredential".into(),
-                    "ConcordiumVerifiableCredential".into(),
-                    "TestCredential".into(),
-                ]
-                .into_iter()
-                .collect(),
-                network: Network::Testnet,
-                contract: contract_1,
-                credential: CredentialHolderId::new(signer_1.verifying_key()),
-                statement: vec![
-                    AtomicStatement::AttributeInRange {
-                        statement: AttributeInRangeStatement {
-                            attribute_tag: "17".into(),
-                            lower: Web3IdAttribute::Numeric(80),
-                            upper: Web3IdAttribute::Numeric(1237),
-                            _phantom: PhantomData,
-                        },
-                    },
-                    AtomicStatement::AttributeInSet {
-                        statement: AttributeInSetStatement {
-                            attribute_tag: "23".into(),
-                            set: [
-                                Web3IdAttribute::String(AttributeKind("ff".into())),
-                                Web3IdAttribute::String(AttributeKind("aa".into())),
-                                Web3IdAttribute::String(AttributeKind("zz".into())),
-                            ]
-                            .into_iter()
-                            .collect(),
-                            _phantom: PhantomData,
-                        },
-                    },
-                ],
-            },
-            CredentialStatement::Web3Id {
-                ty: [
-                    "VerifiableCredential".into(),
-                    "ConcordiumVerifiableCredential".into(),
-                    "TestCredential".into(),
-                ]
-                .into_iter()
-                .collect(),
-                network: Network::Testnet,
-                contract: contract_2,
-                credential: CredentialHolderId::new(signer_2.verifying_key()),
-                statement: vec![
-                    AtomicStatement::AttributeInRange {
-                        statement: AttributeInRangeStatement {
-                            attribute_tag: 0.to_string(),
-                            lower: Web3IdAttribute::Numeric(80),
-                            upper: Web3IdAttribute::Numeric(1237),
-                            _phantom: PhantomData,
-                        },
-                    },
-                    AtomicStatement::AttributeNotInSet {
-                        statement: AttributeNotInSetStatement {
-                            attribute_tag: 1u8.to_string(),
-                            set: [
-                                Web3IdAttribute::String(AttributeKind("ff".into())),
-                                Web3IdAttribute::String(AttributeKind("aa".into())),
-                                Web3IdAttribute::String(AttributeKind("zz".into())),
-                            ]
-                            .into_iter()
-                            .collect(),
-                            _phantom: PhantomData,
-                        },
-                    },
-                    AtomicStatement::AttributeInRange {
-                        statement: AttributeInRangeStatement {
-                            attribute_tag: 2.to_string(),
-                            lower: Web3IdAttribute::Timestamp(Timestamp::from_timestamp_millis(
-                                min_timestamp,
-                            )),
-                            upper: Web3IdAttribute::Timestamp(Timestamp::from_timestamp_millis(
-                                min_timestamp * 3,
-                            )),
-                            _phantom: PhantomData,
-                        },
-                    },
-                ],
-            },
-        ];
-
-        let request = Request::<ArCurve, Web3IdAttribute> {
-            challenge,
-            credential_statements,
-        };
-        let params = GlobalContext::generate("Test".into());
-        let mut values_1 = BTreeMap::new();
-        values_1.insert(17.to_string(), Web3IdAttribute::Numeric(137));
-        values_1.insert(
-            23.to_string(),
-            Web3IdAttribute::String(AttributeKind("ff".into())),
-        );
-        let mut randomness_1 = BTreeMap::new();
-        randomness_1.insert(
-            17.to_string(),
-            pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
-        );
-        randomness_1.insert(
-            23.to_string(),
-            pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
-        );
-        let commitments_1 = SignedCommitments::from_secrets(
-            &params,
-            &values_1,
-            &randomness_1,
-            &CredentialHolderId::new(signer_1.verifying_key()),
-            &issuer_1,
-            contract_1,
-        )
-        .unwrap();
-
-        let secrets_1 = CommitmentInputs::Web3Issuer {
-            signer: &signer_1,
-            values: &values_1,
-            randomness: &randomness_1,
-            signature: commitments_1.signature,
-        };
-
-        let mut values_2 = BTreeMap::new();
-        values_2.insert(0.to_string(), Web3IdAttribute::Numeric(137));
-        values_2.insert(
-            1.to_string(),
-            Web3IdAttribute::String(AttributeKind("xkcd".into())),
-        );
-        values_2.insert(
-            2.to_string(),
-            Web3IdAttribute::Timestamp(Timestamp::from_timestamp_millis(min_timestamp * 2)),
-        );
-        let mut randomness_2 = BTreeMap::new();
-        randomness_2.insert(
-            0.to_string(),
-            pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
-        );
-        randomness_2.insert(
-            1.to_string(),
-            pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
-        );
-        randomness_2.insert(
-            2.to_string(),
-            pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
-        );
-        let commitments_2 = SignedCommitments::from_secrets(
-            &params,
-            &values_2,
-            &randomness_2,
-            &CredentialHolderId::new(signer_2.verifying_key()),
-            &issuer_2,
-            contract_2,
-        )
-        .unwrap();
-        let secrets_2 = CommitmentInputs::Web3Issuer {
-            signer: &signer_2,
-            values: &values_2,
-            randomness: &randomness_2,
-            signature: commitments_2.signature,
-        };
-        let attrs = [secrets_1, secrets_2];
-        let proof = request
-            .clone()
-            .prove(&params, attrs.into_iter())
-            .context("Cannot prove")?;
-
-        let public = vec![
-            CredentialsInputs::Web3 {
-                issuer_pk: issuer_1.verifying_key().into(),
-            },
-            CredentialsInputs::Web3 {
-                issuer_pk: issuer_2.verifying_key().into(),
-            },
-        ];
-        anyhow::ensure!(
-            proof.verify(&params, public.iter())? == request,
-            "Proof verification failed."
-        );
-
-        let data = serde_json::to_string_pretty(&proof)?;
-        assert!(
-            serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok(),
-            "Cannot deserialize proof correctly."
-        );
-
-        let data = serde_json::to_string_pretty(&request)?;
-        assert_eq!(
-            serde_json::from_str::<Request<ArCurve, Web3IdAttribute>>(&data)?,
-            request,
-            "Cannot deserialize request correctly."
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    /// Test that constructing proofs for a mixed (both web3 and id2 credentials
-    /// involved) request works in the sense that the proof verifies.
-    ///
-    /// JSON serialization of requests and presentations is also tested.
-    fn test_mixed() -> anyhow::Result<()> {
-        let mut rng = rand::thread_rng();
-        let challenge = Challenge::new(rng.gen());
-        let params = GlobalContext::generate("Test".into());
-        let cred_id_exp = ArCurve::generate_scalar(&mut rng);
-        let cred_id = CredentialRegistrationID::from_exponent(&params, cred_id_exp);
-        let signer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
-        let issuer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
-        let contract_1 = ContractAddress::new(1337, 42);
-        let credential_statements = vec![
-            CredentialStatement::Web3Id {
-                ty: [
-                    "VerifiableCredential".into(),
-                    "ConcordiumVerifiableCredential".into(),
-                    "TestCredential".into(),
-                ]
-                .into_iter()
-                .collect(),
-                network: Network::Testnet,
-                contract: contract_1,
-                credential: CredentialHolderId::new(signer_1.verifying_key()),
-                statement: vec![
-                    AtomicStatement::AttributeInRange {
-                        statement: AttributeInRangeStatement {
-                            attribute_tag: 17.to_string(),
-                            lower: Web3IdAttribute::Numeric(80),
-                            upper: Web3IdAttribute::Numeric(1237),
-                            _phantom: PhantomData,
-                        },
-                    },
-                    AtomicStatement::AttributeInSet {
-                        statement: AttributeInSetStatement {
-                            attribute_tag: 23u8.to_string(),
-                            set: [
-                                Web3IdAttribute::String(AttributeKind("ff".into())),
-                                Web3IdAttribute::String(AttributeKind("aa".into())),
-                                Web3IdAttribute::String(AttributeKind("zz".into())),
-                            ]
-                            .into_iter()
-                            .collect(),
-                            _phantom: PhantomData,
-                        },
-                    },
-                ],
-            },
-            CredentialStatement::Account {
-                network: Network::Testnet,
-                cred_id,
-                statement: vec![
-                    AtomicStatement::AttributeInRange {
-                        statement: AttributeInRangeStatement {
-                            attribute_tag: 3.into(),
-                            lower: Web3IdAttribute::Numeric(80),
-                            upper: Web3IdAttribute::Numeric(1237),
-                            _phantom: PhantomData,
-                        },
-                    },
-                    AtomicStatement::AttributeNotInSet {
-                        statement: AttributeNotInSetStatement {
-                            attribute_tag: 1u8.into(),
-                            set: [
-                                Web3IdAttribute::String(AttributeKind("ff".into())),
-                                Web3IdAttribute::String(AttributeKind("aa".into())),
-                                Web3IdAttribute::String(AttributeKind("zz".into())),
-                            ]
-                            .into_iter()
-                            .collect(),
-                            _phantom: PhantomData,
-                        },
-                    },
-                ],
-            },
-        ];
-
-        let request = Request::<ArCurve, Web3IdAttribute> {
-            challenge,
-            credential_statements,
-        };
-        let mut values_1 = BTreeMap::new();
-        values_1.insert(17.to_string(), Web3IdAttribute::Numeric(137));
-        values_1.insert(
-            23.to_string(),
-            Web3IdAttribute::String(AttributeKind("ff".into())),
-        );
-        let mut randomness_1 = BTreeMap::new();
-        randomness_1.insert(
-            17.to_string(),
-            pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
-        );
-        randomness_1.insert(
-            23.to_string(),
-            pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
-        );
-        let signed_commitments_1 = SignedCommitments::from_secrets(
-            &params,
-            &values_1,
-            &randomness_1,
-            &CredentialHolderId::new(signer_1.verifying_key()),
-            &issuer_1,
-            contract_1,
-        )
-        .unwrap();
-        let secrets_1 = CommitmentInputs::Web3Issuer {
-            signer: &signer_1,
-            values: &values_1,
-            randomness: &randomness_1,
-            signature: signed_commitments_1.signature,
-        };
-
-        let mut values_2 = BTreeMap::new();
-        values_2.insert(3.into(), Web3IdAttribute::Numeric(137));
-        values_2.insert(
-            1.into(),
-            Web3IdAttribute::String(AttributeKind("xkcd".into())),
-        );
-        let mut randomness_2 = BTreeMap::new();
-        for tag in values_2.keys() {
-            randomness_2.insert(
-                *tag,
-                pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
-            );
-        }
-        let secrets_2 = CommitmentInputs::Account {
-            values: &values_2,
-            randomness: &randomness_2,
-            issuer: IpIdentity::from(17u32),
-        };
-        let attrs = [secrets_1, secrets_2];
-        let proof = request
-            .clone()
-            .prove(&params, attrs.into_iter())
-            .context("Cannot prove")?;
-
-        let commitments_2 = {
-            let key = params.on_chain_commitment_key;
-            let mut comms = BTreeMap::new();
-            for (tag, value) in randomness_2.iter() {
-                let _ = comms.insert(
-                    AttributeTag::from(*tag),
-                    key.hide(
-                        &pedersen_commitment::Value::<ArCurve>::new(
-                            values_2.get(tag).unwrap().to_field_element(),
-                        ),
-                        value,
-                    ),
-                );
-            }
-            comms
-        };
-
-        let public = vec![
-            CredentialsInputs::Web3 {
-                issuer_pk: issuer_1.verifying_key().into(),
-            },
-            CredentialsInputs::Account {
-                commitments: commitments_2,
-            },
-        ];
-        anyhow::ensure!(
-            proof
-                .verify(&params, public.iter())
-                .context("Verification of mixed presentation failed.")?
-                == request,
-            "Proof verification failed."
-        );
-
-        let data = serde_json::to_string_pretty(&proof)?;
-        assert!(
-            serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok(),
-            "Cannot deserialize proof correctly."
-        );
-
-        let data = serde_json::to_string_pretty(&request)?;
-        assert_eq!(
-            serde_json::from_str::<Request<ArCurve, Web3IdAttribute>>(&data)?,
-            request,
-            "Cannot deserialize request correctly."
-        );
-
-        Ok(())
-    }
 
     #[test]
     /// Basic test that conversion of Web3IdCredential from/to JSON works.
@@ -2290,11 +1588,15 @@ mod tests {
         values.insert("0".into(), Web3IdAttribute::Numeric(1234));
         values.insert(
             "3".into(),
-            Web3IdAttribute::String(AttributeKind("Hello".into())),
+            Web3IdAttribute::String(
+                AttributeKind::try_new("Hello".into()).expect("attribute kind"),
+            ),
         );
         values.insert(
             "17".into(),
-            Web3IdAttribute::String(AttributeKind("World".into())),
+            Web3IdAttribute::String(
+                AttributeKind::try_new("World".into()).expect("attribute kind"),
+            ),
         );
 
         let cred = Web3IdCredential::<ArCurve, Web3IdAttribute> {
