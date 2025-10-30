@@ -4,10 +4,15 @@ use crate::curve_arithmetic::{Curve, Pairing};
 use crate::id::types::Attribute;
 use crate::web3id::did::Network;
 use crate::web3id::{
-    AccountCredentialMetadata, AccountCredentialProof, AccountCredentialStatement,
-    IdentityCredentialMetadata, IdentityCredentialProof, IdentityCredentialStatement, LinkingProof,
-    Web3IdCredentialProof, Web3IdCredentialStatement, Web3idCredentialMetadata,
+    did, AccountCredentialMetadata, AccountCredentialProof, AccountCredentialStatement,
+    CredentialHolderId, IdentityCredentialMetadata, IdentityCredentialProof,
+    IdentityCredentialStatement, LinkingProof, Web3IdCredentialProof, Web3IdCredentialStatement,
+    Web3idCredentialMetadata,
 };
+use anyhow::{anyhow, Context};
+use nom::Parser;
+use serde::de::{DeserializeOwned, Error};
+use serde::{de, Deserializer};
 
 /// Context challenge that serves as a distinguishing context when requesting
 /// proofs.
@@ -59,6 +64,116 @@ pub enum CredentialStatementV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Statement about an identity based credential derived from an identity credential issued by an
     /// identity provider.
     Identity(IdentityCredentialStatement<C, AttributeType>),
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
+    for CredentialStatementV1<C, AttributeType>
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            CredentialStatementV1::Account(AccountCredentialStatement {
+                network,
+                cred_id,
+                statement,
+            }) => {
+                let json = serde_json::json!({
+                    "type": ["VerifiableCredential",
+                             "ConcordiumVerifiableCredentialV1",
+                             "ConcordiumAccountBasedCredential"],
+                    "id": format!("did:ccd:{network}:cred:{cred_id}"),
+                    "statement": statement,
+                });
+                json.serialize(serializer)
+            }
+            CredentialStatementV1::Web3Id(Web3IdCredentialStatement {
+                network,
+                contract,
+                credential,
+                statement,
+                ty,
+            }) => {
+                let json = serde_json::json!({
+                    "type": ty,  // todo ar what to do about type here
+                    "id": format!("did:ccd:{network}:sci:{}:{}/credentialEntry/{}", contract.index, contract.subindex, credential),
+                    "statement": statement,
+                });
+                json.serialize(serializer)
+            }
+            CredentialStatementV1::Identity(_) => {
+                todo!()
+            }
+        }
+    }
+}
+
+impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serde::Deserialize<'de>
+    for CredentialStatementV1<C, AttributeType>
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let mut value = serde_json::Value::deserialize(deserializer)?;
+
+        let result = (|| -> anyhow::Result<Self> {
+            let did: did::Method = take_field(&mut value, "id")?
+                .as_str()
+                .context("id field is not a valid DID")?
+                .parse()
+                .context("id field is not a valid DID")?;
+
+            match did.ty {
+                did::IdentifierType::AccountCredential { cred_id } => {
+                    let statement = take_field(&mut value, "statement")?;
+                    Ok(Self::Account(AccountCredentialStatement {
+                        network: did.network,
+                        cred_id,
+                        statement: serde_json::from_value(statement)?,
+                    }))
+                }
+                did::IdentifierType::ContractData {
+                    address,
+                    entrypoint,
+                    parameter,
+                } => {
+                    let statement = take_field(&mut value, "statement")?;
+                    let ty = take_field(&mut value, "type")?;
+                    anyhow::ensure!(entrypoint == "credentialEntry", "Invalid entrypoint.");
+                    Ok(Self::Web3Id(Web3IdCredentialStatement {
+                        ty: serde_json::from_value(ty)?,
+                        network: did.network,
+                        contract: address,
+                        credential: CredentialHolderId::new(
+                            ed25519_dalek::VerifyingKey::from_bytes(
+                                &parameter.as_ref().try_into()?,
+                            )?,
+                        ),
+                        statement: serde_json::from_value(statement)?,
+                    }))
+                }
+                _ => {
+                    anyhow::bail!("Only ID credentials and Web3 credentials are supported.")
+                }
+            }
+        })();
+
+        result.map_err(|err| D::Error::custom(format!("{:#}", err)))
+    }
+}
+
+/// Extract the value at the given key. This mutates the `value` replacing the
+/// value at the provided key with `Null`.
+fn take_field(
+    value: &mut serde_json::Value,
+    field: &'static str,
+) -> anyhow::Result<serde_json::Value> {
+    Ok(value
+        .get_mut(field)
+        .with_context(|| format!("field {field} is not present"))?
+        .take())
 }
 
 /// Metadata of a single credential.
@@ -229,7 +344,11 @@ pub struct PresentationV1<
 
 /// A request for a proof. This is the statement and challenge. The secret data
 /// comes separately.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Debug)]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"
+))]
 pub struct RequestV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub challenge: ContextChallenge,
     pub credential_statements: Vec<CredentialStatementV1<C, AttributeType>>,

@@ -164,9 +164,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 statement,
             }) => {
                 let json = serde_json::json!({
-                    "id": format!("did:ccd:{network}:cred:{cred_id}"),
-                    "statement": statement,
-                });
+                            "id": format!("did:ccd:{network}:cred:{cred_id}"),
+                            "statement": statement,
+                        });
                 json.serialize(serializer)
             }
             CredentialStatement::Web3Id(Web3IdCredentialStatement {
