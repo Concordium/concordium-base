@@ -1,12 +1,13 @@
 // TODO Add JSON regression tests.
 // TODO Add CBOR regression tests.
 // TODO Use v1 presentation when ready.
-// TODO Add more helper functions for constructing requests.
 // TODO Add test case for constructing a request.
 
 //! Types used in Concordium verifiable presentation protocol version 1.
 
 use crate::common::cbor;
+use crate::id::id_proof_types::AtomicStatement;
+use crate::id::types::AttributeTag;
 use crate::web3id::{did, Web3IdAttribute};
 use crate::{hashes, id};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
@@ -14,7 +15,7 @@ use std::collections::HashMap;
 
 /// A verifiable presentation request that specifies what credentials and proofs
 /// are being requested from a credential holder.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename = "ConcordiumVPRequestV1")]
 pub struct VerifiablePresentationRequest {
     /// Presentation being requested.
@@ -23,6 +24,18 @@ pub struct VerifiablePresentationRequest {
     /// Blockchain transaction hash that anchors the request.
     #[serde(rename = "requestTX")]
     pub anchor_transaction_hash: hashes::TransactionHash,
+}
+
+impl VerifiablePresentationRequest {
+    pub fn new(
+        request: VerificationRequestData,
+        anchor_transaction_hash: hashes::TransactionHash,
+    ) -> Self {
+        Self {
+            request,
+            anchor_transaction_hash,
+        }
+    }
 }
 
 /// A verification audit record that contains the complete verifiable presentation
@@ -63,7 +76,7 @@ pub struct VerificationAuditAnchorOnChain {
 /// Description of the presentation being requested from a credential holder.
 ///
 /// This is also used to compute the hash for in the [`VerificationRequestAnchorOnChain`].
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct VerificationRequestData {
     /// Context information for a verifiable presentation request.
     pub request_context: Context,
@@ -108,7 +121,7 @@ impl VerificationRequestData {
 ///
 /// Contains both the context data that is already known (given) and
 /// the context data that needs to be provided by the presenter (requested).
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(tag = "type", rename = "ConcordiumContextInformationV1")]
 pub struct Context {
     /// Context information that is already provided.
@@ -172,7 +185,7 @@ pub struct VerificationRequestAnchorOnChain {
 }
 
 /// The credential statements being requested.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
 pub enum CredentialStatementRequest {
     /// Statements based on the Concordium ID object.
@@ -189,12 +202,12 @@ pub enum CredentialStatementRequest {
     },
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Default)]
 pub struct IdentityStatementRequest {
     /// Set of allowed credential types. Should never be empty or contain the same value twice.
     pub source: Vec<CredentialType>,
     /// The statements requested.
-    pub statement: id::id_proof_types::Statement<id::constants::ArCurve, Web3IdAttribute>,
+    pub statements: id::id_proof_types::Statement<id::constants::ArCurve, Web3IdAttribute>,
     /// The credential issuers allowed.
     pub issuers: Vec<IdentityProviderMethod>,
 }
@@ -205,10 +218,77 @@ impl From<IdentityStatementRequest> for CredentialStatementRequest {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+impl IdentityStatementRequest {
+    /// Create an empty identity statement request.
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Add a source to the given identity statement request.
+    pub fn add_source(mut self, source: CredentialType) -> Self {
+        if !self.source.contains(&source) {
+            self.source.push(source);
+        }
+        self
+    }
+
+    /// Add sources to the given identity statement request.
+    pub fn add_sources(mut self, sources: Vec<CredentialType>) -> Self {
+        for src in sources {
+            if !self.source.contains(&src) {
+                self.source.push(src);
+            }
+        }
+        self
+    }
+
+    /// Add an issuer to the given identity statement request.
+    pub fn add_issuer(mut self, issuer: IdentityProviderMethod) -> Self {
+        if !self.issuers.contains(&issuer) {
+            self.issuers.push(issuer);
+        }
+        self
+    }
+
+    /// Add issuers to the given identity statement request.
+    pub fn add_issuers(mut self, issuers: Vec<IdentityProviderMethod>) -> Self {
+        for issuer in issuers {
+            if !self.issuers.contains(&issuer) {
+                self.issuers.push(issuer);
+            }
+        }
+        self
+    }
+
+    /// Add a statement to the given identity statement request.
+    pub fn add_statement(
+        mut self,
+        statement: AtomicStatement<id::constants::ArCurve, AttributeTag, Web3IdAttribute>,
+    ) -> Self {
+        if !self.statements.statements.contains(&statement) {
+            self.statements.statements.push(statement);
+        }
+        self
+    }
+
+    /// Add statements to the given identity statement request.
+    pub fn add_statements(
+        mut self,
+        statements: Vec<AtomicStatement<id::constants::ArCurve, AttributeTag, Web3IdAttribute>>,
+    ) -> Self {
+        for statement in statements {
+            if !self.statements.statements.contains(&statement) {
+                self.statements.statements.push(statement);
+            }
+        }
+        self
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize, Default)]
 pub struct Web3IdStatementRequest {
     /// The statements requested.
-    pub statement:
+    pub statements:
         Vec<id::id_proof_types::AtomicStatement<id::constants::ArCurve, String, Web3IdAttribute>>,
     /// The credential issuers allowed.
     pub issuers: Vec<did::Method>,
@@ -219,9 +299,58 @@ impl From<Web3IdStatementRequest> for CredentialStatementRequest {
     }
 }
 
+impl Web3IdStatementRequest {
+    /// Create an empty Web3Id statement request.
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Add an issuer to the given Web3Id statement request.
+    pub fn add_issuer(mut self, issuer: did::Method) -> Self {
+        if !self.issuers.contains(&issuer) {
+            self.issuers.push(issuer);
+        }
+        self
+    }
+
+    /// Add issuers to the given Web3Id statement request.
+    pub fn add_issuers(mut self, issuers: Vec<did::Method>) -> Self {
+        for issuer in issuers {
+            if !self.issuers.contains(&issuer) {
+                self.issuers.push(issuer);
+            }
+        }
+        self
+    }
+
+    /// Add a statement to the given Web3Id statement request.
+    pub fn add_statement(
+        mut self,
+        statement: AtomicStatement<id::constants::ArCurve, String, Web3IdAttribute>,
+    ) -> Self {
+        if !self.statements.contains(&statement) {
+            self.statements.push(statement);
+        }
+        self
+    }
+
+    /// Add statements to the given Web3Id statement request.
+    pub fn add_statements(
+        mut self,
+        statements: Vec<AtomicStatement<id::constants::ArCurve, String, Web3IdAttribute>>,
+    ) -> Self {
+        for statement in statements {
+            if !self.statements.contains(&statement) {
+                self.statements.push(statement);
+            }
+        }
+        self
+    }
+}
+
 /// Labels for different types of context information that can be provided in verifiable
 /// presentation requests and proofs.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ContextLabel {
     ContextString,
     #[serde(rename = "ResourceID")]
@@ -234,7 +363,7 @@ pub enum ContextLabel {
 }
 
 /// Identity based credential types.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CredentialType {
     Identity,
@@ -242,13 +371,22 @@ pub enum CredentialType {
 }
 
 /// DID method for a Concordium Identity Provider.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(into = "did::Method", try_from = "did::Method")]
 pub struct IdentityProviderMethod {
     /// The network part of the method.
     pub network: did::Network,
     /// The on-chain identifier of the Concordium Identity Provider.
     pub identity_provider: id::types::IpIdentity,
+}
+
+impl IdentityProviderMethod {
+    pub fn new(ip_identity: u32, network: did::Network) -> Self {
+        Self {
+            network,
+            identity_provider: id::types::IpIdentity(ip_identity),
+        }
+    }
 }
 
 impl From<IdentityProviderMethod> for did::Method {
@@ -282,7 +420,7 @@ impl TryFrom<did::Method> for IdentityProviderMethod {
 }
 
 /// A single piece of context information that can be provided in verifiable presentation interactions.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(into = "GivenContextJson", try_from = "GivenContextJson")]
 pub enum GivenContext {
     /// Cryptographic nonce context.
@@ -380,15 +518,103 @@ impl TryFrom<GivenContextJson> for GivenContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::id::constants::AttributeKind;
+    use crate::id::id_proof_types::{AttributeInRangeStatement, AttributeInSetStatement};
+    use crate::web3id::did::Network;
+    use ed25519_dalek::VerifyingKey;
+    use std::marker::PhantomData;
 
     #[test]
-    fn test_build_request() {
+    fn verifiable_presentation_request_should_perform_successful_json_roundtrip(
+    ) -> anyhow::Result<()> {
+        let web3id_statements = vec![
+            AtomicStatement::AttributeInRange {
+                statement: AttributeInRangeStatement {
+                    attribute_tag: "17".into(),
+                    lower: Web3IdAttribute::Numeric(80),
+                    upper: Web3IdAttribute::Numeric(1237),
+                    _phantom: PhantomData,
+                },
+            },
+            AtomicStatement::AttributeInSet {
+                statement: AttributeInSetStatement {
+                    attribute_tag: "23".into(),
+                    set: [
+                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    _phantom: PhantomData,
+                },
+            },
+        ];
+        let attribute_in_range_statement = AtomicStatement::AttributeInRange {
+            statement: AttributeInRangeStatement {
+                attribute_tag: 17.into(),
+                lower: Web3IdAttribute::Numeric(80),
+                upper: Web3IdAttribute::Numeric(1237),
+                _phantom: PhantomData,
+            },
+        };
+        let attribute_in_set_statement = AtomicStatement::AttributeInSet {
+            statement: AttributeInSetStatement {
+                attribute_tag: 23.into(),
+                set: [
+                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                ]
+                .into_iter()
+                .collect(),
+                _phantom: PhantomData,
+            },
+        };
+
         let context = Context::new_simple(
             vec![0u8; 32],
             "MyConnection".to_string(),
             "MyDappContext".to_string(),
         );
-        let request_data =
-            VerificationRequestData::new(context).add_statement_request(IdentityStatementRequest);
+
+        let request_data = VerificationRequestData::new(context)
+            .add_statement_request(
+                IdentityStatementRequest::default()
+                    .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
+                    .add_source(CredentialType::Identity)
+                    .add_statement(attribute_in_range_statement)
+                    .add_statement(attribute_in_set_statement),
+            )
+            .add_statement_request(
+                Web3IdStatementRequest::default()
+                    .add_issuer(did::Method {
+                        network: Network::Testnet,
+                        ty: did::IdentifierType::PublicKey {
+                            key: VerifyingKey::from_bytes(&[0u8; 32])?,
+                        },
+                    })
+                    .add_statements(web3id_statements),
+            );
+
+        let anchor_transaction_hash = hashes::TransactionHash::new([0u8; 32]);
+
+        let presentation_request =
+            VerifiablePresentationRequest::new(request_data, anchor_transaction_hash);
+
+        let json = anyhow::Context::context(
+            serde_json::to_value(&presentation_request),
+            "Failed verifiable presentation request to JSON value.",
+        )?;
+        let roundtrip = anyhow::Context::context(
+            serde_json::from_value(json),
+            "Failed verifiable presentation request from JSON value.",
+        )?;
+        assert_eq!(
+            presentation_request, roundtrip,
+            "Failed verifiable presentation request JSON roundtrip."
+        );
+
+        Ok(())
     }
 }
