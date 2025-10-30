@@ -85,7 +85,7 @@ pub enum IdentifierType {
     /// Reference to an identity credential via the IdCredSec encryption.
     IdentityCredential {
         cred_id: IdentityCredentialId<ArCurve>,
-    }, // todo ar test
+    },
     /// Reference to a specific smart contract instance.
     ContractData {
         address: ContractAddress,

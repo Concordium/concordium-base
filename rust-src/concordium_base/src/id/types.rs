@@ -2864,7 +2864,7 @@ pub struct IdentityAttributesCredentialsValues<C: Curve, AttributeType: Attribut
     #[map_size_length = 2]
     #[serde(rename = "attributes")]
     pub attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
-    /// Policy of this credential object.
+    /// Temporal validity of the credentials
     #[serde(rename = "validity")]
     pub validity: CredentialValidity,
 }

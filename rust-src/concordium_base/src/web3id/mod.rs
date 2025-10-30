@@ -19,6 +19,7 @@ use crate::id::types::{
 use crate::{
     base::CredentialRegistrationID,
     cis4_types::IssuerKey,
+    common,
     common::{base16_decode_string, base16_encode_string},
     curve_arithmetic::Curve,
     id::{
@@ -64,7 +65,7 @@ pub struct AccountCredentialStatement<C: Curve, AttributeType: Attribute<C::Scal
     pub statement: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
 }
 
-/// A statement about a single identity credential
+/// A statement about a single identity based credential
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IdentityCredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub network: Network,
@@ -199,8 +200,7 @@ pub struct AccountCredentialMetadata {
     pub cred_id: CredentialRegistrationID,
 }
 
-/// Metadata of identity attributes derived directly from an identity issued by an
-/// identity provider.
+/// Metadata of an identity based credential.
 pub struct IdentityCredentialMetadata {
     pub issuer: IpIdentity,
     pub validity: CredentialValidity,
@@ -387,53 +387,57 @@ pub struct AccountCredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>>
     pub proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
 }
 
-/// Credential subject id.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Ephemeral id for identity credentials. The id can be decrypted to IdCredPub.
+/// It will have a new value for each time credential is proven (the encryption is a randomized function)
+#[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
 pub struct IdentityCredentialId<C: Curve> {
     /// Anonymity revocation threshold. Must be <= length of ar_data.
     pub threshold: Threshold,
-    /// Anonymity revocation data. List of anonymity revokers which can revoke
-    /// identity. NB: The order is important since it is the same order as that
-    /// signed by the identity provider, and permuting the list will invalidate
-    /// the signature from the identity provider.
+    /// Anonymity revocation data. It is an encryption of shares of IdCredSec,
+    /// each share encrypted for the privacy guardian (anonymity revoker)
+    /// that is the key in the map.
     // #[map_size_length = 2]
     // #[serde(rename = "arData", deserialize_with = "deserialize_ar_data")]
     pub ar_data: BTreeMap<ArIdentity, ChainArData<C>>,
 }
 
-/// A proof of identity credentials. This contains almost
-/// all the information needed to verify it, except the public commitments.
+/// Identity based credentials. This type of credential is derived from identity credentials issued
+/// by an identity provider. The type contains almost
+/// all the information needed to verify it, except the identity provider and privacy guardian (anonymity revoker) public keys.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IdentityCredentialProof<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 > {
-    /// Creation timestamp of the proof.
+    /// Creation timestamp of the credential
     pub created: chrono::DateTime<chrono::Utc>,
     pub network: Network,
+    /// Ephemeral id for the credential
     pub cred_id: IdentityCredentialId<C>,
-    /// Issuer of this credential, the identity provider index on the
-    /// relevant network.
+    /// Issuer of the underlying identity credential from which this credential is derived.
     pub issuer: IpIdentity,
-    /// The attributes that are part of the identity credentials
+    /// The attributes that are part of the underlying identity credential from which this credential is derived
     // #[map_size_length = 2]
     // #[serde(rename = "attributes")]
     pub attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
-    /// Policy of this credential object.
+    /// Temporal validity of the credential
     // #[serde(rename = "validity")]
     pub validity: CredentialValidity,
-    // pub id_attr_cred_info: IdentityAttributesCredentialsInfo<P, C, AttributeType>,
+    /// Proofs of the credential
     pub proofs: IdentityCredentialProofs<P, C, AttributeType>,
 }
 
+/// Proof of identity based credential
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IdentityCredentialProofs<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 > {
+    /// Proof that the attributes and the other values in [`IdentityCredentialProof`] are correct
     pub identity_attributes_proofs: IdentityAttributesCredentialsProofs<P, C>,
+    /// Proofs of the atomic statements on attributes
     pub statement_proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
 }
 

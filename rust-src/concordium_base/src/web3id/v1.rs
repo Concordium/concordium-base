@@ -56,7 +56,7 @@ pub enum CredentialStatementV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Statement about a credential issued by a Web3 identity provider, a smart
     /// contract.
     Web3Id(Web3IdCredentialStatement<C, AttributeType>),
-    /// Statement about identity attributes derived directly from an identity issued by an
+    /// Statement about an identity based credential derived from an identity credential issued by an
     /// identity provider.
     Identity(IdentityCredentialStatement<C, AttributeType>),
 }
@@ -68,8 +68,7 @@ pub enum CredentialMetadataV1 {
     Account(AccountCredentialMetadata),
     /// Metadata of a Web3Id credential.
     Web3Id(Web3idCredentialMetadata),
-    /// Metadata of identity attributes derived directly from an
-    /// identity object.
+    /// Metadata of an identity based credential.
     Identity(IdentityCredentialMetadata),
 }
 
@@ -78,11 +77,11 @@ pub struct ProofMetadataV1 {
     /// Timestamp of when the proof was created.
     pub created: chrono::DateTime<chrono::Utc>,
     pub network: Network,
-    /// The DID of the credential the proof is about.
+    /// Metadata specific to the type of credential
     pub cred_metadata: CredentialMetadataV1,
 }
 
-/// A proof corresponding to one [`CredentialStatementV1`]. This contains almost
+/// Credential corresponding to one [`CredentialStatementV1`]. This contains almost
 /// all the information needed to verify it, except the issuer's public key in
 /// case of the `Web3Id` proof, and the public commitments in case of the
 /// `Account` proof, and the identity provider and privacy guardian (anonymity revoker) keys
@@ -93,8 +92,11 @@ pub enum CredentialProofV1<
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 > {
+    /// Credential based on an on-chain account
     Account(AccountCredentialProof<C, AttributeType>),
+    /// Credential issued by a Web3 identity provider
     Web3Id(Web3IdCredentialProof<C, AttributeType>),
+    /// Identity based credential
     Identity(IdentityCredentialProof<P, C, AttributeType>),
 }
 
