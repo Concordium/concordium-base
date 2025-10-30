@@ -2517,6 +2517,7 @@ instance AE.FromJSON TransactionSummaryType where
 -- | Result of a valid transaction is a transaction summary.
 data TransactionSummary' a = TransactionSummary
     { tsSender :: !(Maybe AccountAddress),
+      tsSponsor :: !(Maybe AccountAddress),
       tsHash :: !TransactionHash,
       tsCost :: !Amount,
       tsEnergyCost :: !Energy,
@@ -2676,6 +2677,7 @@ instance S.Serialize TransactionSummaryType where
 putTransactionSummary :: S.Putter TransactionSummary
 putTransactionSummary TransactionSummary{..} =
     putMaybe S.put tsSender
+        <> putMaybe S.put tsSponsor
         <> S.put tsHash
         <> S.put tsCost
         <> S.put tsEnergyCost
@@ -2686,6 +2688,7 @@ putTransactionSummary TransactionSummary{..} =
 getTransactionSummary :: SProtocolVersion pv -> S.Get TransactionSummary
 getTransactionSummary spv = do
     tsSender <- getMaybe S.get
+    tsSponsor <- getMaybe S.get
     tsHash <- S.get
     tsCost <- S.get
     tsEnergyCost <- S.get
