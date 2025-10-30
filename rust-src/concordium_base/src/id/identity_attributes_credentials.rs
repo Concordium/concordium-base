@@ -3,6 +3,9 @@
 //! proofs of statements about the attributes is described in "15.4.2 Identity Based Credential" (blue paper v2.2.0).
 //! The full proof of statements based on identity credential, which uses the proofs in the present module as a "sub-proof",
 //! is implemented in the [`web3id`](crate::web3id) module.
+//!
+//! Notice that the proof in the present file can be seen as a lightweight version of the account opening (account credentials)
+//! proof in [`account_holder`](account_holder).
 
 use super::{account_holder, types::*, utils};
 use crate::pedersen_commitment::{CommitmentKey, Randomness};
