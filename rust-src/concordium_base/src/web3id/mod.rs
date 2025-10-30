@@ -164,9 +164,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 statement,
             }) => {
                 let json = serde_json::json!({
-                            "id": format!("did:ccd:{network}:cred:{cred_id}"),
-                            "statement": statement,
-                        });
+                    "id": format!("did:ccd:{network}:cred:{cred_id}"),
+                    "statement": statement,
+                });
                 json.serialize(serializer)
             }
             CredentialStatement::Web3Id(Web3IdCredentialStatement {
@@ -1689,7 +1689,7 @@ impl TryFrom<chrono::DateTime<chrono::Utc>> for Web3IdAttribute {
 
     fn try_from(value: chrono::DateTime<chrono::Utc>) -> Result<Self, Self::Error> {
         use anyhow::Context;
-
+        // todo ar figure this out, why -262144 big thing in json serialization
         // We construct a timestamp in milliseconds from the lowest possible value, and
         // add the offset to align with the previously defined lowest possible
         // value.
