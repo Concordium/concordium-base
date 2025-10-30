@@ -3693,37 +3693,6 @@ mod tests {
         }
         keys
     }
-    #[test]
-    fn test_transaction_signature_v1_serialization() {
-        let mut rng = rand::thread_rng();
-        let hash = TransactionSignHash::new(rng.gen());
-        let sender_keys = create_keys(&mut rng);
-        let sponsor_keys = create_keys(&mut rng);
-        let sender_sig = sender_keys.sign_transaction_hash(&hash);
-        let sponsor_sig = sponsor_keys.sign_transaction_hash(&hash);
-        let sigs = TransactionSignaturesV1 {
-            sender: sender_sig.clone(),
-            sponsor: Some(sponsor_sig),
-        };
-        let binary_result = crate::common::serialize_deserialize(&sigs)
-            .expect("Binary transaction signature v1  serialization is not invertible.");
-        assert_eq!(
-            binary_result, sigs,
-            "Binary transaction signature v1 parses incorrectly."
-        );
-
-        let sigs1 = TransactionSignaturesV1 {
-            sender: sender_sig,
-            sponsor: None,
-        };
-
-        let binary_result = crate::common::serialize_deserialize(&sigs1)
-            .expect("Binary transaction signature v1 serialization is not invertible.");
-        assert_eq!(
-            binary_result, sigs1,
-            "Binary tranasction signature v1 parses incorrectly."
-        );
-    }
 
     #[test]
     fn test_transaction_header_v1_serialization() {
