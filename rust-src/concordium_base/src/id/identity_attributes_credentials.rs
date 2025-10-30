@@ -1,5 +1,9 @@
-//! Functionality to prove and verify identity attribute credentials based on identity credentials. These are to a large
-//! extent equivalent to account credentials deployed on chain, but there is no on-chain account credentials involved.
+//! Prover and verifier of identity attribute credentials based on identity credentials.
+//! The proof of identity attribute credentials together with
+//! proofs of statements about the attributes is described in "15.4.2 Identity Based Credential" (blue paper v2.2.0).
+//! The full proof of statements based on identity credential, which uses the proofs in the present module as a "sub-proof",
+//! is implemented in the [`web3id`](crate::web3id) module.
+
 
 use super::{account_holder, types::*, utils};
 use crate::pedersen_commitment::{CommitmentKey, Randomness};
