@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 /// A verifiable presentation request that specifies what credentials and proofs
 /// are being requested from a credential holder.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Serialize)]
 #[serde(tag = "type", rename = "ConcordiumVPRequestV1")]
 pub struct VerifiablePresentationRequest {
     /// Presentation being requested.
@@ -42,9 +42,9 @@ impl VerifiablePresentationRequest {
 /// interaction, *including all sensitive data that should be kept private*.
 ///
 /// Audit records are used internally by verifiers to maintain complete records
-/// of verification interactions, while only publishing hash-based public records on-chain
-/// to preserve privacy, see [`VerificationAuditAnchorOnChain`].
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+/// of verification interactions, while only publishing hash-based public records/anchors on-chain
+/// to preserve privacy, see [`VerificationAuditRecordOnChain`].
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Serialize)]
 #[serde(tag = "type", rename = "ConcordiumVerificationAuditRecord")]
 pub struct VerificationAuditRecord {
     /// Version integer, for now it is always 1.
@@ -53,15 +53,51 @@ pub struct VerificationAuditRecord {
     pub request: VerifiablePresentationRequest,
     /// Unique identifier chosen by the requester/merchant.
     pub id: String,
-    // TODO Replace serde_json::Value with the actual v1 presentation when ready.
-    pub presentation: serde_json::Value,
+    // TODO Replace String with the actual v1 presentation when ready.
+    pub presentation: String,
+}
+
+impl VerificationAuditRecord {
+    pub fn new(id: String, request: VerifiablePresentationRequest, presentation: String) -> Self {
+        Self {
+            version: 1,
+            request,
+            id,
+            presentation,
+        }
+    }
+
+    /// Computes a hash of the verification audit record.
+    ///
+    /// This hash is used to create a tamper-evident anchor that can be stored
+    /// on-chain to prove the an audit record was made at a specific time and with
+    /// specific parameters.
+    pub fn hash(&self) -> hashes::Hash {
+        use crate::common::Serial;
+        let mut hasher = sha2::Sha256::new();
+        self.serial(&mut hasher);
+        HashBytes::new(hasher.finalize().into())
+    }
+
+    pub fn anchor(
+        &self,
+        public_info: Option<HashMap<String, cbor::value::Value>>,
+    ) -> VerificationAuditRecordOnChain {
+        VerificationAuditRecordOnChain {
+            // Concordium Verification Audit Record
+            r#type: "CCDVAR".to_string(),
+            version: 1,
+            hash: self.hash(),
+            public: public_info,
+        }
+    }
 }
 
 /// Data structure for CBOR-encoded verifiable audit
 ///
 /// This format is used when anchoring a verification audit on the Concordium blockchain.
 #[derive(Debug, Clone, CborSerialize, CborDeserialize)]
-pub struct VerificationAuditAnchorOnChain {
+pub struct VerificationAuditRecordOnChain {
     /// Type identifier for Concordium Verifiable Request Audit Record. Always set to "CCDVAA".
     pub r#type: String,
     /// Data format version integer, for now it is always 1.
@@ -75,7 +111,7 @@ pub struct VerificationAuditAnchorOnChain {
 /// Description of the presentation being requested from a credential holder.
 ///
 /// This is also used to compute the hash for in the [`VerificationRequestAnchorOnChain`].
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Serialize)]
 pub struct VerificationRequestData {
     /// Context information for a verifiable presentation request.
     pub request_context: Context,
@@ -107,8 +143,7 @@ impl VerificationRequestData {
     pub fn hash(&self) -> hashes::Hash {
         use crate::common::Serial;
         let mut hasher = sha2::Sha256::new();
-        self.request_context.serial(&mut hasher);
-        self.credential_statements.serial(&mut hasher);
+        self.serial(&mut hasher);
         HashBytes::new(hasher.finalize().into())
     }
 
@@ -191,12 +226,6 @@ pub struct VerificationRequestAnchorOnChain {
     pub hash: hashes::Hash,
     /// Optional public information.
     pub public: Option<HashMap<String, cbor::value::Value>>,
-}
-
-impl VerificationRequestAnchorOnChain {
-    pub fn hash(&self) -> hashes::Hash {
-        self.hash
-    }
 }
 
 /// The credential statements being requested.
@@ -618,6 +647,8 @@ mod tests {
         constants::AttributeKind,
         id_proof_types::{AttributeInRangeStatement, AttributeInSetStatement},
     };
+    use concordium_contracts_common::hashes::Hash;
+    use hex::FromHex;
     use std::marker::PhantomData;
 
     #[test]
@@ -659,10 +690,12 @@ mod tests {
                 .add_statement(attribute_in_set_statement),
         );
 
-        let anchor_transaction_hash = hashes::TransactionHash::new([0u8; 32]);
+        let verification_request_anchor_transaction_hash = hashes::TransactionHash::new([0u8; 32]);
 
-        let presentation_request =
-            VerifiablePresentationRequest::new(request_data, anchor_transaction_hash);
+        let presentation_request = VerifiablePresentationRequest::new(
+            request_data,
+            verification_request_anchor_transaction_hash,
+        );
 
         let json = anyhow::Context::context(
             serde_json::to_value(&presentation_request),
@@ -709,11 +742,78 @@ mod tests {
 
         let verification_request_anchor: VerificationRequestAnchorOnChain =
             request_data.anchor(Some(public_info));
-        let verification_request_anchor_hash = verification_request_anchor.hash();
+        let verification_request_anchor_hash = verification_request_anchor.hash;
 
-        println!("{}", verification_request_anchor_hash);
+        let expected_verification_request_anchor_hash = Hash::new(
+            <[u8; 32]>::from_hex(
+                "7326166760159b23dbfe8c6b585fa45883358d87e3fe4d784633aa0ebc6998fb",
+            )
+            .expect("Invalid hex"),
+        );
 
-        // TODO: check hash
+        assert_eq!(
+            verification_request_anchor_hash, expected_verification_request_anchor_hash,
+            "Failed verification request anchor hash check."
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn should_compute_the_correct_verification_audit_record() -> anyhow::Result<()> {
+        let id = "MyUUID".to_string();
+        let context = Context::new_simple(
+            vec![0u8; 32],
+            "MyConnection".to_string(),
+            "MyDappContext".to_string(),
+        );
+
+        let attribute_in_range_statement = AtomicStatement::AttributeInRange {
+            statement: AttributeInRangeStatement {
+                attribute_tag: 17.into(),
+                lower: Web3IdAttribute::Numeric(80),
+                upper: Web3IdAttribute::Numeric(1237),
+                _phantom: PhantomData,
+            },
+        };
+
+        let request_data = VerificationRequestData::new(context).add_statement_request(
+            IdentityStatementRequest::default()
+                .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
+                .add_source(CredentialType::Identity)
+                .add_statement(attribute_in_range_statement),
+        );
+
+        let verification_request_anchor_transaction_hash = hashes::TransactionHash::new([0u8; 32]);
+
+        let presentation_request = VerifiablePresentationRequest::new(
+            request_data,
+            verification_request_anchor_transaction_hash,
+        );
+
+        let presentation = "DummyPresentation".to_string();
+
+        let verification_audit_record =
+            VerificationAuditRecord::new(id, presentation_request, presentation);
+
+        let mut public_info = HashMap::new();
+        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
+
+        let verification_audit_record_on_chain: VerificationAuditRecordOnChain =
+            verification_audit_record.anchor(Some(public_info));
+        let verification_audit_record_hash = verification_audit_record_on_chain.hash;
+
+        let expected_verification_audit_record_hash = Hash::new(
+            <[u8; 32]>::from_hex(
+                "190cec0f706b9590f92b7e20747f3ddbd9eba8a601c52554394dc2316634dc68",
+            )
+            .expect("Invalid hex"),
+        );
+
+        assert_eq!(
+            verification_audit_record_hash, expected_verification_audit_record_hash,
+            "Failed verification audit record hash check."
+        );
 
         Ok(())
     }
