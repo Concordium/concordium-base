@@ -143,6 +143,58 @@ pub struct Method {
     pub ty: IdentifierType,
 }
 
+impl Method {
+    /// Construct variant [`Idp`](IdentifierType::Idp)
+    pub fn new_idp(network: Network, idp_identity: IpIdentity) -> Self {
+        Self {
+            network,
+            ty: IdentifierType::Idp {
+                idp_identity
+            }
+        }
+    }
+
+    /// Construct variant [`Account`](IdentifierType::Account)
+    pub fn new_account(network: Network, address: AccountAddress) -> Self {
+        Self {
+            network,
+            ty: IdentifierType::Account {
+                address
+            }
+        }
+    }
+
+    /// Construct variant [`AccountCredential`](IdentifierType::AccountCredential)
+    pub fn new_account_credential(network: Network, cred_id: CredentialRegistrationID) -> Self {
+        Self {
+            network,
+            ty: IdentifierType::AccountCredential {
+                cred_id
+            }
+        }
+    }
+
+    /// Construct variant [`IdentityCredential`](IdentifierType::IdentityCredential)
+    pub fn new_identity_credential(network: Network, cred_id: IdentityCredentialId<ArCurve>) -> Self {
+        Self {
+            network,
+            ty: IdentifierType::IdentityCredential {
+                cred_id
+            }
+        }
+    }
+
+    /// Construct variant [`PublicKey`](IdentifierType::PublicKey)
+    pub fn new_public_key(network: Network, key: ed25519_dalek::VerifyingKey) -> Self {
+        Self {
+            network,
+            ty: IdentifierType::PublicKey {
+                key
+            }
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 /// An error that can occur when attempting to parse a string as a DID
 /// [`Method`].

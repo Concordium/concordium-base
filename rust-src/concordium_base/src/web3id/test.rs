@@ -155,7 +155,7 @@ mod tests {
             vec![CredentialStatement::Account(AccountCredentialStatement {
                 network: Network::Testnet,
                 cred_id,
-                statement: vec![AtomicStatement::AttributeInRange {
+                statements: vec![AtomicStatement::AttributeInRange {
                     statement: AttributeInRangeStatement {
                         attribute_tag,
                         lower: Web3IdAttribute::Numeric(0),

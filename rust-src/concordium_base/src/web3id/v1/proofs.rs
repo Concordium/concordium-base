@@ -7,13 +7,13 @@ use crate::{
 
 use crate::web3id::{
     CommitmentInputs, CredentialsInputs, LinkingProof, PresentationVerificationError, ProofError,
-    WeakLinkingProof, Web3IdCredentialProof, Web3IdSigner, LINKING_DOMAIN_STRING,
+    WeakLinkingProof, Web3IdBasedCredential, Web3IdSigner, LINKING_DOMAIN_STRING,
 };
 use ed25519_dalek::Verifier;
 
 use crate::curve_arithmetic::Pairing;
 use crate::web3id::v1::{
-    ContextChallenge, CredentialProofV1, CredentialStatementV1, PresentationV1, ProofMetadataV1,
+    ContextChallenge, CredentialV1, CredentialStatementV1, PresentationV1, CredentialMetadataV1,
     RequestV1,
 };
 use rand::{CryptoRng, Rng};
@@ -23,8 +23,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 {
     /// Get an iterator over the metadata for each of the verifiable credentials
     /// in the order they appear in the presentation.
-    pub fn metadata(&self) -> impl ExactSizeIterator<Item = ProofMetadataV1> + '_ {
-        self.verifiable_credential.iter().map(|cp| cp.metadata())
+    pub fn metadata(&self) -> impl ExactSizeIterator<Item =CredentialMetadataV1> + '_ {
+        self.verifiable_credentials.iter().map(|cp| cp.metadata())
     }
 
     /// Verify a presentation in the context of the provided public data and
@@ -52,17 +52,17 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 
         // Compute the data that the linking proof signed.
         let to_sign =
-            linking_proof_message_to_sign(&self.presentation_context, &self.verifiable_credential);
+            linking_proof_message_to_sign(&self.presentation_context, &self.verifiable_credentials);
 
         let mut linking_proof_iter = self.linking_proof.proof_value.iter();
 
-        if public.len() != self.verifiable_credential.len() {
+        if public.len() != self.verifiable_credentials.len() {
             return Err(PresentationVerificationError::InconsistentPublicData);
         }
 
-        for (cred_public, cred_proof) in public.zip(&self.verifiable_credential) {
+        for (cred_public, cred_proof) in public.zip(&self.verifiable_credentials) {
             request.credential_statements.push(cred_proof.statement());
-            if let CredentialProofV1::Web3Id(Web3IdCredentialProof { holder: owner, .. }) =
+            if let CredentialV1::Web3Id(Web3IdBasedCredential { holder: owner, .. }) =
                 &cred_proof
             {
                 let Some(sig) = linking_proof_iter.next() else {
@@ -87,7 +87,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
-    CredentialProofV1<P, C, AttributeType>
+    CredentialV1<P, C, AttributeType>
 {
     /// Verify a single credential. This only checks the cryptographic parts and
     /// ignores the metadata such as issuance date.
@@ -98,9 +98,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         public: &CredentialsInputs<P, C>,
     ) -> bool {
         match self {
-            CredentialProofV1::Account(cred_proof) => cred_proof.verify(global, transcript, public),
-            CredentialProofV1::Web3Id(cred_proof) => cred_proof.verify(global, transcript, public),
-            CredentialProofV1::Identity(cred_proof) => {
+            CredentialV1::Account(cred_proof) => cred_proof.verify(global, transcript, public),
+            CredentialV1::Web3Id(cred_proof) => cred_proof.verify(global, transcript, public),
+            CredentialV1::Identity(cred_proof) => {
                 cred_proof.verify(global, transcript, public)
             }
         }
@@ -115,17 +115,17 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatementV1<C, Att
         csprng: &mut impl rand::Rng,
         now: chrono::DateTime<chrono::Utc>,
         input: CommitmentInputs<P, C, AttributeType, Signer>,
-    ) -> Result<CredentialProofV1<P, C, AttributeType>, ProofError> {
+    ) -> Result<CredentialV1<P, C, AttributeType>, ProofError> {
         match self {
             CredentialStatementV1::Account(cred_stmt) => cred_stmt
                 .prove(global, ro, csprng, now, input)
-                .map(CredentialProofV1::Account),
+                .map(CredentialV1::Account),
             CredentialStatementV1::Web3Id(cred_stmt) => cred_stmt
                 .prove(global, ro, csprng, now, input)
-                .map(CredentialProofV1::Web3Id),
+                .map(CredentialV1::Web3Id),
             CredentialStatementV1::Identity(cred_stmt) => cred_stmt
                 .prove(global, ro, csprng, now, input)
-                .map(CredentialProofV1::Identity),
+                .map(CredentialV1::Identity),
         }
     }
 }
@@ -136,7 +136,7 @@ fn linking_proof_message_to_sign<
     AttributeType: Attribute<C::Scalar>,
 >(
     challenge: &ContextChallenge,
-    proofs: &[CredentialProofV1<P, C, AttributeType>],
+    proofs: &[CredentialV1<P, C, AttributeType>],
 ) -> Vec<u8> {
     use crate::common::Serial;
     use sha2::Digest;
@@ -205,7 +205,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
         Ok(PresentationV1 {
             presentation_context: self.challenge,
             linking_proof,
-            verifiable_credential: proofs,
+            verifiable_credentials: proofs,
         })
     }
 }
@@ -226,7 +226,7 @@ pub mod tests {
     use crate::web3id::did::Network;
     use crate::web3id::v1::ContextProperty;
     use crate::web3id::{
-        fixtures, AccountCredentialProof, AccountCredentialStatement, IdentityCredentialProof,
+        fixtures, AccountBasedCredential, AccountCredentialStatement, IdentityBasedCredential,
         IdentityCredentialStatement, Web3IdAttribute, Web3IdCredentialStatement,
     };
     use std::marker::PhantomData;
@@ -268,7 +268,7 @@ pub mod tests {
                 network: Network::Testnet,
                 contract: web3_cred_fixture.contract,
                 credential: web3_cred_fixture.cred_id,
-                statement: statements,
+                statements,
             })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
@@ -317,7 +317,7 @@ pub mod tests {
                 network: Network::Testnet,
                 contract: web3_cred_fixture.contract,
                 credential: web3_cred_fixture.cred_id,
-                statement: vec![],
+                statements: vec![],
             })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
@@ -367,7 +367,7 @@ pub mod tests {
                 network: Network::Testnet,
                 contract: web3_cred_fixture.contract,
                 credential: web3_cred_fixture.cred_id,
-                statement: statements,
+                statements,
             })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
@@ -384,8 +384,8 @@ pub mod tests {
             .expect("prove");
 
         // change commitments signature to be invalid
-        let CredentialProofV1::Web3Id(Web3IdCredentialProof { commitments, .. }) =
-            &mut proof.verifiable_credential[0]
+        let CredentialV1::Web3Id(Web3IdBasedCredential { commitments, .. }) =
+            &mut proof.verifiable_credentials[0]
         else {
             panic!("should be web3 proof");
         };
@@ -412,7 +412,7 @@ pub mod tests {
         let CommitmentInputs::Web3Issuer { signer, .. } = cmm_input else {
             panic!("should be web3 inputs");
         };
-        let to_sign = linking_proof_message_to_sign(challenge, &proof.verifiable_credential);
+        let to_sign = linking_proof_message_to_sign(challenge, &proof.verifiable_credentials);
         let signature = signer.sign(&to_sign);
         proof.linking_proof.proof_value[0] = WeakLinkingProof { signature };
     }
@@ -441,7 +441,7 @@ pub mod tests {
                 network: Network::Testnet,
                 contract: web3_cred_fixture.contract,
                 credential: web3_cred_fixture.cred_id,
-                statement: statements,
+                statements,
             })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
@@ -458,8 +458,8 @@ pub mod tests {
             .expect("prove");
 
         // change statement to be invalid
-        let CredentialProofV1::Web3Id(Web3IdCredentialProof { proofs, .. }) =
-            &mut proof.verifiable_credential[0]
+        let CredentialV1::Web3Id(Web3IdBasedCredential { proofs, .. }) =
+            &mut proof.verifiable_credentials[0]
         else {
             panic!("should be web3 proof");
         };
@@ -509,7 +509,7 @@ pub mod tests {
                 network: Network::Testnet,
                 contract: web3_cred_fixture.contract,
                 credential: web3_cred_fixture.cred_id,
-                statement: statements,
+                statements,
             })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
@@ -592,12 +592,12 @@ pub mod tests {
                 network: Network::Testnet,
                 contract: web3_cred_fixture.contract,
                 credential: web3_cred_fixture.cred_id,
-                statement: statements1,
+                statements: statements1,
             }),
             CredentialStatementV1::Account(AccountCredentialStatement {
                 network: Network::Testnet,
                 cred_id: acc_cred_fixture.cred_id,
-                statement: statements2,
+                statements: statements2,
             }),
         ];
 
@@ -646,7 +646,7 @@ pub mod tests {
             vec![CredentialStatementV1::Account(AccountCredentialStatement {
                 network: Network::Testnet,
                 cred_id: acc_cred_fixture.cred_id,
-                statement: statements,
+                statements,
             })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
@@ -686,7 +686,7 @@ pub mod tests {
             vec![CredentialStatementV1::Account(AccountCredentialStatement {
                 network: Network::Testnet,
                 cred_id: acc_cred_fixture.cred_id,
-                statement: vec![],
+                statements: vec![],
             })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
@@ -728,7 +728,7 @@ pub mod tests {
             vec![CredentialStatementV1::Account(AccountCredentialStatement {
                 network: Network::Testnet,
                 cred_id: acc_cred_fixture.cred_id,
-                statement: statements,
+                statements,
             })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
@@ -745,8 +745,8 @@ pub mod tests {
             .expect("prove");
 
         // change statement to be invalid
-        let CredentialProofV1::Account(AccountCredentialProof { proofs, .. }) =
-            &mut proof.verifiable_credential[0]
+        let CredentialV1::Account(AccountBasedCredential { proofs, .. }) =
+            &mut proof.verifiable_credentials[0]
         else {
             panic!("should be account proof");
         };
@@ -783,7 +783,7 @@ pub mod tests {
             vec![CredentialStatementV1::Account(AccountCredentialStatement {
                 network: Network::Testnet,
                 cred_id: acc_cred_fixture.cred_id,
-                statement: statements,
+                statements,
             })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
@@ -839,7 +839,7 @@ pub mod tests {
                 network: Network::Testnet,
                 contract: web3_cred_fixture.contract,
                 credential: web3_cred_fixture.cred_id,
-                statement: statements,
+                statements,
             })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
@@ -887,7 +887,7 @@ pub mod tests {
             vec![CredentialStatementV1::Account(AccountCredentialStatement {
                 network: Network::Testnet,
                 cred_id: acc_cred_fixture.cred_id,
-                statement: statements,
+                statements,
             })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
@@ -926,7 +926,7 @@ pub mod tests {
             IdentityCredentialStatement {
                 network: Network::Testnet,
                 issuer: id_cred_fixture.issuer,
-                statement: statements,
+                statements,
             },
         )];
 
@@ -967,7 +967,7 @@ pub mod tests {
             IdentityCredentialStatement {
                 network: Network::Testnet,
                 issuer: id_cred_fixture.issuer,
-                statement: vec![],
+                statements: vec![],
             },
         )];
 
@@ -1010,7 +1010,7 @@ pub mod tests {
             IdentityCredentialStatement {
                 network: Network::Testnet,
                 issuer: id_cred_fixture.issuer,
-                statement: statements,
+                statements,
             },
         )];
 
@@ -1028,8 +1028,8 @@ pub mod tests {
             .expect("prove");
 
         // change statement to be invalid
-        let CredentialProofV1::Identity(IdentityCredentialProof { proofs, .. }) =
-            &mut proof.verifiable_credential[0]
+        let CredentialV1::Identity(IdentityBasedCredential { proofs, .. }) =
+            &mut proof.verifiable_credentials[0]
         else {
             panic!("should be account proof");
         };
@@ -1065,7 +1065,7 @@ pub mod tests {
             IdentityCredentialStatement {
                 network: Network::Testnet,
                 issuer: id_cred_fixture.issuer,
-                statement: statements,
+                statements,
             },
         )];
 
@@ -1083,8 +1083,8 @@ pub mod tests {
             .expect("prove");
 
         // change attribute credentials proof to be invalid
-        let CredentialProofV1::Identity(IdentityCredentialProof { proofs, .. }) =
-            &mut proof.verifiable_credential[0]
+        let CredentialV1::Identity(IdentityBasedCredential { proofs, .. }) =
+            &mut proof.verifiable_credentials[0]
         else {
             panic!("should be account proof");
         };

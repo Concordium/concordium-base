@@ -7,12 +7,12 @@ use crate::{
 };
 
 use crate::web3id::{
-    AccountCredentialProof, AccountCredentialStatement, CommitmentInputs, CredentialHolderId,
+    AccountBasedCredential, AccountCredentialStatement, CommitmentInputs, CredentialHolderId,
     CredentialProof, CredentialStatement, CredentialsInputs, IdentityCredentialId,
-    IdentityCredentialProof, IdentityCredentialProofs, IdentityCredentialStatement, LinkingProof,
+    IdentityBasedCredential, IdentityCredentialProofs, IdentityCredentialStatement, LinkingProof,
     Presentation, PresentationVerificationError, ProofError, ProofMetadata, Request,
     Sha256Challenge, SignedCommitments, StatementWithProof, WeakLinkingProof,
-    Web3IdCredentialProof, Web3IdCredentialStatement, Web3IdSigner,
+    Web3IdBasedCredential, Web3IdCredentialStatement, Web3IdSigner,
     COMMITMENT_SIGNATURE_DOMAIN_STRING, LINKING_DOMAIN_STRING,
 };
 use ed25519_dalek::Verifier;
@@ -91,7 +91,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
 
         for (cred_public, cred_proof) in public.zip(&self.verifiable_credential) {
             request.credential_statements.push(cred_proof.statement());
-            if let CredentialProof::Web3Id(Web3IdCredentialProof { holder: owner, .. }) =
+            if let CredentialProof::Web3Id(Web3IdBasedCredential { holder: owner, .. }) =
                 &cred_proof
             {
                 let Some(sig) = linking_proof_iter.next() else {
@@ -115,7 +115,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialProof<C, AttributeType> {
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredential<C, AttributeType> {
     pub fn verify<P: Pairing<ScalarField = C::Scalar>>(
         &self,
         global_context: &GlobalContext<C>,
@@ -132,7 +132,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialProof<C, At
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
-    IdentityCredentialProof<P, C, AttributeType>
+    IdentityBasedCredential<P, C, AttributeType>
 {
     pub fn verify(
         &self,
@@ -188,7 +188,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdCredentialProof<C, AttributeType> {
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdBasedCredential<C, AttributeType> {
     pub fn verify<P: Pairing<ScalarField = C::Scalar>>(
         &self,
         global_context: &GlobalContext<C>,
@@ -264,7 +264,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatement<C
         csprng: &mut impl rand::Rng,
         now: chrono::DateTime<chrono::Utc>,
         input: CommitmentInputs<P, C, AttributeType, Signer>,
-    ) -> Result<AccountCredentialProof<C, AttributeType>, ProofError> {
+    ) -> Result<AccountBasedCredential<C, AttributeType>, ProofError> {
         let CommitmentInputs::Account {
             values,
             randomness,
@@ -275,7 +275,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatement<C
         };
 
         let proofs = prove_statements(
-            self.statement,
+            self.statements,
             values,
             randomness,
             global_context,
@@ -283,7 +283,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatement<C
             csprng,
         )?;
 
-        Ok(AccountCredentialProof {
+        Ok(AccountBasedCredential {
             cred_id: self.cred_id,
             proofs,
             network: self.network,
@@ -301,7 +301,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityCredentialStatement<
         csprng: &mut impl rand::Rng,
         now: chrono::DateTime<chrono::Utc>,
         input: CommitmentInputs<P, C, AttributeType, Signer>,
-    ) -> Result<IdentityCredentialProof<P, C, AttributeType>, ProofError> {
+    ) -> Result<IdentityBasedCredential<P, C, AttributeType>, ProofError> {
         let CommitmentInputs::Identity {
             ip_context,
             id_object,
@@ -312,7 +312,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityCredentialStatement<
         };
 
         let attributes_handling: BTreeMap<_, _> = self
-            .statement
+            .statements
             .iter()
             .map(|stmt| match stmt {
                 AtomicStatement::RevealAttribute { statement } => {
@@ -342,7 +342,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityCredentialStatement<
             .map_err(|err| ProofError::IdentityAttributeCredentials(err.to_string()))?;
 
         let statement_proofs = prove_statements(
-            self.statement,
+            self.statements,
             &id_object.get_attribute_list().alist,
             &id_attr_cmm_rand.attributes_rand,
             global_context,
@@ -360,7 +360,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityCredentialStatement<
             ar_data: id_attr_cred_info.values.ar_data,
         };
 
-        Ok(IdentityCredentialProof {
+        Ok(IdentityBasedCredential {
             proofs,
             network: self.network,
             cred_id,
@@ -380,7 +380,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdCredentialStatement<C,
         csprng: &mut impl rand::Rng,
         now: chrono::DateTime<chrono::Utc>,
         input: CommitmentInputs<P, C, AttributeType, Signer>,
-    ) -> Result<Web3IdCredentialProof<C, AttributeType>, ProofError> {
+    ) -> Result<Web3IdBasedCredential<C, AttributeType>, ProofError> {
         let CommitmentInputs::Web3Issuer {
             signature,
             signer,
@@ -424,7 +424,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdCredentialStatement<C,
             commitments,
         };
         let proofs = prove_statements(
-            self.statement,
+            self.statements,
             values,
             randomness,
             global_context,
@@ -432,7 +432,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdCredentialStatement<C,
             csprng,
         )?;
 
-        Ok(Web3IdCredentialProof {
+        Ok(Web3IdBasedCredential {
             commitments,
             proofs,
             network: self.network,
@@ -604,7 +604,7 @@ pub mod tests {
             network: Network::Testnet,
             contract: web3_cred_fixture.contract,
             credential: web3_cred_fixture.cred_id,
-            statement: statements,
+            statements,
         })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
@@ -652,7 +652,7 @@ pub mod tests {
             network: Network::Testnet,
             contract: web3_cred_fixture.contract,
             credential: web3_cred_fixture.cred_id,
-            statement: vec![],
+            statements: vec![],
         })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
@@ -701,7 +701,7 @@ pub mod tests {
             network: Network::Testnet,
             contract: web3_cred_fixture.contract,
             credential: web3_cred_fixture.cred_id,
-            statement: statements,
+            statements,
         })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
@@ -718,7 +718,7 @@ pub mod tests {
             .expect("prove");
 
         // change commitments signature to be invalid
-        let CredentialProof::Web3Id(Web3IdCredentialProof { commitments, .. }) =
+        let CredentialProof::Web3Id(Web3IdBasedCredential { commitments, .. }) =
             &mut proof.verifiable_credential[0]
         else {
             panic!("should be web3 proof");
@@ -770,7 +770,7 @@ pub mod tests {
             network: Network::Testnet,
             contract: web3_cred_fixture.contract,
             credential: web3_cred_fixture.cred_id,
-            statement: statements,
+            statements,
         })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
@@ -787,7 +787,7 @@ pub mod tests {
             .expect("prove");
 
         // change statement to be invalid
-        let CredentialProof::Web3Id(Web3IdCredentialProof { proofs, .. }) =
+        let CredentialProof::Web3Id(Web3IdBasedCredential { proofs, .. }) =
             &mut proof.verifiable_credential[0]
         else {
             panic!("should be web3 proof");
@@ -833,7 +833,7 @@ pub mod tests {
             network: Network::Testnet,
             contract: web3_cred_fixture.contract,
             credential: web3_cred_fixture.cred_id,
-            statement: statements,
+            statements,
         })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
@@ -916,12 +916,12 @@ pub mod tests {
                 network: Network::Testnet,
                 contract: web3_cred_fixture.contract,
                 credential: web3_cred_fixture.cred_id,
-                statement: statements1,
+                statements: statements1,
             }),
             CredentialStatement::Account(AccountCredentialStatement {
                 network: Network::Testnet,
                 cred_id: acc_cred_fixture.cred_id,
-                statement: statements2,
+                statements: statements2,
             }),
         ];
 
@@ -970,7 +970,7 @@ pub mod tests {
             vec![CredentialStatement::Account(AccountCredentialStatement {
                 network: Network::Testnet,
                 cred_id: acc_cred_fixture.cred_id,
-                statement: statements,
+                statements,
             })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
@@ -1010,7 +1010,7 @@ pub mod tests {
             vec![CredentialStatement::Account(AccountCredentialStatement {
                 network: Network::Testnet,
                 cred_id: acc_cred_fixture.cred_id,
-                statement: vec![],
+                statements: vec![],
             })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
@@ -1052,7 +1052,7 @@ pub mod tests {
             vec![CredentialStatement::Account(AccountCredentialStatement {
                 network: Network::Testnet,
                 cred_id: acc_cred_fixture.cred_id,
-                statement: statements,
+                statements,
             })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
@@ -1069,7 +1069,7 @@ pub mod tests {
             .expect("prove");
 
         // change statement to be invalid
-        let CredentialProof::Account(AccountCredentialProof { proofs, .. }) =
+        let CredentialProof::Account(AccountBasedCredential { proofs, .. }) =
             &mut proof.verifiable_credential[0]
         else {
             panic!("should be account proof");
@@ -1107,7 +1107,7 @@ pub mod tests {
             vec![CredentialStatement::Account(AccountCredentialStatement {
                 network: Network::Testnet,
                 cred_id: acc_cred_fixture.cred_id,
-                statement: statements,
+                statements,
             })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
@@ -1162,7 +1162,7 @@ pub mod tests {
             network: Network::Testnet,
             contract: web3_cred_fixture.contract,
             credential: web3_cred_fixture.cred_id,
-            statement: statements,
+            statements,
         })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
@@ -1210,7 +1210,7 @@ pub mod tests {
             vec![CredentialStatement::Account(AccountCredentialStatement {
                 network: Network::Testnet,
                 cred_id: acc_cred_fixture.cred_id,
-                statement: statements,
+                statements,
             })];
 
         let request = Request::<ArCurve, Web3IdAttribute> {

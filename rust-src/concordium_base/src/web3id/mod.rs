@@ -57,12 +57,12 @@ pub const REVOKE_DOMAIN_STRING: &[u8] = b"WEB3ID:REVOKE";
 /// the credential secret key.
 pub const LINKING_DOMAIN_STRING: &[u8] = b"WEB3ID:LINKING";
 
-/// A statement about a single account credential
+/// A statement about a single account based credential
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AccountCredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub network: Network,
     pub cred_id: CredentialRegistrationID,
-    pub statement: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
+    pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
 }
 
 /// A statement about a single identity based credential
@@ -72,10 +72,10 @@ pub struct IdentityCredentialStatement<C: Curve, AttributeType: Attribute<C::Sca
     // todo ar should the identity provider be here? document what is here and what is not
     pub issuer: IpIdentity,
     /// Attribute statements
-    pub statement: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
+    pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
 }
 
-/// A statement about a single Web3 credential
+/// A statement about a single Web3 based credential
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Web3IdCredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// The credential type. This is chosen by the provider to provide
@@ -87,7 +87,7 @@ pub struct Web3IdCredentialStatement<C: Curve, AttributeType: Attribute<C::Scala
     pub contract: ContractAddress,
     /// Credential identifier inside the contract.
     pub credential: CredentialHolderId,
-    pub statement: Vec<AtomicStatement<C, String, AttributeType>>,
+    pub statements: Vec<AtomicStatement<C, String, AttributeType>>,
 }
 
 /// A statement about a single credential, either an account credential or a
@@ -122,7 +122,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<s
                 Ok(Self::Account(AccountCredentialStatement {
                     network: id.network,
                     cred_id,
-                    statement: serde_json::from_value(statement)?,
+                    statements: serde_json::from_value(statement)?,
                 }))
             }
             IdentifierType::ContractData {
@@ -140,7 +140,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<s
                     credential: CredentialHolderId::new(ed25519_dalek::VerifyingKey::from_bytes(
                         &parameter.as_ref().try_into()?,
                     )?),
-                    statement: serde_json::from_value(statement)?,
+                    statements: serde_json::from_value(statement)?,
                 }))
             }
             _ => {
@@ -161,7 +161,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
             CredentialStatement::Account(AccountCredentialStatement {
                 network,
                 cred_id,
-                statement,
+                statements: statement,
             }) => {
                 let json = serde_json::json!({
                     "id": format!("did:ccd:{network}:cred:{cred_id}"),
@@ -173,7 +173,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 network,
                 contract,
                 credential,
-                statement,
+                statements: statement,
                 ty,
             }) => {
                 let json = serde_json::json!({
@@ -275,9 +275,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialProof<C, AttributeType> {
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredential<C, AttributeType> {
     pub fn metadata(&self) -> AccountCredentialMetadata {
-        let AccountCredentialProof {
+        let AccountBasedCredential {
             cred_id, issuer, ..
         } = self;
 
@@ -289,7 +289,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialProof<C, At
 
     /// Extract the statement from the proof.
     pub fn statement(&self) -> AccountCredentialStatement<C, AttributeType> {
-        let AccountCredentialProof {
+        let AccountBasedCredential {
             network,
             cred_id,
             proofs,
@@ -299,16 +299,16 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialProof<C, At
         AccountCredentialStatement {
             network: *network,
             cred_id: *cred_id,
-            statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
+            statements: proofs.iter().map(|(x, _)| x.clone()).collect(),
         }
     }
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
-    IdentityCredentialProof<P, C, AttributeType>
+    IdentityBasedCredential<P, C, AttributeType>
 {
     pub fn metadata(&self) -> IdentityCredentialMetadata {
-        let IdentityCredentialProof {
+        let IdentityBasedCredential {
             issuer, validity, ..
         } = self;
 
@@ -320,7 +320,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 
     /// Extract the statement from the proof.
     pub fn statement(&self) -> IdentityCredentialStatement<C, AttributeType> {
-        let IdentityCredentialProof {
+        let IdentityBasedCredential {
             network,
             proofs,
             issuer,
@@ -330,7 +330,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         IdentityCredentialStatement {
             network: *network,
             issuer: *issuer,
-            statement: proofs
+            statements: proofs
                 .statement_proofs
                 .iter()
                 .map(|(x, _)| x.clone())
@@ -339,9 +339,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdCredentialProof<C, AttributeType> {
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdBasedCredential<C, AttributeType> {
     pub fn metadata(&self) -> Web3idCredentialMetadata {
-        let Web3IdCredentialProof {
+        let Web3IdBasedCredential {
             holder, contract, ..
         } = self;
 
@@ -353,7 +353,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdCredentialProof<C, Att
 
     /// Extract the statement from the proof.
     pub fn statement(&self) -> Web3IdCredentialStatement<C, AttributeType> {
-        let Web3IdCredentialProof {
+        let Web3IdBasedCredential {
             holder,
             network,
             contract,
@@ -367,15 +367,15 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdCredentialProof<C, Att
             network: *network,
             contract: *contract,
             credential: *holder,
-            statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
+            statements: proofs.iter().map(|(x, _)| x.clone()).collect(),
         }
     }
 }
 
-/// A proof of account credentials. This contains almost
+/// Account based credentials. This contains almost
 /// all the information needed to verify it, except the public commitments.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AccountCredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
+pub struct AccountBasedCredential<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Creation timestamp of the proof.
     pub created: chrono::DateTime<chrono::Utc>,
     pub network: Network,
@@ -405,7 +405,7 @@ pub struct IdentityCredentialId<C: Curve> {
 /// by an identity provider. The type contains almost
 /// all the information needed to verify it, except the identity provider and privacy guardian (anonymity revoker) public keys.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct IdentityCredentialProof<
+pub struct IdentityBasedCredential<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
@@ -435,7 +435,7 @@ pub struct IdentityCredentialProofs<
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 > {
-    /// Proof that the attributes and the other values in [`IdentityCredentialProof`] are correct
+    /// Proof that the attributes and the other values in [`IdentityBasedCredential`] are correct
     pub identity_attributes_proofs: IdentityAttributesCredentialsProofs<P, C>,
     /// Proofs of the atomic statements on attributes
     pub statement_proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
@@ -444,7 +444,7 @@ pub struct IdentityCredentialProofs<
 /// A proof of Web3 credentials. This contains almost
 /// all the information needed to verify it, except the issuer's public key.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Web3IdCredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
+pub struct Web3IdBasedCredential<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Creation timestamp of the proof.
     pub created: chrono::DateTime<chrono::Utc>,
     /// Owner of the credential, a public key.
@@ -462,16 +462,16 @@ pub struct Web3IdCredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> 
     pub proofs: Vec<StatementWithProof<C, String, AttributeType>>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
-#[serde(bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"))]
-#[serde(try_from = "serde_json::Value")]
 /// A proof corresponding to one [`CredentialStatement`]. This contains almost
 /// all the information needed to verify it, except the issuer's public key in
 /// case of the `Web3Id` proof, and the public commitments in case of the
 /// `Account` proof.
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
+#[serde(bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"))]
+#[serde(try_from = "serde_json::Value")]
 pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    Account(AccountCredentialProof<C, AttributeType>),
-    Web3Id(Web3IdCredentialProof<C, AttributeType>),
+    Account(AccountBasedCredential<C, AttributeType>),
+    Web3Id(Web3IdBasedCredential<C, AttributeType>),
 }
 
 /// Commitments signed by the issuer.
@@ -549,7 +549,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
         S: serde::Serializer,
     {
         match self {
-            CredentialProof::Account(AccountCredentialProof {
+            CredentialProof::Account(AccountBasedCredential {
                 created,
                 network,
                 cred_id,
@@ -571,7 +571,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 });
                 json.serialize(serializer)
             }
-            CredentialProof::Web3Id(Web3IdCredentialProof {
+            CredentialProof::Web3Id(Web3IdBasedCredential {
                 created,
                 network,
                 contract,
@@ -666,7 +666,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
 
                 anyhow::ensure!(proof_value.len() == statement.len());
                 let proofs = statement.into_iter().zip(proof_value).collect();
-                Ok(Self::Account(AccountCredentialProof {
+                Ok(Self::Account(AccountBasedCredential {
                     created,
                     network: issuer.network,
                     cred_id,
@@ -713,7 +713,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                 anyhow::ensure!(proof_value.len() == statement.len());
                 let proofs = statement.into_iter().zip(proof_value).collect();
 
-                Ok(Self::Web3Id(Web3IdCredentialProof {
+                Ok(Self::Web3Id(Web3IdBasedCredential {
                     created,
                     holder: CredentialHolderId::new(key),
                     network: issuer.network,
@@ -734,7 +734,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
     fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
         // todo ar proof ser
         match self {
-            CredentialProof::Account(AccountCredentialProof {
+            CredentialProof::Account(AccountBasedCredential {
                 created,
                 network,
                 cred_id,
@@ -748,7 +748,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
                 issuer.serial(out);
                 proofs.serial(out)
             }
-            CredentialProof::Web3Id(Web3IdCredentialProof {
+            CredentialProof::Web3Id(Web3IdBasedCredential {
                 created,
                 network,
                 contract,
@@ -1205,8 +1205,8 @@ impl Web3IdSigner for ed25519_dalek::SecretKey {
     }
 }
 
-/// The additional inputs, additional to the [`Request`] that are needed to
-/// produce a [`Presentation`].
+/// The additional private inputs (mostly secrets), needed to prove the statements
+/// in a [request](VersionedRequest).
 pub enum CommitmentInputs<
     'a,
     P: Pairing,
@@ -1624,10 +1624,8 @@ pub enum ProofError {
     IdentityAttributeCredentials(String),
 }
 
-/// Public inputs to the verification function. These are the public commitments
-/// that are contained in the credentials for identity credentials, and the
-/// issuer's public key for Web3ID credentials which do not store commitments on
-/// the chain.
+/// The additional public inputs needed to verify the statements
+/// in a [presentation](VersionedPresentation).
 #[derive(Debug, serde::Deserialize)]
 #[serde(
     bound = "C: Curve",
@@ -1689,7 +1687,6 @@ impl TryFrom<chrono::DateTime<chrono::Utc>> for Web3IdAttribute {
 
     fn try_from(value: chrono::DateTime<chrono::Utc>) -> Result<Self, Self::Error> {
         use anyhow::Context;
-        // todo ar figure this out, why -262144 big thing in json serialization
         // We construct a timestamp in milliseconds from the lowest possible value, and
         // add the offset to align with the previously defined lowest possible
         // value.
@@ -1984,7 +1981,7 @@ mod tests {
             vec![CredentialStatement::Account(AccountCredentialStatement {
                 network: Network::Testnet,
                 cred_id: acc_cred_fixture.cred_id,
-                statement: vec![
+                statements: vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
                             attribute_tag: 3.into(),
@@ -2292,7 +2289,7 @@ mod tests {
             network: Network::Testnet,
             contract: web3_cred_fixture.contract,
             credential: web3_cred_fixture.cred_id,
-            statement: vec![
+            statements: vec![
                 AtomicStatement::AttributeInRange {
                     statement: AttributeInRangeStatement {
                         attribute_tag: "3".into(),
