@@ -2723,6 +2723,7 @@ impl<C: Curve> HasAttributeRandomness<C> for SystemAttributeRandomness {
 
 /// The commitments produced by identity attribute credentials created from identity credential
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IdentityAttributesCredentialsCommitments<C: Curve> {
     /// commitments to the coefficients of the polynomial
     /// used to share id_cred_sec
@@ -2744,6 +2745,10 @@ pub struct IdentityAttributesCredentialsRandomness<C: Curve> {
 /// This structure contains all proofs, which are required to prove identity attributes credentials created
 /// from identity credential.
 #[derive(Debug, Eq, PartialEq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>",
+    deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>"
+))]
 pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// (Blinded) Signature derived from the signature on the pre-identity
     /// object by the IP
@@ -2796,6 +2801,10 @@ pub struct CredentialValidity {
 /// Attribute value as represented in the identity attribute credential values. An attribute value has ither been committed to,
 /// revealed, or just proven known.
 #[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone)]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
 pub enum IdentityAttribute<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// The attribute value is committed to and the value is proven equal to the value in the commitment
     Committed(PedersenCommitment<C>),
@@ -2845,6 +2854,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial
 
 /// Values (as opposed to proofs) in identity attribute credentials created from identity credential.
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
 pub struct IdentityAttributesCredentialsValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Identity of the identity provider who signed the identity object from
     /// which this credential is derived.
@@ -2872,6 +2885,10 @@ pub struct IdentityAttributesCredentialsValues<C: Curve, AttributeType: Attribut
 /// Identity attributes credentials created from identity credential, and proofs that it is
 /// well-formed.
 #[derive(Debug, Eq, PartialEq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
 pub struct IdentityAttributesCredentialsInfo<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,

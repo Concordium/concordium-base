@@ -182,18 +182,21 @@ pub type StatementWithProof<C, TagType, AttributeType> = (
 
 /// Metadata of an account credentials derived from an identity issued by an
 /// identity provider.
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct AccountCredentialMetadata {
     pub issuer: IpIdentity,
     pub cred_id: CredentialRegistrationID,
 }
 
 /// Metadata of an identity based credential.
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct IdentityCredentialMetadata {
     pub issuer: IpIdentity,
     pub validity: CredentialValidity,
 }
 
 /// Metadata of a Web3Id credential.
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Web3idCredentialMetadata {
     pub contract: ContractAddress,
     pub holder: CredentialHolderId,
@@ -630,7 +633,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
     for CredentialProof<C, AttributeType>
 {
     fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
-        // todo ar proof ser
         match self {
             CredentialProof::Account(AccountBasedCredential {
                 created,

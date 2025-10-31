@@ -41,7 +41,7 @@ const CONCORDIUM_IDENTITY_BASED_STATEMENT_TYPE: &'static str = "ConcordiumIdBase
 
 /// Context challenge that serves as a distinguishing context when requesting
 /// proofs.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, crate::common::Serialize, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, common::Serialize, Debug)]
 pub struct ContextChallenge {
     /// This part of the challenge is supposed to be provided by the dapp backend (e.g. merchant backend).
     pub given: Vec<ContextProperty>,
@@ -95,8 +95,7 @@ impl<'de> serde::Deserialize<'de> for ContextChallenge {
     PartialOrd,
     serde::Deserialize,
     serde::Serialize,
-    crate::common::Serial,
-    crate::common::Deserial,
+    common::Serialize,
     Debug,
 )]
 pub struct ContextProperty {
@@ -259,6 +258,7 @@ fn take_field_de<T: DeserializeOwned>(
 /// Metadata of a credential [`CredentialV1`].
 /// Contains the information needed to determine the validity of the
 /// credential and resolve [`CredentialsInputs`](super::CredentialsInputs)
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum CredentialMetadataTypeV1 {
     /// Metadata of an account credential, i.e., a credential derived from an
     /// identity object.
@@ -268,6 +268,7 @@ pub enum CredentialMetadataTypeV1 {
 }
 
 /// Metadata of a credential [`CredentialV1`].
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CredentialMetadataV1 {
     /// Timestamp of when the proof was created.
     pub created: chrono::DateTime<chrono::Utc>,
@@ -282,7 +283,6 @@ pub struct CredentialMetadataV1 {
 pub struct AccountBasedCredentialV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Creation timestamp of the proof.
     pub created: chrono::DateTime<chrono::Utc>,
-    pub network: Network,
     /// Issuer of this credential, the identity provider index on the
     /// relevant network.
     pub issuer: IpIdentity,
@@ -295,14 +295,57 @@ pub struct AccountBasedCredentialV1<C: Curve, AttributeType: Attribute<C::Scalar
 /// Subject of account based credential
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AccountCredentialSubject<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    pub network: Network,
     /// Reference to the credential to which this statement applies.
     pub cred_id: CredentialRegistrationID,
     /// Proven statements
     pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
 }
 
+impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
+    for AccountCredentialSubject<C, AttributeType>
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut map = serializer.serialize_map(None)?;
+        let id = did::Method::new_account_credential(self.network, self.cred_id);
+        map.serialize_entry("id", &id)?;
+        map.serialize_entry("statement", &self.statements)?;
+        map.end()
+    }
+}
+
+impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serde::Deserialize<'de>
+    for AccountCredentialSubject<C, AttributeType>
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let mut value = serde_json::Value::deserialize(deserializer)?;
+
+        let result = (|| -> anyhow::Result<Self> {
+            let id: did::Method = take_field_de(&mut value, "id")?;
+            let did::IdentifierType::AccountCredential { cred_id } = id.ty else {
+                bail!("expected identity credential did, was {}", id);
+            };
+            let statement = take_field_de(&mut value, "statement")?;
+
+            Ok(Self {
+                network: id.network,
+                cred_id,
+                statements: statement,
+            })
+        })();
+
+        result.map_err(|err| D::Error::custom(format!("{:#}", err)))
+    }
+}
+
 /// Proof of account based credential
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, common::Serialize)]
 pub struct AccountCredentialProofs<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Proofs of the atomic statements on attributes
     pub statement_proofs: Vec<AtomicProof<C, AttributeType>>,
@@ -325,9 +368,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
     /// Extract the statement from the proof.
     pub fn statement(&self) -> AccountCredentialStatementV1<C, AttributeType> {
         let AccountBasedCredentialV1 {
-            network,
             subject:
                 AccountCredentialSubject {
+                    network,
                     cred_id,
                     statements,
                 },
@@ -350,8 +393,7 @@ pub struct IdentityCredentialId<C: Curve> {
     /// Anonymity revocation data. It is an encryption of shares of IdCredSec,
     /// each share encrypted for the privacy guardian (anonymity revoker)
     /// that is the key in the map.
-    // #[map_size_length = 2]
-    // #[serde(rename = "arData", deserialize_with = "deserialize_ar_data")]
+    #[map_size_length = 2]
     pub ar_data: BTreeMap<ArIdentity, ChainArData<C>>,
 }
 
@@ -366,7 +408,6 @@ pub struct IdentityBasedCredentialV1<
 > {
     /// Creation timestamp of the credential
     pub created: chrono::DateTime<chrono::Utc>,
-    pub network: Network,
     /// Issuer of the underlying identity credential from which this credential is derived.
     pub issuer: IpIdentity,
     /// Decryption threshold of the IdCredPub in [`IdentityCredentialId`]
@@ -387,14 +428,57 @@ pub struct IdentityBasedCredentialV1<
 /// Subject of identity based credential
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IdentityCredentialSubject<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    pub network: Network,
     /// Ephemeral id for the credential
     pub cred_id: IdentityCredentialId<C>,
     /// Proven statements
     pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
 }
 
+impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
+    for IdentityCredentialSubject<C, AttributeType>
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut map = serializer.serialize_map(None)?;
+        let id = did::Method::new_identity_credential(self.network, self.cred_id.clone());
+        map.serialize_entry("id", &id)?;
+        map.serialize_entry("statement", &self.statements)?;
+        map.end()
+    }
+}
+
+impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serde::Deserialize<'de>
+    for IdentityCredentialSubject<C, AttributeType>
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let mut value = serde_json::Value::deserialize(deserializer)?;
+
+        let result = (|| -> anyhow::Result<Self> {
+            let id: did::Method = take_field_de(&mut value, "id")?;
+            let did::IdentifierType::IdentityCredential { cred_id } = id.ty else {
+                bail!("expected identity credential did, was {}", id);
+            };
+            let statement = take_field_de(&mut value, "statement")?;
+
+            Ok(Self {
+                network: id.network,
+                cred_id,
+                statements: statement,
+            })
+        })();
+
+        result.map_err(|err| D::Error::custom(format!("{:#}", err)))
+    }
+}
+
 /// Proof of identity based credential
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, common::Serialize)]
 pub struct IdentityCredentialProofs<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -423,8 +507,12 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     /// Extract the statement from the proof.
     pub fn statement(&self) -> IdentityCredentialStatementV1<C, AttributeType> {
         let IdentityBasedCredentialV1 {
-            network,
-            subject: IdentityCredentialSubject { statements, .. },
+            subject:
+                IdentityCredentialSubject {
+                    network,
+                    statements,
+                    ..
+                },
             issuer,
             ..
         } = self;
@@ -463,86 +551,55 @@ impl<
     where
         S: serde::Serializer,
     {
-        todo!()
-        // match self {
-        //     Self::Account(AccountBasedCredential {
-        //         created,
-        //         network,
-        //         cred_id,
-        //         issuer,
-        //         proofs,
-        //     }) => {
-        //
-        //
-        //         let mut map = serializer.serialize_map(None)?;
-        //         map.serialize_entry(
-        //             "type",
-        //             &[
-        //                 VERIFIABLE_CREDENTIAL_TYPE,
-        //                 CONCORDIUM_VERIFIABLE_CREDENTIAL_V1_TYPE,
-        //                 CONCORDIUM_ACCOUNT_BASED_CREDENTIAL_TYPE,
-        //             ],
-        //         )?;
-        //         let issuer = did::Method::new_idp(*network, *issuer);
-        //         map.serialize_entry("issuer", &issuer)?;
-        //         map.serialize_entry("credentialSubject", serde_json::json!({
-        //
-        //         }))?;
-        //
-        //         let id = did::Method::new_account_credential(*network, *cred_id);
-        //
-        //         // map.serialize_entry("id", &format!("did:ccd:{network}:cred:{cred_id}"))?;
-        //         // map.serialize_entry("statement", statement)?;
-        //         map.end()
-        //     }
-        //     Self::Web3Id(Web3IdCredentialStatement {
-        //         network,
-        //         contract,
-        //         credential,
-        //         statements: statement,
-        //         ty,
-        //     }) => {
-        //         let mut map = serializer.serialize_map(None)?;
-        //         map.serialize_entry(
-        //             "type", // todo ar what to do about type here
-        //             ty,
-        //         )?;
-        //         map.serialize_entry(
-        //             "id",
-        //             &format!(
-        //                 "did:ccd:{network}:sci:{}:{}/credentialEntry/{}",
-        //                 contract.index, contract.subindex, credential
-        //             ),
-        //         )?;
-        //         map.serialize_entry("statement", statement)?;
-        //         map.end()
-        //     }
-        //     Self::Identity(IdentityCredentialStatement {
-        //         network,
-        //         issuer,
-        //         statements: statement,
-        //     }) => {
-        //         let did = did::Method {
-        //             network: *network,
-        //             ty: did::IdentifierType::Idp {
-        //                 idp_identity: *issuer,
-        //             },
-        //         };
-        //
-        //         let mut map = serializer.serialize_map(None)?;
-        //         map.serialize_entry(
-        //             "type",
-        //             &[
-        //                 VERIFIABLE_CREDENTIAL_TYPE,
-        //                 CONCORDIUM_VERIFIABLE_CREDENTIAL_V1_TYPE,
-        //                 CONCORDIUM_IDENTITY_BASED_CREDENTIAL_TYPE,
-        //             ],
-        //         )?;
-        //         // map.serialize_entry("issuer", &did)?;
-        //         // map.serialize_entry("statement", statement)?;
-        //         map.end()
-        //     }
-        // }
+        match self {
+            Self::Account(AccountBasedCredentialV1 {
+                created,
+                subject,
+                issuer,
+                proofs,
+            }) => {
+                let mut map = serializer.serialize_map(None)?;
+                map.serialize_entry(
+                    "type",
+                    &[
+                        VERIFIABLE_CREDENTIAL_TYPE,
+                        CONCORDIUM_VERIFIABLE_CREDENTIAL_V1_TYPE,
+                        CONCORDIUM_ACCOUNT_BASED_CREDENTIAL_TYPE,
+                    ],
+                )?;
+                map.serialize_entry("credentialSubject", subject)?;
+                let issuer = did::Method::new_idp(subject.network, *issuer);
+                map.serialize_entry("issuer", &issuer)?;
+                map.end()
+            }
+            Self::Identity(IdentityBasedCredentialV1 {
+                created,
+                issuer,
+                threshold,
+                validity,
+                attributes,
+                subject,
+                proofs,
+            }) => {
+                let mut map = serializer.serialize_map(None)?;
+                map.serialize_entry(
+                    "type",
+                    &[
+                        VERIFIABLE_CREDENTIAL_TYPE,
+                        CONCORDIUM_VERIFIABLE_CREDENTIAL_V1_TYPE,
+                        CONCORDIUM_IDENTITY_BASED_CREDENTIAL_TYPE,
+                    ],
+                )?;
+                map.serialize_entry("credentialSubject", subject)?;
+                map.serialize_entry("validFrom", &validity.created_at)?;
+                map.serialize_entry("validUntil", &validity.valid_to)?;
+                let issuer = did::Method::new_idp(subject.network, *issuer);
+                map.serialize_entry("issuer", &issuer)?;
+                map.serialize_entry("attributes", &attributes)?;
+                map.serialize_entry("threshold", &threshold)?;
+                map.end()
+            }
+        }
     }
 }
 
@@ -561,47 +618,13 @@ impl<
     }
 }
 
-impl<P: Pairing<ScalarField = C::Scalar>, C: Curve, AttributeType: Attribute<C::Scalar>>
-    crate::common::Serial for CredentialV1<P, C, AttributeType>
-{
-    fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
-        // todo ar proof ser
-        match self {
-            CredentialV1::Account(AccountBasedCredentialV1 {
-                ..
-                // created,
-                // network,
-                // cred_id,
-                // proofs,
-                // issuer,
-            }) => {
-                0u8.serial(out);
-                // todo ar
-                // created.timestamp_millis().serial(out);
-                // network.serial(out);
-                // cred_id.serial(out);
-                // issuer.serial(out);
-                // proofs.serial(out)
-            }
-            CredentialV1::Identity(IdentityBasedCredentialV1 { .. }) => {
-                // todo ar update
-                1u8.serial(out);
-                // created.timestamp_millis().serial(out);
-                // network.serial(out);
-                // id_attr_cred_info.serial(out);
-                // proofs.serial(out)
-            }
-        }
-    }
-}
-
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
     CredentialV1<P, C, AttributeType>
 {
     pub fn network(&self) -> Network {
         match self {
-            CredentialV1::Account(acc) => acc.network,
-            CredentialV1::Identity(id) => id.network,
+            CredentialV1::Account(acc) => acc.subject.network,
+            CredentialV1::Identity(id) => id.subject.network,
         }
     }
 

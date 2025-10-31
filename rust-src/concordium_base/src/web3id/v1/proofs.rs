@@ -43,7 +43,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     /// In case of success returns the [`RequestV1`] for which the presentation
     /// verifies.
     ///
-    /// **NB:** This only verifies the cryptographic consistentcy of the data.
+    /// **NB:** This only verifies the cryptographic consistency of the data.
     /// It does not check metadata, such as expiry. This should be checked
     /// separately by the verifier.
     pub fn verify<'a>(
@@ -239,8 +239,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatementV1
             subject: AccountCredentialSubject {
                 cred_id: self.cred_id,
                 statements: self.statements,
+                network: self.network,
             },
-            network: self.network,
             created: now,
             issuer,
         })
@@ -317,11 +317,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>>
 
         Ok(IdentityBasedCredentialV1 {
             proofs,
-            network: self.network,
             threshold: id_attr_cred_info.values.threshold,
             subject: IdentityCredentialSubject {
                 cred_id,
                 statements: self.statements,
+                network: self.network,
             },
             issuer: id_attr_cred_info.values.ip_identity,
             attributes: id_attr_cred_info.values.attributes,
