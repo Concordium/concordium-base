@@ -2772,7 +2772,7 @@ pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::
         deserialize_with = "base16_decode"
     )]
     pub challenge: Challenge,
-    /// Proof (response part), or each privacy guardian (anonymity revoker) that the commitment to
+    /// Proof (response part), for each privacy guardian (anonymity revoker) that the commitment to
     /// the IdCredSec share contains the same value as the encryption. The commitment to the share
     /// is calculated from the commitments to the coefficients in the sharing polynomial.
     #[serde(rename = "proofIdCredPub")]
