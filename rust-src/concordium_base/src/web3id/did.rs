@@ -420,7 +420,6 @@ mod tests {
     use super::*;
     use crate::common;
     use crate::elgamal::Cipher;
-    use crate::id::secret_sharing::Threshold;
     use crate::id::types::{ArIdentity, ChainArData};
     use crate::web3id::fixtures;
     use std::collections::BTreeMap;
@@ -638,7 +637,6 @@ mod tests {
 
     /// Create an [`IdentityCredentialId`] to use in tests
     fn identity_cred_id_fixture() -> IdentityCredentialId<ArCurve> {
-        let threshold = Threshold(4);
         let mut ar_data = BTreeMap::new();
         ar_data.insert(
             ArIdentity::try_from(1).unwrap(),
@@ -659,7 +657,7 @@ mod tests {
             },
         );
 
-        IdentityCredentialId { threshold, ar_data }
+        IdentityCredentialId { ar_data }
     }
 
     #[test]
@@ -685,7 +683,7 @@ mod tests {
             target
         );
         let s = target.to_string();
-        assert_eq!(s, "did:ccd:mainnet:idcred:04000000000000000300000001ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e00000002ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e00000003ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e");
+        assert_eq!(s, "did:ccd:mainnet:idcred:000000000000000300000001ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e00000002ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e00000003ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e");
         assert_eq!(s.parse::<Method>().unwrap(), target);
         assert_eq!(
             format!("did:ccd:testnet:idcred:{cred_id_hex}")

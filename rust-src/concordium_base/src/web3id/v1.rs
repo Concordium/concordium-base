@@ -7,16 +7,14 @@ mod proofs;
 use crate::base::CredentialRegistrationID;
 use crate::common;
 use crate::curve_arithmetic::{Curve, Pairing};
-use crate::id::id_proof_types::AtomicStatement;
+use crate::id::id_proof_types::{AtomicProof, AtomicStatement};
 use crate::id::secret_sharing::Threshold;
 use crate::id::types::{
     ArIdentity, Attribute, AttributeTag, ChainArData, CredentialValidity, IdentityAttribute,
     IdentityAttributesCredentialsProofs, IpIdentity,
 };
 use crate::web3id::did::Network;
-use crate::web3id::{
-    did, AccountCredentialMetadata, IdentityCredentialMetadata, LinkingProof, StatementWithProof,
-};
+use crate::web3id::{did, AccountCredentialMetadata, IdentityCredentialMetadata, LinkingProof};
 use anyhow::{bail, ensure, Context};
 use itertools::Itertools;
 
@@ -285,18 +283,37 @@ pub struct AccountBasedCredentialV1<C: Curve, AttributeType: Attribute<C::Scalar
     /// Creation timestamp of the proof.
     pub created: chrono::DateTime<chrono::Utc>,
     pub network: Network,
-    /// Reference to the credential to which this statement applies.
-    pub cred_id: CredentialRegistrationID,
     /// Issuer of this credential, the identity provider index on the
     /// relevant network.
     pub issuer: IpIdentity,
-    pub proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
+    /// Credential subject
+    pub subject: AccountCredentialSubject<C, AttributeType>,
+    /// Proofs of the credential
+    pub proofs: AccountCredentialProofs<C, AttributeType>,
+}
+
+/// Subject of account based credential
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AccountCredentialSubject<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// Reference to the credential to which this statement applies.
+    pub cred_id: CredentialRegistrationID,
+    /// Proven statements
+    pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
+}
+
+/// Proof of account based credential
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AccountCredentialProofs<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// Proofs of the atomic statements on attributes
+    pub statement_proofs: Vec<AtomicProof<C, AttributeType>>,
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, AttributeType> {
     pub fn metadata(&self) -> AccountCredentialMetadata {
         let AccountBasedCredentialV1 {
-            cred_id, issuer, ..
+            subject: AccountCredentialSubject { cred_id, .. },
+            issuer,
+            ..
         } = self;
 
         AccountCredentialMetadata {
@@ -309,7 +326,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
     pub fn statement(&self) -> AccountCredentialStatementV1<C, AttributeType> {
         let AccountBasedCredentialV1 {
             network,
-            cred_id,
+            subject:
+                AccountCredentialSubject {
+                    cred_id,
+                    statements,
+                },
             proofs,
             ..
         } = self;
@@ -317,7 +338,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
         AccountCredentialStatementV1 {
             network: *network,
             cred_id: *cred_id,
-            statements: proofs.iter().map(|(x, _)| x.clone()).collect(),
+            statements: statements.clone(),
         }
     }
 }
@@ -326,8 +347,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
 /// It will have a new value for each time credential is proven (the encryption is a randomized function)
 #[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
 pub struct IdentityCredentialId<C: Curve> {
-    /// Anonymity revocation threshold. Must be <= length of ar_data.
-    pub threshold: Threshold,
     /// Anonymity revocation data. It is an encryption of shares of IdCredSec,
     /// each share encrypted for the privacy guardian (anonymity revoker)
     /// that is the key in the map.
@@ -348,19 +367,30 @@ pub struct IdentityBasedCredentialV1<
     /// Creation timestamp of the credential
     pub created: chrono::DateTime<chrono::Utc>,
     pub network: Network,
-    /// Ephemeral id for the credential
-    pub cred_id: IdentityCredentialId<C>,
     /// Issuer of the underlying identity credential from which this credential is derived.
     pub issuer: IpIdentity,
+    /// Decryption threshold of the IdCredPub in [`IdentityCredentialId`]
+    pub threshold: Threshold,
+    /// Temporal validity of the credential
+    // #[serde(rename = "validity")]
+    pub validity: CredentialValidity,
     /// The attributes that are part of the underlying identity credential from which this credential is derived
     // #[map_size_length = 2]
     // #[serde(rename = "attributes")]
     pub attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
-    /// Temporal validity of the credential
-    // #[serde(rename = "validity")]
-    pub validity: CredentialValidity,
+    /// Credential subject
+    pub subject: IdentityCredentialSubject<C, AttributeType>,
     /// Proofs of the credential
     pub proofs: IdentityCredentialProofs<P, C, AttributeType>,
+}
+
+/// Subject of identity based credential
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IdentityCredentialSubject<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// Ephemeral id for the credential
+    pub cred_id: IdentityCredentialId<C>,
+    /// Proven statements
+    pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
 }
 
 /// Proof of identity based credential
@@ -373,7 +403,7 @@ pub struct IdentityCredentialProofs<
     /// Proof that the attributes and the other values in [`IdentityBasedCredentialV1`] are correct
     pub identity_attributes_proofs: IdentityAttributesCredentialsProofs<P, C>,
     /// Proofs of the atomic statements on attributes
-    pub statement_proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
+    pub statement_proofs: Vec<AtomicProof<C, AttributeType>>,
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
@@ -394,7 +424,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     pub fn statement(&self) -> IdentityCredentialStatementV1<C, AttributeType> {
         let IdentityBasedCredentialV1 {
             network,
-            proofs,
+            subject: IdentityCredentialSubject { statements, .. },
             issuer,
             ..
         } = self;
@@ -402,11 +432,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         IdentityCredentialStatementV1 {
             network: *network,
             issuer: *issuer,
-            statements: proofs
-                .statement_proofs
-                .iter()
-                .map(|(x, _)| x.clone())
-                .collect(),
+            statements: statements.clone(),
         }
     }
 }
@@ -542,18 +568,20 @@ impl<P: Pairing<ScalarField = C::Scalar>, C: Curve, AttributeType: Attribute<C::
         // todo ar proof ser
         match self {
             CredentialV1::Account(AccountBasedCredentialV1 {
-                created,
-                network,
-                cred_id,
-                proofs,
-                issuer,
+                ..
+                // created,
+                // network,
+                // cred_id,
+                // proofs,
+                // issuer,
             }) => {
                 0u8.serial(out);
-                created.timestamp_millis().serial(out);
-                network.serial(out);
-                cred_id.serial(out);
-                issuer.serial(out);
-                proofs.serial(out)
+                // todo ar
+                // created.timestamp_millis().serial(out);
+                // network.serial(out);
+                // cred_id.serial(out);
+                // issuer.serial(out);
+                // proofs.serial(out)
             }
             CredentialV1::Identity(IdentityBasedCredentialV1 { .. }) => {
                 // todo ar update

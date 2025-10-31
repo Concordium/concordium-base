@@ -18,7 +18,6 @@ use crate::id::types::{
 use crate::{
     base::CredentialRegistrationID,
     cis4_types::IssuerKey,
-    common,
     common::{base16_decode_string, base16_encode_string},
     curve_arithmetic::Curve,
     id::{

@@ -3,7 +3,6 @@ use crate::{
     curve_arithmetic::Curve,
     id::types::{Attribute, GlobalContext},
     random_oracle::RandomOracle,
-    web3id,
 };
 use std::collections::BTreeMap;
 
@@ -13,17 +12,19 @@ use crate::web3id::{
 };
 
 use crate::curve_arithmetic::Pairing;
-use crate::id::id_proof_types::AtomicStatement;
+use crate::id::id_proof_types::{AtomicProof, AtomicStatement, ProofVersion};
 use crate::id::identity_attributes_credentials;
 use crate::id::identity_attributes_credentials::IdentityAttributeHandling;
 use crate::id::types::{
-    IdentityAttribute, IdentityAttributesCredentialsInfo, IdentityAttributesCredentialsValues,
-    IpContextOnly,
+    HasAttributeRandomness, HasAttributeValues, IdentityAttribute,
+    IdentityAttributesCredentialsInfo, IdentityAttributesCredentialsValues, IpContextOnly,
 };
+use crate::pedersen_commitment::Commitment;
 use crate::web3id::v1::{
-    AccountBasedCredentialV1, AccountCredentialStatementV1, ContextChallenge, CredentialMetadataV1,
-    CredentialStatementV1, CredentialV1, IdentityBasedCredentialV1, IdentityCredentialId,
-    IdentityCredentialProofs, IdentityCredentialStatementV1, PresentationV1, RequestV1,
+    AccountBasedCredentialV1, AccountCredentialProofs, AccountCredentialStatementV1,
+    AccountCredentialSubject, ContextChallenge, CredentialMetadataV1, CredentialStatementV1,
+    CredentialV1, IdentityBasedCredentialV1, IdentityCredentialId, IdentityCredentialProofs,
+    IdentityCredentialStatementV1, IdentityCredentialSubject, PresentationV1, RequestV1,
 };
 use rand::{CryptoRng, Rng};
 
@@ -105,7 +106,15 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
             return false;
         };
 
-        web3id::proofs::verify_statements(&self.proofs, commitments, global_context, transcript)
+        verify_statements(
+            self.subject
+                .statements
+                .iter()
+                .zip(self.proofs.statement_proofs.iter()),
+            commitments,
+            global_context,
+            transcript,
+        )
     }
 }
 
@@ -126,8 +135,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         let id_attr_cred_info = IdentityAttributesCredentialsInfo {
             values: IdentityAttributesCredentialsValues {
                 ip_identity: self.issuer,
-                threshold: self.cred_id.threshold,
-                ar_data: self.cred_id.ar_data.clone(),
+                threshold: self.threshold,
+                ar_data: self.subject.cred_id.ar_data.clone(),
                 attributes: self.attributes.clone(),
                 validity: self.validity.clone(),
             },
@@ -157,13 +166,45 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             })
             .collect();
 
-        web3id::proofs::verify_statements(
-            &self.proofs.statement_proofs,
+        verify_statements(
+            self.subject
+                .statements
+                .iter()
+                .zip(self.proofs.statement_proofs.iter()),
             &cmm_attributes,
             global_context,
             transcript,
         )
     }
+}
+
+fn verify_statements<
+    'a,
+    C: Curve,
+    AttributeType: Attribute<C::Scalar> + 'a,
+    TagType: Ord + crate::common::Serialize + 'a,
+>(
+    statements_with_proofs: impl IntoIterator<
+        Item = (
+            &'a AtomicStatement<C, TagType, AttributeType>,
+            &'a AtomicProof<C, AttributeType>,
+        ),
+    >,
+    cmm_attributes: &BTreeMap<TagType, Commitment<C>>,
+    global_context: &GlobalContext<C>,
+    transcript: &mut RandomOracle,
+) -> bool {
+    statements_with_proofs
+        .into_iter()
+        .all(|(statement, proof)| {
+            statement.verify(
+                ProofVersion::Version2,
+                global_context,
+                transcript,
+                cmm_attributes,
+                proof,
+            )
+        })
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatementV1<C, AttributeType> {
@@ -184,8 +225,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatementV1
             return Err(ProofError::CommitmentsStatementsMismatch);
         };
 
-        let proofs = web3id::proofs::prove_statements(
-            self.statements,
+        let statement_proofs = prove_statements(
+            &self.statements,
             values,
             randomness,
             global_context,
@@ -194,8 +235,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatementV1
         )?;
 
         Ok(AccountBasedCredentialV1 {
-            cred_id: self.cred_id,
-            proofs,
+            proofs: AccountCredentialProofs { statement_proofs },
+            subject: AccountCredentialSubject {
+                cred_id: self.cred_id,
+                statements: self.statements,
+            },
             network: self.network,
             created: now,
             issuer,
@@ -253,8 +297,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>>
             )
             .map_err(|err| ProofError::IdentityAttributeCredentials(err.to_string()))?;
 
-        let statement_proofs = web3id::proofs::prove_statements(
-            self.statements,
+        let statement_proofs = prove_statements(
+            &self.statements,
             &id_object.get_attribute_list().alist,
             &id_attr_cmm_rand.attributes_rand,
             global_context,
@@ -268,20 +312,53 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>>
         };
 
         let cred_id = IdentityCredentialId {
-            threshold: id_attr_cred_info.values.threshold,
             ar_data: id_attr_cred_info.values.ar_data,
         };
 
         Ok(IdentityBasedCredentialV1 {
             proofs,
             network: self.network,
-            cred_id,
+            threshold: id_attr_cred_info.values.threshold,
+            subject: IdentityCredentialSubject {
+                cred_id,
+                statements: self.statements,
+            },
             issuer: id_attr_cred_info.values.ip_identity,
             attributes: id_attr_cred_info.values.attributes,
             created: now,
             validity: id_attr_cred_info.values.validity,
         })
     }
+}
+
+fn prove_statements<
+    'a,
+    C: Curve,
+    AttributeType: Attribute<C::Scalar> + 'a,
+    TagType: Ord + crate::common::Serialize + 'a,
+>(
+    statements: impl IntoIterator<Item = &'a AtomicStatement<C, TagType, AttributeType>>,
+    attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
+    attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
+    global_context: &GlobalContext<C>,
+    transcript: &mut RandomOracle,
+    csprng: &mut impl rand::Rng,
+) -> Result<Vec<AtomicProof<C, AttributeType>>, ProofError> {
+    statements
+        .into_iter()
+        .map(|statement| {
+            statement
+                .prove(
+                    ProofVersion::Version2,
+                    global_context,
+                    transcript,
+                    csprng,
+                    attribute_values,
+                    attribute_randomness,
+                )
+                .ok_or(ProofError::MissingAttribute)
+        })
+        .collect()
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatementV1<C, AttributeType> {
@@ -562,12 +639,12 @@ pub mod tests {
             .expect("prove");
 
         // change statement to be invalid
-        let CredentialV1::Account(AccountBasedCredentialV1 { proofs, .. }) =
+        let CredentialV1::Account(AccountBasedCredentialV1 { subject, .. }) =
             &mut proof.verifiable_credentials[0]
         else {
             panic!("should be account proof");
         };
-        proofs[2].0 = AtomicStatement::AttributeInRange {
+        subject.statements[2] = AtomicStatement::AttributeInRange {
             statement: AttributeInRangeStatement {
                 attribute_tag: 3.into(),
                 lower: Web3IdAttribute::Numeric(200),
@@ -791,12 +868,12 @@ pub mod tests {
             .expect("prove");
 
         // change statement to be invalid
-        let CredentialV1::Identity(IdentityBasedCredentialV1 { proofs, .. }) =
+        let CredentialV1::Identity(IdentityBasedCredentialV1 { subject, .. }) =
             &mut proof.verifiable_credentials[0]
         else {
             panic!("should be account proof");
         };
-        proofs.statement_proofs[2].0 = AtomicStatement::AttributeInRange {
+        subject.statements[2] = AtomicStatement::AttributeInRange {
             statement: AttributeInRangeStatement {
                 attribute_tag: 3.into(),
                 lower: Web3IdAttribute::Numeric(200),

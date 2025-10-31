@@ -153,7 +153,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdBasedCredential<C, Att
     }
 }
 
-pub fn verify_statements<
+fn verify_statements<
     'a,
     C: Curve,
     AttributeType: Attribute<C::Scalar> + 'a,
@@ -302,7 +302,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdCredentialStatement<C,
     }
 }
 
-pub fn prove_statements<
+fn prove_statements<
     C: Curve,
     AttributeType: Attribute<C::Scalar>,
     TagType: Ord + crate::common::Serialize,
