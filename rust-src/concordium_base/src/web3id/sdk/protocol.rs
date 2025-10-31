@@ -68,7 +68,7 @@ impl VerificationAuditRecord {
     /// Computes a hash of the verification audit record.
     ///
     /// This hash is used to create a tamper-evident anchor that can be stored
-    /// on-chain to prove the an audit record was made at a specific time and with
+    /// on-chain to prove an audit record was made at a specific time and with
     /// specific parameters.
     pub fn hash(&self) -> hashes::Hash {
         use crate::common::Serial;
@@ -82,8 +82,8 @@ impl VerificationAuditRecord {
         public_info: Option<HashMap<String, cbor::value::Value>>,
     ) -> VerificationAuditRecordOnChain {
         VerificationAuditRecordOnChain {
-            // Concordium Verification Audit Record
-            r#type: "CCDVAR".to_string(),
+            // Concordium Verification Audit Anchor
+            r#type: "CCDVAA".to_string(),
             version: 1,
             hash: self.hash(),
             public: public_info,
@@ -96,7 +96,7 @@ impl VerificationAuditRecord {
 /// This format is used when anchoring a verification audit on the Concordium blockchain.
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 pub struct VerificationAuditRecordOnChain {
-    /// Type identifier for Concordium Verifiable Request Audit Record. Always set to "CCDVAA".
+    /// Type identifier for Concordium Verifiable Request Audit Anchor/Record. Always set to "CCDVAA".
     pub r#type: String,
     /// Data format version integer, for now it is always 1.
     pub version: u16,
@@ -198,9 +198,9 @@ impl Context {
     ///
     /// # Parameters
     ///
-    /// - `nonce` Cryptographic nonce for preventing replay attacks
-    /// - `connectionId` Identifier for the verification session
-    /// - `contextString` Additional context information
+    /// - `nonce` Cryptographic nonce for preventing replay attacks and should be at least of length bytes32.
+    /// - `connectionId` Identifier for the verification session (e.g. wallet-connect topic).
+    /// - `contextString` Additional context information.
     pub fn new_simple(nonce: Vec<u8>, connection_id: String, context_string: String) -> Self {
         Self::default()
             .add_context(GivenContext::Nonce(nonce))
@@ -616,7 +616,6 @@ impl TryFrom<GivenContextJson> for GivenContext {
     fn try_from(value: GivenContextJson) -> Result<Self, Self::Error> {
         match value.label {
             ContextLabel::ContextString => Ok(Self::ContextString(value.context)),
-
             ContextLabel::ResourceId => Ok(Self::ResourceId(value.context)),
             ContextLabel::ConnectionId => Ok(Self::ConnectionId(value.context)),
             ContextLabel::Nonce => Ok(Self::Nonce(
