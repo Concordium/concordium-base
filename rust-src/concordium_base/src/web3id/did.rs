@@ -1,7 +1,7 @@
 //! Definition of Concordium DIDs and their parser.
 
 use crate::id::constants::ArCurve;
-use crate::web3id::IdentityCredentialId;
+use crate::web3id::v1::IdentityCredentialId;
 use crate::{
     base::CredentialRegistrationID, common, common::base16_decode_string, id::types::IpIdentity,
 };
@@ -148,9 +148,7 @@ impl Method {
     pub fn new_idp(network: Network, idp_identity: IpIdentity) -> Self {
         Self {
             network,
-            ty: IdentifierType::Idp {
-                idp_identity
-            }
+            ty: IdentifierType::Idp { idp_identity },
         }
     }
 
@@ -158,9 +156,7 @@ impl Method {
     pub fn new_account(network: Network, address: AccountAddress) -> Self {
         Self {
             network,
-            ty: IdentifierType::Account {
-                address
-            }
+            ty: IdentifierType::Account { address },
         }
     }
 
@@ -168,19 +164,18 @@ impl Method {
     pub fn new_account_credential(network: Network, cred_id: CredentialRegistrationID) -> Self {
         Self {
             network,
-            ty: IdentifierType::AccountCredential {
-                cred_id
-            }
+            ty: IdentifierType::AccountCredential { cred_id },
         }
     }
 
     /// Construct variant [`IdentityCredential`](IdentifierType::IdentityCredential)
-    pub fn new_identity_credential(network: Network, cred_id: IdentityCredentialId<ArCurve>) -> Self {
+    pub fn new_identity_credential(
+        network: Network,
+        cred_id: IdentityCredentialId<ArCurve>,
+    ) -> Self {
         Self {
             network,
-            ty: IdentifierType::IdentityCredential {
-                cred_id
-            }
+            ty: IdentifierType::IdentityCredential { cred_id },
         }
     }
 
@@ -188,9 +183,7 @@ impl Method {
     pub fn new_public_key(network: Network, key: ed25519_dalek::VerifyingKey) -> Self {
         Self {
             network,
-            ty: IdentifierType::PublicKey {
-                key
-            }
+            ty: IdentifierType::PublicKey { key },
         }
     }
 }

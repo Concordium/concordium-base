@@ -8,24 +8,18 @@ use crate::{
 
 use crate::web3id::{
     AccountBasedCredential, AccountCredentialStatement, CommitmentInputs, CredentialHolderId,
-    CredentialProof, CredentialStatement, CredentialsInputs, IdentityCredentialId,
-    IdentityBasedCredential, IdentityCredentialProofs, IdentityCredentialStatement, LinkingProof,
-    Presentation, PresentationVerificationError, ProofError, ProofMetadata, Request,
-    Sha256Challenge, SignedCommitments, StatementWithProof, WeakLinkingProof,
-    Web3IdBasedCredential, Web3IdCredentialStatement, Web3IdSigner,
-    COMMITMENT_SIGNATURE_DOMAIN_STRING, LINKING_DOMAIN_STRING,
+    CredentialProof, CredentialStatement, CredentialsInputs, LinkingProof, Presentation,
+    PresentationVerificationError, ProofError, ProofMetadata, Request, Sha256Challenge,
+    SignedCommitments, StatementWithProof, WeakLinkingProof, Web3IdBasedCredential,
+    Web3IdCredentialStatement, Web3IdSigner, COMMITMENT_SIGNATURE_DOMAIN_STRING,
+    LINKING_DOMAIN_STRING,
 };
 use ed25519_dalek::Verifier;
 
 use crate::cis4_types::IssuerKey;
 use crate::curve_arithmetic::Pairing;
 use crate::id::id_proof_types::{AtomicStatement, ProofVersion};
-use crate::id::identity_attributes_credentials;
-use crate::id::identity_attributes_credentials::IdentityAttributeHandling;
-use crate::id::types::{
-    HasAttributeRandomness, HasAttributeValues, IdentityAttribute,
-    IdentityAttributesCredentialsInfo, IdentityAttributesCredentialsValues, IpContextOnly,
-};
+use crate::id::types::{HasAttributeRandomness, HasAttributeValues};
 use crate::pedersen_commitment::Commitment;
 use concordium_contracts_common::ContractAddress;
 use rand::{CryptoRng, Rng};
@@ -131,63 +125,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredential<C, At
     }
 }
 
-impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
-    IdentityBasedCredential<P, C, AttributeType>
-{
-    pub fn verify(
-        &self,
-        global_context: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
-        input: &CredentialsInputs<P, C>,
-    ) -> bool {
-        let CredentialsInputs::Identity { ip_info, ars_infos } = input else {
-            // mismatch in types
-            return false;
-        };
-
-        let id_attr_cred_info = IdentityAttributesCredentialsInfo {
-            values: IdentityAttributesCredentialsValues {
-                ip_identity: self.issuer,
-                threshold: self.cred_id.threshold,
-                ar_data: self.cred_id.ar_data.clone(),
-                attributes: self.attributes.clone(),
-                validity: self.validity.clone(),
-            },
-            proofs: self.proofs.identity_attributes_proofs.clone(),
-        };
-
-        if identity_attributes_credentials::verify_identity_attributes(
-            global_context,
-            IpContextOnly {
-                ip_info,
-                ars_infos: &ars_infos.anonymity_revokers,
-            },
-            &id_attr_cred_info,
-            transcript,
-        )
-        .is_err()
-        {
-            return false;
-        }
-
-        let cmm_attributes: BTreeMap<_, _> = self
-            .attributes
-            .iter()
-            .filter_map(|(tag, attr)| match attr {
-                IdentityAttribute::Committed(cmm) => Some((*tag, *cmm)),
-                _ => None,
-            })
-            .collect();
-
-        verify_statements(
-            &self.proofs.statement_proofs,
-            &cmm_attributes,
-            global_context,
-            transcript,
-        )
-    }
-}
-
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdBasedCredential<C, AttributeType> {
     pub fn verify<P: Pairing<ScalarField = C::Scalar>>(
         &self,
@@ -216,7 +153,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdBasedCredential<C, Att
     }
 }
 
-fn verify_statements<
+pub fn verify_statements<
     'a,
     C: Curve,
     AttributeType: Attribute<C::Scalar> + 'a,
@@ -293,85 +230,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatement<C
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityCredentialStatement<C, AttributeType> {
-    pub fn prove<P: Pairing<ScalarField = C::Scalar>, Signer: Web3IdSigner>(
-        self,
-        global_context: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
-        csprng: &mut impl rand::Rng,
-        now: chrono::DateTime<chrono::Utc>,
-        input: CommitmentInputs<P, C, AttributeType, Signer>,
-    ) -> Result<IdentityBasedCredential<P, C, AttributeType>, ProofError> {
-        let CommitmentInputs::Identity {
-            ip_context,
-            id_object,
-            id_object_use_data,
-        } = input
-        else {
-            return Err(ProofError::CommitmentsStatementsMismatch);
-        };
-
-        let attributes_handling: BTreeMap<_, _> = self
-            .statements
-            .iter()
-            .map(|stmt| match stmt {
-                AtomicStatement::RevealAttribute { statement } => {
-                    (statement.attribute_tag, IdentityAttributeHandling::Commit)
-                }
-                AtomicStatement::AttributeInRange { statement } => {
-                    (statement.attribute_tag, IdentityAttributeHandling::Commit)
-                }
-                AtomicStatement::AttributeInSet { statement } => {
-                    (statement.attribute_tag, IdentityAttributeHandling::Commit)
-                }
-                AtomicStatement::AttributeNotInSet { statement } => {
-                    (statement.attribute_tag, IdentityAttributeHandling::Commit)
-                }
-            })
-            .collect();
-
-        let (id_attr_cred_info, id_attr_cmm_rand) =
-            identity_attributes_credentials::prove_identity_attributes(
-                global_context,
-                ip_context,
-                id_object,
-                id_object_use_data,
-                &attributes_handling,
-                transcript,
-            )
-            .map_err(|err| ProofError::IdentityAttributeCredentials(err.to_string()))?;
-
-        let statement_proofs = prove_statements(
-            self.statements,
-            &id_object.get_attribute_list().alist,
-            &id_attr_cmm_rand.attributes_rand,
-            global_context,
-            transcript,
-            csprng,
-        )?;
-
-        let proofs = IdentityCredentialProofs {
-            identity_attributes_proofs: id_attr_cred_info.proofs,
-            statement_proofs,
-        };
-
-        let cred_id = IdentityCredentialId {
-            threshold: id_attr_cred_info.values.threshold,
-            ar_data: id_attr_cred_info.values.ar_data,
-        };
-
-        Ok(IdentityBasedCredential {
-            proofs,
-            network: self.network,
-            cred_id,
-            issuer: id_attr_cred_info.values.ip_identity,
-            attributes: id_attr_cred_info.values.attributes,
-            created: now,
-            validity: id_attr_cred_info.values.validity,
-        })
-    }
-}
-
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdCredentialStatement<C, AttributeType> {
     pub fn prove<P: Pairing<ScalarField = C::Scalar>, Signer: Web3IdSigner>(
         self,
@@ -444,7 +302,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdCredentialStatement<C,
     }
 }
 
-fn prove_statements<
+pub fn prove_statements<
     C: Curve,
     AttributeType: Attribute<C::Scalar>,
     TagType: Ord + crate::common::Serialize,

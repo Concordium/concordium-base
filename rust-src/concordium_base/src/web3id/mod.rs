@@ -12,9 +12,8 @@ pub mod v1;
 mod test;
 
 use crate::id::types::{
-    ArIdentity, ArInfos, ChainArData, CredentialValidity, HasIdentityObjectFields, IdObjectUseData,
-    IdentityAttribute, IdentityAttributesCredentialsProofs, IdentityObjectV1, IpContextOnly,
-    IpInfo,
+    ArInfos, CredentialValidity, HasIdentityObjectFields, IdObjectUseData, IdentityObjectV1,
+    IpContextOnly, IpInfo,
 };
 use crate::{
     base::CredentialRegistrationID,
@@ -37,7 +36,6 @@ use crate::web3id::did::{IdentifierType, Method, Network};
 
 use crate::common::{SerdeDeserialize, SerdeSerialize};
 use crate::curve_arithmetic::Pairing;
-use crate::id::secret_sharing::Threshold;
 use serde::de::DeserializeOwned;
 use serde::{Deserializer, Serializer};
 use std::{
@@ -62,16 +60,6 @@ pub const LINKING_DOMAIN_STRING: &[u8] = b"WEB3ID:LINKING";
 pub struct AccountCredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub network: Network,
     pub cred_id: CredentialRegistrationID,
-    pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
-}
-
-/// A statement about a single identity based credential
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IdentityCredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    pub network: Network,
-    // todo ar should the identity provider be here? document what is here and what is not
-    pub issuer: IpIdentity,
-    /// Attribute statements
     pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
 }
 
@@ -304,41 +292,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredential<C, At
     }
 }
 
-impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
-    IdentityBasedCredential<P, C, AttributeType>
-{
-    pub fn metadata(&self) -> IdentityCredentialMetadata {
-        let IdentityBasedCredential {
-            issuer, validity, ..
-        } = self;
-
-        IdentityCredentialMetadata {
-            issuer: issuer.clone(),
-            validity: validity.clone(),
-        }
-    }
-
-    /// Extract the statement from the proof.
-    pub fn statement(&self) -> IdentityCredentialStatement<C, AttributeType> {
-        let IdentityBasedCredential {
-            network,
-            proofs,
-            issuer,
-            ..
-        } = self;
-
-        IdentityCredentialStatement {
-            network: *network,
-            issuer: *issuer,
-            statements: proofs
-                .statement_proofs
-                .iter()
-                .map(|(x, _)| x.clone())
-                .collect(),
-        }
-    }
-}
-
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdBasedCredential<C, AttributeType> {
     pub fn metadata(&self) -> Web3idCredentialMetadata {
         let Web3IdBasedCredential {
@@ -385,60 +338,6 @@ pub struct AccountBasedCredential<C: Curve, AttributeType: Attribute<C::Scalar>>
     /// relevant network.
     pub issuer: IpIdentity,
     pub proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
-}
-
-/// Ephemeral id for identity credentials. The id can be decrypted to IdCredPub.
-/// It will have a new value for each time credential is proven (the encryption is a randomized function)
-#[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
-pub struct IdentityCredentialId<C: Curve> {
-    /// Anonymity revocation threshold. Must be <= length of ar_data.
-    pub threshold: Threshold,
-    /// Anonymity revocation data. It is an encryption of shares of IdCredSec,
-    /// each share encrypted for the privacy guardian (anonymity revoker)
-    /// that is the key in the map.
-    // #[map_size_length = 2]
-    // #[serde(rename = "arData", deserialize_with = "deserialize_ar_data")]
-    pub ar_data: BTreeMap<ArIdentity, ChainArData<C>>,
-}
-
-/// Identity based credentials. This type of credential is derived from identity credentials issued
-/// by an identity provider. The type contains almost
-/// all the information needed to verify it, except the identity provider and privacy guardian (anonymity revoker) public keys.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct IdentityBasedCredential<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
-> {
-    /// Creation timestamp of the credential
-    pub created: chrono::DateTime<chrono::Utc>,
-    pub network: Network,
-    /// Ephemeral id for the credential
-    pub cred_id: IdentityCredentialId<C>,
-    /// Issuer of the underlying identity credential from which this credential is derived.
-    pub issuer: IpIdentity,
-    /// The attributes that are part of the underlying identity credential from which this credential is derived
-    // #[map_size_length = 2]
-    // #[serde(rename = "attributes")]
-    pub attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
-    /// Temporal validity of the credential
-    // #[serde(rename = "validity")]
-    pub validity: CredentialValidity,
-    /// Proofs of the credential
-    pub proofs: IdentityCredentialProofs<P, C, AttributeType>,
-}
-
-/// Proof of identity based credential
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct IdentityCredentialProofs<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
-> {
-    /// Proof that the attributes and the other values in [`IdentityBasedCredential`] are correct
-    pub identity_attributes_proofs: IdentityAttributesCredentialsProofs<P, C>,
-    /// Proofs of the atomic statements on attributes
-    pub statement_proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
 }
 
 /// A proof of Web3 credentials. This contains almost
