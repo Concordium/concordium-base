@@ -1,5 +1,4 @@
 // TODO Add JSON regression tests.
-// TODO Add CBOR regression tests.
 // TODO Use v1 presentation when ready.
 //! Types used in Concordium verifiable presentation protocol version 1.
 
@@ -96,7 +95,7 @@ impl VerificationAuditRecord {
 /// Data structure for CBOR-encoded verifiable audit
 ///
 /// This format is used when anchoring a verification audit on the Concordium blockchain.
-#[derive(Debug, Clone, CborSerialize, CborDeserialize)]
+#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 pub struct VerificationAuditRecordOnChain {
     /// Type identifier for Concordium Verifiable Request Audit Record. Always set to "CCDVAA".
     pub r#type: String,
@@ -216,7 +215,7 @@ impl Context {
 /// Data structure for CBOR-encoded verifiable presentation request anchors.
 ///
 /// This format is used when anchoring presentation requests on the Concordium blockchain.
-#[derive(Debug, Clone, CborSerialize, CborDeserialize)]
+#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 pub struct VerificationRequestAnchorOnChain {
     /// Type identifier for Concordium Verifiable Request Anchor. Always set to "CCDVRA".
     pub r#type: String,
@@ -652,8 +651,7 @@ mod tests {
     use std::marker::PhantomData;
 
     #[test]
-    fn verifiable_presentation_request_should_perform_successful_json_roundtrip(
-    ) -> anyhow::Result<()> {
+    fn test_verification_presentation_request_json_roundtrip() -> anyhow::Result<()> {
         let attribute_in_range_statement = AtomicStatement::AttributeInRange {
             statement: AttributeInRangeStatement {
                 attribute_tag: 17.into(),
@@ -714,7 +712,7 @@ mod tests {
     }
 
     #[test]
-    fn should_compute_the_correct_verifiable_presentation_anchor() -> anyhow::Result<()> {
+    fn test_compute_the_correct_verification_request_anchor() -> anyhow::Result<()> {
         let context = Context::new_simple(
             vec![0u8; 32],
             "MyConnection".to_string(),
@@ -760,7 +758,7 @@ mod tests {
     }
 
     #[test]
-    fn should_compute_the_correct_verification_audit_record() -> anyhow::Result<()> {
+    fn test_compute_the_correct_verification_audit_record() -> anyhow::Result<()> {
         let id = "MyUUID".to_string();
         let context = Context::new_simple(
             vec![0u8; 32],
@@ -816,5 +814,92 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn test_verification_request_anchor_cbor_roundtrip() {
+        let context = Context::new_simple(
+            vec![0u8; 32],
+            "MyConnection".to_string(),
+            "MyDappContext".to_string(),
+        );
+
+        let attribute_in_range_statement = AtomicStatement::AttributeInRange {
+            statement: AttributeInRangeStatement {
+                attribute_tag: 17.into(),
+                lower: Web3IdAttribute::Numeric(80),
+                upper: Web3IdAttribute::Numeric(1237),
+                _phantom: PhantomData,
+            },
+        };
+
+        let request_data = VerificationRequestData::new(context).add_statement_request(
+            IdentityStatementRequest::default()
+                .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
+                .add_source(CredentialType::Identity)
+                .add_statement(attribute_in_range_statement),
+        );
+
+        let mut public_info = HashMap::new();
+        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
+
+        let verification_request_anchor: VerificationRequestAnchorOnChain =
+            request_data.anchor(Some(public_info));
+
+        let cbor = cbor::cbor_encode(&verification_request_anchor).unwrap();
+        assert_eq!(hex::encode(&cbor), "a4646861736858207326166760159b23dbfe8c6b585fa45883358d87e3fe4d784633aa0ebc6998fb667075626c6963a1636b65790466722374797065664343445652416776657273696f6e01");
+
+        let decoded: VerificationRequestAnchorOnChain = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(decoded, verification_request_anchor);
+    }
+
+    #[test]
+    fn test_verification_audit_record_cbor_roundtrip() {
+        let id = "MyUUID".to_string();
+        let context = Context::new_simple(
+            vec![0u8; 32],
+            "MyConnection".to_string(),
+            "MyDappContext".to_string(),
+        );
+
+        let attribute_in_range_statement = AtomicStatement::AttributeInRange {
+            statement: AttributeInRangeStatement {
+                attribute_tag: 17.into(),
+                lower: Web3IdAttribute::Numeric(80),
+                upper: Web3IdAttribute::Numeric(1237),
+                _phantom: PhantomData,
+            },
+        };
+
+        let request_data = VerificationRequestData::new(context).add_statement_request(
+            IdentityStatementRequest::default()
+                .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
+                .add_source(CredentialType::Identity)
+                .add_statement(attribute_in_range_statement),
+        );
+
+        let verification_request_anchor_transaction_hash = hashes::TransactionHash::new([0u8; 32]);
+
+        let presentation_request = VerifiablePresentationRequest::new(
+            request_data,
+            verification_request_anchor_transaction_hash,
+        );
+
+        let presentation = "DummyPresentation".to_string();
+
+        let verification_audit_record =
+            VerificationAuditRecord::new(id, presentation_request, presentation);
+
+        let mut public_info = HashMap::new();
+        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
+
+        let verification_audit_record_on_chain: VerificationAuditRecordOnChain =
+            verification_audit_record.anchor(Some(public_info));
+
+        let cbor = cbor::cbor_encode(&verification_audit_record_on_chain).unwrap();
+        assert_eq!(hex::encode(&cbor), "a464686173685820190cec0f706b9590f92b7e20747f3ddbd9eba8a601c52554394dc2316634dc68667075626c6963a1636b65790466722374797065664343445641526776657273696f6e01");
+
+        let decoded: VerificationAuditRecordOnChain = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(decoded, verification_audit_record_on_chain);
     }
 }
