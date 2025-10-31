@@ -1,5 +1,9 @@
 ## Unreleased
 
+- Add context types `ContextLabel`, `Context`, `GivenContext`, and `GivenContextJson` to generate structured context to be used as a challenge for ZK proofs.
+- Add request types `CredentialType`, `IdentityProviderMethod`, `IdentityStatementRequest`, and `VerifiablePresentationRequest` to generate a request to be used for the verifiable presentation V1 protocol.
+- Add verification request anchor types `VerificationRequestData`, and `VerificationRequestAnchorOnChain` to generate an anchor and computes its anchor hash to be used for the verifiable presentation V1 protocol.
+- Add verification audit record types `VerificationAuditRecord`, and `VerificationAuditRecordOnChain` to generate an anchor and computes its anchor hash to be used for the verifiable presentation V1 protocol.
 - Changed `Debug` implementation of secret keys and cleartext values to not print the key or value.
 - Removed `ChainParameterVersionX` types and the `MintDistributionFamily`, `GASRewardsFamily` and `AuthorizationsFamily` traits and their implementations.
 - Revised `UpdateSigner` implementations not to use references, since the one method (`sign_update_hash`) already takes a reference (`&self`).

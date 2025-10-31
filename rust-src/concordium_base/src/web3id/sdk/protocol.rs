@@ -1,4 +1,3 @@
-// TODO Add JSON regression tests.
 // TODO Use v1 presentation when ready.
 //! Types used in Concordium verifiable presentation protocol version 1.
 
