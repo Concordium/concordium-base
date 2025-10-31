@@ -892,7 +892,7 @@ mod tests {
             verification_audit_record.anchor(Some(public_info));
 
         let cbor = cbor::cbor_encode(&verification_audit_record_on_chain).unwrap();
-        assert_eq!(hex::encode(&cbor), "a464686173685820190cec0f706b9590f92b7e20747f3ddbd9eba8a601c52554394dc2316634dc68667075626c6963a1636b65790466722374797065664343445641526776657273696f6e01");
+        assert_eq!(hex::encode(&cbor), "a464686173685820190cec0f706b9590f92b7e20747f3ddbd9eba8a601c52554394dc2316634dc68667075626c6963a1636b65790466722374797065664343445641416776657273696f6e01");
 
         let decoded: VerificationAuditRecordOnChain = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(decoded, verification_audit_record_on_chain);
