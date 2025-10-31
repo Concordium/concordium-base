@@ -1,16 +1,15 @@
 // TODO Add JSON regression tests.
 // TODO Add CBOR regression tests.
 // TODO Use v1 presentation when ready.
-// TODO Add test case for constructing a request.
-
 //! Types used in Concordium verifiable presentation protocol version 1.
 
-use crate::common::cbor;
-use crate::id::id_proof_types::AtomicStatement;
-use crate::id::types::AttributeTag;
+use crate::common::{cbor, Buffer, Deserial, Get, ParseResult, ReadBytesExt, Serial, Serialize};
+use crate::id::{id_proof_types::AtomicStatement, types::AttributeTag};
 use crate::web3id::{did, Web3IdAttribute};
 use crate::{hashes, id};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
+use concordium_contracts_common::hashes::HashBytes;
+use sha2::Digest;
 use std::collections::HashMap;
 
 /// A verifiable presentation request that specifies what credentials and proofs
@@ -100,16 +99,26 @@ impl VerificationRequestData {
         self
     }
 
+    /// Computes a hash of the Verification request context and statements.
+    ///
+    /// This hash is used to create a tamper-evident anchor that can be stored
+    /// on-chain to prove the request was made at a specific time and with
+    /// specific parameters.
     pub fn hash(&self) -> hashes::Hash {
-        todo!()
+        use crate::common::Serial;
+        let mut hasher = sha2::Sha256::new();
+        self.request_context.serial(&mut hasher);
+        self.credential_statements.serial(&mut hasher);
+        HashBytes::new(hasher.finalize().into())
     }
 
     pub fn anchor(
         &self,
         public_info: Option<HashMap<String, cbor::value::Value>>,
-    ) -> VerificationAuditAnchorOnChain {
-        VerificationAuditAnchorOnChain {
-            r#type: "CCDVAA".to_string(),
+    ) -> VerificationRequestAnchorOnChain {
+        VerificationRequestAnchorOnChain {
+            // Concordium Verification Request Anchor
+            r#type: "CCDVRA".to_string(),
             version: 1,
             hash: self.hash(),
             public: public_info,
@@ -121,7 +130,7 @@ impl VerificationRequestData {
 ///
 /// Contains both the context data that is already known (given) and
 /// the context data that needs to be provided by the presenter (requested).
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Serialize, Default)]
 #[serde(tag = "type", rename = "ConcordiumContextInformationV1")]
 pub struct Context {
     /// Context information that is already provided.
@@ -184,6 +193,12 @@ pub struct VerificationRequestAnchorOnChain {
     pub public: Option<HashMap<String, cbor::value::Value>>,
 }
 
+impl VerificationRequestAnchorOnChain {
+    pub fn hash(&self) -> hashes::Hash {
+        self.hash
+    }
+}
+
 /// The credential statements being requested.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
@@ -202,14 +217,45 @@ pub enum CredentialStatementRequest {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Default)]
+impl Serial for CredentialStatementRequest {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            CredentialStatementRequest::Identity { request } => {
+                0u8.serial(out);
+                request.serial(out);
+            }
+            CredentialStatementRequest::Web3Id { request } => {
+                1u8.serial(out);
+                request.serial(out);
+            }
+        }
+    }
+}
+
+impl Deserial for CredentialStatementRequest {
+    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        match u8::deserial(source)? {
+            0u8 => {
+                let request = source.get()?;
+                Ok(Self::Identity { request })
+            }
+            1u8 => {
+                let request = source.get()?;
+                Ok(Self::Web3Id { request })
+            }
+            n => anyhow::bail!("Unrecognized CredentialStatementRequest tag {n}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Default, Serialize)]
 pub struct IdentityStatementRequest {
-    /// Set of allowed credential types. Should never be empty or contain the same value twice.
-    pub source: Vec<CredentialType>,
     /// The statements requested.
     pub statements: id::id_proof_types::Statement<id::constants::ArCurve, Web3IdAttribute>,
     /// The credential issuers allowed.
     pub issuers: Vec<IdentityProviderMethod>,
+    /// Set of allowed credential types. Should never be empty or contain the same value twice.
+    pub source: Vec<CredentialType>,
 }
 
 impl From<IdentityStatementRequest> for CredentialStatementRequest {
@@ -285,7 +331,7 @@ impl IdentityStatementRequest {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Default, Serialize)]
 pub struct Web3IdStatementRequest {
     /// The statements requested.
     pub statements:
@@ -350,28 +396,92 @@ impl Web3IdStatementRequest {
 
 /// Labels for different types of context information that can be provided in verifiable
 /// presentation requests and proofs.
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ContextLabel {
-    ContextString,
+    /// A nonce which should be at least of lenth bytes32.
+    Nonce,
+    /// Payment hash (Concordium transaction hash).
+    PaymentHash,
+    /// Concordium block hash.
+    BlockHash,
+    #[serde(rename = "ConnectionID")]
+    /// Identifier for some connection (e.g. wallet-connect topic).
+    ConnectionId,
+    /// Identifier for some resource (e.g. Website URL or fingerprint of TLS certificate).
     #[serde(rename = "ResourceID")]
     ResourceId,
-    BlockHash,
-    PaymentHash,
-    #[serde(rename = "ConnectionID")]
-    ConnectionId,
-    Nonce,
+    /// String value for general purposes.
+    ContextString,
+}
+
+impl Serial for ContextLabel {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            ContextLabel::Nonce => {
+                0u8.serial(out);
+            }
+            ContextLabel::PaymentHash => {
+                1u8.serial(out);
+            }
+            ContextLabel::BlockHash => {
+                2u8.serial(out);
+            }
+            ContextLabel::ConnectionId => {
+                3u8.serial(out);
+            }
+            ContextLabel::ResourceId => {
+                4u8.serial(out);
+            }
+            ContextLabel::ContextString => {
+                5u8.serial(out);
+            }
+        }
+    }
+}
+
+impl Deserial for ContextLabel {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        match u8::deserial(source)? {
+            0u8 => Ok(Self::Nonce),
+            1u8 => Ok(Self::PaymentHash),
+            2u8 => Ok(Self::BlockHash),
+            3u8 => Ok(Self::ConnectionId),
+            4u8 => Ok(Self::ResourceId),
+            5u8 => Ok(Self::ContextString),
+            n => anyhow::bail!("Unknown ContextLabel tag: {}", n),
+        }
+    }
 }
 
 /// Identity based credential types.
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CredentialType {
     Identity,
     Account,
 }
 
+impl Serial for CredentialType {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            CredentialType::Identity => 0u8.serial(out),
+            CredentialType::Account => 1u8.serial(out),
+        }
+    }
+}
+
+impl Deserial for CredentialType {
+    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        match u8::deserial(source)? {
+            0u8 => Ok(Self::Identity),
+            1u8 => Ok(Self::Account),
+            n => anyhow::bail!("Unrecognized CredentialType tag {n}"),
+        }
+    }
+}
+
 /// DID method for a Concordium Identity Provider.
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Serialize)]
 #[serde(into = "did::Method", try_from = "did::Method")]
 pub struct IdentityProviderMethod {
     /// The network part of the method.
@@ -420,21 +530,84 @@ impl TryFrom<did::Method> for IdentityProviderMethod {
 }
 
 /// A single piece of context information that can be provided in verifiable presentation interactions.
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(into = "GivenContextJson", try_from = "GivenContextJson")]
 pub enum GivenContext {
-    /// Cryptographic nonce context.
+    /// Cryptographic nonce context which should be at least of length bytes32.
     Nonce(Vec<u8>),
-    /// Payment Hash context.
+    /// Payment hash context (Concordium transaction hash).
     PaymentHash(hashes::Hash),
     /// Concordium block hash context.
     BlockHash(hashes::BlockHash),
-    /// Identifier for some connection.
+    /// Identifier for some connection (e.g. wallet-connect topic).
     ConnectionId(String),
-    /// Identifier for some resource.
+    /// Identifier for some resource (e.g. Website URL or fingerprint of TLS certificate).
     ResourceId(String),
     /// String value for general purposes.
     ContextString(String),
+}
+
+impl Serial for GivenContext {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            GivenContext::Nonce(hash) => {
+                0u8.serial(out);
+                hash.serial(out);
+            }
+            GivenContext::PaymentHash(hash) => {
+                1u8.serial(out);
+                hash.serial(out);
+            }
+            GivenContext::BlockHash(hash) => {
+                2u8.serial(out);
+                hash.serial(out);
+            }
+            GivenContext::ConnectionId(connection_id) => {
+                3u8.serial(out);
+                connection_id.serial(out);
+            }
+            GivenContext::ResourceId(rescource_id) => {
+                4u8.serial(out);
+                rescource_id.serial(out);
+            }
+            GivenContext::ContextString(context_string) => {
+                5u8.serial(out);
+                context_string.serial(out);
+            }
+        }
+    }
+}
+
+impl Deserial for GivenContext {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        match u8::deserial(source)? {
+            0u8 => {
+                let hash = source.get()?;
+                Ok(Self::Nonce(hash))
+            }
+            1u8 => {
+                let hash = source.get()?;
+                Ok(Self::PaymentHash(hash))
+            }
+            2u8 => {
+                let hash = source.get()?;
+                Ok(Self::BlockHash(hash))
+            }
+            3u8 => {
+                let nonce = source.get()?;
+                Ok(Self::ConnectionId(nonce))
+            }
+            4u8 => {
+                let rescource_id = source.get()?;
+                Ok(Self::ResourceId(rescource_id))
+            }
+            5u8 => {
+                let context_string = source.get()?;
+                Ok(Self::ContextString(context_string))
+            }
+            n => anyhow::bail!("Unknown GivenContext tag: {}", n),
+        }
+    }
 }
 
 /// JSON representation of context information that is already provided in a request for a presentation.
@@ -518,8 +691,10 @@ impl TryFrom<GivenContextJson> for GivenContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::id::constants::AttributeKind;
-    use crate::id::id_proof_types::{AttributeInRangeStatement, AttributeInSetStatement};
+    use crate::id::{
+        constants::AttributeKind,
+        id_proof_types::{AttributeInRangeStatement, AttributeInSetStatement},
+    };
     use crate::web3id::did::Network;
     use ed25519_dalek::VerifyingKey;
     use std::marker::PhantomData;
@@ -614,6 +789,44 @@ mod tests {
             presentation_request, roundtrip,
             "Failed verifiable presentation request JSON roundtrip."
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn should_compute_the_correct_verifiable_presentation_anchor() -> anyhow::Result<()> {
+        let context = Context::new_simple(
+            vec![0u8; 32],
+            "MyConnection".to_string(),
+            "MyDappContext".to_string(),
+        );
+
+        let attribute_in_range_statement = AtomicStatement::AttributeInRange {
+            statement: AttributeInRangeStatement {
+                attribute_tag: 17.into(),
+                lower: Web3IdAttribute::Numeric(80),
+                upper: Web3IdAttribute::Numeric(1237),
+                _phantom: PhantomData,
+            },
+        };
+
+        let request_data = VerificationRequestData::new(context).add_statement_request(
+            IdentityStatementRequest::default()
+                .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
+                .add_source(CredentialType::Identity)
+                .add_statement(attribute_in_range_statement),
+        );
+
+        let mut public_info = HashMap::new();
+        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
+
+        let verification_request_anchor: VerificationRequestAnchorOnChain =
+            request_data.anchor(Some(public_info));
+        let verification_request_anchor_hash = verification_request_anchor.hash();
+
+        println!("{}", verification_request_anchor_hash);
+
+        // TODO: check hash
 
         Ok(())
     }

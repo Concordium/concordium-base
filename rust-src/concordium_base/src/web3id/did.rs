@@ -1,5 +1,6 @@
 //! Definition of Concordium DIDs and their parser.
 
+use crate::common::{Buffer,Deserial, Get, ParseResult, ReadBytesExt, Serial, Serialize};
 use crate::{base::CredentialRegistrationID, common::base16_decode_string, id::types::IpIdentity};
 use concordium_contracts_common::{
     AccountAddress, ContractAddress, EntrypointName, OwnedEntrypointName, OwnedParameter,
@@ -92,6 +93,87 @@ pub enum IdentifierType {
     Idp { idp_identity: IpIdentity },
 }
 
+impl Serial for IdentifierType {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            IdentifierType::Account { address } => {
+                0u8.serial(out);
+                address.serial(out);
+            }
+            IdentifierType::Credential { cred_id } => {
+                1u8.serial(out);
+                cred_id.serial(out);
+            }
+            IdentifierType::ContractData {
+                address,
+                entrypoint,
+                parameter,
+            } => {
+                2u8.serial(out);
+                address.serial(out);
+                // FixMe: Wasn't able to use the serial trait implemented
+                // on the type so doing it manually now.
+                let entrypoint_string: String = entrypoint.to_string();
+                let bytes = entrypoint_string.as_bytes();
+                (bytes.len() as u16).serial(out);
+                for b in bytes {
+                    b.serial(out);
+                }
+                parameter.serial(out);
+            }
+            IdentifierType::PublicKey { key } => {
+                3u8.serial(out);
+                key.serial(out);
+            }
+            IdentifierType::Idp { idp_identity } => {
+                4u8.serial(out);
+                idp_identity.serial(out);
+            }
+        }
+    }
+}
+
+impl Deserial for IdentifierType {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        match u8::deserial(source)? {
+            0u8 => {
+                let address = source.get()?;
+                Ok(Self::Account { address })
+            }
+            1u8 => {
+                let cred_id = source.get()?;
+                Ok(Self::Credential { cred_id })
+            }
+            2u8 => {
+                let address = source.get()?;
+
+                // FixMe: Wasn't able to use the deserial trait implemented
+                // on the type so doing it manually now.
+                let len: u16 = source.get()?;
+                let bytes: Vec<u8> = (0..len).map(|_| source.get()).collect::<Result<_, _>>()?;
+                let name = String::from_utf8(bytes)?;
+                let entrypoint = OwnedEntrypointName::new(name)?;
+
+                let parameter = source.get()?;
+                Ok(Self::ContractData {
+                    address,
+                    entrypoint,
+                    parameter,
+                })
+            }
+            3u8 => {
+                let key = source.get()?;
+                Ok(Self::PublicKey { key })
+            }
+            4u8 => {
+                let idp_identity = source.get()?;
+                Ok(Self::Idp { idp_identity })
+            }
+            n => anyhow::bail!("Unknown IdentifierType tag: {}", n),
+        }
+    }
+}
+
 impl IdentifierType {
     /// If `self` is the [`ContractData`](Self::ContractData) variant then
     /// check if the entrypoint is as specified, and attempt to parse the
@@ -125,7 +207,7 @@ impl IdentifierType {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Serialize)]
 #[serde(try_from = "String", into = "String")]
 /// A DID method.
 pub struct Method {
