@@ -433,9 +433,15 @@ mod tests {
                         statement: AttributeInSetStatement {
                             attribute_tag: "23".into(),
                             set: [
-                                Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                                Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("ff".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("aa".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("zz".into()).unwrap(),
+                                ),
                             ]
                             .into_iter()
                             .collect(),
@@ -468,9 +474,15 @@ mod tests {
                         statement: AttributeNotInSetStatement {
                             attribute_tag: 1u8.to_string(),
                             set: [
-                                Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                                Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("ff".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("aa".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("zz".into()).unwrap(),
+                                ),
                             ]
                             .into_iter()
                             .collect(),
@@ -642,9 +654,15 @@ mod tests {
                         statement: AttributeInSetStatement {
                             attribute_tag: 23u8.to_string(),
                             set: [
-                                Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                                Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("ff".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("aa".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("zz".into()).unwrap(),
+                                ),
                             ]
                             .into_iter()
                             .collect(),
@@ -669,9 +687,15 @@ mod tests {
                         statement: AttributeNotInSetStatement {
                             attribute_tag: 1u8.into(),
                             set: [
-                                Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                                Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("ff".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("aa".into()).unwrap(),
+                                ),
+                                Web3IdAttribute::String(
+                                    AttributeKind::try_new("zz".into()).unwrap(),
+                                ),
                             ]
                             .into_iter()
                             .collect(),

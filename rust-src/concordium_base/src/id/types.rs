@@ -2,6 +2,7 @@
 //! implementations.
 use super::secret_sharing::Threshold;
 pub use crate::common::types::{AccountAddress, ACCOUNT_ADDRESS_SIZE};
+use crate::sigma_protocols::ps_sig_known;
 use crate::{
     bulletproofs::{range_proof::RangeProof, utils::Generators},
     common::{
@@ -2706,19 +2707,6 @@ impl<C: Curve> HasAttributeRandomness<C> for SystemAttributeRandomness {
 /// The commitments produced by identity attribute credentials created from identity credential
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 pub struct IdentityAttributesCredentialsCommitments<C: Curve> {
-    /// commitment to the prf key
-    #[serde(rename = "cmmPrf")]
-    pub cmm_prf: PedersenCommitment<C>,
-    /// commitment to the max account number.
-    #[serde(rename = "cmmMaxAccounts")]
-    pub cmm_max_accounts: PedersenCommitment<C>,
-    /// List of commitments to the attributes that are not revealed.
-    /// For the purposes of checking signatures, the commitments to those
-    /// that are revealed as part of the policy are going to be computed by the
-    /// verifier.
-    #[map_size_length = 2]
-    #[serde(rename = "cmmAttributes")]
-    pub cmm_attributes: BTreeMap<AttributeTag, PedersenCommitment<C>>,
     /// commitments to the coefficients of the polynomial
     /// used to share id_cred_sec
     /// S + b1 X + b2 X^2...
@@ -2727,11 +2715,9 @@ pub struct IdentityAttributesCredentialsCommitments<C: Curve> {
     pub cmm_id_cred_sec_sharing_coeff: Vec<PedersenCommitment<C>>,
 }
 
-/// Randomness that is generated to commit to attributes when
+/// Randomness that is generated when we commit to the identity attributes as part of
 /// proving identity attribute credentials.
-/// This randomness is needed later on if the user wishes to do
-/// something with those commitments, for example reveal the commited value, or
-/// prove a property of the value.
+/// This randomness is needed later to prove a property of the value.
 pub struct IdentityAttributesCredentialsRandomness<C: Curve> {
     /// Randomness, if any, used to commit to user-chosen attributes, such as
     /// country of nationality.
@@ -2745,43 +2731,99 @@ pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::
     /// (Blinded) Signature derived from the signature on the pre-identity
     /// object by the IP
     #[serde(
-        rename = "sig",
+        rename = "signature",
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub sig: crate::ps_sig::BlindedSignature<P>,
-    /// list of  commitments to the attributes .
+    pub signature: crate::ps_sig::BlindedSignature<P>,
+    /// Commitments linking the proofs together
     #[serde(
         rename = "commitments",
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
     pub commitments: IdentityAttributesCredentialsCommitments<C>,
-    /// Challenge used for all of the proofs.
+    /// Challenge used for all the proofs
     #[serde(
         rename = "challenge",
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
     pub challenge: Challenge,
-    /// Responses in the proof that the computed commitment to the share
-    /// contains the same value as the encryption
-    /// the commitment to the share is not sent but computed from
-    /// the commitments to the sharing coefficients
+    /// Proof (response part), for each privacy guardian (anonymity revoker) that the commitment to
+    /// the IdCredSec share contains the same value as the encryption. The commitment to the share
+    /// is calculated from the commitments to the coefficients in the sharing polynomial.
     #[serde(rename = "proofIdCredPub")]
     #[map_size_length = 4]
     pub proof_id_cred_pub: BTreeMap<ArIdentity, com_enc_eq::Response<C>>,
-    /// Responses in the proof of knowledge of signature of Identity Provider on
-    /// the list
-    ///
-    /// - `(idCredSec, prfKey, attributes[0], attributes[1], ..., attributes[n],
-    ///   AR[1], ..., AR[m])`
+    /// Proof of knowledge of signature of identity provider
     #[serde(
-        rename = "proofIpSig",
+        rename = "proofIpSignature",
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub proof_ip_sig: com_eq_sig::Response<P, C>,
+    pub proof_ip_signature: ps_sig_known::Response<P, C>,
+}
+
+/// Describes the time period for which a credential is valid
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+pub struct CredentialValidity {
+    /// When credential is valid until
+    #[serde(rename = "validTo")]
+    pub valid_to: YearMonth,
+    /// When the credential was created
+    #[serde(rename = "createdAt")]
+    pub created_at: YearMonth,
+}
+
+/// Attribute value as represented in the identity attribute credential values. An attribute value has ither been committed to,
+/// revealed, or just proven known.
+#[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone)]
+pub enum IdentityAttribute<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// The attribute value is committed to and the value is proven equal to the value in the commitment
+    Committed(PedersenCommitment<C>),
+    /// The attribute value is revealed
+    Revealed(AttributeType),
+    /// The attribute value is proven known
+    Known,
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for IdentityAttribute<C, AttributeType> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            Self::Committed(cmm) => {
+                out.put(&0u8);
+                out.put(cmm);
+            }
+            Self::Revealed(value) => {
+                out.put(&1u8);
+                out.put(value);
+            }
+            Self::Known => {
+                out.put(&2u8);
+            }
+        }
+    }
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial
+    for IdentityAttribute<C, AttributeType>
+{
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let tag: u8 = source.get()?;
+        Ok(match tag {
+            0 => {
+                let cmm = source.get()?;
+                Self::Committed(cmm)
+            }
+            1 => {
+                let attr = source.get()?;
+                Self::Revealed(attr)
+            }
+            2 => Self::Known,
+            _ => bail!("unsupported IdentityAttribute item type: {}", tag),
+        })
+    }
 }
 
 /// Values (as opposed to proofs) in identity attribute credentials created from identity credential.
@@ -2801,9 +2843,13 @@ pub struct IdentityAttributesCredentialsValues<C: Curve, AttributeType: Attribut
     #[map_size_length = 2]
     #[serde(rename = "arData", deserialize_with = "deserialize_ar_data")]
     pub ar_data: BTreeMap<ArIdentity, ChainArData<C>>,
+    /// The attributes that are part of the identity credentials
+    #[map_size_length = 2]
+    #[serde(rename = "attributes")]
+    pub attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
     /// Policy of this credential object.
-    #[serde(rename = "policy")]
-    pub policy: Policy<C, AttributeType>,
+    #[serde(rename = "validity")]
+    pub validity: CredentialValidity,
 }
 
 /// Identity attributes credentials created from identity credential, and proofs that it is
