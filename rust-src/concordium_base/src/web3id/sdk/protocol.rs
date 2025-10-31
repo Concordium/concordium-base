@@ -209,12 +209,6 @@ pub enum CredentialStatementRequest {
         #[serde(flatten)]
         request: IdentityStatementRequest,
     },
-    /// Statements based on the Concordium Web3ID credentials.
-    #[serde(rename = "web3Id")]
-    Web3Id {
-        #[serde(flatten)]
-        request: Web3IdStatementRequest,
-    },
 }
 
 impl Serial for CredentialStatementRequest {
@@ -222,10 +216,6 @@ impl Serial for CredentialStatementRequest {
         match self {
             CredentialStatementRequest::Identity { request } => {
                 0u8.serial(out);
-                request.serial(out);
-            }
-            CredentialStatementRequest::Web3Id { request } => {
-                1u8.serial(out);
                 request.serial(out);
             }
         }
@@ -238,10 +228,6 @@ impl Deserial for CredentialStatementRequest {
             0u8 => {
                 let request = source.get()?;
                 Ok(Self::Identity { request })
-            }
-            1u8 => {
-                let request = source.get()?;
-                Ok(Self::Web3Id { request })
             }
             n => anyhow::bail!("Unrecognized CredentialStatementRequest tag {n}"),
         }
@@ -325,69 +311,6 @@ impl IdentityStatementRequest {
         for statement in statements {
             if !self.statements.statements.contains(&statement) {
                 self.statements.statements.push(statement);
-            }
-        }
-        self
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Default, Serialize)]
-pub struct Web3IdStatementRequest {
-    /// The statements requested.
-    pub statements:
-        Vec<id::id_proof_types::AtomicStatement<id::constants::ArCurve, String, Web3IdAttribute>>,
-    /// The credential issuers allowed.
-    pub issuers: Vec<did::Method>,
-}
-impl From<Web3IdStatementRequest> for CredentialStatementRequest {
-    fn from(request: Web3IdStatementRequest) -> Self {
-        Self::Web3Id { request }
-    }
-}
-
-impl Web3IdStatementRequest {
-    /// Create an empty Web3Id statement request.
-    pub fn new() -> Self {
-        Default::default()
-    }
-
-    /// Add an issuer to the given Web3Id statement request.
-    pub fn add_issuer(mut self, issuer: did::Method) -> Self {
-        if !self.issuers.contains(&issuer) {
-            self.issuers.push(issuer);
-        }
-        self
-    }
-
-    /// Add issuers to the given Web3Id statement request.
-    pub fn add_issuers(mut self, issuers: Vec<did::Method>) -> Self {
-        for issuer in issuers {
-            if !self.issuers.contains(&issuer) {
-                self.issuers.push(issuer);
-            }
-        }
-        self
-    }
-
-    /// Add a statement to the given Web3Id statement request.
-    pub fn add_statement(
-        mut self,
-        statement: AtomicStatement<id::constants::ArCurve, String, Web3IdAttribute>,
-    ) -> Self {
-        if !self.statements.contains(&statement) {
-            self.statements.push(statement);
-        }
-        self
-    }
-
-    /// Add statements to the given Web3Id statement request.
-    pub fn add_statements(
-        mut self,
-        statements: Vec<AtomicStatement<id::constants::ArCurve, String, Web3IdAttribute>>,
-    ) -> Self {
-        for statement in statements {
-            if !self.statements.contains(&statement) {
-                self.statements.push(statement);
             }
         }
         self
@@ -695,36 +618,11 @@ mod tests {
         constants::AttributeKind,
         id_proof_types::{AttributeInRangeStatement, AttributeInSetStatement},
     };
-    use crate::web3id::did::Network;
-    use ed25519_dalek::VerifyingKey;
     use std::marker::PhantomData;
 
     #[test]
     fn verifiable_presentation_request_should_perform_successful_json_roundtrip(
     ) -> anyhow::Result<()> {
-        let web3id_statements = vec![
-            AtomicStatement::AttributeInRange {
-                statement: AttributeInRangeStatement {
-                    attribute_tag: "17".into(),
-                    lower: Web3IdAttribute::Numeric(80),
-                    upper: Web3IdAttribute::Numeric(1237),
-                    _phantom: PhantomData,
-                },
-            },
-            AtomicStatement::AttributeInSet {
-                statement: AttributeInSetStatement {
-                    attribute_tag: "23".into(),
-                    set: [
-                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                    ]
-                    .into_iter()
-                    .collect(),
-                    _phantom: PhantomData,
-                },
-            },
-        ];
         let attribute_in_range_statement = AtomicStatement::AttributeInRange {
             statement: AttributeInRangeStatement {
                 attribute_tag: 17.into(),
@@ -753,24 +651,13 @@ mod tests {
             "MyDappContext".to_string(),
         );
 
-        let request_data = VerificationRequestData::new(context)
-            .add_statement_request(
-                IdentityStatementRequest::default()
-                    .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
-                    .add_source(CredentialType::Identity)
-                    .add_statement(attribute_in_range_statement)
-                    .add_statement(attribute_in_set_statement),
-            )
-            .add_statement_request(
-                Web3IdStatementRequest::default()
-                    .add_issuer(did::Method {
-                        network: Network::Testnet,
-                        ty: did::IdentifierType::PublicKey {
-                            key: VerifyingKey::from_bytes(&[0u8; 32])?,
-                        },
-                    })
-                    .add_statements(web3id_statements),
-            );
+        let request_data = VerificationRequestData::new(context).add_statement_request(
+            IdentityStatementRequest::default()
+                .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
+                .add_source(CredentialType::Identity)
+                .add_statement(attribute_in_range_statement)
+                .add_statement(attribute_in_set_statement),
+        );
 
         let anchor_transaction_hash = hashes::TransactionHash::new([0u8; 32]);
 
