@@ -156,7 +156,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                         CONCORDIUM_ACCOUNT_BASED_STATEMENT_TYPE,
                     ],
                 )?;
-                let id = did::Method::new_account_credential(*network, *cred_id);
+                let id = did::Method::<C>::new_account_credential(*network, *cred_id);
                 map.serialize_entry("id", &id)?;
                 map.serialize_entry("statement", statement)?;
                 map.end()
@@ -174,7 +174,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                         CONCORDIUM_IDENTITY_BASED_STATEMENT_TYPE,
                     ],
                 )?;
-                let issuer = did::Method::new_idp(*network, *issuer);
+                let issuer = did::Method::<C>::new_idp(*network, *issuer);
                 map.serialize_entry("issuer", &issuer)?;
                 map.serialize_entry("statement", statement)?;
                 map.end()
@@ -200,7 +200,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
                     .iter()
                     .any(|ty| ty == CONCORDIUM_ACCOUNT_BASED_STATEMENT_TYPE)
                 {
-                    let id: did::Method = take_field_de(&mut value, "id")?;
+                    let id: did::Method<C> = take_field_de(&mut value, "id")?;
                     let did::IdentifierType::AccountCredential { cred_id } = id.ty else {
                         bail!("expected account credential did, was {}", id);
                     };
@@ -215,7 +215,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
                     .iter()
                     .any(|ty| ty == CONCORDIUM_IDENTITY_BASED_STATEMENT_TYPE)
                 {
-                    let issuer: did::Method = take_field_de(&mut value, "issuer")?;
+                    let issuer: did::Method<C> = take_field_de(&mut value, "issuer")?;
                     let did::IdentifierType::Idp { idp_identity } = issuer.ty else {
                         bail!("expected issuer did, was {}", issuer);
                     };
@@ -308,7 +308,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
         S: serde::Serializer,
     {
         let mut map = serializer.serialize_map(None)?;
-        let id = did::Method::new_account_credential(self.network, self.cred_id);
+        let id = did::Method::<C>::new_account_credential(self.network, self.cred_id);
         map.serialize_entry("id", &id)?;
         map.serialize_entry("statement", &self.statements)?;
         map.end()
@@ -325,7 +325,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
         let mut value = serde_json::Value::deserialize(deserializer)?;
 
         let result = (|| -> anyhow::Result<Self> {
-            let id: did::Method = take_field_de(&mut value, "id")?;
+            let id: did::Method<C> = take_field_de(&mut value, "id")?;
             let did::IdentifierType::AccountCredential { cred_id } = id.ty else {
                 bail!("expected identity credential did, was {}", id);
             };
@@ -388,6 +388,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
 /// It will have a new value for each time credential is proven (the encryption is a randomized function)
 #[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
 pub struct IdentityCredentialId<C: Curve> {
+    // todo ar make non-generic?
     /// Anonymity revocation data. It is an encryption of shares of IdCredSec,
     /// each share encrypted for the privacy guardian (anonymity revoker)
     /// that is the key in the map.
@@ -456,7 +457,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
         let mut value = serde_json::Value::deserialize(deserializer)?;
 
         let result = (|| -> anyhow::Result<Self> {
-            let id: did::Method = take_field_de(&mut value, "id")?;
+            let id: did::Method<C> = take_field_de(&mut value, "id")?;
             let did::IdentifierType::IdentityCredential { cred_id } = id.ty else {
                 bail!("expected identity credential did, was {}", id);
             };
@@ -585,7 +586,7 @@ impl<
                 )?;
                 map.serialize_entry("credentialSubject", subject)?;
                 map.serialize_entry("proof", proofs)?;
-                let issuer = did::Method::new_idp(subject.network, *issuer);
+                let issuer = did::Method::<C>::new_idp(subject.network, *issuer);
                 map.serialize_entry("issuer", &issuer)?;
                 map.end()
             }
@@ -610,7 +611,7 @@ impl<
                 map.serialize_entry("validFrom", &validity.created_at)?;
                 map.serialize_entry("validUntil", &validity.valid_to)?;
                 map.serialize_entry("proof", proofs)?;
-                let issuer = did::Method::new_idp(subject.network, *issuer);
+                let issuer = did::Method::<C>::new_idp(subject.network, *issuer);
                 map.serialize_entry("issuer", &issuer)?;
                 map.serialize_entry("attributes", &attributes)?;
                 map.serialize_entry("threshold", &threshold)?;

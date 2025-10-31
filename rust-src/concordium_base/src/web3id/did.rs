@@ -1,6 +1,6 @@
 //! Definition of Concordium DIDs and their parser.
 
-use crate::id::constants::ArCurve;
+use crate::curve_arithmetic::Curve;
 use crate::web3id::v1::IdentityCredentialId;
 use crate::{
     base::CredentialRegistrationID, common, common::base16_decode_string, id::types::IpIdentity,
@@ -77,17 +77,15 @@ impl crate::common::Deserial for Network {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 /// The supported DID identifiers on Concordium.
-pub enum IdentifierType {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IdentifierType<C: Curve> {
     /// Reference to an account via an address.
     Account { address: AccountAddress },
     /// Reference to an account credential via its the account credential registration ID.
     AccountCredential { cred_id: CredentialRegistrationID },
     /// Reference to an identity credential via the IdCredSec encryption.
-    IdentityCredential {
-        cred_id: IdentityCredentialId<ArCurve>,
-    },
+    IdentityCredential { cred_id: IdentityCredentialId<C> },
     /// Reference to a specific smart contract instance.
     ContractData {
         address: ContractAddress,
@@ -100,7 +98,7 @@ pub enum IdentifierType {
     Idp { idp_identity: IpIdentity },
 }
 
-impl IdentifierType {
+impl<C: Curve> IdentifierType<C> {
     /// If `self` is the [`ContractData`](Self::ContractData) variant then
     /// check if the entrypoint is as specified, and attempt to parse the
     /// parameter into the provided type.
@@ -135,15 +133,16 @@ impl IdentifierType {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(try_from = "String", into = "String")]
+#[serde(bound(serialize = "", deserialize = ""))]
 /// A DID method.
-pub struct Method {
+pub struct Method<C: Curve> {
     /// The network part of the method.
     pub network: Network,
     /// The remaining identifier.
-    pub ty: IdentifierType,
+    pub ty: IdentifierType<C>,
 }
 
-impl Method {
+impl<C: Curve> Method<C> {
     /// Construct variant [`Idp`](IdentifierType::Idp)
     pub fn new_idp(network: Network, idp_identity: IpIdentity) -> Self {
         Self {
@@ -169,10 +168,7 @@ impl Method {
     }
 
     /// Construct variant [`IdentityCredential`](IdentifierType::IdentityCredential)
-    pub fn new_identity_credential(
-        network: Network,
-        cred_id: IdentityCredentialId<ArCurve>,
-    ) -> Self {
+    pub fn new_identity_credential(network: Network, cred_id: IdentityCredentialId<C>) -> Self {
         Self {
             network,
             ty: IdentifierType::IdentityCredential { cred_id },
@@ -198,7 +194,7 @@ pub enum MethodFromStrError {
     Leftover(String),
 }
 
-impl<'a> TryFrom<&'a str> for Method {
+impl<'a, C: Curve> TryFrom<&'a str> for Method<C> {
     type Error = MethodFromStrError;
 
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
@@ -211,7 +207,7 @@ impl<'a> TryFrom<&'a str> for Method {
     }
 }
 
-impl TryFrom<String> for Method {
+impl<C: Curve> TryFrom<String> for Method<C> {
     type Error = MethodFromStrError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
@@ -219,7 +215,7 @@ impl TryFrom<String> for Method {
     }
 }
 
-impl std::str::FromStr for Method {
+impl<C: Curve> std::str::FromStr for Method<C> {
     type Err = MethodFromStrError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -227,7 +223,7 @@ impl std::str::FromStr for Method {
     }
 }
 
-impl std::fmt::Display for Method {
+impl<C: Curve> std::fmt::Display for Method<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.ty {
             IdentifierType::Account { address } => {
@@ -266,8 +262,8 @@ impl std::fmt::Display for Method {
     }
 }
 
-impl From<Method> for String {
-    fn from(value: Method) -> Self {
+impl<C: Curve> From<Method<C>> for String {
+    fn from(value: Method<C>) -> Self {
         value.to_string()
     }
 }
@@ -298,7 +294,7 @@ fn network(input: &str) -> IResult<&str, Network> {
     }
 }
 
-fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
+fn ty<'a, C: Curve>(input: &'a str) -> IResult<&'a str, IdentifierType<C>> {
     let account = |input: &'a str| {
         let (input, _) = tag("acc:")(input)?;
         let (input, data) = cut(recognize(many_m_n(50, 50, cut(anychar))))(input)?;
@@ -320,8 +316,8 @@ fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
         let bytes = hex::decode(input).map_err(|_| {
             nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify))
         })?;
-        let cred_id: IdentityCredentialId<ArCurve> = common::from_bytes(&mut bytes.as_bytes())
-            .map_err(|_| {
+        let cred_id: IdentityCredentialId<C> =
+            common::from_bytes(&mut bytes.as_bytes()).map_err(|_| {
                 nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify))
             })?;
         Ok(("", IdentifierType::IdentityCredential { cred_id }))
@@ -408,7 +404,7 @@ fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
 
 /// Parse a DID, returning either an error or the parsed method and leftover
 /// input.
-pub fn parse_did(input: &str) -> IResult<&str, Method> {
+pub fn parse_did<C: Curve>(input: &str) -> IResult<&str, Method<C>> {
     let (input, _) = prefix(input)?;
     let (input, network) = network(input)?;
     let (input, ty) = ty(input)?;
@@ -420,6 +416,7 @@ mod tests {
     use super::*;
     use crate::common;
     use crate::elgamal::Cipher;
+    use crate::id::constants::ArCurve;
     use crate::id::types::{ArIdentity, ChainArData};
     use crate::web3id::fixtures;
     use std::collections::BTreeMap;
@@ -431,22 +428,25 @@ mod tests {
             network: Network::Mainnet,
             ty: IdentifierType::Account { address },
         };
-        assert_eq!(format!("did:ccd:acc:{address}").parse::<Method>()?, target);
         assert_eq!(
-            format!("did:ccd:mainnet:acc:{address}").parse::<Method>()?,
+            format!("did:ccd:acc:{address}").parse::<Method<ArCurve>>()?,
+            target
+        );
+        assert_eq!(
+            format!("did:ccd:mainnet:acc:{address}").parse::<Method<ArCurve>>()?,
             target
         );
         let s = target.to_string();
-        assert_eq!(s.parse::<Method>()?, target);
+        assert_eq!(s.parse::<Method<ArCurve>>()?, target);
         assert_eq!(
-            format!("did:ccd:testnet:acc:{address}").parse::<Method>()?,
+            format!("did:ccd:testnet:acc:{address}").parse::<Method<ArCurve>>()?,
             Method {
                 network: Network::Testnet,
                 ..target
             }
         );
         assert!(format!("did:ccd:acc:{address}/ff")
-            .parse::<Method>()
+            .parse::<Method<ArCurve>>()
             .is_err());
         Ok(())
     }
@@ -466,19 +466,20 @@ mod tests {
             },
         };
         assert_eq!(
-            format!("did:ccd:sci:{index}:{subindex}/{entrypoint}/{parameter}").parse::<Method>()?,
+            format!("did:ccd:sci:{index}:{subindex}/{entrypoint}/{parameter}")
+                .parse::<Method<ArCurve>>()?,
             target
         );
         assert_eq!(
             format!("did:ccd:mainnet:sci:{index}:{subindex}/{entrypoint}/{parameter}")
-                .parse::<Method>()?,
+                .parse::<Method<ArCurve>>()?,
             target
         );
         let s = target.to_string();
-        assert_eq!(s.parse::<Method>()?, target);
+        assert_eq!(s.parse::<Method<ArCurve>>()?, target);
         assert_eq!(
             format!("did:ccd:testnet:sci:{index}:{subindex}/{entrypoint}/{parameter}")
-                .parse::<Method>()?,
+                .parse::<Method<ArCurve>>()?,
             Method {
                 network: Network::Testnet,
                 ..target
@@ -486,7 +487,7 @@ mod tests {
         );
         assert!(
             format!("did:ccd:testnet:sci:{index}:{subindex}/{entrypoint}/{parameter}/ff")
-                .parse::<Method>()
+                .parse::<Method<ArCurve>>()
                 .is_err()
         );
 
@@ -505,43 +506,45 @@ mod tests {
             },
         };
         assert_eq!(
-            format!("did:ccd:sci:{index}:{subindex}/{entrypoint}/{parameter}").parse::<Method>()?,
+            format!("did:ccd:sci:{index}:{subindex}/{entrypoint}/{parameter}")
+                .parse::<Method<ArCurve>>()?,
             target
         );
         assert_eq!(
-            format!("did:ccd:sci:{index}/{entrypoint}/{parameter}").parse::<Method>()?,
+            format!("did:ccd:sci:{index}/{entrypoint}/{parameter}").parse::<Method<ArCurve>>()?,
             target
         );
         assert_eq!(
-            format!("did:ccd:sci:{index}/{entrypoint}/").parse::<Method>()?,
+            format!("did:ccd:sci:{index}/{entrypoint}/").parse::<Method<ArCurve>>()?,
             target
         );
         assert_eq!(
-            format!("did:ccd:sci:{index}/{entrypoint}").parse::<Method>()?,
+            format!("did:ccd:sci:{index}/{entrypoint}").parse::<Method<ArCurve>>()?,
             target
         );
         assert_eq!(
             format!("did:ccd:mainnet:sci:{index}:{subindex}/{entrypoint}/{parameter}")
-                .parse::<Method>()?,
+                .parse::<Method<ArCurve>>()?,
             target
         );
         assert_eq!(
-            format!("did:ccd:mainnet:sci:{index}/{entrypoint}/{parameter}").parse::<Method>()?,
+            format!("did:ccd:mainnet:sci:{index}/{entrypoint}/{parameter}")
+                .parse::<Method<ArCurve>>()?,
             target
         );
         assert_eq!(
-            format!("did:ccd:mainnet:sci:{index}/{entrypoint}").parse::<Method>()?,
+            format!("did:ccd:mainnet:sci:{index}/{entrypoint}").parse::<Method<ArCurve>>()?,
             target
         );
         assert_eq!(
-            format!("did:ccd:mainnet:sci:{index}/{entrypoint}/").parse::<Method>()?,
+            format!("did:ccd:mainnet:sci:{index}/{entrypoint}/").parse::<Method<ArCurve>>()?,
             target
         );
         let s = target.to_string();
-        assert_eq!(s.parse::<Method>()?, target);
+        assert_eq!(s.parse::<Method<ArCurve>>()?, target);
         assert_eq!(
             format!("did:ccd:testnet:sci:{index}:{subindex}/{entrypoint}/{parameter}")
-                .parse::<Method>()?,
+                .parse::<Method<ArCurve>>()?,
             Method {
                 network: Network::Testnet,
                 ..target
@@ -558,22 +561,25 @@ mod tests {
             network: Network::Mainnet,
             ty: IdentifierType::AccountCredential { cred_id },
         };
-        assert_eq!(format!("did:ccd:cred:{cred_id}").parse::<Method>()?, target);
         assert_eq!(
-            format!("did:ccd:mainnet:cred:{cred_id}").parse::<Method>()?,
+            format!("did:ccd:cred:{cred_id}").parse::<Method<ArCurve>>()?,
+            target
+        );
+        assert_eq!(
+            format!("did:ccd:mainnet:cred:{cred_id}").parse::<Method<ArCurve>>()?,
             target
         );
         let s = target.to_string();
-        assert_eq!(s.parse::<Method>()?, target);
+        assert_eq!(s.parse::<Method<ArCurve>>()?, target);
         assert_eq!(
-            format!("did:ccd:testnet:cred:{cred_id}").parse::<Method>()?,
+            format!("did:ccd:testnet:cred:{cred_id}").parse::<Method<ArCurve>>()?,
             Method {
                 network: Network::Testnet,
                 ..target
             }
         );
         assert!(format!("did:ccd:cred:{cred_id}/ff")
-            .parse::<Method>()
+            .parse::<Method<ArCurve>>()
             .is_err());
         Ok(())
     }
@@ -587,21 +593,26 @@ mod tests {
                 key: base16_decode_string(key)?,
             },
         };
-        assert_eq!(format!("did:ccd:pkc:{key}").parse::<Method>()?, target);
         assert_eq!(
-            format!("did:ccd:mainnet:pkc:{key}").parse::<Method>()?,
+            format!("did:ccd:pkc:{key}").parse::<Method<ArCurve>>()?,
+            target
+        );
+        assert_eq!(
+            format!("did:ccd:mainnet:pkc:{key}").parse::<Method<ArCurve>>()?,
             target
         );
         let s = target.to_string();
-        assert_eq!(s.parse::<Method>()?, target);
+        assert_eq!(s.parse::<Method<ArCurve>>()?, target);
         assert_eq!(
-            format!("did:ccd:testnet:pkc:{key}").parse::<Method>()?,
+            format!("did:ccd:testnet:pkc:{key}").parse::<Method<ArCurve>>()?,
             Method {
                 network: Network::Testnet,
                 ..target
             }
         );
-        assert!(format!("did:ccd:cred:{key}/ff").parse::<Method>().is_err());
+        assert!(format!("did:ccd:cred:{key}/ff")
+            .parse::<Method<ArCurve>>()
+            .is_err());
         Ok(())
     }
 
@@ -613,24 +624,24 @@ mod tests {
             ty: IdentifierType::Idp { idp_identity },
         };
         assert_eq!(
-            format!("did:ccd:idp:{idp_identity}").parse::<Method>()?,
+            format!("did:ccd:idp:{idp_identity}").parse::<Method<ArCurve>>()?,
             target
         );
         assert_eq!(
-            format!("did:ccd:mainnet:idp:{idp_identity}").parse::<Method>()?,
+            format!("did:ccd:mainnet:idp:{idp_identity}").parse::<Method<ArCurve>>()?,
             target
         );
         let s = target.to_string();
-        assert_eq!(s.parse::<Method>()?, target);
+        assert_eq!(s.parse::<Method<ArCurve>>()?, target);
         assert_eq!(
-            format!("did:ccd:testnet:idp:{idp_identity}").parse::<Method>()?,
+            format!("did:ccd:testnet:idp:{idp_identity}").parse::<Method<ArCurve>>()?,
             Method {
                 network: Network::Testnet,
                 ..target
             }
         );
         assert!(format!("did:ccd:idp:{idp_identity}/ff")
-            .parse::<Method>()
+            .parse::<Method<ArCurve>>()
             .is_err());
         Ok(())
     }
@@ -672,28 +683,30 @@ mod tests {
 
         assert_eq!(
             format!("did:ccd:idcred:{cred_id_hex}")
-                .parse::<Method>()
+                .parse::<Method<ArCurve>>()
                 .unwrap(),
             target
         );
         assert_eq!(
             format!("did:ccd:mainnet:idcred:{cred_id_hex}")
-                .parse::<Method>()
+                .parse::<Method<ArCurve>>()
                 .unwrap(),
             target
         );
         let s = target.to_string();
         assert_eq!(s, "did:ccd:mainnet:idcred:000000000000000300000001ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e00000002ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e00000003ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e");
-        assert_eq!(s.parse::<Method>().unwrap(), target);
+        assert_eq!(s.parse::<Method<ArCurve>>().unwrap(), target);
         assert_eq!(
             format!("did:ccd:testnet:idcred:{cred_id_hex}")
-                .parse::<Method>()
+                .parse::<Method<ArCurve>>()
                 .unwrap(),
             Method {
                 network: Network::Testnet,
                 ..target
             }
         );
-        assert!("did:ccd:idcred:aaff00dd".parse::<Method>().is_err());
+        assert!("did:ccd:idcred:aaff00dd"
+            .parse::<Method<ArCurve>>()
+            .is_err());
     }
 }
