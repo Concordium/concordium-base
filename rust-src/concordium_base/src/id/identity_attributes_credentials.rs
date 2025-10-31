@@ -5,7 +5,7 @@
 //! is implemented in the [`web3id`](crate::web3id) module.
 //!
 //! Notice that the proof in the present file can be seen as a lightweight version of the account opening (account credentials)
-//! proof in [`account_holder`](account_holder).
+//! proof in [`account_holder`].
 
 use super::{account_holder, types::*, utils};
 use crate::pedersen_commitment::{CommitmentKey, Randomness};
