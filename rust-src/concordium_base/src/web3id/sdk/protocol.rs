@@ -642,9 +642,12 @@ impl TryFrom<GivenContextJson> for GivenContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::id::{
-        constants::AttributeKind,
-        id_proof_types::{AttributeInRangeStatement, AttributeInSetStatement},
+    use crate::{
+        common::serialize_deserialize,
+        id::{
+            constants::AttributeKind,
+            id_proof_types::{AttributeInRangeStatement, AttributeInSetStatement},
+        },
     };
     use concordium_contracts_common::hashes::Hash;
     use hex::FromHex;
@@ -767,6 +770,83 @@ mod tests {
     }
 
     // Tests about serialization and deserialization roundtrips
+
+    #[test]
+    fn test_verification_request_anchor_serialization_deserialization_roundtrip() {
+        let context = Context::new_simple(
+            vec![0u8; 32],
+            "MyConnection".to_string(),
+            "MyDappContext".to_string(),
+        );
+
+        let attribute_in_range_statement = AtomicStatement::AttributeInRange {
+            statement: AttributeInRangeStatement {
+                attribute_tag: 17.into(),
+                lower: Web3IdAttribute::Numeric(80),
+                upper: Web3IdAttribute::Numeric(1237),
+                _phantom: PhantomData,
+            },
+        };
+
+        let request_data = VerificationRequestData::new(context).add_statement_request(
+            IdentityStatementRequest::default()
+                .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
+                .add_source(CredentialType::Identity)
+                .add_statement(attribute_in_range_statement),
+        );
+
+        let deserialized = serialize_deserialize(&request_data).expect("Deserialization succeeds.");
+
+        assert_eq!(
+            request_data, deserialized,
+            "Failed verification request anchor serialization deserialization roundtrip."
+        );
+    }
+
+    #[test]
+    fn test_verification_audit_record_serialization_deserialization_roundtrip() {
+        let id = "MyUUID".to_string();
+        let context = Context::new_simple(
+            vec![0u8; 32],
+            "MyConnection".to_string(),
+            "MyDappContext".to_string(),
+        );
+
+        let attribute_in_range_statement = AtomicStatement::AttributeInRange {
+            statement: AttributeInRangeStatement {
+                attribute_tag: 17.into(),
+                lower: Web3IdAttribute::Numeric(80),
+                upper: Web3IdAttribute::Numeric(1237),
+                _phantom: PhantomData,
+            },
+        };
+
+        let request_data = VerificationRequestData::new(context).add_statement_request(
+            IdentityStatementRequest::default()
+                .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
+                .add_source(CredentialType::Identity)
+                .add_statement(attribute_in_range_statement),
+        );
+
+        let verification_request_anchor_transaction_hash = hashes::TransactionHash::new([0u8; 32]);
+
+        let presentation_request = VerifiablePresentationRequest::new(
+            request_data,
+            verification_request_anchor_transaction_hash,
+        );
+
+        let presentation = "DummyPresentation".to_string();
+
+        let verification_audit_record =
+            VerificationAuditRecord::new(id, presentation_request, presentation);
+
+        let deserialized =
+            serialize_deserialize(&verification_audit_record).expect("Deserialization succeeds.");
+        assert_eq!(
+            verification_audit_record, deserialized,
+            "Failed verification audit record serialization deserialization roundtrip."
+        );
+    }
 
     // Tests about cbor serialization and deserialization roundtrips for the anchors
 
