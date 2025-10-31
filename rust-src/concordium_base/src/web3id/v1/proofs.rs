@@ -22,9 +22,10 @@ use crate::id::types::{
 use crate::pedersen_commitment::Commitment;
 use crate::web3id::v1::{
     AccountBasedCredentialV1, AccountCredentialProofs, AccountCredentialStatementV1,
-    AccountCredentialSubject, ContextChallenge, CredentialMetadataV1, CredentialStatementV1,
-    CredentialV1, IdentityBasedCredentialV1, IdentityCredentialId, IdentityCredentialProofs,
-    IdentityCredentialStatementV1, IdentityCredentialSubject, PresentationV1, RequestV1,
+    AccountCredentialSubject, ConcordiumProofType, ConcordiumZKProof, ContextChallenge,
+    CredentialMetadataV1, CredentialStatementV1, CredentialV1, IdentityBasedCredentialV1,
+    IdentityCredentialId, IdentityCredentialProofs, IdentityCredentialStatementV1,
+    IdentityCredentialSubject, PresentationV1, RequestV1,
 };
 use rand::{CryptoRng, Rng};
 
@@ -110,7 +111,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
             self.subject
                 .statements
                 .iter()
-                .zip(self.proofs.statement_proofs.iter()),
+                .zip(self.proofs.proof.statement_proofs.iter()),
             commitments,
             global_context,
             transcript,
@@ -140,7 +141,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
                 attributes: self.attributes.clone(),
                 validity: self.validity.clone(),
             },
-            proofs: self.proofs.identity_attributes_proofs.clone(),
+            proofs: self.proofs.proof.identity_attributes_proofs.clone(),
         };
 
         if identity_attributes_credentials::verify_identity_attributes(
@@ -170,7 +171,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             self.subject
                 .statements
                 .iter()
-                .zip(self.proofs.statement_proofs.iter()),
+                .zip(self.proofs.proof.statement_proofs.iter()),
             &cmm_attributes,
             global_context,
             transcript,
@@ -235,13 +236,16 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatementV1
         )?;
 
         Ok(AccountBasedCredentialV1 {
-            proofs: AccountCredentialProofs { statement_proofs },
+            proofs: ConcordiumZKProof {
+                created_at: now,
+                proof: AccountCredentialProofs { statement_proofs },
+                proof_type: ConcordiumProofType::ConcordiumZKProofV4,
+            },
             subject: AccountCredentialSubject {
                 cred_id: self.cred_id,
                 statements: self.statements,
                 network: self.network,
             },
-            created: now,
             issuer,
         })
     }
@@ -306,7 +310,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>>
             csprng,
         )?;
 
-        let proofs = IdentityCredentialProofs {
+        let proof = IdentityCredentialProofs {
             identity_attributes_proofs: id_attr_cred_info.proofs,
             statement_proofs,
         };
@@ -316,7 +320,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>>
         };
 
         Ok(IdentityBasedCredentialV1 {
-            proofs,
+            proofs: ConcordiumZKProof {
+                created_at: now,
+                proof,
+                proof_type: ConcordiumProofType::ConcordiumZKProofV4,
+            },
             threshold: id_attr_cred_info.values.threshold,
             subject: IdentityCredentialSubject {
                 cred_id,
@@ -325,7 +333,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>>
             },
             issuer: id_attr_cred_info.values.ip_identity,
             attributes: id_attr_cred_info.values.attributes,
-            created: now,
             validity: id_attr_cred_info.values.validity,
         })
     }
@@ -928,16 +935,22 @@ pub mod tests {
         else {
             panic!("should be account proof");
         };
-        let mut ar_keys = proofs.identity_attributes_proofs.proof_id_cred_pub.keys();
+        let mut ar_keys = proofs
+            .proof
+            .identity_attributes_proofs
+            .proof_id_cred_pub
+            .keys();
         let ar1 = *ar_keys.next().unwrap();
         let ar2 = *ar_keys.next().unwrap();
-        let tmp = proofs.identity_attributes_proofs.proof_id_cred_pub[&ar1].clone();
+        let tmp = proofs.proof.identity_attributes_proofs.proof_id_cred_pub[&ar1].clone();
         *proofs
+            .proof
             .identity_attributes_proofs
             .proof_id_cred_pub
             .get_mut(&ar1)
-            .unwrap() = proofs.identity_attributes_proofs.proof_id_cred_pub[&ar2].clone();
+            .unwrap() = proofs.proof.identity_attributes_proofs.proof_id_cred_pub[&ar2].clone();
         *proofs
+            .proof
             .identity_attributes_proofs
             .proof_id_cred_pub
             .get_mut(&ar2)

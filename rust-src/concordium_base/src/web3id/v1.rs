@@ -281,15 +281,13 @@ pub struct CredentialMetadataV1 {
 /// all the information needed to verify it, except the public commitments.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AccountBasedCredentialV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    /// Creation timestamp of the proof.
-    pub created: chrono::DateTime<chrono::Utc>,
     /// Issuer of this credential, the identity provider index on the
     /// relevant network.
     pub issuer: IpIdentity,
     /// Credential subject
     pub subject: AccountCredentialSubject<C, AttributeType>,
     /// Proofs of the credential
-    pub proofs: AccountCredentialProofs<C, AttributeType>,
+    pub proofs: ConcordiumZKProof<AccountCredentialProofs<C, AttributeType>>,
 }
 
 /// Subject of account based credential
@@ -406,8 +404,6 @@ pub struct IdentityBasedCredentialV1<
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 > {
-    /// Creation timestamp of the credential
-    pub created: chrono::DateTime<chrono::Utc>,
     /// Issuer of the underlying identity credential from which this credential is derived.
     pub issuer: IpIdentity,
     /// Decryption threshold of the IdCredPub in [`IdentityCredentialId`]
@@ -422,7 +418,7 @@ pub struct IdentityBasedCredentialV1<
     /// Credential subject
     pub subject: IdentityCredentialSubject<C, AttributeType>,
     /// Proofs of the credential
-    pub proofs: IdentityCredentialProofs<P, C, AttributeType>,
+    pub proofs: ConcordiumZKProof<IdentityCredentialProofs<P, C, AttributeType>>,
 }
 
 /// Subject of identity based credential
@@ -525,6 +521,27 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum ConcordiumProofType {
+    #[serde(rename = "ConcordiumZKProofV4")]
+    ConcordiumZKProofV4,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(bound(serialize = "T: common::Serial", deserialize = "T: common::Deserial"))]
+pub struct ConcordiumZKProof<T> {
+    #[serde(rename = "createdAt")]
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    #[serde(
+        rename = "proof",
+        serialize_with = "common::base16_encode",
+        deserialize_with = "common::base16_decode"
+    )]
+    pub proof: T,
+    #[serde(rename = "type")]
+    pub proof_type: ConcordiumProofType,
+}
+
 /// Verifiable credential. Embeds and proofs the statements from a [`CredentialStatementV1`]. The credential
 /// is derived from an underlying credential, represented via the different variants:
 /// account credentials and identity credentials.
@@ -553,7 +570,6 @@ impl<
     {
         match self {
             Self::Account(AccountBasedCredentialV1 {
-                created,
                 subject,
                 issuer,
                 proofs,
@@ -568,12 +584,12 @@ impl<
                     ],
                 )?;
                 map.serialize_entry("credentialSubject", subject)?;
+                map.serialize_entry("proof", proofs)?;
                 let issuer = did::Method::new_idp(subject.network, *issuer);
                 map.serialize_entry("issuer", &issuer)?;
                 map.end()
             }
             Self::Identity(IdentityBasedCredentialV1 {
-                created,
                 issuer,
                 threshold,
                 validity,
@@ -593,6 +609,7 @@ impl<
                 map.serialize_entry("credentialSubject", subject)?;
                 map.serialize_entry("validFrom", &validity.created_at)?;
                 map.serialize_entry("validUntil", &validity.valid_to)?;
+                map.serialize_entry("proof", proofs)?;
                 let issuer = did::Method::new_idp(subject.network, *issuer);
                 map.serialize_entry("issuer", &issuer)?;
                 map.serialize_entry("attributes", &attributes)?;
@@ -630,8 +647,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 
     pub fn created(&self) -> chrono::DateTime<chrono::Utc> {
         match self {
-            CredentialV1::Account(acc) => acc.created,
-            CredentialV1::Identity(id) => id.created,
+            CredentialV1::Account(acc) => acc.proofs.created_at,
+            CredentialV1::Identity(id) => id.proofs.created_at,
         }
     }
 
