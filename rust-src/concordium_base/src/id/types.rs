@@ -2792,6 +2792,7 @@ pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::
 pub struct CredentialValidity {
     /// When credential is valid until
     #[serde(rename = "validTo")]
+    // todo ar datetime serialization
     pub valid_to: YearMonth,
     /// When the credential was created
     #[serde(rename = "createdAt")]
@@ -2805,6 +2806,7 @@ pub struct CredentialValidity {
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
+#[serde(rename_all = "camelCase", tag = "repr", content = "value")]
 pub enum IdentityAttribute<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// The attribute value is committed to and the value is proven equal to the value in the commitment
     Committed(PedersenCommitment<C>),
