@@ -4,6 +4,9 @@
 - Add request types `CredentialType`, `IdentityProviderMethod`, `IdentityStatementRequest`, and `VerifiablePresentationRequest` to generate a request to be used for the verifiable presentation V1 protocol.
 - Add verification request anchor types `VerificationRequestData`, and `VerificationRequestAnchorOnChain` to generate an anchor and computes its anchor hash to be used for the verifiable presentation V1 protocol.
 - Add verification audit record types `VerificationAuditRecord`, and `VerificationAuditRecordOnChain` to generate an anchor and computes its anchor hash to be used for the verifiable presentation V1 protocol.
+
+## 9.0.0 (2025-10-29)
+
 - Changed `Debug` implementation of secret keys and cleartext values to not print the key or value.
 - Removed `ChainParameterVersionX` types and the `MintDistributionFamily`, `GASRewardsFamily` and `AuthorizationsFamily` traits and their implementations.
 - Revised `UpdateSigner` implementations not to use references, since the one method (`sign_update_hash`) already takes a reference (`&self`).
@@ -12,6 +15,15 @@
   to allow constructing and accessing values.
 - Introduced the trait `StructuredDigest` to add data to `RandomOracle` and other hashes
 - Removed the method `RandomOracle::add` and deprecated `RandomOracle::extend_from`
+- Added `Eq` and `PartialEq` instances for
+  - `UpdateKeysThreshold`
+  - `InclusiveRange<T>`
+  - `LeverageFactor`
+  - `MintRate`
+  - `CapitalBound`
+  - `Ratio`
+  - `HigherLevelAccessStructure<Kind>`
+  - `AccessStructure`
 
 ## 8.0.0-alpha.3 (2025-10-08)
 
