@@ -84,8 +84,6 @@ pub enum IdentifierType<C: Curve> {
     Account { address: AccountAddress },
     /// Reference to an account credential via its the account credential registration ID.
     AccountCredential { cred_id: CredentialRegistrationID },
-    /// Reference to an identity credential via the IdCredSec encryption.
-    IdentityCredential { cred_id: IdentityCredentialId<C> },
     /// Reference to a specific smart contract instance.
     ContractData {
         address: ContractAddress,
@@ -96,6 +94,8 @@ pub enum IdentifierType<C: Curve> {
     PublicKey { key: ed25519_dalek::VerifyingKey },
     /// Reference to a specific identity provider.
     Idp { idp_identity: IpIdentity },
+    /// Reference to an identity credential via the IdCredSec encryption.
+    IdentityCredential { cred_id: IdentityCredentialId<C> },
 }
 
 impl<C: Curve> IdentifierType<C> {
@@ -167,13 +167,6 @@ impl<C: Curve> Method<C> {
         }
     }
 
-    /// Construct variant [`IdentityCredential`](IdentifierType::IdentityCredential)
-    pub fn new_identity_credential(network: Network, cred_id: IdentityCredentialId<C>) -> Self {
-        Self {
-            network,
-            ty: IdentifierType::IdentityCredential { cred_id },
-        }
-    }
 
     /// Construct variant [`PublicKey`](IdentifierType::PublicKey)
     pub fn new_public_key(network: Network, key: ed25519_dalek::VerifyingKey) -> Self {
@@ -182,6 +175,15 @@ impl<C: Curve> Method<C> {
             ty: IdentifierType::PublicKey { key },
         }
     }
+
+    /// Construct variant [`IdentityCredential`](IdentifierType::IdentityCredential)
+    pub fn new_identity_credential(network: Network, cred_id: IdentityCredentialId<C>) -> Self {
+        Self {
+            network,
+            ty: IdentifierType::IdentityCredential { cred_id },
+        }
+    }
+
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -232,10 +234,6 @@ impl<C: Curve> std::fmt::Display for Method<C> {
             IdentifierType::AccountCredential { cred_id } => {
                 write!(f, "did:ccd:{}:cred:{cred_id}", self.network)
             }
-            IdentifierType::IdentityCredential { cred_id } => {
-                let cred_id_hex = hex::encode(common::to_bytes(&cred_id));
-                write!(f, "did:ccd:{}:idcred:{cred_id_hex}", self.network)
-            }
             IdentifierType::ContractData {
                 address,
                 entrypoint,
@@ -257,6 +255,10 @@ impl<C: Curve> std::fmt::Display for Method<C> {
             }
             IdentifierType::Idp { idp_identity } => {
                 write!(f, "did:ccd:{}:idp:{idp_identity}", self.network)
+            }
+            IdentifierType::IdentityCredential { cred_id } => {
+                let cred_id_hex = hex::encode(common::to_bytes(&cred_id));
+                write!(f, "did:ccd:{}:idcred:{cred_id_hex}", self.network)
             }
         }
     }
