@@ -141,7 +141,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
                 attributes: self.attributes.clone(),
                 validity: self.validity.clone(),
             },
-            proofs: self.proofs.proof.identity_attributes_proofs.clone(),
+            proofs: self.proof.proof.identity_attributes_proofs.clone(),
         };
 
         if identity_attributes_credentials::verify_identity_attributes(
@@ -171,7 +171,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             self.subject
                 .statements
                 .iter()
-                .zip(self.proofs.proof.statement_proofs.iter()),
+                .zip(self.proof.proof.statement_proofs.iter()),
             &cmm_attributes,
             global_context,
             transcript,
@@ -320,7 +320,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>>
         };
 
         Ok(IdentityBasedCredentialV1 {
-            proofs: ConcordiumZKProof {
+            proof: ConcordiumZKProof {
                 created_at: now,
                 proof,
                 proof_type: ConcordiumProofType::ConcordiumZKProofV4,
@@ -930,7 +930,7 @@ pub mod tests {
             .expect("prove");
 
         // change attribute credentials proof to be invalid
-        let CredentialV1::Identity(IdentityBasedCredentialV1 { proofs, .. }) =
+        let CredentialV1::Identity(IdentityBasedCredentialV1 { proof: proofs, .. }) =
             &mut proof.verifiable_credentials[0]
         else {
             panic!("should be account proof");
