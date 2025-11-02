@@ -108,10 +108,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
         };
 
         verify_statements(
-            self.subject
-                .statements
-                .iter()
-                .zip(self.proofs.proof.statement_proofs.iter()),
+            self.subject.statements.iter(),
+            self.proofs.proof.statement_proofs.iter(),
             commitments,
             global_context,
             transcript,
@@ -168,10 +166,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             .collect();
 
         verify_statements(
-            self.subject
-                .statements
-                .iter()
-                .zip(self.proof.proof.statement_proofs.iter()),
+            self.subject.statements.iter(),
+            self.proof.proof.statement_proofs.iter(),
             &cmm_attributes,
             global_context,
             transcript,
@@ -185,27 +181,26 @@ fn verify_statements<
     AttributeType: Attribute<C::Scalar> + 'a,
     TagType: Ord + crate::common::Serialize + 'a,
 >(
-    statements_with_proofs: impl IntoIterator<
-        Item = (
-            &'a AtomicStatement<C, TagType, AttributeType>,
-            &'a AtomicProof<C, AttributeType>,
-        ),
-    >,
+    statements: impl ExactSizeIterator<Item = &'a AtomicStatement<C, TagType, AttributeType>>,
+    proofs: impl ExactSizeIterator<Item = &'a AtomicProof<C, AttributeType>>,
     cmm_attributes: &BTreeMap<TagType, Commitment<C>>,
     global_context: &GlobalContext<C>,
     transcript: &mut RandomOracle,
 ) -> bool {
-    statements_with_proofs
-        .into_iter()
-        .all(|(statement, proof)| {
-            statement.verify(
-                ProofVersion::Version2,
-                global_context,
-                transcript,
-                cmm_attributes,
-                proof,
-            )
-        })
+    if statements.len() != proofs.len() {
+        // todo ar autotest
+        return false;
+    }
+
+    statements.zip(proofs).all(|(statement, proof)| {
+        statement.verify(
+            ProofVersion::Version2,
+            global_context,
+            transcript,
+            cmm_attributes,
+            proof,
+        )
+    })
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatementV1<C, AttributeType> {
