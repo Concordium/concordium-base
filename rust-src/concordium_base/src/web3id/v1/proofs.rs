@@ -1,15 +1,15 @@
 use crate::random_oracle::StructuredDigest;
+use crate::web3id::{
+    CommitmentInputs, CredentialsInputs, LinkingProof, PresentationVerificationError, ProofError,
+    Web3IdSigner,
+};
 use crate::{
     curve_arithmetic::Curve,
     id::types::{Attribute, GlobalContext},
     random_oracle::RandomOracle,
 };
+use itertools::Itertools;
 use std::collections::BTreeMap;
-
-use crate::web3id::{
-    CommitmentInputs, CredentialsInputs, LinkingProof, PresentationVerificationError, ProofError,
-    Web3IdSigner,
-};
 
 use crate::curve_arithmetic::Pairing;
 use crate::id::id_proof_types::{AtomicProof, AtomicStatement, ProofVersion};
@@ -187,19 +187,17 @@ fn verify_statements<
     global_context: &GlobalContext<C>,
     transcript: &mut RandomOracle,
 ) -> bool {
-    if statements.len() != proofs.len() {
-        // todo ar autotest
-        return false;
-    }
-
-    statements.zip(proofs).all(|(statement, proof)| {
-        statement.verify(
-            ProofVersion::Version2,
-            global_context,
-            transcript,
-            cmm_attributes,
-            proof,
-        )
+    // todo ar autotest not equal length
+    statements.zip_longest(proofs).all(|elm| {
+        elm.both().map_or(false, |(statement, proof)| {
+            statement.verify(
+                ProofVersion::Version2,
+                global_context,
+                transcript,
+                cmm_attributes,
+                proof,
+            )
+        })
     })
 }
 
