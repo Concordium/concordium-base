@@ -640,21 +640,27 @@ impl TryFrom<GivenContextJson> for GivenContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        common::serialize_deserialize,
-        id::{
-            constants::AttributeKind,
-            id_proof_types::{AttributeInRangeStatement, AttributeInSetStatement},
-        },
-    };
+    use crate::{common::serialize_deserialize, id::id_proof_types::AttributeInRangeStatement};
     use concordium_contracts_common::hashes::Hash;
     use hex::FromHex;
     use std::marker::PhantomData;
 
-    // Tests about JSON serialization and deserialization roundtrips
+    fn verification_request_data_fixture() -> VerificationRequestData {
+        let context = Context::new_simple(
+            vec![0u8; 32],
+            "MyConnection".to_string(),
+            "MyDappContext".to_string(),
+        )
+        // While above simple context is used in practice,
+        // we add all possible context variants and context label variants to ensure test coverage.
+        .add_context(GivenContext::PaymentHash(hashes::Hash::new([0u8; 32])))
+        .add_context(GivenContext::BlockHash(hashes::BlockHash::new([1u8; 32])))
+        .add_context(GivenContext::ResourceId("MyRescourceId".to_string()))
+        .add_request(ContextLabel::Nonce)
+        .add_request(ContextLabel::PaymentHash)
+        .add_request(ContextLabel::ConnectionId)
+        .add_request(ContextLabel::ContextString);
 
-    #[test]
-    fn test_verification_presentation_request_json_roundtrip() -> anyhow::Result<()> {
         let attribute_in_range_statement = AtomicStatement::AttributeInRange {
             statement: AttributeInRangeStatement {
                 attribute_tag: 17.into(),
@@ -663,33 +669,83 @@ mod tests {
                 _phantom: PhantomData,
             },
         };
-        let attribute_in_set_statement = AtomicStatement::AttributeInSet {
-            statement: AttributeInSetStatement {
-                attribute_tag: 23.into(),
-                set: [
-                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                ]
-                .into_iter()
-                .collect(),
-                _phantom: PhantomData,
-            },
-        };
 
+        VerificationRequestData::new(context).add_statement_request(
+            IdentityStatementRequest::default()
+                .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
+                .add_source(CredentialType::Identity)
+                .add_statement(attribute_in_range_statement),
+        )
+    }
+
+    fn verification_request_anchor_on_chain_fixture() -> VerificationRequestAnchorOnChain {
+        let request_data = verification_request_data_fixture();
+
+        let mut public_info = HashMap::new();
+        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
+
+        request_data.anchor(Some(public_info))
+    }
+
+    fn verification_audit_record_fixture() -> VerificationAuditRecord {
         let context = Context::new_simple(
             vec![0u8; 32],
             "MyConnection".to_string(),
             "MyDappContext".to_string(),
-        );
+        )
+        // While above simple context is used in practice,
+        // we add all possible context variants and context label variants to ensure test coverage.
+        .add_context(GivenContext::PaymentHash(hashes::Hash::new([0u8; 32])))
+        .add_context(GivenContext::BlockHash(hashes::BlockHash::new([1u8; 32])))
+        .add_context(GivenContext::ResourceId("MyRescourceId".to_string()))
+        .add_request(ContextLabel::Nonce)
+        .add_request(ContextLabel::PaymentHash)
+        .add_request(ContextLabel::ConnectionId)
+        .add_request(ContextLabel::ContextString);
+
+        let attribute_in_range_statement = AtomicStatement::AttributeInRange {
+            statement: AttributeInRangeStatement {
+                attribute_tag: 17.into(),
+                lower: Web3IdAttribute::Numeric(80),
+                upper: Web3IdAttribute::Numeric(1237),
+                _phantom: PhantomData,
+            },
+        };
 
         let request_data = VerificationRequestData::new(context).add_statement_request(
             IdentityStatementRequest::default()
                 .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
                 .add_source(CredentialType::Identity)
-                .add_statement(attribute_in_range_statement)
-                .add_statement(attribute_in_set_statement),
+                .add_statement(attribute_in_range_statement),
         );
+
+        let verification_request_anchor_transaction_hash = hashes::TransactionHash::new([2u8; 32]);
+
+        let presentation_request = VerifiablePresentationRequest::new(
+            request_data,
+            verification_request_anchor_transaction_hash,
+        );
+
+        let id = "MyUUID".to_string();
+        let presentation = "DummyPresentation".to_string();
+
+        VerificationAuditRecord::new(id, presentation_request, presentation)
+    }
+
+    fn verification_audit_record_on_chain_fixture() -> VerificationAuditRecordOnChain {
+        let verification_audit_record = verification_audit_record_fixture();
+
+        let mut public_info = HashMap::new();
+        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
+
+        verification_audit_record.anchor(Some(public_info))
+    }
+
+    // Tests about JSON serialization and deserialization roundtrips
+
+    #[test]
+    fn test_verification_presentation_request_json_roundtrip() -> anyhow::Result<()> {
+        let request_data = verification_request_data_fixture();
 
         let verification_request_anchor_transaction_hash = hashes::TransactionHash::new([0u8; 32]);
 
@@ -715,41 +771,28 @@ mod tests {
     }
 
     #[test]
+    fn test_verification_request_anchor_json_roundtrip() -> anyhow::Result<()> {
+        let verification_request_anchor = verification_request_data_fixture();
+
+        let json = anyhow::Context::context(
+            serde_json::to_value(&verification_request_anchor),
+            "Failed verification request anchor to JSON value.",
+        )?;
+        let roundtrip = anyhow::Context::context(
+            serde_json::from_value(json),
+            "Failed verification request anchor from JSON value.",
+        )?;
+        assert_eq!(
+            verification_request_anchor, roundtrip,
+            "Failed verification request anchor JSON roundtrip."
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn test_verification_audit_record_json_roundtrip() -> anyhow::Result<()> {
-        let id = "MyUUID".to_string();
-        let context = Context::new_simple(
-            vec![0u8; 32],
-            "MyConnection".to_string(),
-            "MyDappContext".to_string(),
-        );
-
-        let attribute_in_range_statement = AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
-                attribute_tag: 17.into(),
-                lower: Web3IdAttribute::Numeric(80),
-                upper: Web3IdAttribute::Numeric(1237),
-                _phantom: PhantomData,
-            },
-        };
-
-        let request_data = VerificationRequestData::new(context).add_statement_request(
-            IdentityStatementRequest::default()
-                .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
-                .add_source(CredentialType::Identity)
-                .add_statement(attribute_in_range_statement),
-        );
-
-        let verification_request_anchor_transaction_hash = hashes::TransactionHash::new([0u8; 32]);
-
-        let presentation_request = VerifiablePresentationRequest::new(
-            request_data,
-            verification_request_anchor_transaction_hash,
-        );
-
-        let presentation = "DummyPresentation".to_string();
-
-        let verification_audit_record =
-            VerificationAuditRecord::new(id, presentation_request, presentation);
+        let verification_audit_record = verification_audit_record_fixture();
 
         let json = anyhow::Context::context(
             serde_json::to_value(&verification_audit_record),
@@ -771,27 +814,7 @@ mod tests {
 
     #[test]
     fn test_verification_request_anchor_serialization_deserialization_roundtrip() {
-        let context = Context::new_simple(
-            vec![0u8; 32],
-            "MyConnection".to_string(),
-            "MyDappContext".to_string(),
-        );
-
-        let attribute_in_range_statement = AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
-                attribute_tag: 17.into(),
-                lower: Web3IdAttribute::Numeric(80),
-                upper: Web3IdAttribute::Numeric(1237),
-                _phantom: PhantomData,
-            },
-        };
-
-        let request_data = VerificationRequestData::new(context).add_statement_request(
-            IdentityStatementRequest::default()
-                .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
-                .add_source(CredentialType::Identity)
-                .add_statement(attribute_in_range_statement),
-        );
+        let request_data = verification_request_data_fixture();
 
         let deserialized = serialize_deserialize(&request_data).expect("Deserialization succeeds.");
 
@@ -803,40 +826,7 @@ mod tests {
 
     #[test]
     fn test_verification_audit_record_serialization_deserialization_roundtrip() {
-        let id = "MyUUID".to_string();
-        let context = Context::new_simple(
-            vec![0u8; 32],
-            "MyConnection".to_string(),
-            "MyDappContext".to_string(),
-        );
-
-        let attribute_in_range_statement = AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
-                attribute_tag: 17.into(),
-                lower: Web3IdAttribute::Numeric(80),
-                upper: Web3IdAttribute::Numeric(1237),
-                _phantom: PhantomData,
-            },
-        };
-
-        let request_data = VerificationRequestData::new(context).add_statement_request(
-            IdentityStatementRequest::default()
-                .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
-                .add_source(CredentialType::Identity)
-                .add_statement(attribute_in_range_statement),
-        );
-
-        let verification_request_anchor_transaction_hash = hashes::TransactionHash::new([0u8; 32]);
-
-        let presentation_request = VerifiablePresentationRequest::new(
-            request_data,
-            verification_request_anchor_transaction_hash,
-        );
-
-        let presentation = "DummyPresentation".to_string();
-
-        let verification_audit_record =
-            VerificationAuditRecord::new(id, presentation_request, presentation);
+        let verification_audit_record = verification_audit_record_fixture();
 
         let deserialized =
             serialize_deserialize(&verification_audit_record).expect("Deserialization succeeds.");
@@ -849,50 +839,23 @@ mod tests {
     // Tests about cbor serialization and deserialization roundtrips for the anchors
 
     #[test]
+    fn test_verification_request_anchor_cbor_roundtrip() {
+        let verification_request_anchor = verification_request_anchor_on_chain_fixture();
+
+        let cbor = cbor::cbor_encode(&verification_request_anchor).unwrap();
+
+        assert_eq!(hex::encode(&cbor), "a46468617368582053e6987f48f1ac15bf7fe183849bb63255ab4134ff246b8c5c9e5aa2d37c553a667075626c6963a1636b65790466722374797065664343445652416776657273696f6e01");
+
+        let decoded: VerificationRequestAnchorOnChain = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(decoded, verification_request_anchor);
+    }
+
+    #[test]
     fn test_verification_audit_record_cbor_roundtrip() {
-        let id = "MyUUID".to_string();
-        let context = Context::new_simple(
-            vec![0u8; 32],
-            "MyConnection".to_string(),
-            "MyDappContext".to_string(),
-        );
-
-        let attribute_in_range_statement = AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
-                attribute_tag: 17.into(),
-                lower: Web3IdAttribute::Numeric(80),
-                upper: Web3IdAttribute::Numeric(1237),
-                _phantom: PhantomData,
-            },
-        };
-
-        let request_data = VerificationRequestData::new(context).add_statement_request(
-            IdentityStatementRequest::default()
-                .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
-                .add_source(CredentialType::Identity)
-                .add_statement(attribute_in_range_statement),
-        );
-
-        let verification_request_anchor_transaction_hash = hashes::TransactionHash::new([0u8; 32]);
-
-        let presentation_request = VerifiablePresentationRequest::new(
-            request_data,
-            verification_request_anchor_transaction_hash,
-        );
-
-        let presentation = "DummyPresentation".to_string();
-
-        let verification_audit_record =
-            VerificationAuditRecord::new(id, presentation_request, presentation);
-
-        let mut public_info = HashMap::new();
-        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
-
-        let verification_audit_record_on_chain: VerificationAuditRecordOnChain =
-            verification_audit_record.anchor(Some(public_info));
+        let verification_audit_record_on_chain = verification_audit_record_on_chain_fixture();
 
         let cbor = cbor::cbor_encode(&verification_audit_record_on_chain).unwrap();
-        assert_eq!(hex::encode(&cbor), "a464686173685820190cec0f706b9590f92b7e20747f3ddbd9eba8a601c52554394dc2316634dc68667075626c6963a1636b65790466722374797065664343445641416776657273696f6e01");
+        assert_eq!(hex::encode(&cbor), "a464686173685820f2b559b04d03cdfd252e070e585e9b181d58ab23e4d18dceea31da59b4fa9055667075626c6963a1636b65790466722374797065664343445641416776657273696f6e01");
 
         let decoded: VerificationAuditRecordOnChain = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(decoded, verification_audit_record_on_chain);
@@ -902,38 +865,11 @@ mod tests {
 
     #[test]
     fn test_compute_the_correct_verification_request_anchor() -> anyhow::Result<()> {
-        let context = Context::new_simple(
-            vec![0u8; 32],
-            "MyConnection".to_string(),
-            "MyDappContext".to_string(),
-        );
-
-        let attribute_in_range_statement = AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
-                attribute_tag: 17.into(),
-                lower: Web3IdAttribute::Numeric(80),
-                upper: Web3IdAttribute::Numeric(1237),
-                _phantom: PhantomData,
-            },
-        };
-
-        let request_data = VerificationRequestData::new(context).add_statement_request(
-            IdentityStatementRequest::default()
-                .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
-                .add_source(CredentialType::Identity)
-                .add_statement(attribute_in_range_statement),
-        );
-
-        let mut public_info = HashMap::new();
-        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
-
-        let verification_request_anchor: VerificationRequestAnchorOnChain =
-            request_data.anchor(Some(public_info));
-        let verification_request_anchor_hash = verification_request_anchor.hash;
+        let verification_request_anchor_hash = verification_request_anchor_on_chain_fixture().hash;
 
         let expected_verification_request_anchor_hash = Hash::new(
             <[u8; 32]>::from_hex(
-                "7326166760159b23dbfe8c6b585fa45883358d87e3fe4d784633aa0ebc6998fb",
+                "53e6987f48f1ac15bf7fe183849bb63255ab4134ff246b8c5c9e5aa2d37c553a",
             )
             .expect("Invalid hex"),
         );
@@ -948,51 +884,11 @@ mod tests {
 
     #[test]
     fn test_compute_the_correct_verification_audit_record() -> anyhow::Result<()> {
-        let id = "MyUUID".to_string();
-        let context = Context::new_simple(
-            vec![0u8; 32],
-            "MyConnection".to_string(),
-            "MyDappContext".to_string(),
-        );
-
-        let attribute_in_range_statement = AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
-                attribute_tag: 17.into(),
-                lower: Web3IdAttribute::Numeric(80),
-                upper: Web3IdAttribute::Numeric(1237),
-                _phantom: PhantomData,
-            },
-        };
-
-        let request_data = VerificationRequestData::new(context).add_statement_request(
-            IdentityStatementRequest::default()
-                .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
-                .add_source(CredentialType::Identity)
-                .add_statement(attribute_in_range_statement),
-        );
-
-        let verification_request_anchor_transaction_hash = hashes::TransactionHash::new([0u8; 32]);
-
-        let presentation_request = VerifiablePresentationRequest::new(
-            request_data,
-            verification_request_anchor_transaction_hash,
-        );
-
-        let presentation = "DummyPresentation".to_string();
-
-        let verification_audit_record =
-            VerificationAuditRecord::new(id, presentation_request, presentation);
-
-        let mut public_info = HashMap::new();
-        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
-
-        let verification_audit_record_on_chain: VerificationAuditRecordOnChain =
-            verification_audit_record.anchor(Some(public_info));
-        let verification_audit_record_hash = verification_audit_record_on_chain.hash;
+        let verification_audit_record_hash = verification_audit_record_on_chain_fixture().hash;
 
         let expected_verification_audit_record_hash = Hash::new(
             <[u8; 32]>::from_hex(
-                "190cec0f706b9590f92b7e20747f3ddbd9eba8a601c52554394dc2316634dc68",
+                "f2b559b04d03cdfd252e070e585e9b181d58ab23e4d18dceea31da59b4fa9055",
             )
             .expect("Invalid hex"),
         );
@@ -1003,42 +899,5 @@ mod tests {
         );
 
         Ok(())
-    }
-
-    #[test]
-    fn test_verification_request_anchor_cbor_roundtrip() {
-        let context = Context::new_simple(
-            vec![0u8; 32],
-            "MyConnection".to_string(),
-            "MyDappContext".to_string(),
-        );
-
-        let attribute_in_range_statement = AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
-                attribute_tag: 17.into(),
-                lower: Web3IdAttribute::Numeric(80),
-                upper: Web3IdAttribute::Numeric(1237),
-                _phantom: PhantomData,
-            },
-        };
-
-        let request_data = VerificationRequestData::new(context).add_statement_request(
-            IdentityStatementRequest::default()
-                .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
-                .add_source(CredentialType::Identity)
-                .add_statement(attribute_in_range_statement),
-        );
-
-        let mut public_info = HashMap::new();
-        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
-
-        let verification_request_anchor: VerificationRequestAnchorOnChain =
-            request_data.anchor(Some(public_info));
-
-        let cbor = cbor::cbor_encode(&verification_request_anchor).unwrap();
-        assert_eq!(hex::encode(&cbor), "a4646861736858207326166760159b23dbfe8c6b585fa45883358d87e3fe4d784633aa0ebc6998fb667075626c6963a1636b65790466722374797065664343445652416776657273696f6e01");
-
-        let decoded: VerificationRequestAnchorOnChain = cbor::cbor_decode(&cbor).unwrap();
-        assert_eq!(decoded, verification_request_anchor);
     }
 }
