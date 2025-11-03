@@ -887,6 +887,7 @@ genValidResult spv =
 genTransactionSummary :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen TransactionSummary
 genTransactionSummary spv = do
     tsSender <- oneof [return Nothing, Just <$> genAccountAddress]
+    tsSponsor <- oneof [return Nothing, Just <$> genAccountAddress]
     tsHash <- TransactionHashV0 . SHA256.Hash . FBS.pack <$> vector 32
     tsCost <- genAmount
     tsEnergyCost <- Energy <$> arbitrary
