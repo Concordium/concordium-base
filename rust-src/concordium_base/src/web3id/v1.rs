@@ -615,14 +615,14 @@ impl<
                     &validity
                         .created_at
                         .lower()
-                        .ok_or(S::Error::custom("convert valid from to date time"))?,
+                        .ok_or(S::Error::custom("convert crated at to date time"))?,
                 )?;
                 map.serialize_entry(
                     "validUntil",
                     &validity
                         .valid_to
                         .upper_inclusive()
-                        .ok_or(S::Error::custom("convert valid until to date time"))?,
+                        .ok_or(S::Error::custom("convert valid to to date time"))?,
                 )?;
                 let issuer = did::Method::<C>::new_idp(subject.network, *issuer);
                 map.serialize_entry("issuer", &issuer)?;
@@ -677,11 +677,15 @@ impl<
                 {
                     let subject: IdentityCredentialSubject<C, AttributeType> =
                         take_field_de(&mut value, "credentialSubject")?;
-                    let created_at: YearMonth = take_field_de(&mut value, "validFrom")?;
-                    let valid_to: YearMonth = take_field_de(&mut value, "validUntil")?;
+                    let valid_from: chrono::DateTime<chrono::Utc> =
+                        take_field_de(&mut value, "validFrom")?;
+                    let valid_until: chrono::DateTime<chrono::Utc> =
+                        take_field_de(&mut value, "validUntil")?;
                     let validity = CredentialValidity {
-                        created_at,
-                        valid_to,
+                        created_at: YearMonth::from_timestamp(valid_from.timestamp())
+                            .context("convert valid from to year and month")?,
+                        valid_to: YearMonth::from_timestamp(valid_until.timestamp())
+                            .context("convert valid until to year and month")?,
                     };
                     let issuer: did::Method<C> = take_field_de(&mut value, "issuer")?;
                     let did::IdentifierType::Idp { idp_identity } = issuer.ty else {

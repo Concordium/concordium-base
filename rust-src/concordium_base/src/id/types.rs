@@ -3063,6 +3063,9 @@ mod tests {
 
                 let lower_from_ts = YearMonth::from_timestamp(lower.timestamp()).unwrap();
                 assert_eq!(ym, lower_from_ts);
+                let upper_inclusive_from_ts =
+                    YearMonth::from_timestamp(upper_inclusive.timestamp()).unwrap();
+                assert_eq!(ym, upper_inclusive_from_ts);
             }
         }
     }
