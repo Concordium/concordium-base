@@ -143,6 +143,7 @@ pub fn test_create_pio_v1<'a>(
     ars_infos: &'a BTreeMap<ArIdentity, ArInfo<ArCurve>>,
     global_ctx: &'a GlobalContext<ArCurve>,
     num_ars: u8, // should be at least 1
+    csprng: &mut (impl Rng + CryptoRng),
 ) -> (
     IpContext<'a, IpPairing, ArCurve>,
     PreIdentityObjectV1<IpPairing, ArCurve>,
@@ -155,7 +156,7 @@ pub fn test_create_pio_v1<'a>(
     let threshold = Threshold::try_from(num_ars - 1).unwrap_or(Threshold(1));
 
     // Create and return PIO
-    let (pio, randomness) = generate_pio_v1(&context, threshold, id_use_data)
+    let (pio, randomness) = generate_pio_v1_with_rng(&context, threshold, id_use_data, csprng)
         .expect("Generating the pre-identity object should succeed.");
     (context, pio, randomness)
 }
@@ -395,8 +396,14 @@ pub fn test_pipeline_v1() {
         test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
 
     let id_use_data = test_create_id_use_data(&mut csprng);
-    let (context, pio, randomness) =
-        test_create_pio_v1(&id_use_data, &ip_info, &ars_infos, &global_ctx, num_ars);
+    let (context, pio, randomness) = test_create_pio_v1(
+        &id_use_data,
+        &ip_info,
+        &ars_infos,
+        &global_ctx,
+        num_ars,
+        &mut csprng,
+    );
     assert!(
         *randomness == *id_use_data.randomness,
         "Returned randomness is not equal to used randomness."

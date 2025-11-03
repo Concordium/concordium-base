@@ -2652,11 +2652,17 @@ mod fixtures {
             &ars_infos.anonymity_revokers,
             &global_context,
             num_ars,
+            &mut seed0(),
         );
         let alist = create_attribute_list(attrs);
-        let ip_sig =
-            identity_provider::verify_credentials_v1(&pio, context, &alist, &ip_secret_key)
-                .expect("verify credentials");
+        let ip_sig = identity_provider::sign_identity_object_v1_with_rng(
+            &pio,
+            context.ip_info,
+            &alist,
+            &ip_secret_key,
+            &mut seed0(),
+        )
+        .expect("sign credentials");
 
         let id_object = IdentityObjectV1 {
             pre_identity_object: pio,
