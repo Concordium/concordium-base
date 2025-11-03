@@ -85,6 +85,7 @@ pub fn prove_identity_attributes<
                 .choice_ar_parameters
                 .threshold,
             &global_context.on_chain_commitment_key,
+            csprng,
         );
 
     // Create ar data map

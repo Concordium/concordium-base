@@ -507,15 +507,15 @@ pub fn compute_sharing_data<'a, C: Curve>(
     ar_parameters: &'a BTreeMap<ArIdentity, ArInfo<C>>, // Chosen anonimity revokers.
     threshold: Threshold,                               // Anonymity revocation threshold.
     commitment_key: &PedersenKey<C>,                    // commitment key
+    csprng: &mut (impl Rng + CryptoRng),
 ) -> SharingData<'a, C> {
     let n = ar_parameters.len() as u32;
-    let mut csprng = thread_rng();
     // first commit to the scalar
-    let (cmm_scalar, cmm_scalar_rand) = commitment_key.commit(&shared_scalar, &mut csprng);
+    let (cmm_scalar, cmm_scalar_rand) = commitment_key.commit(&shared_scalar, csprng);
     // We evaluate the polynomial at ar_identities.
     let share_points = ar_parameters.keys().copied();
     // share the scalar on ar_identity points.
-    let sharing_data = share::<C, _, _, _>(shared_scalar, share_points, threshold, &mut csprng);
+    let sharing_data = share::<C, _, _, _>(shared_scalar, share_points, threshold, csprng);
     // commitments to the sharing coefficients
     let mut cmm_sharing_coefficients: Vec<Commitment<C>> = Vec::with_capacity(threshold.into());
     // first coefficient is the shared scalar
@@ -526,7 +526,7 @@ pub fn compute_sharing_data<'a, C: Curve>(
     cmm_coeff_randomness.push(cmm_scalar_rand);
     // fill the rest
     for coeff in sharing_data.coefficients.iter() {
-        let (cmm, rnd) = commitment_key.commit(coeff, &mut csprng);
+        let (cmm, rnd) = commitment_key.commit(coeff, csprng);
         cmm_sharing_coefficients.push(cmm);
         cmm_coeff_randomness.push(rnd);
     }
@@ -538,7 +538,7 @@ pub fn compute_sharing_data<'a, C: Curve>(
         let si = ar.ar_identity;
         let pk = ar.ar_public_key;
         // encrypt the share
-        let (cipher, rnd2) = pk.encrypt_exponent_rand(&mut csprng, &share);
+        let (cipher, rnd2) = pk.encrypt_exponent_rand(csprng, &share);
         // compute the commitment to this share from the commitment to the coeff
         let (cmm, rnd) =
             commitment_to_share_and_rand(si, &cmm_sharing_coefficients, &cmm_coeff_randomness);
@@ -783,6 +783,7 @@ pub fn create_unsigned_credential<
         &chosen_ars,
         prio.choice_ar_parameters.threshold,
         &context.global_context.on_chain_commitment_key,
+        &mut csprng,
     );
 
     let number_of_ars = prio.choice_ar_parameters.ar_identities.len();
@@ -1370,7 +1371,7 @@ mod tests {
 
         // Act
         let (ar_datas, _comms, _rands) =
-            compute_sharing_data(&value, &ars_infos, Threshold(threshold), &ck);
+            compute_sharing_data(&value, &ars_infos, Threshold(threshold), &ck, &mut csprng);
 
         // Assert ArData's are good
         for data in ar_datas.iter() {
