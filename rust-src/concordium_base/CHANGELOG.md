@@ -1,6 +1,6 @@
 ## Unreleased
 
-- Add context types `ContextLabel`, `Context`, `GivenContext`, and `GivenContextJson` to generate structured context to be used as a challenge for ZK proofs.
+- Add context types `ContextLabel`, `Context`, and `GivenContext` to generate structured context to be used as a challenge for ZK proofs.
 - Add request types `CredentialType`, `IdentityProviderMethod`, `IdentityStatementRequest`, and `VerifiablePresentationRequest` to generate a request to be used for the verifiable presentation V1 protocol.
 - Add verification request anchor types `VerificationRequestData`, and `VerificationRequestAnchorOnChain` to generate an anchor and computes its anchor hash to be used for the verifiable presentation V1 protocol.
 - Add verification audit record types `VerificationAuditRecord`, and `VerificationAuditRecordOnChain` to generate an anchor and computes its anchor hash to be used for the verifiable presentation V1 protocol.
