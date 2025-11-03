@@ -10,8 +10,9 @@ use crate::curve_arithmetic::{Curve, Pairing};
 use crate::id::id_proof_types::{AtomicProof, AtomicStatement};
 use crate::id::secret_sharing::Threshold;
 use crate::id::types::{
-    ArIdentity, Attribute, AttributeTag, ChainArData, CredentialValidity, IdentityAttribute,
-    IdentityAttributesCredentialsProofs, IpIdentity,
+    ArIdentity, Attribute, AttributeTag, ChainArData,
+    CredentialValidity, IdentityAttribute, IdentityAttributesCredentialsProofs, IpIdentity,
+    YearMonth,
 };
 use crate::web3id::did::Network;
 use crate::web3id::{did, AccountCredentialMetadata, IdentityCredentialMetadata, LinkingProof};
@@ -290,7 +291,7 @@ pub struct AccountBasedCredentialV1<C: Curve, AttributeType: Attribute<C::Scalar
     /// Credential subject
     pub subject: AccountCredentialSubject<C, AttributeType>,
     /// Proofs of the credential
-    pub proofs: ConcordiumZKProof<AccountCredentialProofs<C, AttributeType>>,
+    pub proof: ConcordiumZKProof<AccountCredentialProofs<C, AttributeType>>,
 }
 
 /// Subject of account based credential
@@ -375,7 +376,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
                     cred_id,
                     statements,
                 },
-            proofs,
+            proof: proofs,
             ..
         } = self;
 
@@ -576,7 +577,7 @@ impl<
             Self::Account(AccountBasedCredentialV1 {
                 subject,
                 issuer,
-                proofs,
+                proof: proofs,
             }) => {
                 let mut map = serializer.serialize_map(None)?;
                 map.serialize_entry(
@@ -599,7 +600,7 @@ impl<
                 validity,
                 attributes,
                 subject,
-                               proof: proofs,
+                proof: proofs,
             }) => {
                 let mut map = serializer.serialize_map(None)?;
                 map.serialize_entry(
@@ -635,8 +636,69 @@ impl<
     where
         D: Deserializer<'de>,
     {
-        // todo ar impl deser
-        todo!()
+        let mut value = serde_json::Value::deserialize(deserializer)?;
+
+        let result = (|| -> anyhow::Result<Self> {
+            let types: BTreeSet<String> = take_field_de(&mut value, "type")?;
+
+            Ok(
+                if types
+                    .iter()
+                    .any(|ty| ty == CONCORDIUM_ACCOUNT_BASED_CREDENTIAL_TYPE)
+                {
+                    let subject: AccountCredentialSubject<C, AttributeType> =
+                        take_field_de(&mut value, "credentialSubject")?;
+                    let proof: ConcordiumZKProof<AccountCredentialProofs<C, AttributeType>> =
+                        take_field_de(&mut value, "proof")?;
+                    let issuer: did::Method<C> = take_field_de(&mut value, "issuer")?;
+                    let did::IdentifierType::Idp { idp_identity } = issuer.ty else {
+                        bail!("expected idp did, was {}", issuer);
+                    };
+                    ensure!(issuer.network == subject.network, "network not identical");
+
+                    Self::Account(AccountBasedCredentialV1 {
+                        issuer: idp_identity,
+                        subject,
+                        proof,
+                    })
+                } else if types
+                    .iter()
+                    .any(|ty| ty == CONCORDIUM_IDENTITY_BASED_CREDENTIAL_TYPE)
+                {
+                    let subject: IdentityCredentialSubject<C, AttributeType> =
+                        take_field_de(&mut value, "credentialSubject")?;
+                    let created_at: YearMonth = take_field_de(&mut value, "validFrom")?;
+                    let valid_to: YearMonth = take_field_de(&mut value, "validUntil")?;
+                    let validity = CredentialValidity {
+                        created_at,
+                        valid_to,
+                    };
+                    let proof: ConcordiumZKProof<IdentityCredentialProofs<P, C, AttributeType>> =
+                        take_field_de(&mut value, "proof")?;
+                    let issuer: did::Method<C> = take_field_de(&mut value, "issuer")?;
+                    let did::IdentifierType::Idp { idp_identity } = issuer.ty else {
+                        bail!("expected idp did, was {}", issuer);
+                    };
+                    ensure!(issuer.network == subject.network, "network not identical");
+                    let attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>> =
+                        take_field_de(&mut value, "attributes")?;
+                    let threshold: Threshold = take_field_de(&mut value, "threshold")?;
+
+                    Self::Identity(IdentityBasedCredentialV1 {
+                        issuer: idp_identity,
+                        threshold,
+                        validity,
+                        attributes,
+                        subject,
+                        proof,
+                    })
+                } else {
+                    bail!("unknown credential types: {}", types.iter().format(","))
+                },
+            )
+        })();
+
+        result.map_err(|err| D::Error::custom(format!("{:#}", err)))
     }
 }
 
@@ -652,7 +714,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 
     pub fn created(&self) -> chrono::DateTime<chrono::Utc> {
         match self {
-            CredentialV1::Account(acc) => acc.proofs.created_at,
+            CredentialV1::Account(acc) => acc.proof.created_at,
             CredentialV1::Identity(id) => id.proof.created_at,
         }
     }
@@ -716,13 +778,13 @@ impl<
         map.serialize_entry(
             "type",
             &[
-                VERIFIABLE_CREDENTIAL_TYPE,
+                VERIFIABLE_PRESENTATION_TYPE,
                 CONCORDIUM_VERIFIABLE_PRESENTATION_TYPE,
             ],
         )?;
         map.serialize_entry("presentationContext", &self.presentation_context)?;
-        map.serialize_entry("proof", &self.linking_proof)?;
         map.serialize_entry("verifiableCredential", &self.verifiable_credentials)?;
+        map.serialize_entry("proof", &self.linking_proof)?;
         map.end()
     }
 }
@@ -748,8 +810,8 @@ impl<
                 CONCORDIUM_VERIFIABLE_PRESENTATION_TYPE
             );
 
-            let presentation_context = take_field_de(&mut value, "context")?;
-            let verifiable_credentials = take_field_de(&mut value, "verifiableCredentials")?;
+            let presentation_context = take_field_de(&mut value, "presentationContext")?;
+            let verifiable_credentials = take_field_de(&mut value, "verifiableCredential")?;
             let linking_proof = take_field_de(&mut value, "proof")?;
 
             Ok(Self {
@@ -1069,7 +1131,7 @@ mod tests {
         let expected_proof_json = r#"
 {
   "type": [
-    "VerifiableCredential",
+    "VerifiablePresentation",
     "ConcordiumVerifiablePresentationV1"
   ],
   "presentationContext": {
@@ -1086,11 +1148,6 @@ mod tests {
         "context": "val2"
       }
     ]
-  },
-  "proof": {
-    "created": "2023-08-28T23:12:15Z",
-    "proofValue": [],
-    "type": "ConcordiumWeakLinkingProofV1"
   },
   "verifiableCredential": [
     {
@@ -1151,7 +1208,12 @@ mod tests {
       },
       "issuer": "did:ccd:testnet:idp:17"
     }
-  ]
+  ],
+  "proof": {
+    "created": "2023-08-28T23:12:15Z",
+    "proofValue": [],
+    "type": "ConcordiumWeakLinkingProofV1"
+  }
 }
         "#;
 

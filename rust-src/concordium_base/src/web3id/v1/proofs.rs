@@ -109,7 +109,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
 
         verify_statements(
             self.subject.statements.iter(),
-            self.proofs.proof.statement_proofs.iter(),
+            self.proof.proof.statement_proofs.iter(),
             commitments,
             global_context,
             transcript,
@@ -229,7 +229,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatementV1
         )?;
 
         Ok(AccountBasedCredentialV1 {
-            proofs: ConcordiumZKProof {
+            proof: ConcordiumZKProof {
                 created_at: now,
                 proof: AccountCredentialProofs { statement_proofs },
                 proof_type: ConcordiumProofType::ConcordiumZKProofV4,
