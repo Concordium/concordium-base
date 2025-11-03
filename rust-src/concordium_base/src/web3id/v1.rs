@@ -18,26 +18,27 @@ use crate::web3id::{did, AccountCredentialMetadata, IdentityCredentialMetadata, 
 use anyhow::{bail, ensure, Context};
 use itertools::Itertools;
 
+use nom::AsBytes;
 use serde::de::{DeserializeOwned, Error as _};
 use serde::ser::{Error as _, SerializeMap};
 use serde::Deserializer;
 use std::collections::{BTreeMap, BTreeSet};
 
-const CONCORDIUM_CONTEXT_INFORMATION_TYPE: &'static str = "ConcordiumContextInformationV1";
+const CONCORDIUM_CONTEXT_INFORMATION_TYPE: &str = "ConcordiumContextInformationV1";
 
-const VERIFIABLE_PRESENTATION_TYPE: &'static str = "VerifiablePresentation";
-const CONCORDIUM_VERIFIABLE_PRESENTATION_TYPE: &'static str = "ConcordiumVerifiablePresentationV1";
+const VERIFIABLE_PRESENTATION_TYPE: &str = "VerifiablePresentation";
+const CONCORDIUM_VERIFIABLE_PRESENTATION_TYPE: &str = "ConcordiumVerifiablePresentationV1";
 
-const VERIFIABLE_CREDENTIAL_TYPE: &'static str = "VerifiableCredential";
-const CONCORDIUM_VERIFIABLE_CREDENTIAL_V1_TYPE: &'static str = "ConcordiumVerifiableCredentialV1";
-const CONCORDIUM_ACCOUNT_BASED_CREDENTIAL_TYPE: &'static str = "ConcordiumAccountBasedCredential";
-const CONCORDIUM_IDENTITY_BASED_CREDENTIAL_TYPE: &'static str = "ConcordiumIdBasedCredential";
+const VERIFIABLE_CREDENTIAL_TYPE: &str = "VerifiableCredential";
+const CONCORDIUM_VERIFIABLE_CREDENTIAL_V1_TYPE: &str = "ConcordiumVerifiableCredentialV1";
+const CONCORDIUM_ACCOUNT_BASED_CREDENTIAL_TYPE: &str = "ConcordiumAccountBasedCredential";
+const CONCORDIUM_IDENTITY_BASED_CREDENTIAL_TYPE: &str = "ConcordiumIdBasedCredential";
 
-const CONCORDIUM_REQUEST_TYPE: &'static str = "ConcordiumVerifiablePresentationRequestV1";
+const CONCORDIUM_REQUEST_TYPE: &str = "ConcordiumVerifiablePresentationRequestV1";
 
-const CONCORDIUM_STATEMENT_V1_TYPE: &'static str = "ConcordiumStatementV1";
-const CONCORDIUM_ACCOUNT_BASED_STATEMENT_TYPE: &'static str = "ConcordiumAccountBasedStatement";
-const CONCORDIUM_IDENTITY_BASED_STATEMENT_TYPE: &'static str = "ConcordiumIdBasedStatement";
+const CONCORDIUM_STATEMENT_V1_TYPE: &str = "ConcordiumStatementV1";
+const CONCORDIUM_ACCOUNT_BASED_STATEMENT_TYPE: &str = "ConcordiumAccountBasedStatement";
+const CONCORDIUM_IDENTITY_BASED_STATEMENT_TYPE: &str = "ConcordiumIdBasedStatement";
 
 /// Context challenge that serves as a distinguishing context when requesting
 /// proofs.
@@ -158,7 +159,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                         CONCORDIUM_ACCOUNT_BASED_STATEMENT_TYPE,
                     ],
                 )?;
-                let id = did::Method::<C>::new_account_credential(*network, *cred_id);
+                let id = did::Method::new_account_credential(*network, *cred_id);
                 map.serialize_entry("id", &id)?;
                 map.serialize_entry("statement", statement)?;
                 map.end()
@@ -176,7 +177,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                         CONCORDIUM_IDENTITY_BASED_STATEMENT_TYPE,
                     ],
                 )?;
-                let issuer = did::Method::<C>::new_idp(*network, *issuer);
+                let issuer = did::Method::new_idp(*network, *issuer);
                 map.serialize_entry("issuer", &issuer)?;
                 map.serialize_entry("statement", statement)?;
                 map.end()
@@ -202,7 +203,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
                     .iter()
                     .any(|ty| ty == CONCORDIUM_ACCOUNT_BASED_STATEMENT_TYPE)
                 {
-                    let id: did::Method<C> = take_field_de(&mut value, "id")?;
+                    let id: did::Method = take_field_de(&mut value, "id")?;
                     let did::IdentifierType::AccountCredential { cred_id } = id.ty else {
                         bail!("expected account credential did, was {}", id);
                     };
@@ -217,7 +218,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
                     .iter()
                     .any(|ty| ty == CONCORDIUM_IDENTITY_BASED_STATEMENT_TYPE)
                 {
-                    let issuer: did::Method<C> = take_field_de(&mut value, "issuer")?;
+                    let issuer: did::Method = take_field_de(&mut value, "issuer")?;
                     let did::IdentifierType::Idp { idp_identity } = issuer.ty else {
                         bail!("expected issuer did, was {}", issuer);
                     };
@@ -311,7 +312,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
         S: serde::Serializer,
     {
         let mut map = serializer.serialize_map(None)?;
-        let id = did::Method::<C>::new_account_credential(self.network, self.cred_id);
+        let id = did::Method::new_account_credential(self.network, self.cred_id);
         map.serialize_entry("id", &id)?;
         map.serialize_entry("statement", &self.statements)?;
         map.end()
@@ -328,7 +329,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
         let mut value = serde_json::Value::deserialize(deserializer)?;
 
         let result = (|| -> anyhow::Result<Self> {
-            let id: did::Method<C> = take_field_de(&mut value, "id")?;
+            let id: did::Method = take_field_de(&mut value, "id")?;
             let did::IdentifierType::AccountCredential { cred_id } = id.ty else {
                 bail!("expected identity credential did, was {}", id);
             };
@@ -386,16 +387,51 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
     }
 }
 
+/// Ephemeral id for identity credentials. It will have a new value for each time credential is proven (the encryption is a randomized function).
+/// The id can be decrypted to IdCredPub by first converting
+/// the value to [`IdentityCredentialIdData`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdentityCredentialId(pub Vec<u8>);
+// todo add curve as parameter?
+
 /// Ephemeral id for identity credentials. The id can be decrypted to IdCredPub.
 /// It will have a new value for each time credential is proven (the encryption is a randomized function)
 #[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
-pub struct IdentityCredentialId<C: Curve> {
-    // todo ar make non-generic, create IdentityCredentialIdData
+pub struct IdentityCredentialIdData<C: Curve> {
     /// Anonymity revocation data. It is an encryption of shares of IdCredSec,
     /// each share encrypted for the privacy guardian (anonymity revoker)
     /// that is the key in the map.
     #[map_size_length = 2]
     pub ar_data: BTreeMap<ArIdentity, ChainArData<C>>,
+}
+
+impl<C: Curve> IdentityCredentialIdData<C> {
+    pub fn as_ref(&self) -> IdentityCredentialIdDataRef<'_, C> {
+        IdentityCredentialIdDataRef {
+            ar_data: &self.ar_data,
+        }
+    }
+}
+
+/// Ephemeral id for identity credentials. The id can be decrypted to IdCredPub.
+/// It will have a new value for each time credential is proven (the encryption is a randomized function)
+#[derive(Debug, Clone, PartialEq, Eq, common::Serial)]
+pub struct IdentityCredentialIdDataRef<'a, C: Curve> {
+    /// Anonymity revocation data. It is an encryption of shares of IdCredSec,
+    /// each share encrypted for the privacy guardian (anonymity revoker)
+    /// that is the key in the map.
+    #[map_size_length = 2]
+    pub ar_data: &'a BTreeMap<ArIdentity, ChainArData<C>>,
+}
+
+impl IdentityCredentialId {
+    pub fn try_to_data<C: Curve>(&self) -> common::ParseResult<IdentityCredentialIdData<C>> {
+        common::from_bytes(&mut self.0.as_bytes())
+    }
+
+    pub fn from_data<C: Curve>(data_ref: IdentityCredentialIdDataRef<'_, C>) -> Self {
+        IdentityCredentialId(common::to_bytes(&data_ref))
+    }
 }
 
 /// Identity based credentials. This type of credential is derived from identity credentials issued
@@ -429,7 +465,7 @@ pub struct IdentityBasedCredentialV1<
 pub struct IdentityCredentialSubject<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub network: Network,
     /// Ephemeral id for the credential
-    pub cred_id: IdentityCredentialId<C>,
+    pub cred_id: IdentityCredentialId,
     /// Proven statements
     pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
 }
@@ -459,7 +495,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
         let mut value = serde_json::Value::deserialize(deserializer)?;
 
         let result = (|| -> anyhow::Result<Self> {
-            let id: did::Method<C> = take_field_de(&mut value, "id")?;
+            let id: did::Method = take_field_de(&mut value, "id")?;
             let did::IdentifierType::IdentityCredential { cred_id } = id.ty else {
                 bail!("expected identity credential did, was {}", id);
             };
@@ -498,7 +534,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         } = self;
 
         IdentityCredentialMetadata {
-            issuer: issuer.clone(),
+            issuer: *issuer,
             validity: validity.clone(),
         }
     }
@@ -587,7 +623,7 @@ impl<
                     ],
                 )?;
                 map.serialize_entry("credentialSubject", subject)?;
-                let issuer = did::Method::<C>::new_idp(subject.network, *issuer);
+                let issuer = did::Method::new_idp(subject.network, *issuer);
                 map.serialize_entry("issuer", &issuer)?;
                 map.serialize_entry("proof", proofs)?;
                 map.end()
@@ -624,7 +660,7 @@ impl<
                         .upper_inclusive()
                         .ok_or(S::Error::custom("convert valid to to date time"))?,
                 )?;
-                let issuer = did::Method::<C>::new_idp(subject.network, *issuer);
+                let issuer = did::Method::new_idp(subject.network, *issuer);
                 map.serialize_entry("issuer", &issuer)?;
                 map.serialize_entry("attributes", &attributes)?;
                 map.serialize_entry("threshold", &threshold)?;
@@ -658,7 +694,7 @@ impl<
                 {
                     let subject: AccountCredentialSubject<C, AttributeType> =
                         take_field_de(&mut value, "credentialSubject")?;
-                    let issuer: did::Method<C> = take_field_de(&mut value, "issuer")?;
+                    let issuer: did::Method = take_field_de(&mut value, "issuer")?;
                     let did::IdentifierType::Idp { idp_identity } = issuer.ty else {
                         bail!("expected idp did, was {}", issuer);
                     };
@@ -687,7 +723,7 @@ impl<
                         valid_to: YearMonth::from_timestamp(valid_until.timestamp())
                             .context("convert valid until to year and month")?,
                     };
-                    let issuer: did::Method<C> = take_field_de(&mut value, "issuer")?;
+                    let issuer: did::Method = take_field_de(&mut value, "issuer")?;
                     let did::IdentifierType::Idp { idp_identity } = issuer.ty else {
                         bail!("expected idp did, was {}", issuer);
                     };
@@ -896,6 +932,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::elgamal::Cipher;
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
     use crate::id::id_proof_types::{
         AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement,
@@ -908,6 +945,40 @@ mod tests {
 
     fn remove_whitespace(str: &str) -> String {
         str.chars().filter(|c| !c.is_whitespace()).collect()
+    }
+
+    fn identity_cred_id_fixture() -> IdentityCredentialId {
+        let mut ar_data = BTreeMap::new();
+        ar_data.insert(
+            ArIdentity::try_from(1).unwrap(),
+            ChainArData {
+                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed0()),
+            },
+        );
+        ar_data.insert(
+            ArIdentity::try_from(2).unwrap(),
+            ChainArData {
+                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed0()),
+            },
+        );
+        ar_data.insert(
+            ArIdentity::try_from(3).unwrap(),
+            ChainArData {
+                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed0()),
+            },
+        );
+
+        IdentityCredentialId::from_data(IdentityCredentialIdDataRef::<ArCurve> {
+            ar_data: &ar_data,
+        })
+    }
+
+    #[test]
+    fn test_identity_credential_id_serialization() {
+        let cred_id = identity_cred_id_fixture();
+        let data = cred_id.try_to_data::<ArCurve>().unwrap();
+        let cred_id_deserialized = IdentityCredentialId::from_data(data.as_ref());
+        assert_eq!(cred_id_deserialized, cred_id);
     }
 
     /// Tests JSON serialization and deserialization of request and presentation. Test

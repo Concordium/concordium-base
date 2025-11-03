@@ -24,8 +24,8 @@ use crate::web3id::v1::{
     AccountBasedCredentialV1, AccountCredentialProofs, AccountCredentialStatementV1,
     AccountCredentialSubject, ConcordiumProofType, ConcordiumZKProof, ContextChallenge,
     CredentialMetadataV1, CredentialStatementV1, CredentialV1, IdentityBasedCredentialV1,
-    IdentityCredentialId, IdentityCredentialProofs, IdentityCredentialStatementV1,
-    IdentityCredentialSubject, PresentationV1, RequestV1,
+    IdentityCredentialId, IdentityCredentialIdDataRef, IdentityCredentialProofs,
+    IdentityCredentialStatementV1, IdentityCredentialSubject, PresentationV1, RequestV1,
 };
 use rand::{CryptoRng, Rng};
 
@@ -131,11 +131,16 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             return false;
         };
 
+        let Ok(cred_id_data) = self.subject.cred_id.try_to_data() else {
+            // todo ar test
+            return false;
+        };
+
         let id_attr_cred_info = IdentityAttributesCredentialsInfo {
             values: IdentityAttributesCredentialsValues {
                 ip_identity: self.issuer,
                 threshold: self.threshold,
-                ar_data: self.subject.cred_id.ar_data.clone(),
+                ar_data: cred_id_data.ar_data,
                 attributes: self.attributes.clone(),
                 validity: self.validity.clone(),
             },
@@ -187,7 +192,6 @@ fn verify_statements<
     global_context: &GlobalContext<C>,
     transcript: &mut RandomOracle,
 ) -> bool {
-    // todo ar autotest not equal length
     statements.zip_longest(proofs).all(|elm| {
         elm.both().map_or(false, |(statement, proof)| {
             statement.verify(
@@ -309,9 +313,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>>
             statement_proofs,
         };
 
-        let cred_id = IdentityCredentialId {
-            ar_data: id_attr_cred_info.values.ar_data,
-        };
+        let cred_id = IdentityCredentialId::from_data(IdentityCredentialIdDataRef {
+            ar_data: &id_attr_cred_info.values.ar_data,
+        });
 
         Ok(IdentityBasedCredentialV1 {
             proof: ConcordiumZKProof {
@@ -447,6 +451,7 @@ pub mod tests {
 
     use crate::id::constants::ArCurve;
     use crate::id::id_proof_types::{AtomicStatement, AttributeInRangeStatement};
+    use crate::id::types::AttributeTag;
     use crate::web3id::did::Network;
     use crate::web3id::v1::ContextProperty;
     use crate::web3id::{fixtures, Web3IdAttribute};
@@ -838,7 +843,7 @@ pub mod tests {
     /// Test prove and verify presentation for identity credentials where
     /// verification fails because statements are false.
     #[test]
-    fn test_soundness_identity_statements() {
+    fn test_soundness_identity_statements_invalid() {
         let challenge = challenge_fixture();
 
         let global_context = GlobalContext::generate("Test".into());
@@ -882,6 +887,72 @@ pub mod tests {
                 _phantom: PhantomData,
             },
         };
+
+        let public = vec![id_cred_fixture.credential_inputs];
+        let err = proof
+            .verify(&global_context, public.iter())
+            .expect_err("verify");
+        assert_eq!(err, PresentationVerificationError::InvalidCredential);
+    }
+
+    /// Test prove and verify presentation for identity credentials where
+    /// verification fails because there are additional statements added compared to what is proven.
+    // todo ar rewrite to test lower level instead: verify_statements
+    #[test]
+    fn test_soundness_identity_statements_added() {
+        let challenge = challenge_fixture();
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let (statements, attributes) = fixtures::statements_and_attributes();
+
+        let id_cred_fixture = fixtures::identity_credentials_fixture(attributes, &global_context);
+
+        let credential_statements = vec![CredentialStatementV1::Identity(
+            IdentityCredentialStatementV1 {
+                network: Network::Testnet,
+                issuer: id_cred_fixture.issuer,
+                statements,
+            },
+        )];
+
+        let request = RequestV1::<ArCurve, Web3IdAttribute> {
+            challenge,
+            credential_statements,
+        };
+
+        let mut proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [id_cred_fixture.commitment_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        // add additional statement
+        let CredentialV1::Identity(IdentityBasedCredentialV1 { subject, .. }) =
+            &mut proof.verifiable_credentials[0]
+        else {
+            panic!("should be account proof");
+        };
+        subject.statements.push(AtomicStatement::AttributeInRange {
+            statement: AttributeInRangeStatement {
+                attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
+                lower: Web3IdAttribute::try_from(
+                    chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                        .unwrap()
+                        .to_utc(),
+                )
+                .unwrap(),
+                upper: Web3IdAttribute::try_from(
+                    chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                        .unwrap()
+                        .to_utc(),
+                )
+                .unwrap(),
+                _phantom: PhantomData,
+            },
+        });
 
         let public = vec![id_cred_fixture.credential_inputs];
         let err = proof

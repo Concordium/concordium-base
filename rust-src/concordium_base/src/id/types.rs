@@ -2795,7 +2795,6 @@ pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::
 pub struct CredentialValidity {
     /// When credential is valid until
     #[serde(rename = "validTo")]
-    // todo ar datetime serialization
     pub valid_to: YearMonth,
     /// When the credential was created
     #[serde(rename = "createdAt")]
