@@ -250,7 +250,7 @@ fn take_field(value: &mut serde_json::Value, field: &str) -> anyhow::Result<serd
 
 /// Extract the value at the given key and deserializes it. This mutates the `value` replacing the
 /// value at the provided key with `Null`.
-fn take_field_de<T: DeserializeOwned>(
+pub fn take_field_de<T: DeserializeOwned>(
     value: &mut serde_json::Value,
     field: &str,
 ) -> anyhow::Result<T> {

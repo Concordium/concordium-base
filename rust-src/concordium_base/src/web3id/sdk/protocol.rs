@@ -7,13 +7,19 @@ use crate::id::{
     id_proof_types::AtomicStatement,
     types::{Attribute, AttributeTag},
 };
-use crate::web3id::v1::PresentationV1;
+use crate::web3id::v1::{take_field_de, PresentationV1};
 use crate::web3id::{did, Web3IdAttribute};
 use crate::{hashes, id};
+use anyhow::ensure;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::hashes::HashBytes;
+use serde::de::{DeserializeOwned, Error as _};
+use serde::ser::SerializeMap;
+use serde::Deserializer;
 use sha2::Digest;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
+
+const CONCORDIUM_VERIFICATION_AUDIT_RECORD: &str = "ConcordiumVerificationAuditRecord";
 
 /// A verifiable presentation request that specifies what credentials and proofs
 /// are being requested from a credential holder.
@@ -47,10 +53,8 @@ impl VerifiablePresentationRequest {
 /// Audit records are used internally by verifiers to maintain complete records
 /// of verification interactions, while only publishing hash-based public records/anchors on-chain
 /// to preserve privacy, see [`VerificationAuditRecordOnChain`].
-#[derive(PartialEq, serde::Serialize)]
-// TODO: enable traits again: Serialize, serde::Deserialize
-// TODO: enable traits again: Debug, Clone
-#[serde(tag = "type", rename = "ConcordiumVerificationAuditRecord")]
+#[derive(Debug, Clone, PartialEq)]
+// TODO: enable traits again: Serialize,
 pub struct VerificationAuditRecord<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -64,6 +68,64 @@ pub struct VerificationAuditRecord<
     pub id: String,
     /// The verifiable presentation including the proof.
     pub presentation: PresentationV1<P, C, AttributeType>,
+}
+
+impl<
+        P: Pairing,
+        C: Curve<Scalar = P::ScalarField>,
+        AttributeType: Attribute<C::Scalar> + serde::Serialize,
+    > serde::Serialize for VerificationAuditRecord<P, C, AttributeType>
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut map = serializer.serialize_map(None)?;
+        map.serialize_entry("type", &[CONCORDIUM_VERIFICATION_AUDIT_RECORD])?;
+        map.serialize_entry("version", &self.version)?;
+        map.serialize_entry("request", &self.request)?;
+        map.serialize_entry("id", &self.id)?;
+        map.serialize_entry("presentation", &self.presentation)?;
+        map.end()
+    }
+}
+
+impl<
+        'de,
+        P: Pairing,
+        C: Curve<Scalar = P::ScalarField>,
+        AttributeType: Attribute<C::Scalar> + DeserializeOwned,
+    > serde::Deserialize<'de> for VerificationAuditRecord<P, C, AttributeType>
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let mut value = serde_json::Value::deserialize(deserializer)?;
+
+        let result = (|| -> anyhow::Result<Self> {
+            let types: BTreeSet<String> = take_field_de(&mut value, "type")?;
+            ensure!(
+                types.contains(CONCORDIUM_VERIFICATION_AUDIT_RECORD),
+                "expected type {}",
+                CONCORDIUM_VERIFICATION_AUDIT_RECORD
+            );
+
+            let version = take_field_de(&mut value, "version")?;
+            let request = take_field_de(&mut value, "request")?;
+            let id = take_field_de(&mut value, "id")?;
+            let presentation = take_field_de(&mut value, "presentation")?;
+
+            Ok(Self {
+                version,
+                request,
+                id,
+                presentation,
+            })
+        })();
+
+        result.map_err(|err| D::Error::custom(format!("{:#}", err)))
+    }
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
@@ -711,7 +773,8 @@ mod tests {
         request_data.anchor(Some(public_info))
     }
 
-    fn verification_audit_record_fixture () -> VerificationAuditRecord<IpPairing, ArCurve, Web3IdAttribute> {
+    fn verification_audit_record_fixture(
+    ) -> VerificationAuditRecord<IpPairing, ArCurve, Web3IdAttribute> {
         let context = Context::new_simple(
             vec![1; 32],
             "MyConnection".to_string(),
@@ -883,11 +946,15 @@ mod tests {
         let presentation_deserialized: PresentationV1<IpPairing, ArCurve, Web3IdAttribute> =
             serde_json::from_str(&presentation_json).unwrap();
 
-         VerificationAuditRecord::new(id, presentation_request, presentation_deserialized)
+        VerificationAuditRecord::new(id, presentation_request, presentation_deserialized)
     }
 
     fn verification_audit_record_on_chain_fixture() -> VerificationAuditRecordOnChain {
-        let verification_audit_record:VerificationAuditRecord<IpPairing, ArCurve, Web3IdAttribute> = verification_audit_record_fixture();
+        let verification_audit_record: VerificationAuditRecord<
+            IpPairing,
+            ArCurve,
+            Web3IdAttribute,
+        > = verification_audit_record_fixture();
 
         let mut public_info = HashMap::new();
         public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
@@ -944,26 +1011,26 @@ mod tests {
         Ok(())
     }
 
-    // TODO: enable again
-    // #[test]
-    // fn test_verification_audit_record_json_roundtrip() -> anyhow::Result<()> {
-    //     let verification_audit_record = verification_audit_record_fixture();
+    #[test]
+    fn test_verification_audit_record_json_roundtrip() -> anyhow::Result<()> {
+        let verification_audit_record = verification_audit_record_fixture();
 
-    //     let json = anyhow::Context::context(
-    //         serde_json::to_value(&verification_audit_record),
-    //         "Failed verification audit record to JSON value.",
-    //     )?;
-    //     let roundtrip = anyhow::Context::context(
-    //         serde_json::from_value(json),
-    //         "Failed verification audit record from JSON value.",
-    //     )?;
-    //     assert_eq!(
-    //         verification_audit_record, roundtrip,
-    //         "Failed verification audit record JSON roundtrip."
-    //     );
+        let json = anyhow::Context::context(
+            serde_json::to_value(&verification_audit_record),
+            "Failed verification audit record to JSON value.",
+        )?;
+        println!("{}", json);
+        let roundtrip = anyhow::Context::context(
+            serde_json::from_value(json),
+            "Failed verification audit record from JSON value.",
+        )?;
+        assert_eq!(
+            verification_audit_record, roundtrip,
+            "Failed verification audit record JSON roundtrip."
+        );
 
-    //     Ok(())
-    // }
+        Ok(())
+    }
 
     // Tests about serialization and deserialization roundtrips
 
