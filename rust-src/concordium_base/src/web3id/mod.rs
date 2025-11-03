@@ -101,7 +101,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<s
 
     fn try_from(mut value: serde_json::Value) -> Result<Self, Self::Error> {
         let id_value = get_field(&mut value, "id")?;
-        let Some(Ok((_, id))) = id_value.as_str().map(did::parse_did::<C>) else {
+        let Some(Ok((_, id))) = id_value.as_str().map(did::parse_did) else {
             anyhow::bail!("id field is not a valid DID");
         };
         match id.ty {
@@ -538,13 +538,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
             ty.contains("VerifiableCredential") && ty.contains("ConcordiumVerifiableCredential")
         );
         let mut credential_subject = get_field(&mut value, "credentialSubject")?;
-        let issuer = did::parse_did::<C>(&issuer)
+        let issuer = did::parse_did(&issuer)
             .map_err(|e| anyhow::anyhow!("Unable to parse issuer: {e}"))?
             .1;
         match issuer.ty {
             IdentifierType::Idp { idp_identity } => {
                 let id = get_field(&mut credential_subject, "id")?;
-                let Some(Ok(id)) = id.as_str().map(did::parse_did::<C>) else {
+                let Some(Ok(id)) = id.as_str().map(did::parse_did) else {
                     anyhow::bail!("Credential ID invalid.")
                 };
                 let IdentifierType::AccountCredential { cred_id } = id.1.ty else {
@@ -587,7 +587,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                     "Issuer must have an empty parameter."
                 );
                 let id = get_field(&mut credential_subject, "id")?;
-                let Some(Ok(id)) = id.as_str().map(did::parse_did::<C>) else {
+                let Some(Ok(id)) = id.as_str().map(did::parse_did) else {
                     anyhow::bail!("Credential ID invalid.")
                 };
                 let IdentifierType::PublicKey { key } = id.1.ty else {
@@ -1196,7 +1196,7 @@ impl<C: Curve, AttributeType: serde::Serialize> From<Web3IdCredential<C, Attribu
     for serde_json::Value
 {
     fn from(value: Web3IdCredential<C, AttributeType>) -> Self {
-        let id = Method::<C> {
+        let id = Method {
             network: value.network,
             ty: IdentifierType::ContractData {
                 address: value.registry,
@@ -1204,19 +1204,19 @@ impl<C: Curve, AttributeType: serde::Serialize> From<Web3IdCredential<C, Attribu
                 parameter: OwnedParameter::from_serial(&value.holder_id).unwrap(),
             },
         };
-        let verification_method = Method::<C> {
+        let verification_method = Method {
             network: value.network,
             ty: IdentifierType::PublicKey {
                 key: value.issuer_key.public_key,
             },
         };
-        let cred_id = Method::<C> {
+        let cred_id = Method {
             network: value.network,
             ty: IdentifierType::PublicKey {
                 key: value.holder_id.public_key,
             },
         };
-        let issuer = Method::<C> {
+        let issuer = Method {
             network: value.network,
             ty: IdentifierType::ContractData {
                 address: value.registry,
@@ -1262,7 +1262,7 @@ impl<C: Curve, AttributeType: DeserializeOwned> TryFrom<serde_json::Value>
         use anyhow::Context;
 
         let id_value = get_field(&mut value, "id")?;
-        let Some(Ok((_, id))) = id_value.as_str().map(did::parse_did::<C>) else {
+        let Some(Ok((_, id))) = id_value.as_str().map(did::parse_did) else {
             anyhow::bail!("id field is not a valid DID");
         };
         let IdentifierType::ContractData {
@@ -1281,7 +1281,7 @@ impl<C: Curve, AttributeType: DeserializeOwned> TryFrom<serde_json::Value>
         // Just validate the issuer field.
         {
             let issuer_value = get_field(&mut value, "issuer")?;
-            let Some(Ok((_, id))) = issuer_value.as_str().map(did::parse_did::<C>) else {
+            let Some(Ok((_, id))) = issuer_value.as_str().map(did::parse_did) else {
                 anyhow::bail!("issuer field is not a valid DID");
             };
             let IdentifierType::ContractData {
@@ -1312,7 +1312,7 @@ impl<C: Curve, AttributeType: DeserializeOwned> TryFrom<serde_json::Value>
             let mut subject = get_field(&mut value, "credentialSubject")?;
 
             let cred_id = get_field(&mut subject, "id")?;
-            let Some(Ok((_, cred_id))) = cred_id.as_str().map(did::parse_did::<C>) else {
+            let Some(Ok((_, cred_id))) = cred_id.as_str().map(did::parse_did) else {
                 anyhow::bail!("credentialSubject/id field is not a valid DID");
             };
             let IdentifierType::PublicKey { key } = cred_id.ty else {
@@ -1340,7 +1340,7 @@ impl<C: Curve, AttributeType: DeserializeOwned> TryFrom<serde_json::Value>
                 "Only `assertionMethod` purpose is supported."
             );
             let method = get_field(&mut proof, "verificationMethod")?;
-            let Some(Ok((_, method))) = method.as_str().map(did::parse_did::<C>) else {
+            let Some(Ok((_, method))) = method.as_str().map(did::parse_did) else {
                 anyhow::bail!("verificationMethod field is not a valid DID");
             };
             let IdentifierType::PublicKey { key } = method.ty else {
@@ -2614,8 +2614,8 @@ mod fixtures {
     fn create_attribute_list<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(
         alist: BTreeMap<AttributeTag, AttributeType>,
     ) -> AttributeList<<ArCurve as Curve>::Scalar, AttributeType> {
-        let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
-        let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+        let valid_to = YearMonth::new(2022, 5).unwrap();
+        let created_at = YearMonth::new(2020, 5).unwrap();
         AttributeList {
             valid_to,
             created_at,
@@ -2653,11 +2653,17 @@ mod fixtures {
             &ars_infos.anonymity_revokers,
             &global_context,
             num_ars,
+            &mut seed0(),
         );
         let alist = create_attribute_list(attrs);
-        let ip_sig =
-            identity_provider::verify_credentials_v1(&pio, context, &alist, &ip_secret_key)
-                .expect("verify credentials");
+        let ip_sig = identity_provider::sign_identity_object_v1_with_rng(
+            &pio,
+            context.ip_info,
+            &alist,
+            &ip_secret_key,
+            &mut seed0(),
+        )
+        .expect("sign credentials");
 
         let id_object = IdentityObjectV1 {
             pre_identity_object: pio,

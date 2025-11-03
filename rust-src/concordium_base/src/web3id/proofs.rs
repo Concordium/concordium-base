@@ -69,7 +69,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
         transcript.append_message(b"ctx", &params);
 
         let mut request = Request {
-            challenge: self.presentation_context.clone(),
+            challenge: self.presentation_context,
             credential_statements: Vec::new(),
         };
 

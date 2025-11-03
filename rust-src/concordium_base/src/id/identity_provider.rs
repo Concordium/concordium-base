@@ -364,11 +364,13 @@ pub fn sign_identity_object<
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_secret_key: &crate::ps_sig::SecretKey<P>,
 ) -> Result<crate::ps_sig::Signature<P>, Reason> {
+    let mut csprng = thread_rng();
     sign_identity_object_common(
         &pre_id_obj.get_common_pio_fields(),
         ip_info,
         alist,
         ip_secret_key,
+        &mut csprng,
     )
 }
 
@@ -389,11 +391,35 @@ pub fn sign_identity_object_v1<
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_secret_key: &crate::ps_sig::SecretKey<P>,
 ) -> Result<crate::ps_sig::Signature<P>, Reason> {
+    let mut csprng = thread_rng();
+    sign_identity_object_v1_with_rng(pre_id_obj, ip_info, alist, ip_secret_key, &mut csprng)
+}
+
+/// Sign the given pre-identity-object to produce a version 1 identity object.
+/// The inputs are
+/// - pre_id_obj - The version 1 pre-identity object
+/// - ip_info - Information about the identity provider, including its public
+///   keys
+/// - alist - the list of attributes to be signed
+/// - ip_secret_key - the signing key of the identity provider
+/// - csprng - cryptographically secure randomness source
+pub fn sign_identity_object_v1_with_rng<
+    P: Pairing,
+    AttributeType: Attribute<P::ScalarField>,
+    C: Curve<Scalar = P::ScalarField>,
+>(
+    pre_id_obj: &PreIdentityObjectV1<P, C>,
+    ip_info: &IpInfo<P>,
+    alist: &AttributeList<C::Scalar, AttributeType>,
+    ip_secret_key: &crate::ps_sig::SecretKey<P>,
+    csprng: &mut (impl Rng + CryptoRng),
+) -> Result<crate::ps_sig::Signature<P>, Reason> {
     sign_identity_object_common(
         &pre_id_obj.get_common_pio_fields(),
         ip_info,
         alist,
         ip_secret_key,
+        csprng,
     )
 }
 
@@ -414,6 +440,7 @@ fn sign_identity_object_common<
     ip_info: &IpInfo<P>,
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_secret_key: &crate::ps_sig::SecretKey<P>,
+    csprng: &mut (impl Rng + CryptoRng),
 ) -> Result<crate::ps_sig::Signature<P>, Reason> {
     let choice_ar_handles = common_fields.choice_ar_parameters.ar_identities.clone();
     let message: crate::ps_sig::UnknownMessage<P> = compute_message(
@@ -424,9 +451,7 @@ fn sign_identity_object_common<
         alist,
         &ip_info.ip_verify_key,
     )?;
-    let mut csprng = thread_rng();
-    // FIXME: Pass in csprng here.
-    Ok(ip_secret_key.sign_unknown_message(&message, &mut csprng))
+    Ok(ip_secret_key.sign_unknown_message(&message, csprng))
 }
 
 fn compute_prf_sharing_verifier<C: Curve>(
@@ -798,8 +823,14 @@ mod tests {
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
 
         let id_use_data = test_create_id_use_data(&mut csprng);
-        let (context, pio, _) =
-            test_create_pio_v1(&id_use_data, &ip_info, &ars_infos, &global_ctx, num_ars);
+        let (context, pio, _) = test_create_pio_v1(
+            &id_use_data,
+            &ip_info,
+            &ars_infos,
+            &global_ctx,
+            num_ars,
+            &mut csprng,
+        );
         let attrs = test_create_attributes();
 
         // Act
