@@ -646,8 +646,8 @@ mod test {
         alist.insert(TAG_1, VALUE_1.clone());
         alist.insert(TAG_2, VALUE_2.clone());
 
-        let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
-        let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+        let valid_to = YearMonth::new(2022, 5).unwrap();
+        let created_at = YearMonth::new(2020, 5).unwrap();
         ExampleAttributeList {
             valid_to,
             created_at,
@@ -1084,7 +1084,7 @@ mod test {
         .expect("prove");
 
         // change created at
-        id_attr_info.values.validity.created_at = YearMonth::try_from(2025 << 8 | 5).unwrap();
+        id_attr_info.values.validity.created_at = YearMonth::new(2025, 5).unwrap();
 
         let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(
@@ -1116,7 +1116,7 @@ mod test {
         .expect("prove");
 
         // change valid to
-        id_attr_info.values.validity.valid_to = YearMonth::try_from(2025 << 8 | 5).unwrap();
+        id_attr_info.values.validity.valid_to = YearMonth::new(2025, 5).unwrap();
 
         let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(

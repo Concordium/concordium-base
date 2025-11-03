@@ -2613,8 +2613,8 @@ mod fixtures {
     fn create_attribute_list<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(
         alist: BTreeMap<AttributeTag, AttributeType>,
     ) -> AttributeList<<ArCurve as Curve>::Scalar, AttributeType> {
-        let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
-        let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+        let valid_to = YearMonth::new(2022, 5).unwrap();
+        let created_at = YearMonth::new(2020, 5).unwrap();
         AttributeList {
             valid_to,
             created_at,

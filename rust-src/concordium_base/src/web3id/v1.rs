@@ -18,8 +18,8 @@ use crate::web3id::{did, AccountCredentialMetadata, IdentityCredentialMetadata, 
 use anyhow::{bail, ensure, Context};
 use itertools::Itertools;
 
-use serde::de::{DeserializeOwned, Error};
-use serde::ser::SerializeMap;
+use serde::de::{DeserializeOwned, Error as _};
+use serde::ser::{Error as _, SerializeMap};
 use serde::Deserializer;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -610,23 +610,25 @@ impl<
                     ],
                 )?;
                 map.serialize_entry("credentialSubject", subject)?;
-                map.serialize_entry("validFrom", &validity.created_at)?;
-                map.serialize_entry("validUntil", &validity.valid_to)?;
+                map.serialize_entry(
+                    "validFrom",
+                    &validity
+                        .created_at
+                        .lower()
+                        .ok_or(S::Error::custom("convert valid from to date time"))?,
+                )?;
+                map.serialize_entry(
+                    "validUntil",
+                    &validity
+                        .valid_to
+                        .upper_inclusive()
+                        .ok_or(S::Error::custom("convert valid until to date time"))?,
+                )?;
                 let issuer = did::Method::<C>::new_idp(subject.network, *issuer);
                 map.serialize_entry("issuer", &issuer)?;
                 map.serialize_entry("attributes", &attributes)?;
                 map.serialize_entry("threshold", &threshold)?;
                 map.serialize_entry("proof", proofs)?;
-
-                println!(
-                    "stmt proofs: {}",
-                    hex::encode(common::to_bytes(&proofs.proof.statement_proofs))
-                );
-                println!(
-                    "id proofs: {}",
-                    hex::encode(common::to_bytes(&proofs.proof.identity_attributes_proofs))
-                );
-
                 map.end()
             }
         }
@@ -1539,8 +1541,8 @@ mod tests {
           }
         ]
       },
-      "validFrom": "202005",
-      "validUntil": "202205",
+      "validFrom": "2020-05-01T00:00:00Z",
+      "validUntil": "2022-05-31T23:59:59Z",
       "issuer": "did:ccd:testnet:idp:0",
       "attributes": {
         "lastName": {

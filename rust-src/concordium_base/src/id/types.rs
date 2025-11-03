@@ -25,7 +25,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail};
 use byteorder::ReadBytesExt;
-use chrono::TimeZone;
+use chrono::{TimeDelta, TimeZone};
 use concordium_contracts_common as concordium_std;
 pub use concordium_contracts_common::SignatureThreshold;
 use concordium_contracts_common::{AccountPublicKeys, AccountThreshold, ZeroSignatureThreshold};
@@ -430,6 +430,18 @@ impl YearMonth {
         let time = chrono::NaiveTime::from_hms_opt(0, 0, 0)?;
         let date = date.checked_add_months(chrono::Months::new(1))?;
         let dt = date.and_time(time);
+        Some(chrono::Utc.from_utc_datetime(&dt))
+    }
+
+    /// Return the time at the last second of the month. This is typically
+    /// used as the inclusive upper bound of a validity of a credential.
+    pub fn upper_inclusive(self) -> Option<chrono::DateTime<chrono::Utc>> {
+        let date = chrono::NaiveDate::from_ymd_opt(self.year.into(), self.month.into(), 1)?;
+        let time = chrono::NaiveTime::from_hms_opt(0, 0, 0)?;
+        let date = date.checked_add_months(chrono::Months::new(1))?;
+        let dt = date
+            .and_time(time)
+            .checked_add_signed(TimeDelta::seconds(-1))?;
         Some(chrono::Utc.from_utc_datetime(&dt))
     }
 }
@@ -2915,6 +2927,7 @@ pub struct IdRecoveryRequest<C: Curve> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::NaiveTime;
     use ed25519::Signer;
 
     #[test]
@@ -3020,10 +3033,14 @@ mod tests {
                     continue;
                 }
                 let ym = YearMonth::new(year, month).unwrap();
+
                 let lower = ym.lower().unwrap();
-                let upper = ym.upper().unwrap();
                 assert_eq!(lower.year(), year as i32);
                 assert_eq!(lower.month(), month as u32);
+                assert_eq!(lower.day(), 1);
+                assert_eq!(lower.time(), NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+
+                let upper = ym.upper().unwrap();
                 assert_eq!(
                     upper.year(),
                     if month == 12 { year + 1 } else { year } as i32
@@ -3031,6 +3048,17 @@ mod tests {
                 assert_eq!(
                     upper.month(),
                     if month == 12 { 1 } else { (month + 1) as u32 }
+                );
+                assert_eq!(upper.day(), 1);
+                assert_eq!(upper.time(), NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+
+                let upper_inclusive = ym.upper_inclusive().unwrap();
+                assert_eq!(upper_inclusive.year(), year as i32);
+                assert_eq!(upper_inclusive.month(), month as u32);
+                assert!(upper_inclusive.day() <= 31 && upper_inclusive.day() >= 28);
+                assert_eq!(
+                    upper_inclusive.time(),
+                    NaiveTime::from_hms_opt(23, 59, 59).unwrap()
                 );
 
                 let lower_from_ts = YearMonth::from_timestamp(lower.timestamp()).unwrap();
