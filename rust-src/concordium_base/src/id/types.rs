@@ -1165,7 +1165,7 @@ pub struct ArInfo<C: Curve> {
 }
 
 /// Collection of anonymity revokers.
-#[derive(Debug, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 #[serde(transparent)]
 pub struct ArInfos<C: Curve> {
@@ -1915,7 +1915,7 @@ pub struct PublicInformationForIp<C: Curve> {
 /// This context is derived from the public information of the identity
 /// provider, as well as some other global parameters which can be found in the
 /// struct 'GlobalContext'.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct IpContext<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Public information on the chosen identity provider.
     pub ip_info: &'a IpInfo<P>,
@@ -2050,6 +2050,23 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> IpContext<'a, P, C> {
         }
     }
 }
+
+/// Context needed to generate create identity attributes and verify them.
+/// It includes identity provider public keys and privacy guardian (anonymity revokers)
+/// public keys. Compared to [`IpContext`], this type does not include
+/// the global context.
+#[derive(Debug, Clone)]
+pub struct IpContextOnly<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    /// Public information on the chosen identity provider.
+    pub ip_info: &'a IpInfo<P>,
+    /// Public information on the __supported__ anonymity revokers.
+    /// This is used by the identity provider and the chain to
+    /// validate the identity object requests, to validate credentials,
+    /// as well as by the account holder to create a credential.
+    pub ars_infos: &'a BTreeMap<ArIdentity, ArInfo<C>>,
+}
+
+impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IpContextOnly<'a, P, C> {}
 
 /// A helper trait to access the public parts of the InitialAccountData
 /// structure. We use this to allow implementations that do not give or have
@@ -2704,17 +2721,6 @@ impl<C: Curve> HasAttributeRandomness<C> for SystemAttributeRandomness {
     }
 }
 
-/// The commitments produced by identity attribute credentials created from identity credential
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
-pub struct IdentityAttributesCredentialsCommitments<C: Curve> {
-    /// commitments to the coefficients of the polynomial
-    /// used to share id_cred_sec
-    /// S + b1 X + b2 X^2...
-    /// where S is id_cred_sec
-    #[serde(rename = "cmmIdCredSecSharingCoeff")]
-    pub cmm_id_cred_sec_sharing_coeff: Vec<PedersenCommitment<C>>,
-}
-
 /// Randomness that is generated when we commit to the identity attributes as part of
 /// proving identity attribute credentials.
 /// This randomness is needed later to prove a property of the value.
@@ -2726,7 +2732,11 @@ pub struct IdentityAttributesCredentialsRandomness<C: Curve> {
 
 /// This structure contains all proofs, which are required to prove identity attributes credentials created
 /// from identity credential.
-#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+#[derive(Debug, Eq, PartialEq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>",
+    deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>"
+))]
 pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// (Blinded) Signature derived from the signature on the pre-identity
     /// object by the IP
@@ -2736,13 +2746,16 @@ pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::
         deserialize_with = "base16_decode"
     )]
     pub signature: crate::ps_sig::BlindedSignature<P>,
-    /// Commitments linking the proofs together
+    /// Commitments to the coefficients of the polynomial
+    /// used to share id_cred_sec
+    /// S + b1 X + b2 X^2...
+    /// where S is id_cred_sec
     #[serde(
-        rename = "commitments",
+        rename = "cmmIdCredSecSharingCoeff",
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub commitments: IdentityAttributesCredentialsCommitments<C>,
+    pub cmm_id_cred_sec_sharing_coeff: Vec<PedersenCommitment<C>>,
     /// Challenge used for all the proofs
     #[serde(
         rename = "challenge",
@@ -2770,6 +2783,7 @@ pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::
 pub struct CredentialValidity {
     /// When credential is valid until
     #[serde(rename = "validTo")]
+    // todo ar datetime serialization
     pub valid_to: YearMonth,
     /// When the credential was created
     #[serde(rename = "createdAt")]
@@ -2779,6 +2793,11 @@ pub struct CredentialValidity {
 /// Attribute value as represented in the identity attribute credential values. An attribute value has ither been committed to,
 /// revealed, or just proven known.
 #[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone)]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
+#[serde(rename_all = "camelCase", tag = "repr", content = "value")]
 pub enum IdentityAttribute<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// The attribute value is committed to and the value is proven equal to the value in the commitment
     Committed(PedersenCommitment<C>),
@@ -2828,6 +2847,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial
 
 /// Values (as opposed to proofs) in identity attribute credentials created from identity credential.
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
 pub struct IdentityAttributesCredentialsValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Identity of the identity provider who signed the identity object from
     /// which this credential is derived.
@@ -2847,14 +2870,18 @@ pub struct IdentityAttributesCredentialsValues<C: Curve, AttributeType: Attribut
     #[map_size_length = 2]
     #[serde(rename = "attributes")]
     pub attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
-    /// Policy of this credential object.
+    /// Temporal validity of the credentials
     #[serde(rename = "validity")]
     pub validity: CredentialValidity,
 }
 
 /// Identity attributes credentials created from identity credential, and proofs that it is
 /// well-formed.
-#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+#[derive(Debug, Eq, PartialEq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
 pub struct IdentityAttributesCredentialsInfo<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,

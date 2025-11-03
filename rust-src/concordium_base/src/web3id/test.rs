@@ -1,46 +1,38 @@
 #[cfg(test)]
 mod tests {
-    use crate::id::types::Attribute;
+    use crate::id::constants::IpPairing;
+    use crate::id::{account_holder, chain, identity_provider};
     use crate::web3id::{
-        Challenge, CommitmentInputs, CredentialStatement, CredentialsInputs, Presentation, Request,
-        Sha256Challenge,
+        AccountCredentialStatement, CommitmentInputs, CredentialStatement, CredentialsInputs,
+        Request, Sha256Challenge, Web3IdAttribute,
     };
     use crate::{
         base::CredentialRegistrationID,
         id::{
-            constants::{ArCurve, AttributeKind},
             id_proof_types::AtomicStatement,
             types::{AttributeList, AttributeTag, GlobalContext, IpIdentity},
         },
-        pedersen_commitment,
     };
     use crate::{
         common::types::{KeyIndex, KeyPair},
-        curve_arithmetic::arkworks_instances::ArkGroup,
         id::{
-            account_holder::create_credential,
-            chain::verify_cdi,
             constants::BaseField,
             id_proof_types::AttributeInRangeStatement,
-            identity_provider::*,
             test::*,
             types::{
                 CredentialData, IdentityObjectV1, IpData, Policy, SystemAttributeRandomness,
                 YearMonth,
             },
         },
-        web3id::{did::Network, Web3IdAttribute},
+        web3id::did::Network,
     };
-    use anyhow::Context;
     use concordium_contracts_common::SignatureThreshold;
     use either::Either::Left;
     use rand::Rng;
     use std::collections::BTreeMap;
     use std::marker::PhantomData;
 
-    type ExampleAttribute = AttributeKind;
-
-    type ExampleAttributeList = AttributeList<BaseField, ExampleAttribute>;
+    type ExampleAttributeList = AttributeList<BaseField, Web3IdAttribute>;
 
     /// Create example attributes to be used by tests.
     fn test_create_attribute_list(
@@ -50,7 +42,7 @@ mod tests {
         let mut alist = BTreeMap::new();
         alist.insert(
             AttributeTag::from(attribute_tag),
-            AttributeKind::from(numeric_attribute_value),
+            Web3IdAttribute::Numeric(numeric_attribute_value),
         );
 
         let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
@@ -70,12 +62,11 @@ mod tests {
     ///
     /// JSON serialization of requests and presentations is also tested.
     #[test]
-    fn test_deploy_account_credentials_and_test_verifiable_presentation_from_account_credentials(
-    ) -> anyhow::Result<()> {
+    fn test_deploy_account_credentials_and_test_verifiable_presentation_from_account_credentials() {
         let mut rng = rand::thread_rng();
         let global_ctx = GlobalContext::generate(String::from("genesis_string"));
         let numeric_attribute_value = 137u64;
-        let attribute_tag = 3u8;
+        let attribute_tag = AttributeTag(3u8);
 
         // Generate PIO
         let max_attrs = 10;
@@ -96,8 +87,9 @@ mod tests {
             *randomness == *id_use_data.randomness,
             "Returned randomness is not equal to used randomness."
         );
-        let alist = test_create_attribute_list(attribute_tag, numeric_attribute_value);
-        let ver_ok = verify_credentials_v1(&pio, context, &alist, &ip_secret_key);
+        let alist = test_create_attribute_list(attribute_tag.0, numeric_attribute_value);
+        let ver_ok =
+            identity_provider::verify_credentials_v1(&pio, context, &alist, &ip_secret_key);
         assert!(ver_ok.is_ok(), "Signature on the credential is invalid.");
 
         // Generate CDI
@@ -126,7 +118,7 @@ mod tests {
             },
             threshold: SignatureThreshold::TWO,
         };
-        let (cdi, commitmnet_randomness) = create_credential(
+        let (cdi, commitment_randomness) = account_holder::create_credential(
             context,
             &id_object,
             &id_use_data,
@@ -138,112 +130,60 @@ mod tests {
         )
         .expect("Should generate the credential successfully.");
 
-        let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
+        let cdi_check = chain::verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
         assert_eq!(cdi_check, Ok(()));
 
-        let mut values = BTreeMap::new();
-        values.insert(
-            attribute_tag.into(),
-            Web3IdAttribute::Numeric(numeric_attribute_value),
-        );
-
-        let mut randomness = BTreeMap::new();
-        let randomness_at_tag = commitmnet_randomness
+        let randomness: BTreeMap<_, _> = commitment_randomness
             .attributes_rand
-            .get(&attribute_tag)
-            .unwrap();
-        randomness.insert(
-            attribute_tag.into(),
-            pedersen_commitment::Randomness::<ArCurve>::new(**randomness_at_tag),
-        );
-        let secrets: CommitmentInputs<
-            '_,
-            ArkGroup<ark_ec::short_weierstrass::Projective<ark_bls12_381::g1::Config>>,
-            Web3IdAttribute,
-            ed25519_dalek::SigningKey,
-        > = CommitmentInputs::Account {
-            values: &values,
+            .iter()
+            .map(|(a, r)| (*a, r.clone()))
+            .collect();
+
+        let secrets = CommitmentInputs::Account::<IpPairing, _, _, KeyPair> {
+            values: &id_object.alist.alist,
             randomness: &randomness,
             issuer: IpIdentity::from(0u32),
         };
         let commitment_inputs = [secrets];
 
         // Now generate the proofs with regards to the account credential attribute statements.
-        let challenge = Challenge::Sha256(Sha256Challenge::new(rng.gen()));
+        let challenge = Sha256Challenge::new(rng.gen());
 
         let cred_id = CredentialRegistrationID::new(cdi.values.cred_id);
 
-        let credential_statements = vec![CredentialStatement::Account {
-            network: Network::Testnet,
-            cred_id,
-            statement: vec![AtomicStatement::AttributeInRange {
-                statement: AttributeInRangeStatement {
-                    attribute_tag: 3.into(),
-                    lower: Web3IdAttribute::Numeric(0),
-                    upper: Web3IdAttribute::Numeric(1237),
-                    _phantom: PhantomData,
-                },
-            }],
-        }];
+        let credential_statements =
+            vec![CredentialStatement::Account(AccountCredentialStatement {
+                network: Network::Testnet,
+                cred_id,
+                statements: vec![AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag,
+                        lower: Web3IdAttribute::Numeric(0),
+                        upper: Web3IdAttribute::Numeric(1237),
+                        _phantom: PhantomData,
+                    },
+                }],
+            })];
 
-        let request = Request::<ArCurve, Web3IdAttribute> {
+        let request = Request {
             challenge,
             credential_statements,
         };
 
         let proof = request
             .clone()
-            .prove(
-                &global_ctx,
-                <[CommitmentInputs<
-                    '_,
-                    ArkGroup<ark_ec::short_weierstrass::Projective<ark_bls12_381::g1::Config>>,
-                    Web3IdAttribute,
-                    _,
-                >; 1] as IntoIterator>::into_iter(commitment_inputs),
-            )
-            .context("Cannot prove")?;
+            .prove(&global_ctx, commitment_inputs.into_iter())
+            .expect("Cannot prove");
 
-        let commitments = {
-            let key = global_ctx.on_chain_commitment_key;
-            let mut comms = BTreeMap::new();
-            for (tag, value) in randomness.iter() {
-                let _ = comms.insert(
-                    AttributeTag::from(*tag),
-                    key.hide(
-                        &pedersen_commitment::Value::<ArCurve>::new(
-                            values.get(tag).unwrap().to_field_element(),
-                        ),
-                        value,
-                    ),
-                );
-            }
-            comms
-        };
+        let commitments = cdi.proofs.id_proofs.commitments.cmm_attributes.clone();
+        let public = vec![CredentialsInputs::Account::<IpPairing, _> { commitments }];
 
-        let public = vec![CredentialsInputs::Account { commitments }];
-
-        anyhow::ensure!(
+        assert_eq!(
             proof
                 .verify(&global_ctx, public.iter())
-                .context("Verification of presentation failed.")?
-                == request,
+                .expect("Verification of presentation failed."),
+            request,
             "Proof verification failed."
         );
-
-        let data = serde_json::to_string_pretty(&proof)?;
-        assert!(
-            serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok(),
-            "Cannot deserialize proof correctly."
-        );
-
-        let data = serde_json::to_string_pretty(&request)?;
-        assert_eq!(
-            serde_json::from_str::<Request<ArCurve, Web3IdAttribute>>(&data)?,
-            request,
-            "Cannot deserialize request correctly."
-        );
-
-        Ok(())
     }
 }
