@@ -688,6 +688,6 @@ mod tests {
                 ..target
             }
         );
-        assert!("did:ccd:idcred:aaff00dd".parse::<Method>().is_err());
+        assert!("did:ccd:idcred:asdf".parse::<Method>().is_err());
     }
 }
