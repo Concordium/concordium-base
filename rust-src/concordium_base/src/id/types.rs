@@ -2721,18 +2721,6 @@ impl<C: Curve> HasAttributeRandomness<C> for SystemAttributeRandomness {
     }
 }
 
-/// The commitments produced by identity attribute credentials created from identity credential
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
-#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
-pub struct IdentityAttributesCredentialsCommitments<C: Curve> {
-    /// commitments to the coefficients of the polynomial
-    /// used to share id_cred_sec
-    /// S + b1 X + b2 X^2...
-    /// where S is id_cred_sec
-    #[serde(rename = "cmmIdCredSecSharingCoeff")]
-    pub cmm_id_cred_sec_sharing_coeff: Vec<PedersenCommitment<C>>,
-}
-
 /// Randomness that is generated when we commit to the identity attributes as part of
 /// proving identity attribute credentials.
 /// This randomness is needed later to prove a property of the value.
@@ -2758,13 +2746,16 @@ pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::
         deserialize_with = "base16_decode"
     )]
     pub signature: crate::ps_sig::BlindedSignature<P>,
-    /// Commitments linking the proofs together
+    /// Commitments to the coefficients of the polynomial
+    /// used to share id_cred_sec
+    /// S + b1 X + b2 X^2...
+    /// where S is id_cred_sec
     #[serde(
-        rename = "commitments",
+        rename = "cmmIdCredSecSharingCoeff",
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub commitments: IdentityAttributesCredentialsCommitments<C>,
+    pub cmm_id_cred_sec_sharing_coeff: Vec<PedersenCommitment<C>>,
     /// Challenge used for all the proofs
     #[serde(
         rename = "challenge",

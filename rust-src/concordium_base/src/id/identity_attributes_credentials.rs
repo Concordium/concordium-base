@@ -162,10 +162,6 @@ pub fn prove_identity_attributes<
         created_at: id_object.get_attribute_list().created_at,
     };
 
-    let commitments = IdentityAttributesCredentialsCommitments {
-        cmm_id_cred_sec_sharing_coeff: cmm_id_cred_sec_sharing_coeff.to_owned(),
-    };
-
     let cmm_rand = IdentityAttributesCredentialsRandomness {
         attributes_rand: signature_pok_output.attribute_cmm_rand,
     };
@@ -195,7 +191,7 @@ pub fn prove_identity_attributes<
 
     let id_proofs = IdentityAttributesCredentialsProofs {
         signature: signature_pok_output.blinded_sig,
-        commitments,
+        cmm_id_cred_sec_sharing_coeff,
         challenge: proof.challenge,
         proof_id_cred_pub: id_cred_pub_share_numbers
             .into_iter()
@@ -413,13 +409,7 @@ pub fn verify_identity_attributes<
     // the number of coefficients in the sharing polynomial
     // (corresponding to the degree+1)
     let rt_usize: usize = id_attr_info.values.threshold.into();
-    if rt_usize
-        != id_attr_info
-            .proofs
-            .commitments
-            .cmm_id_cred_sec_sharing_coeff
-            .len()
-    {
+    if rt_usize != id_attr_info.proofs.cmm_id_cred_sec_sharing_coeff.len() {
         return Err(AttributeCommitmentVerificationError::Ar);
     }
 
@@ -440,10 +430,7 @@ pub fn verify_identity_attributes<
         &global_context.on_chain_commitment_key,
         ip_context.ars_infos,
         &id_attr_info.values.ar_data,
-        &id_attr_info
-            .proofs
-            .commitments
-            .cmm_id_cred_sec_sharing_coeff,
+        &id_attr_info.proofs.cmm_id_cred_sec_sharing_coeff,
         &id_attr_info.proofs.proof_id_cred_pub,
     )?;
 
@@ -554,11 +541,7 @@ fn signature_knowledge_verifier<
     // For IdCredSec, we verify equal to a commitment in order to link the signature proof
     // to the IdCredSec encryption parts proofs
     msgs.push(PsSigMsg::EqualToCommitment(
-        *id_attr_info
-            .proofs
-            .commitments
-            .cmm_id_cred_sec_sharing_coeff
-            .first()?,
+        *id_attr_info.proofs.cmm_id_cred_sec_sharing_coeff.first()?,
     ));
 
     // The PRF secret key we just verify knowledge of
@@ -1028,11 +1011,7 @@ mod test {
 
         // decrease ar threshold
         id_attr_info.values.threshold.0 -= 1;
-        id_attr_info
-            .proofs
-            .commitments
-            .cmm_id_cred_sec_sharing_coeff
-            .pop();
+        id_attr_info.proofs.cmm_id_cred_sec_sharing_coeff.pop();
 
         let mut transcript = RandomOracle::empty();
         let res = verify_identity_attributes(

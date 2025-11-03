@@ -906,14 +906,20 @@ pub enum VersionedPresentation<
     V1(v1::PresentationV1<P, C, AttributeType>),
 }
 
-impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
-    SerdeSerialize for VersionedPresentation<P, C, AttributeType>
+impl<
+        P: Pairing,
+        C: Curve<Scalar = P::ScalarField>,
+        AttributeType: Attribute<C::Scalar> + serde::Serialize,
+    > SerdeSerialize for VersionedPresentation<P, C, AttributeType>
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        todo!()
+        match self {
+            VersionedPresentation::V0(pres) => pres.serialize(serializer),
+            VersionedPresentation::V1(pres) => pres.serialize(serializer),
+        }
     }
 }
 
