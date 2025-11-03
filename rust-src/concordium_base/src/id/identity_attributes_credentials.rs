@@ -52,13 +52,12 @@ pub fn prove_identity_attributes<
     id_object: &(impl HasIdentityObjectFields<P, C, AttributeType> + ?Sized),
     id_object_use_data: &IdObjectUseData<P, C>,
     attributes_handling: &BTreeMap<AttributeTag, IdentityAttributeHandling>,
+    csprng: &mut (impl Rng + CryptoRng),
     transcript: &mut RandomOracle,
 ) -> anyhow::Result<(
     IdentityAttributesCredentialsInfo<P, C, AttributeType>,
     IdentityAttributesCredentialsRandomness<C>,
 )> {
-    let mut csprng = thread_rng();
-
     // Lookup keys for the anonymity revokers
     let ars = {
         let mut ars = BTreeMap::new();
@@ -136,7 +135,7 @@ pub fn prove_identity_attributes<
 
     // Proof of knowledge of the signature of the identity provider.
     let (prover_signature, witness_signature, signature_pok_output) = signature_knowledge_prover(
-        &mut csprng,
+        csprng,
         &global_context.on_chain_commitment_key,
         &ip_context.ip_info.ip_verify_key,
         id_object,
@@ -191,7 +190,7 @@ pub fn prove_identity_attributes<
     transcript.append_message(b"identity_attribute_values", &id_attribute_values);
     transcript.append_message(b"global_context", &global_context);
 
-    let proof = sigma_protocols::common::prove(transcript, &prover, witness, &mut csprng)
+    let proof = sigma_protocols::common::prove(transcript, &prover, witness, csprng)
         .context("cannot produce zero knowledge proof")?;
 
     let id_proofs = IdentityAttributesCredentialsProofs {
@@ -233,7 +232,7 @@ fn signature_knowledge_prover<
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 >(
-    csprng: &mut impl Rng,
+    csprng: &mut (impl Rng + CryptoRng),
     commitment_key: &PedersenKey<C>,
     ip_pub_key: &ps_sig::PublicKey<P>,
     id_object: &(impl HasIdentityObjectFields<P, C, AttributeType> + ?Sized),
@@ -746,6 +745,7 @@ mod test {
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
             &attributes_handling,
+            &mut seed0(),
             &mut transcript,
         )
         .expect("prove");
@@ -794,6 +794,7 @@ mod test {
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
             &attributes_handling,
+            &mut seed0(),
             &mut transcript,
         )
         .expect("prove");
@@ -832,6 +833,7 @@ mod test {
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
             &attributes_handling,
+            &mut seed0(),
             &mut transcript,
         )
         .expect("prove");
@@ -875,6 +877,7 @@ mod test {
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
             &attributes_handling,
+            &mut seed0(),
             &mut transcript,
         )
         .expect("prove");
@@ -917,6 +920,7 @@ mod test {
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
             &attributes_handling,
+            &mut seed0(),
             &mut transcript,
         )
         .expect("prove");
@@ -953,6 +957,7 @@ mod test {
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
             &attributes_handling,
+            &mut seed0(),
             &mut transcript,
         )
         .expect("prove");
@@ -985,6 +990,7 @@ mod test {
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
             &attributes_handling,
+            &mut seed0(),
             &mut transcript,
         )
         .expect("prove");
@@ -1015,6 +1021,7 @@ mod test {
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
             &attributes_handling,
+            &mut seed0(),
             &mut transcript,
         )
         .expect("prove");
@@ -1051,6 +1058,7 @@ mod test {
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
             &attributes_handling,
+            &mut seed0(),
             &mut transcript,
         )
         .expect("prove");
@@ -1084,6 +1092,7 @@ mod test {
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
             &attributes_handling,
+            &mut seed0(),
             &mut transcript,
         )
         .expect("prove");
@@ -1115,6 +1124,7 @@ mod test {
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
             &attributes_handling,
+            &mut seed0(),
             &mut transcript,
         )
         .expect("prove");
@@ -1147,6 +1157,7 @@ mod test {
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
             &attributes_handling,
+            &mut seed0(),
             &mut transcript,
         )
         .expect("prove");
@@ -1183,6 +1194,7 @@ mod test {
             &id_object_fixture.id_object,
             &id_object_fixture.id_use_data,
             &attributes_handling,
+            &mut seed0(),
             &mut transcript,
         )
         .expect("prove");

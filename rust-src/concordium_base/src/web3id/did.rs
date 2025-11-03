@@ -167,7 +167,6 @@ impl<C: Curve> Method<C> {
         }
     }
 
-
     /// Construct variant [`PublicKey`](IdentifierType::PublicKey)
     pub fn new_public_key(network: Network, key: ed25519_dalek::VerifyingKey) -> Self {
         Self {
@@ -183,7 +182,6 @@ impl<C: Curve> Method<C> {
             ty: IdentifierType::IdentityCredential { cred_id },
         }
     }
-
 }
 
 #[derive(Debug, thiserror::Error)]

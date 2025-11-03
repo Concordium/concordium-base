@@ -693,14 +693,17 @@ pub enum VersionedRequest<C: Curve, AttributeType: Attribute<C::Scalar>> {
     V1(v1::RequestV1<C, AttributeType>),
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> SerdeSerialize
+impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> SerdeSerialize
     for VersionedRequest<C, AttributeType>
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        todo!()
+        match self {
+            VersionedRequest::V0(req) => req.serialize(serializer),
+            VersionedRequest::V1(req) => req.serialize(serializer),
+        }
     }
 }
 

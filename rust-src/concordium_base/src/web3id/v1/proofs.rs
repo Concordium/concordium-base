@@ -206,7 +206,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatementV1
         self,
         global_context: &GlobalContext<C>,
         transcript: &mut RandomOracle,
-        csprng: &mut impl rand::Rng,
+        csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
         input: CommitmentInputs<P, C, AttributeType, Signer>,
     ) -> Result<AccountBasedCredentialV1<C, AttributeType>, ProofError> {
@@ -251,7 +251,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>>
         self,
         global_context: &GlobalContext<C>,
         transcript: &mut RandomOracle,
-        csprng: &mut impl rand::Rng,
+        csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
         input: CommitmentInputs<P, C, AttributeType, Signer>,
     ) -> Result<IdentityBasedCredentialV1<P, C, AttributeType>, ProofError> {
@@ -290,6 +290,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>>
                 id_object,
                 id_object_use_data,
                 &attributes_handling,
+                csprng,
                 transcript,
             )
             .map_err(|err| ProofError::IdentityAttributeCredentials(err.to_string()))?;
@@ -342,7 +343,7 @@ fn prove_statements<
     attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
     global_context: &GlobalContext<C>,
     transcript: &mut RandomOracle,
-    csprng: &mut impl rand::Rng,
+    csprng: &mut (impl Rng + CryptoRng),
 ) -> Result<Vec<AtomicProof<C, AttributeType>>, ProofError> {
     statements
         .into_iter()
@@ -366,7 +367,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatementV1<C, Att
         self,
         global: &GlobalContext<C>,
         ro: &mut RandomOracle,
-        csprng: &mut impl rand::Rng,
+        csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
         input: CommitmentInputs<P, C, AttributeType, Signer>,
     ) -> Result<CredentialV1<P, C, AttributeType>, ProofError> {

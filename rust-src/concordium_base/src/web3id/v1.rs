@@ -10,9 +10,8 @@ use crate::curve_arithmetic::{Curve, Pairing};
 use crate::id::id_proof_types::{AtomicProof, AtomicStatement};
 use crate::id::secret_sharing::Threshold;
 use crate::id::types::{
-    ArIdentity, Attribute, AttributeTag, ChainArData,
-    CredentialValidity, IdentityAttribute, IdentityAttributesCredentialsProofs, IpIdentity,
-    YearMonth,
+    ArIdentity, Attribute, AttributeTag, ChainArData, CredentialValidity, IdentityAttribute,
+    IdentityAttributesCredentialsProofs, IpIdentity, YearMonth,
 };
 use crate::web3id::did::Network;
 use crate::web3id::{did, AccountCredentialMetadata, IdentityCredentialMetadata, LinkingProof};
@@ -376,7 +375,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
                     cred_id,
                     statements,
                 },
-            proof: proofs,
             ..
         } = self;
 
