@@ -29,6 +29,7 @@ import qualified Data.ByteString.Short as BSS
 import Data.Coerce
 import Data.Foldable (toList)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (isJust)
 import qualified Data.ProtoLens as Proto
 import qualified Data.ProtoLens.Combinators as Proto
 import qualified Data.ProtoLens.Field
@@ -47,7 +48,6 @@ import qualified Proto.V2.Concordium.ProtocolLevelTokens as Proto
 import qualified Proto.V2.Concordium.ProtocolLevelTokens_Fields as PLTFields
 import qualified Proto.V2.Concordium.Types as Proto
 import qualified Proto.V2.Concordium.Types_Fields as ProtoFields
-import Data.Maybe (isJust)
 
 import Concordium.Crypto.EncryptedTransfers
 import Concordium.ID.Types
@@ -1685,8 +1685,8 @@ convertAccountTransaction ty cost sender mbSponsor result = case ty of
                         ProtoFields.tokenUpdateEffect . ProtoFields.events .= protoEvents
   where
     (senderCost, sponsorCost)
-        | isJust mbSponsor = (Amount 0, cost)
-        | otherwise  = (cost, Amount 0)
+        | isJust mbSponsor = (0, cost)
+        | otherwise = (cost, 0)
 
     mkSuccess :: Proto.AccountTransactionEffects -> Proto.AccountTransactionDetails
     mkSuccess effects = Proto.make $ do
