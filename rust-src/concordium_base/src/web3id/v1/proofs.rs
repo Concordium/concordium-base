@@ -20,13 +20,7 @@ use crate::id::types::{
     IdentityAttributesCredentialsInfo, IdentityAttributesCredentialsValues, IpContextOnly,
 };
 use crate::pedersen_commitment::Commitment;
-use crate::web3id::v1::{
-    AccountBasedCredentialV1, AccountCredentialProofs, AccountCredentialStatementV1,
-    AccountCredentialSubject, ConcordiumProofType, ConcordiumZKProof, ContextChallenge,
-    CredentialMetadataV1, CredentialStatementV1, CredentialV1, IdentityBasedCredentialV1,
-    IdentityCredentialId, IdentityCredentialIdDataRef, IdentityCredentialProofs,
-    IdentityCredentialStatementV1, IdentityCredentialSubject, PresentationV1, RequestV1,
-};
+use crate::web3id::v1::{AccountBasedCredentialV1, AccountCredentialProofPrivateInputs, AccountCredentialProofs, AccountCredentialStatementV1, AccountCredentialSubject, ConcordiumProofType, ConcordiumZKProof, ContextChallenge, CredentialMetadataV1, CredentialProofPrivateInputs, CredentialStatementV1, CredentialV1, IdentityBasedCredentialV1, IdentityCredentialId, IdentityCredentialIdDataRef, IdentityCredentialProofPrivateInputs, IdentityCredentialProofs, IdentityCredentialStatementV1, IdentityCredentialSubject, PresentationV1, RequestV1};
 use rand::{CryptoRng, Rng};
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
@@ -205,19 +199,19 @@ fn verify_statements<
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatementV1<C, AttributeType> {
-    pub fn prove<P: Pairing<ScalarField = C::Scalar>, Signer: Web3IdSigner>(
+    pub fn prove<P: Pairing<ScalarField = C::Scalar>>(
         self,
         global_context: &GlobalContext<C>,
         transcript: &mut RandomOracle,
         csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
-        input: CommitmentInputs<P, C, AttributeType, Signer>,
+        input: CredentialProofPrivateInputs<P, C, AttributeType>,
     ) -> Result<AccountBasedCredentialV1<C, AttributeType>, ProofError> {
-        let CommitmentInputs::Account {
+        let CredentialProofPrivateInputs::Account(AccountCredentialProofPrivateInputs {
             values,
             randomness,
             issuer,
-        } = input
+        }) = input
         else {
             return Err(ProofError::CommitmentsStatementsMismatch);
         };
@@ -250,19 +244,19 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatementV1
 impl<C: Curve, AttributeType: Attribute<C::Scalar>>
     IdentityCredentialStatementV1<C, AttributeType>
 {
-    pub fn prove<P: Pairing<ScalarField = C::Scalar>, Signer: Web3IdSigner>(
+    pub fn prove<P: Pairing<ScalarField = C::Scalar>>(
         self,
         global_context: &GlobalContext<C>,
         transcript: &mut RandomOracle,
         csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
-        input: CommitmentInputs<P, C, AttributeType, Signer>,
+        input: CredentialProofPrivateInputs<P, C, AttributeType>,
     ) -> Result<IdentityBasedCredentialV1<P, C, AttributeType>, ProofError> {
-        let CommitmentInputs::Identity {
+        let CredentialProofPrivateInputs::Identity(IdentityCredentialProofPrivateInputs {
             ip_context,
             id_object,
             id_object_use_data,
-        } = input
+        }) = input
         else {
             return Err(ProofError::CommitmentsStatementsMismatch);
         };
@@ -366,13 +360,13 @@ fn prove_statements<
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatementV1<C, AttributeType> {
-    fn prove<P: Pairing<ScalarField = C::Scalar>, Signer: Web3IdSigner>(
+    fn prove<P: Pairing<ScalarField = C::Scalar>>(
         self,
         global: &GlobalContext<C>,
         ro: &mut RandomOracle,
         csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
-        input: CommitmentInputs<P, C, AttributeType, Signer>,
+        input: CredentialProofPrivateInputs<P, C, AttributeType>,
     ) -> Result<CredentialV1<P, C, AttributeType>, ProofError> {
         match self {
             CredentialStatementV1::Account(cred_stmt) => cred_stmt
@@ -388,10 +382,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatementV1<C, Att
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> {
     /// Construct a proof for the [`RequestV1`] using the provided cryptographic
     /// parameters and secrets.
-    pub fn prove<'a, P: Pairing<ScalarField = C::Scalar>, Signer: 'a + Web3IdSigner>(
+    pub fn prove<'a, P: Pairing<ScalarField = C::Scalar>>(
         self,
         params: &GlobalContext<C>,
-        attrs: impl ExactSizeIterator<Item = CommitmentInputs<'a, P, C, AttributeType, Signer>>,
+        attrs: impl ExactSizeIterator<Item = CredentialProofPrivateInputs<'a, P, C, AttributeType>>,
     ) -> Result<PresentationV1<P, C, AttributeType>, ProofError>
     where
         AttributeType: 'a,
@@ -402,10 +396,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
     /// Construct a proof for the [`RequestV1`] using the provided cryptographic
     /// parameters and secrets. The source of randomness and "now" are given
     /// as arguments.
-    pub fn prove_with_rng<'a, P: Pairing<ScalarField = C::Scalar>, Signer: 'a + Web3IdSigner>(
+    pub fn prove_with_rng<'a, P: Pairing<ScalarField = C::Scalar>>(
         self,
         params: &GlobalContext<C>,
-        attrs: impl ExactSizeIterator<Item = CommitmentInputs<'a, P, C, AttributeType, Signer>>,
+        attrs: impl ExactSizeIterator<Item = CredentialProofPrivateInputs<'a, P, C, AttributeType>>,
         csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
     ) -> Result<PresentationV1<P, C, AttributeType>, ProofError>
