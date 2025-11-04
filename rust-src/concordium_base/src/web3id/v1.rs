@@ -392,7 +392,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
 /// the value to [`IdentityCredentialIdData`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IdentityCredentialId(pub Vec<u8>);
-// todo add curve as parameter?
 
 /// Ephemeral id for identity credentials. The id can be decrypted to IdCredPub.
 /// It will have a new value for each time credential is proven (the encryption is a randomized function)
