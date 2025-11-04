@@ -1127,7 +1127,7 @@ pub fn mk_dummy_description(name: String) -> Description {
 }
 
 /// Public information about an identity provider.
-#[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "P: Pairing", deserialize = "P: Pairing"))]
 pub struct IpInfo<P: Pairing> {
     /// Unique identifier of the identity provider.
@@ -1177,7 +1177,7 @@ pub struct ArInfo<C: Curve> {
 }
 
 /// Collection of anonymity revokers.
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 #[serde(transparent)]
 pub struct ArInfos<C: Curve> {

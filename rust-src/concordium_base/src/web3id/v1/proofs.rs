@@ -713,13 +713,13 @@ pub mod tests {
                         .unwrap()
                         .to_utc(),
                 )
-                    .unwrap(),
+                .unwrap(),
                 upper: Web3IdAttribute::try_from(
                     chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
                         .unwrap()
                         .to_utc(),
                 )
-                    .unwrap(),
+                .unwrap(),
                 _phantom: PhantomData,
             },
         });

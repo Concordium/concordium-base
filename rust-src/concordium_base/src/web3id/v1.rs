@@ -5,16 +5,17 @@
 mod proofs;
 
 use crate::base::CredentialRegistrationID;
-use crate::common;
 use crate::curve_arithmetic::{Curve, Pairing};
 use crate::id::id_proof_types::{AtomicProof, AtomicStatement};
 use crate::id::secret_sharing::Threshold;
 use crate::id::types::{
-    ArIdentity, Attribute, AttributeTag, ChainArData, CredentialValidity, IdentityAttribute,
-    IdentityAttributesCredentialsProofs, IpIdentity, YearMonth,
+    ArIdentity, ArInfos, Attribute, AttributeTag, ChainArData, CredentialValidity,
+    HasIdentityObjectFields, IdObjectUseData, IdentityAttribute,
+    IdentityAttributesCredentialsProofs, IpContextOnly, IpIdentity, IpInfo, YearMonth,
 };
 use crate::web3id::did::Network;
-use crate::web3id::{did, AccountCredentialMetadata, IdentityCredentialMetadata, LinkingProof};
+use crate::web3id::{did, LinkingProof};
+use crate::{common, pedersen_commitment};
 use anyhow::{bail, ensure, Context};
 use itertools::Itertools;
 
@@ -258,6 +259,21 @@ fn take_field_de<T: DeserializeOwned>(
         .with_context(|| format!("deserialize {}", field))
 }
 
+/// Metadata of an account credentials derived from an identity issued by an
+/// identity provider.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct AccountCredentialMetadataV1 {
+    pub issuer: IpIdentity,
+    pub cred_id: CredentialRegistrationID,
+}
+
+/// Metadata of an identity based credential.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct IdentityCredentialMetadataV1 {
+    pub issuer: IpIdentity,
+    pub validity: CredentialValidity,
+}
+
 /// Metadata of a credential [`CredentialV1`].
 /// Contains the information needed to determine the validity of the
 /// credential and resolve [`CredentialsInputs`](super::CredentialsInputs)
@@ -265,9 +281,9 @@ fn take_field_de<T: DeserializeOwned>(
 pub enum CredentialMetadataTypeV1 {
     /// Metadata of an account credential, i.e., a credential derived from an
     /// identity object.
-    Account(AccountCredentialMetadata),
+    Account(AccountCredentialMetadataV1),
     /// Metadata of an identity based credential.
-    Identity(IdentityCredentialMetadata),
+    Identity(IdentityCredentialMetadataV1),
 }
 
 // todo ar describe credential metadata
@@ -354,14 +370,14 @@ pub struct AccountCredentialProofs<C: Curve, AttributeType: Attribute<C::Scalar>
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, AttributeType> {
-    pub fn metadata(&self) -> AccountCredentialMetadata {
+    pub fn metadata(&self) -> AccountCredentialMetadataV1 {
         let AccountBasedCredentialV1 {
             subject: AccountCredentialSubject { cred_id, .. },
             issuer,
             ..
         } = self;
 
-        AccountCredentialMetadata {
+        AccountCredentialMetadataV1 {
             issuer: *issuer,
             cred_id: *cred_id,
         }
@@ -527,12 +543,12 @@ pub struct IdentityCredentialProofs<
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
     IdentityBasedCredentialV1<P, C, AttributeType>
 {
-    pub fn metadata(&self) -> IdentityCredentialMetadata {
+    pub fn metadata(&self) -> IdentityCredentialMetadataV1 {
         let IdentityBasedCredentialV1 {
             issuer, validity, ..
         } = self;
 
-        IdentityCredentialMetadata {
+        IdentityCredentialMetadataV1 {
             issuer: *issuer,
             validity: validity.clone(),
         }
@@ -926,6 +942,76 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
 
         result.map_err(|err| D::Error::custom(format!("{:#}", err)))
     }
+}
+
+/// Private inputs for an account credential proof.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct PrivateAccountCredentialProofInputs<'a, C: Curve, AttributeType> {
+    pub issuer: IpIdentity,
+    /// The values that are committed to and are required in the proofs.
+    pub values: &'a BTreeMap<AttributeTag, AttributeType>,
+    /// The randomness to go along with commitments in `values`.
+    pub randomness: &'a BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
+}
+
+/// Private inputs for an identity credential proof.
+pub struct PrivateIdentityCredentialProofInputs<
+    'a,
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType,
+> {
+    /// Context with identity provider data
+    pub ip_context: IpContextOnly<'a, P, C>,
+    /// Identity object. Together with `id_object_use_data`, it constitutes the identity credentials
+    pub id_object: &'a dyn HasIdentityObjectFields<P, C, AttributeType>,
+    /// Identity credentials
+    pub id_object_use_data: &'a IdObjectUseData<P, C>,
+}
+
+/// The additional private inputs (mostly secrets), needed to prove the statements
+/// in a [request](RequestV1).
+pub enum PrivateCredentialProofInputs<
+    'a,
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType,
+> {
+    /// Inputs are for an account credential derived from an identity issued by an
+    /// identity provider.
+    Account(PrivateAccountCredentialProofInputs<'a, C, AttributeType>),
+    /// Inputs are for an identity credential issued by an identity provider.
+    Identity(PrivateIdentityCredentialProofInputs<'a, P, C, AttributeType>),
+}
+
+/// Verification material for an account credential.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct AccountCredentialVerificationMaterial<C: Curve> {
+    // All the commitments of the credential.
+    // In principle, we only ever need to borrow this, but it is simpler to
+    // have the owned map instead of a reference to it.
+    pub commitments: BTreeMap<AttributeTag, pedersen_commitment::Commitment<C>>,
+}
+
+/// Verification material for an identity credential.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct IdentityCredentialVerificationMaterial<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    /// Public information on the chosen identity provider.
+    pub ip_info: IpInfo<P>,
+    /// Public information on the __supported__ anonymity revokers.
+    /// This is used by the identity provider and the chain to
+    /// validate the identity object requests, to validate credentials,
+    /// as well as by the account holder to create a credential.
+    pub ars_infos: ArInfos<C>,
+}
+
+/// The additional public inputs needed to verify the statements
+/// in a [presentation](PresentationV1).
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum CredentialVerificationMaterial<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    /// Verification material for an account credential.
+    Account(AccountCredentialVerificationMaterial<C>),
+    Identity(IdentityCredentialVerificationMaterial<P, C>),
 }
 
 #[cfg(test)]
