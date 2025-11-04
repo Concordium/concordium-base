@@ -529,7 +529,7 @@ pub struct IdentityCredentialProofs<
     AttributeType: Attribute<C::Scalar>,
 > {
     /// The attributes that are part of the underlying identity credential from which this credential is derived
-    pub attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
+    pub identity_attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
     /// Proof that the attributes and the other values in [`IdentityBasedCredentialV1`] are correct
     pub identity_attributes_proofs: IdentityAttributesCredentialsProofs<P, C>,
     /// Proofs of the atomic statements on attributes
@@ -1355,7 +1355,7 @@ mod tests {
             .clone()
             .prove_with_rng(
                 &global_context,
-                [acc_cred_fixture.commitment_inputs()].into_iter(),
+                [acc_cred_fixture.private_inputs()].into_iter(),
                 &mut fixtures::seed0(),
                 now,
             )
@@ -1685,7 +1685,7 @@ mod tests {
             .clone()
             .prove_with_rng(
                 &global_context,
-                [id_cred_fixture.commitment_inputs()].into_iter(),
+                [id_cred_fixture.private_inputs()].into_iter(),
                 &mut fixtures::seed0(),
                 now,
             )
@@ -1844,18 +1844,18 @@ mod fixtures {
     use std::str::FromStr;
 
     pub struct IdentityCredentialsFixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> {
-        pub commitment_inputs: OwnedCredentialProofPrivateInputs<IpPairing, ArCurve, AttributeType>,
-        pub credential_inputs: CredentialVerificationMaterial<IpPairing, ArCurve>,
+        pub private_inputs: OwnedCredentialProofPrivateInputs<IpPairing, ArCurve, AttributeType>,
+        pub verification_material: CredentialVerificationMaterial<IpPairing, ArCurve>,
         pub issuer: IpIdentity,
     }
 
     impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>
         IdentityCredentialsFixture<AttributeType>
     {
-        pub fn commitment_inputs(
+        pub fn private_inputs(
             &self,
         ) -> CredentialProofPrivateInputs<'_, IpPairing, ArCurve, AttributeType> {
-            self.commitment_inputs.borrow()
+            self.private_inputs.borrow()
         }
     }
 
@@ -2040,25 +2040,25 @@ mod fixtures {
             });
 
         IdentityCredentialsFixture {
-            commitment_inputs,
-            credential_inputs,
+            private_inputs: commitment_inputs,
+            verification_material: credential_inputs,
             issuer: ip_info.ip_identity,
         }
     }
 
     pub struct AccountCredentialsFixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> {
-        pub commitment_inputs: OwnedCredentialProofPrivateInputs<IpPairing, ArCurve, AttributeType>,
-        pub credential_inputs: CredentialVerificationMaterial<IpPairing, ArCurve>,
+        pub private_inputs: OwnedCredentialProofPrivateInputs<IpPairing, ArCurve, AttributeType>,
+        pub verification_material: CredentialVerificationMaterial<IpPairing, ArCurve>,
         pub cred_id: CredentialRegistrationID,
     }
 
     impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>
         AccountCredentialsFixture<AttributeType>
     {
-        pub fn commitment_inputs(
+        pub fn private_inputs(
             &self,
         ) -> CredentialProofPrivateInputs<'_, IpPairing, ArCurve, AttributeType> {
-            self.commitment_inputs.borrow()
+            self.private_inputs.borrow()
         }
     }
 
@@ -2093,8 +2093,8 @@ mod fixtures {
             });
 
         AccountCredentialsFixture {
-            commitment_inputs,
-            credential_inputs,
+            private_inputs: commitment_inputs,
+            verification_material: credential_inputs,
             cred_id,
         }
     }

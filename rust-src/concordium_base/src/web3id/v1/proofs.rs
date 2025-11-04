@@ -147,7 +147,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
                 ip_identity: self.issuer,
                 threshold: self.threshold,
                 ar_data: cred_id_data.ar_data,
-                attributes: self.proof.proof.attributes.clone(),
+                attributes: self.proof.proof.identity_attributes.clone(),
                 validity: self.validity.clone(),
             },
             proofs: self.proof.proof.identity_attributes_proofs.clone(),
@@ -168,7 +168,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         }
 
         let cmm_attributes: BTreeMap<_, _> = self
-            .proof.proof.attributes
+            .proof.proof.identity_attributes
             .iter()
             .filter_map(|(tag, attr)| match attr {
                 IdentityAttribute::Committed(cmm) => Some((*tag, *cmm)),
@@ -316,7 +316,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>>
 
         let proof = IdentityCredentialProofs {
             identity_attributes_proofs: id_attr_cred_info.proofs,
-            attributes: id_attr_cred_info.values.attributes,
+            identity_attributes: id_attr_cred_info.values.attributes,
             statement_proofs,
         };
 
@@ -514,16 +514,16 @@ pub mod tests {
             .prove(
                 &global_context,
                 [
-                    id_cred_fixture.commitment_inputs(),
-                    acc_cred_fixture.commitment_inputs(),
+                    id_cred_fixture.private_inputs(),
+                    acc_cred_fixture.private_inputs(),
                 ]
                 .into_iter(),
             )
             .expect("Cannot prove");
 
         let public = vec![
-            id_cred_fixture.credential_inputs,
-            acc_cred_fixture.credential_inputs,
+            id_cred_fixture.verification_material,
+            acc_cred_fixture.verification_material,
         ];
         assert_eq!(
             proof
@@ -562,11 +562,11 @@ pub mod tests {
             .clone()
             .prove(
                 &global_context,
-                [acc_cred_fixture.commitment_inputs()].into_iter(),
+                [acc_cred_fixture.private_inputs()].into_iter(),
             )
             .expect("prove");
 
-        let public = vec![acc_cred_fixture.credential_inputs];
+        let public = vec![acc_cred_fixture.verification_material];
         assert_eq!(
             proof
                 .verify(&global_context, public.iter())
@@ -603,11 +603,11 @@ pub mod tests {
             .clone()
             .prove(
                 &global_context,
-                [acc_cred_fixture.commitment_inputs()].into_iter(),
+                [acc_cred_fixture.private_inputs()].into_iter(),
             )
             .expect("prove");
 
-        let public = vec![acc_cred_fixture.credential_inputs];
+        let public = vec![acc_cred_fixture.verification_material];
         assert_eq!(
             proof
                 .verify(&global_context, public.iter())
@@ -646,7 +646,7 @@ pub mod tests {
             .clone()
             .prove(
                 &global_context,
-                [acc_cred_fixture.commitment_inputs()].into_iter(),
+                [acc_cred_fixture.private_inputs()].into_iter(),
             )
             .expect("prove");
 
@@ -665,7 +665,7 @@ pub mod tests {
             },
         };
 
-        let public = vec![acc_cred_fixture.credential_inputs];
+        let public = vec![acc_cred_fixture.verification_material];
 
         let err = proof
             .verify(&global_context, public.iter())
@@ -702,7 +702,7 @@ pub mod tests {
             .clone()
             .prove(
                 &global_context,
-                [acc_cred_fixture.commitment_inputs()].into_iter(),
+                [acc_cred_fixture.private_inputs()].into_iter(),
             )
             .expect("prove");
 
@@ -731,7 +731,7 @@ pub mod tests {
             },
         });
 
-        let public = vec![acc_cred_fixture.credential_inputs];
+        let public = vec![acc_cred_fixture.verification_material];
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
@@ -767,7 +767,7 @@ pub mod tests {
             .clone()
             .prove(
                 &global_context,
-                [acc_cred_fixture.commitment_inputs()].into_iter(),
+                [acc_cred_fixture.private_inputs()].into_iter(),
             )
             .expect("prove");
 
@@ -779,7 +779,7 @@ pub mod tests {
             &global_context,
         );
 
-        let public = vec![web3_cred_fixture.credential_inputs];
+        let public = vec![web3_cred_fixture.verification_material];
 
         let err = proof
             .verify(&global_context, public.iter())
@@ -816,7 +816,7 @@ pub mod tests {
             .clone()
             .prove(
                 &global_context,
-                [acc_cred_fixture.commitment_inputs()].into_iter(),
+                [acc_cred_fixture.private_inputs()].into_iter(),
             )
             .expect("prove");
 
@@ -856,11 +856,11 @@ pub mod tests {
             .clone()
             .prove(
                 &global_context,
-                [id_cred_fixture.commitment_inputs()].into_iter(),
+                [id_cred_fixture.private_inputs()].into_iter(),
             )
             .expect("prove");
 
-        let public = vec![id_cred_fixture.credential_inputs];
+        let public = vec![id_cred_fixture.verification_material];
         assert_eq!(
             proof
                 .verify(&global_context, public.iter())
@@ -897,11 +897,11 @@ pub mod tests {
             .clone()
             .prove(
                 &global_context,
-                [id_cred_fixture.commitment_inputs()].into_iter(),
+                [id_cred_fixture.private_inputs()].into_iter(),
             )
             .expect("prove");
 
-        let public = vec![id_cred_fixture.credential_inputs];
+        let public = vec![id_cred_fixture.verification_material];
         assert_eq!(
             proof
                 .verify(&global_context, public.iter())
@@ -940,7 +940,7 @@ pub mod tests {
             .clone()
             .prove(
                 &global_context,
-                [id_cred_fixture.commitment_inputs()].into_iter(),
+                [id_cred_fixture.private_inputs()].into_iter(),
             )
             .expect("prove");
 
@@ -959,7 +959,7 @@ pub mod tests {
             },
         };
 
-        let public = vec![id_cred_fixture.credential_inputs];
+        let public = vec![id_cred_fixture.verification_material];
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
@@ -995,7 +995,7 @@ pub mod tests {
             .clone()
             .prove(
                 &global_context,
-                [id_cred_fixture.commitment_inputs()].into_iter(),
+                [id_cred_fixture.private_inputs()].into_iter(),
             )
             .expect("prove");
 
@@ -1024,7 +1024,7 @@ pub mod tests {
             },
         });
 
-        let public = vec![id_cred_fixture.credential_inputs];
+        let public = vec![id_cred_fixture.verification_material];
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
@@ -1060,7 +1060,7 @@ pub mod tests {
             .clone()
             .prove(
                 &global_context,
-                [id_cred_fixture.commitment_inputs()].into_iter(),
+                [id_cred_fixture.private_inputs()].into_iter(),
             )
             .expect("prove");
 
@@ -1091,7 +1091,7 @@ pub mod tests {
             .get_mut(&ar2)
             .unwrap() = tmp;
 
-        let public = vec![id_cred_fixture.credential_inputs];
+        let public = vec![id_cred_fixture.verification_material];
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
@@ -1127,7 +1127,7 @@ pub mod tests {
             .clone()
             .prove(
                 &global_context,
-                [id_cred_fixture.commitment_inputs()].into_iter(),
+                [id_cred_fixture.private_inputs()].into_iter(),
             )
             .expect("prove");
 
@@ -1139,7 +1139,7 @@ pub mod tests {
         };
         subject.cred_id.0 = vec![0, 1, 2];
 
-        let public = vec![id_cred_fixture.credential_inputs];
+        let public = vec![id_cred_fixture.verification_material];
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
