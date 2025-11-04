@@ -792,14 +792,14 @@ pub fn concordium_test(attr: TokenStream, item: TokenStream) -> TokenStream {
     unwrap_or_report(attribute::concordium_test_worker(attr, item))
 }
 
-/// Sets the cfg for testing targeting either Wasm and native.
+/// Sets the cfg for testing targeting Wasm.
 #[cfg(feature = "wasm-test")]
 #[proc_macro_attribute]
 pub fn concordium_cfg_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
     item
 }
 
-/// Sets the cfg for testing targeting either Wasm and native.
+/// Sets the cfg for testing targeting Wasm.
 #[cfg(not(feature = "wasm-test"))]
 #[proc_macro_attribute]
 pub fn concordium_cfg_test(_attr: TokenStream, _item: TokenStream) -> TokenStream {
