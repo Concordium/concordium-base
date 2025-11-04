@@ -2478,7 +2478,7 @@ mod fixtures {
         RevealAttributeStatement,
     };
     use crate::id::types::{
-        AttributeList, AttributeTag, IpIdentity, YearMonth,
+        AttributeTag, IpIdentity,
     };
 
     use crate::web3id::{

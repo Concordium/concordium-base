@@ -111,7 +111,6 @@ pub struct ContextProperty {
 pub struct AccountCredentialStatementV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub network: Network,
     pub cred_id: CredentialRegistrationID,
-    // todo ar issuer also here?
     pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
 }
 
@@ -119,7 +118,6 @@ pub struct AccountCredentialStatementV1<C: Curve, AttributeType: Attribute<C::Sc
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IdentityCredentialStatementV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub network: Network,
-    // todo ar should the identity provider be here? document what is here and what is not (maybe fail in prover also)
     pub issuer: IpIdentity,
     /// Attribute statements
     pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
@@ -464,12 +462,7 @@ pub struct IdentityBasedCredentialV1<
     /// Decryption threshold of the IdCredPub in [`IdentityCredentialId`]
     pub threshold: Threshold,
     /// Temporal validity of the credential
-    // #[serde(rename = "validity")]
     pub validity: CredentialValidity,
-    /// The attributes that are part of the underlying identity credential from which this credential is derived
-    // #[map_size_length = 2]
-    // #[serde(rename = "attributes")]
-    pub attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
     /// Credential subject
     pub subject: IdentityCredentialSubject<C, AttributeType>,
     /// Proof of the credential
@@ -535,7 +528,8 @@ pub struct IdentityCredentialProofs<
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 > {
-    // todo ar move commitments in here
+    /// The attributes that are part of the underlying identity credential from which this credential is derived
+    pub attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
     /// Proof that the attributes and the other values in [`IdentityBasedCredentialV1`] are correct
     pub identity_attributes_proofs: IdentityAttributesCredentialsProofs<P, C>,
     /// Proofs of the atomic statements on attributes
@@ -649,7 +643,6 @@ impl<
                 issuer,
                 threshold,
                 validity,
-                attributes,
                 subject,
                 proof: proofs,
             }) => {
@@ -679,7 +672,6 @@ impl<
                 )?;
                 let issuer = did::Method::new_idp(subject.network, *issuer);
                 map.serialize_entry("issuer", &issuer)?;
-                map.serialize_entry("attributes", &attributes)?;
                 map.serialize_entry("threshold", &threshold)?;
                 map.serialize_entry("proof", proofs)?;
                 map.end()
@@ -745,8 +737,6 @@ impl<
                         bail!("expected idp did, was {}", issuer);
                     };
                     ensure!(issuer.network == subject.network, "network not identical");
-                    let attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>> =
-                        take_field_de(&mut value, "attributes")?;
                     let threshold: Threshold = take_field_de(&mut value, "threshold")?;
                     let proof: ConcordiumZKProof<IdentityCredentialProofs<P, C, AttributeType>> =
                         take_field_de(&mut value, "proof")?;
@@ -755,7 +745,6 @@ impl<
                         issuer: idp_identity,
                         threshold,
                         validity,
-                        attributes,
                         subject,
                         proof,
                     })

@@ -147,7 +147,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
                 ip_identity: self.issuer,
                 threshold: self.threshold,
                 ar_data: cred_id_data.ar_data,
-                attributes: self.attributes.clone(),
+                attributes: self.proof.proof.attributes.clone(),
                 validity: self.validity.clone(),
             },
             proofs: self.proof.proof.identity_attributes_proofs.clone(),
@@ -168,7 +168,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         }
 
         let cmm_attributes: BTreeMap<_, _> = self
-            .attributes
+            .proof.proof.attributes
             .iter()
             .filter_map(|(tag, attr)| match attr {
                 IdentityAttribute::Committed(cmm) => Some((*tag, *cmm)),
@@ -316,6 +316,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>>
 
         let proof = IdentityCredentialProofs {
             identity_attributes_proofs: id_attr_cred_info.proofs,
+            attributes: id_attr_cred_info.values.attributes,
             statement_proofs,
         };
 
@@ -336,7 +337,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>>
                 network: self.network,
             },
             issuer: id_attr_cred_info.values.ip_identity,
-            attributes: id_attr_cred_info.values.attributes,
             validity: id_attr_cred_info.values.validity,
         })
     }
@@ -968,7 +968,6 @@ pub mod tests {
 
     /// Test prove and verify presentation for identity credentials where
     /// verification fails because there are additional statements added compared to what is proven.
-    // todo ar rewrite to test lower level instead: verify_statements
     #[test]
     fn test_soundness_identity_statements_added() {
         let challenge = challenge_fixture();
