@@ -414,8 +414,8 @@ mod tests {
     use crate::web3id::v1::IdentityCredentialIdDataRef;
 
     use crate::id::constants::ArCurve;
-    use std::collections::BTreeMap;
     use crate::id::secret_sharing::Threshold;
+    use std::collections::BTreeMap;
 
     #[test]
     fn test_account() -> anyhow::Result<()> {
@@ -679,7 +679,7 @@ mod tests {
             target
         );
         let s = target.to_string();
-        assert_eq!(s, "did:ccd:mainnet:idcred:000300000001ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e00000002ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e00000003ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e");
+        assert_eq!(s, "did:ccd:mainnet:idcred:02000300000001ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e00000002ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e00000003ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e");
         assert_eq!(s.parse::<Method>().unwrap(), target);
         assert_eq!(
             format!("did:ccd:testnet:idcred:{cred_id_hex}")

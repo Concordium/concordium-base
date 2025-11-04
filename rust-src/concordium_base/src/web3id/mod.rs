@@ -714,7 +714,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar>> SerdeDeserialize<'de>
     where
         D: Deserializer<'de>,
     {
-        todo!()
+        todo!() // todo ar
     }
 }
 
@@ -930,7 +930,7 @@ impl<'de, P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribut
     where
         D: Deserializer<'de>,
     {
-        todo!()
+        todo!() // todo ar
     }
 }
 
@@ -2477,16 +2477,11 @@ mod fixtures {
         AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
         RevealAttributeStatement,
     };
-    use crate::id::types::{
-        AttributeTag, IpIdentity,
-    };
+    use crate::id::types::{AttributeTag, IpIdentity};
 
-    use crate::web3id::{
-        CredentialHolderId, OwnedCommitmentInputs, Web3IdAttribute,
-    };
+    use crate::web3id::{CredentialHolderId, OwnedCommitmentInputs, Web3IdAttribute};
     use concordium_contracts_common::ContractAddress;
     use rand::SeedableRng;
-
 
     /// Statements and attributes that make the statements true
     pub fn statements_and_attributes<TagType: FromStr + common::Serialize + Ord>() -> (

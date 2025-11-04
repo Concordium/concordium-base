@@ -168,7 +168,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         }
 
         let cmm_attributes: BTreeMap<_, _> = self
-            .proof.proof.identity_attributes
+            .proof
+            .proof
+            .identity_attributes
             .iter()
             .filter_map(|(tag, attr)| match attr {
                 IdentityAttribute::Committed(cmm) => Some((*tag, *cmm)),
@@ -460,7 +462,7 @@ pub mod tests {
     use crate::id::types::AttributeTag;
     use crate::web3id::did::Network;
     use crate::web3id::v1::{fixtures, ContextProperty};
-    use crate::web3id::{Web3IdAttribute};
+    use crate::web3id::Web3IdAttribute;
     use std::marker::PhantomData;
 
     fn challenge_fixture() -> ContextChallenge {
