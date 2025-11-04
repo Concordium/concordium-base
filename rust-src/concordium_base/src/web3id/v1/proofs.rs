@@ -145,7 +145,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         let id_attr_cred_info = IdentityAttributesCredentialsInfo {
             values: IdentityAttributesCredentialsValues {
                 ip_identity: self.issuer,
-                threshold: self.threshold,
+                threshold: cred_id_data.threshold,
                 ar_data: cred_id_data.ar_data,
                 attributes: self.proof.proof.identity_attributes.clone(),
                 validity: self.validity.clone(),
@@ -322,6 +322,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>>
 
         let cred_id = IdentityCredentialId::from_data(IdentityCredentialIdDataRef {
             ar_data: &id_attr_cred_info.values.ar_data,
+            threshold: id_attr_cred_info.values.threshold,
         });
 
         Ok(IdentityBasedCredentialV1 {
@@ -330,7 +331,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>>
                 proof,
                 proof_type: ConcordiumProofType::ConcordiumZKProofV4,
             },
-            threshold: id_attr_cred_info.values.threshold,
             subject: IdentityCredentialSubject {
                 cred_id,
                 statements: self.statements,

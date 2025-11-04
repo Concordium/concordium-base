@@ -411,17 +411,19 @@ pub struct IdentityCredentialId(pub Vec<u8>);
 /// It will have a new value for each time credential is proven (the encryption is a randomized function)
 #[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
 pub struct IdentityCredentialIdData<C: Curve> {
+    /// Decryption threshold of the IdCredPub in [`IdentityCredentialId`]
+    pub threshold: Threshold,
     /// Anonymity revocation data. It is an encryption of shares of IdCredSec,
     /// each share encrypted for the privacy guardian (anonymity revoker)
     /// that is the key in the map.
     #[map_size_length = 2]
     pub ar_data: BTreeMap<ArIdentity, ChainArData<C>>,
-    // todo ar move threshold back here
 }
 
 impl<C: Curve> IdentityCredentialIdData<C> {
     pub fn as_ref(&self) -> IdentityCredentialIdDataRef<'_, C> {
         IdentityCredentialIdDataRef {
+            threshold: self.threshold,
             ar_data: &self.ar_data,
         }
     }
@@ -431,6 +433,8 @@ impl<C: Curve> IdentityCredentialIdData<C> {
 /// It will have a new value for each time credential is proven (the encryption is a randomized function)
 #[derive(Debug, Clone, PartialEq, Eq, common::Serial)]
 pub struct IdentityCredentialIdDataRef<'a, C: Curve> {
+    /// Decryption threshold of the IdCredPub in [`IdentityCredentialId`]
+    pub threshold: Threshold,
     /// Anonymity revocation data. It is an encryption of shares of IdCredSec,
     /// each share encrypted for the privacy guardian (anonymity revoker)
     /// that is the key in the map.
@@ -459,8 +463,6 @@ pub struct IdentityBasedCredentialV1<
 > {
     /// Issuer of the underlying identity credential from which this credential is derived.
     pub issuer: IpIdentity,
-    /// Decryption threshold of the IdCredPub in [`IdentityCredentialId`]
-    pub threshold: Threshold,
     /// Temporal validity of the credential
     pub validity: CredentialValidity,
     /// Credential subject
@@ -641,7 +643,6 @@ impl<
             }
             Self::Identity(IdentityBasedCredentialV1 {
                 issuer,
-                threshold,
                 validity,
                 subject,
                 proof: proofs,
@@ -672,7 +673,6 @@ impl<
                 )?;
                 let issuer = did::Method::new_idp(subject.network, *issuer);
                 map.serialize_entry("issuer", &issuer)?;
-                map.serialize_entry("threshold", &threshold)?;
                 map.serialize_entry("proof", proofs)?;
                 map.end()
             }
@@ -737,13 +737,11 @@ impl<
                         bail!("expected idp did, was {}", issuer);
                     };
                     ensure!(issuer.network == subject.network, "network not identical");
-                    let threshold: Threshold = take_field_de(&mut value, "threshold")?;
                     let proof: ConcordiumZKProof<IdentityCredentialProofs<P, C, AttributeType>> =
                         take_field_de(&mut value, "proof")?;
 
                     Self::Identity(IdentityBasedCredentialV1 {
                         issuer: idp_identity,
-                        threshold,
                         validity,
                         subject,
                         proof,
@@ -1120,6 +1118,7 @@ mod tests {
 
         IdentityCredentialId::from_data(IdentityCredentialIdDataRef::<ArCurve> {
             ar_data: &ar_data,
+            threshold: Threshold(2),
         })
     }
 

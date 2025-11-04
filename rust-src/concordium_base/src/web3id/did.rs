@@ -415,6 +415,7 @@ mod tests {
 
     use crate::id::constants::ArCurve;
     use std::collections::BTreeMap;
+    use crate::id::secret_sharing::Threshold;
 
     #[test]
     fn test_account() -> anyhow::Result<()> {
@@ -651,6 +652,7 @@ mod tests {
 
         IdentityCredentialId::from_data(IdentityCredentialIdDataRef::<ArCurve> {
             ar_data: &ar_data,
+            threshold: Threshold(2),
         })
     }
 
