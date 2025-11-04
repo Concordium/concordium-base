@@ -822,7 +822,9 @@ pub fn concordium_cfg_not_test(_attr: TokenStream, _item: TokenStream) -> TokenS
 /// `#[concordium_cfg_test]`.
 #[cfg(not(feature = "wasm-test"))]
 #[proc_macro_attribute]
-pub fn concordium_cfg_not_test(_attr: TokenStream, item: TokenStream) -> TokenStream { item }
+pub fn concordium_cfg_not_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
 
 // Supported attributes for `concordium-quickcheck`
 
