@@ -1,6 +1,6 @@
 use crate::random_oracle::StructuredDigest;
 use crate::web3id::{
-    CommitmentInputs, CredentialsInputs, LinkingProof, PresentationVerificationError, ProofError,
+    LinkingProof, PresentationVerificationError, ProofError,
     Web3IdSigner,
 };
 use crate::{
@@ -20,7 +20,16 @@ use crate::id::types::{
     IdentityAttributesCredentialsInfo, IdentityAttributesCredentialsValues, IpContextOnly,
 };
 use crate::pedersen_commitment::Commitment;
-use crate::web3id::v1::{AccountBasedCredentialV1, AccountCredentialProofPrivateInputs, AccountCredentialProofs, AccountCredentialStatementV1, AccountCredentialSubject, ConcordiumProofType, ConcordiumZKProof, ContextChallenge, CredentialMetadataV1, CredentialProofPrivateInputs, CredentialStatementV1, CredentialV1, IdentityBasedCredentialV1, IdentityCredentialId, IdentityCredentialIdDataRef, IdentityCredentialProofPrivateInputs, IdentityCredentialProofs, IdentityCredentialStatementV1, IdentityCredentialSubject, PresentationV1, RequestV1};
+use crate::web3id::v1::{
+    AccountBasedCredentialV1, AccountCredentialProofPrivateInputs, AccountCredentialProofs,
+    AccountCredentialStatementV1, AccountCredentialSubject, AccountCredentialVerificationMaterial,
+    ConcordiumProofType, ConcordiumZKProof, ContextChallenge, CredentialMetadataV1,
+    CredentialProofPrivateInputs, CredentialStatementV1, CredentialV1,
+    CredentialVerificationMaterial, IdentityBasedCredentialV1, IdentityCredentialId,
+    IdentityCredentialIdDataRef, IdentityCredentialProofPrivateInputs, IdentityCredentialProofs,
+    IdentityCredentialStatementV1, IdentityCredentialSubject,
+    IdentityCredentialVerificationMaterial, PresentationV1, RequestV1,
+};
 use rand::{CryptoRng, Rng};
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
@@ -44,7 +53,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     pub fn verify<'a>(
         &self,
         params: &GlobalContext<C>,
-        public: impl ExactSizeIterator<Item = &'a CredentialsInputs<P, C>>,
+        public: impl ExactSizeIterator<Item = &'a CredentialVerificationMaterial<P, C>>,
     ) -> Result<RequestV1<C, AttributeType>, PresentationVerificationError> {
         let mut transcript = RandomOracle::domain("ConcordiumVerifiablePresentationV1");
         append_context(&mut transcript, &self.presentation_context);
@@ -80,7 +89,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         &self,
         global: &GlobalContext<C>,
         transcript: &mut RandomOracle,
-        public: &CredentialsInputs<P, C>,
+        public: &CredentialVerificationMaterial<P, C>,
     ) -> bool {
         match self {
             CredentialV1::Account(cred_proof) => cred_proof.verify(global, transcript, public),
@@ -94,9 +103,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
         &self,
         global_context: &GlobalContext<C>,
         transcript: &mut RandomOracle,
-        input: &CredentialsInputs<P, C>,
+        input: &CredentialVerificationMaterial<P, C>,
     ) -> bool {
-        let CredentialsInputs::Account { commitments } = input else {
+        let CredentialVerificationMaterial::Account(AccountCredentialVerificationMaterial {
+            commitments,
+        }) = input
+        else {
             // mismatch in types
             return false;
         };
@@ -118,9 +130,13 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         &self,
         global_context: &GlobalContext<C>,
         transcript: &mut RandomOracle,
-        input: &CredentialsInputs<P, C>,
+        input: &CredentialVerificationMaterial<P, C>,
     ) -> bool {
-        let CredentialsInputs::Identity { ip_info, ars_infos } = input else {
+        let CredentialVerificationMaterial::Identity(IdentityCredentialVerificationMaterial {
+            ip_info,
+            ars_infos,
+        }) = input
+        else {
             // mismatch in types
             return false;
         };
