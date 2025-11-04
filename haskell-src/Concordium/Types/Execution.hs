@@ -2514,16 +2514,34 @@ instance AE.FromJSON TransactionSummaryType where
             AE.String "updateTransaction" -> TSTUpdateTransaction <$> v .: "contents"
             _ -> fail "Cannot parse JSON TransactionSummaryType"
 
+data SponsorDetails = SponsorDetails
+    { -- The transaction sponsor.
+      sdSponsor :: !AccountAddress,
+      -- The transaction cost paid for by the sponsor.
+      sdCost :: !Amount
+    }
+    deriving (Eq, Show, Generic)
+
+instance S.Serialize SponsorDetails where
+    put SponsorDetails{..} = do
+        S.put sdSponsor
+        S.put sdCost
+    get = do
+        sdSponsor <- S.get
+        sdCost <- S.get
+        return SponsorDetails{..}
+
 -- | Result of a valid transaction is a transaction summary.
 data TransactionSummary' a = TransactionSummary
     { tsSender :: !(Maybe AccountAddress),
-      tsSponsor :: !(Maybe AccountAddress),
       tsHash :: !TransactionHash,
+      -- The transaction cost paid for by the sender
       tsCost :: !Amount,
       tsEnergyCost :: !Energy,
       tsType :: !TransactionSummaryType,
       tsResult :: !a,
-      tsIndex :: !TransactionIndex
+      tsIndex :: !TransactionIndex,
+      tsSponsorDetails :: !(Maybe SponsorDetails)
     }
     deriving (Eq, Show, Generic)
 
@@ -2677,7 +2695,7 @@ instance S.Serialize TransactionSummaryType where
 putTransactionSummary :: S.Putter TransactionSummary
 putTransactionSummary TransactionSummary{..} =
     putMaybe S.put tsSender
-        <> putMaybe S.put tsSponsor
+        <> putMaybe S.put tsSponsorDetails
         <> S.put tsHash
         <> S.put tsCost
         <> S.put tsEnergyCost
@@ -2688,7 +2706,7 @@ putTransactionSummary TransactionSummary{..} =
 getTransactionSummary :: SProtocolVersion pv -> S.Get TransactionSummary
 getTransactionSummary spv = do
     tsSender <- getMaybe S.get
-    tsSponsor <- getMaybe S.get
+    tsSponsorDetails <- getMaybe S.get
     tsHash <- S.get
     tsCost <- S.get
     tsEnergyCost <- S.get
@@ -3016,6 +3034,7 @@ data FailureKind
 
 data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind
 
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''SponsorDetails)
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionSummary')
 
 -- | Generate the challenge for adding a baker.

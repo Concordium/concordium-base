@@ -29,7 +29,6 @@ import qualified Data.ByteString.Short as BSS
 import Data.Coerce
 import Data.Foldable (toList)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (isJust)
 import qualified Data.ProtoLens as Proto
 import qualified Data.ProtoLens.Combinators as Proto
 import qualified Data.ProtoLens.Field
@@ -812,7 +811,7 @@ instance ToProto SupplementedTransactionSummary where
             sender <- case tsSender of
                 Nothing -> Left CEInvalidTransactionResult
                 Just acc -> Right acc
-            details <- convertAccountTransaction tty tsCost sender tsSponsor tsResult
+            details <- convertAccountTransaction tty tsCost sender tsSponsorDetails tsResult
             Right . Proto.make $ do
                 ProtoFields.index .= mkWord64 tsIndex
                 ProtoFields.energyCost .= toProto tsEnergyCost
@@ -1342,13 +1341,13 @@ convertAccountTransaction ::
     Amount ->
     -- | The sender of the transaction.
     AccountAddress ->
-    -- | The optional sponsor of the transaction.
-    Maybe AccountAddress ->
+    -- | The optional sponsor details of the transaction.
+    Maybe SponsorDetails ->
     -- | The result of the transaction. If the transaction was rejected, it contains the reject reason.
     --   Otherwise it contains the events.
     SupplementedValidResult ->
     Either ConversionError Proto.AccountTransactionDetails
-convertAccountTransaction ty cost sender mbSponsor result = case ty of
+convertAccountTransaction ty cost sender mbSponsorDetails result = case ty of
     Nothing -> Right . mkNone $ SerializationFailure
     Just ty' -> case result of
         TxReject rejectReason -> Right . mkNone $ rejectReason
@@ -1684,22 +1683,18 @@ convertAccountTransaction ty cost sender mbSponsor result = case ty of
                     Right . Proto.make $
                         ProtoFields.tokenUpdateEffect . ProtoFields.events .= protoEvents
   where
-    (senderCost, sponsorCost)
-        | isJust mbSponsor = (0, cost)
-        | otherwise = (cost, 0)
-
     mkSuccess :: Proto.AccountTransactionEffects -> Proto.AccountTransactionDetails
     mkSuccess effects = Proto.make $ do
-        ProtoFields.cost .= toProto senderCost
+        ProtoFields.cost .= toProto cost
         ProtoFields.sender .= toProto sender
         ProtoFields.effects .= effects
-        ProtoFields.maybe'sponsor .= fmap mkSponsorDetails mbSponsor
+        ProtoFields.maybe'sponsor .= fmap mkSponsorDetails mbSponsorDetails
 
     mkNone :: RejectReason -> Proto.AccountTransactionDetails
     mkNone rr = Proto.make $ do
-        ProtoFields.cost .= toProto senderCost
+        ProtoFields.cost .= toProto cost
         ProtoFields.sender .= toProto sender
-        ProtoFields.maybe'sponsor .= fmap mkSponsorDetails mbSponsor
+        ProtoFields.maybe'sponsor .= fmap mkSponsorDetails mbSponsorDetails
         ProtoFields.effects
             . ProtoFields.none
             .= ( Proto.make $ do
@@ -1709,10 +1704,10 @@ convertAccountTransaction ty cost sender mbSponsor result = case ty of
                         Just ty' -> ProtoFields.transactionType .= toProto ty'
                )
 
-    mkSponsorDetails :: AccountAddress -> Proto.SponsorDetails
-    mkSponsorDetails sponsor = Proto.make $ do
-        ProtoFields.sponsor .= toProto sponsor
-        ProtoFields.cost .= toProto sponsorCost
+    mkSponsorDetails :: SponsorDetails -> Proto.SponsorDetails
+    mkSponsorDetails SponsorDetails{..} = Proto.make $ do
+        ProtoFields.sponsor .= toProto sdSponsor
+        ProtoFields.cost .= toProto sdCost
 
 instance ToProto TokenParameter where
     type Output TokenParameter = Proto.Cbor
@@ -2668,7 +2663,7 @@ instance ToProto (DryRunResponse (TransactionSummary' SupplementedValidResultWit
             sender <- case tsSender of
                 Nothing -> Left CEInvalidTransactionResult
                 Just acc -> Right acc
-            details <- convertAccountTransaction tty tsCost sender tsSponsor (vrwrResult tsResult)
+            details <- convertAccountTransaction tty tsCost sender tsSponsorDetails (vrwrResult tsResult)
             Right . Proto.make $ do
                 ProtoFields.success
                     .= Proto.make
