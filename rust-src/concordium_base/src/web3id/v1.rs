@@ -11,14 +11,14 @@ use crate::id::secret_sharing::Threshold;
 use crate::id::types::{
     ArIdentity, ArInfos, Attribute, AttributeTag, ChainArData, CredentialValidity,
     HasIdentityObjectFields, IdObjectUseData, IdentityAttribute,
-    IdentityAttributesCredentialsProofs, IpContextOnly, IpIdentity, IpInfo, YearMonth,
+    IdentityAttributesCredentialsProofs, IdentityObjectV1, IpContextOnly, IpIdentity, IpInfo,
+    YearMonth,
 };
 use crate::web3id::did::Network;
 use crate::web3id::{did, LinkingProof};
 use crate::{common, pedersen_commitment};
 use anyhow::{bail, ensure, Context};
 use itertools::Itertools;
-
 use nom::AsBytes;
 use serde::de::{DeserializeOwned, Error as _};
 use serde::ser::{Error as _, SerializeMap};
@@ -128,7 +128,7 @@ pub struct IdentityCredentialStatementV1<C: Curve, AttributeType: Attribute<C::S
 /// A statement about a credential. The credential
 /// is derived from an underlying credential, represented via the different variants:
 /// account credentials and identity credentials.
-/// To prove the statement, the corresponding private input [`CommitmentInputs`](super::CommitmentInputs) is needed.
+/// To prove the statement, the corresponding private input [`CredentialProofPrivateInputs`] is needed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CredentialStatementV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Statement about an account credential derived from an identity issued by an
@@ -418,6 +418,7 @@ pub struct IdentityCredentialIdData<C: Curve> {
     /// that is the key in the map.
     #[map_size_length = 2]
     pub ar_data: BTreeMap<ArIdentity, ChainArData<C>>,
+    // todo ar move threshold back here
 }
 
 impl<C: Curve> IdentityCredentialIdData<C> {
@@ -534,6 +535,7 @@ pub struct IdentityCredentialProofs<
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 > {
+    // todo ar move commitments in here
     /// Proof that the attributes and the other values in [`IdentityBasedCredentialV1`] are correct
     pub identity_attributes_proofs: IdentityAttributesCredentialsProofs<P, C>,
     /// Proofs of the atomic statements on attributes
@@ -892,7 +894,7 @@ impl<
 
 /// A request for a verifiable presentation [`PresentationV1`].
 /// Contains statements and a context. The secret data to prove the statements
-/// is input via [`CommitmentInputs`](super::CommitmentInputs).
+/// is input via [`CredentialVerificationMaterial`].
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct RequestV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub challenge: ContextChallenge,
@@ -946,7 +948,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
 
 /// Private inputs for an account credential proof.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct PrivateAccountCredentialProofInputs<'a, C: Curve, AttributeType> {
+pub struct AccountCredentialProofPrivateInputs<'a, C: Curve, AttributeType> {
     pub issuer: IpIdentity,
     /// The values that are committed to and are required in the proofs.
     pub values: &'a BTreeMap<AttributeTag, AttributeType>,
@@ -955,7 +957,7 @@ pub struct PrivateAccountCredentialProofInputs<'a, C: Curve, AttributeType> {
 }
 
 /// Private inputs for an identity credential proof.
-pub struct PrivateIdentityCredentialProofInputs<
+pub struct IdentityCredentialProofPrivateInputs<
     'a,
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -971,7 +973,7 @@ pub struct PrivateIdentityCredentialProofInputs<
 
 /// The additional private inputs (mostly secrets), needed to prove the statements
 /// in a [request](RequestV1).
-pub enum PrivateCredentialProofInputs<
+pub enum CredentialProofPrivateInputs<
     'a,
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -979,9 +981,83 @@ pub enum PrivateCredentialProofInputs<
 > {
     /// Inputs are for an account credential derived from an identity issued by an
     /// identity provider.
-    Account(PrivateAccountCredentialProofInputs<'a, C, AttributeType>),
+    Account(AccountCredentialProofPrivateInputs<'a, C, AttributeType>),
     /// Inputs are for an identity credential issued by an identity provider.
-    Identity(PrivateIdentityCredentialProofInputs<'a, P, C, AttributeType>),
+    Identity(IdentityCredentialProofPrivateInputs<'a, P, C, AttributeType>),
+}
+
+/// An owned version of [`CredentialVerificationMaterial`] that can be deserialized.
+#[derive(serde::Deserialize)]
+#[serde(bound(deserialize = "AttributeType: DeserializeOwned"))]
+#[serde(rename_all = "camelCase")]
+pub struct OwnedIdentityCredentialVerificationMaterial<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    /// Identity provider information
+    pub ip_info: IpInfo<P>,
+    /// Public information on the __supported__ anonymity revokers.
+    /// Must include at least the anonymity revokers supported by the identity provider.
+    /// This is used to create and validate credential.
+    pub ar_infos: ArInfos<C>,
+    /// Identity object. Together with `id_object_use_data`, it constitutes the identity credentials
+    pub id_object: IdentityObjectV1<P, C, AttributeType>,
+    /// Identity credentials
+    pub id_object_use_data: IdObjectUseData<P, C>,
+}
+
+/// An owned version of [`CredentialVerificationMaterial`] that can be deserialized.
+#[derive(serde::Deserialize)]
+#[serde(bound(deserialize = "AttributeType: DeserializeOwned"))]
+#[serde(rename_all = "camelCase")]
+pub struct OwnedAccountCredentialVerificationMaterial<C: Curve, AttributeType: Attribute<C::Scalar>>
+{
+    pub issuer: IpIdentity,
+    pub values: BTreeMap<AttributeTag, AttributeType>,
+    pub randomness: BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
+}
+
+/// An owned version of [`CredentialVerificationMaterial`] that can be deserialized.
+#[derive(serde::Deserialize)]
+#[serde(bound(deserialize = "AttributeType: DeserializeOwned"))]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum OwnedCredentialProofPrivateInputs<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    /// Private inputs for account based credential
+    Account(OwnedAccountCredentialVerificationMaterial<C, AttributeType>),
+    /// Private inputs for identity based credential
+    Identity(Box<OwnedIdentityCredentialVerificationMaterial<P, C, AttributeType>>),
+}
+
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
+    OwnedCredentialProofPrivateInputs<P, C, AttributeType>
+{
+    /// Borrow the private inputs
+    pub fn borrow(&self) -> CredentialProofPrivateInputs<'_, P, C, AttributeType> {
+        match self {
+            OwnedCredentialProofPrivateInputs::Account(acc) => {
+                CredentialProofPrivateInputs::Account(AccountCredentialProofPrivateInputs {
+                    issuer: acc.issuer,
+                    values: &acc.values,
+                    randomness: &acc.randomness,
+                })
+            }
+            OwnedCredentialProofPrivateInputs::Identity(id) => {
+                CredentialProofPrivateInputs::Identity(IdentityCredentialProofPrivateInputs {
+                    ip_context: IpContextOnly {
+                        ip_info: &id.ip_info,
+                        ars_infos: &id.ar_infos.anonymity_revokers,
+                    },
+                    id_object: &id.id_object,
+                    id_object_use_data: &id.id_object_use_data,
+                })
+            }
+        }
+    }
 }
 
 /// Verification material for an account credential.
@@ -1011,6 +1087,7 @@ pub struct IdentityCredentialVerificationMaterial<P: Pairing, C: Curve<Scalar = 
 pub enum CredentialVerificationMaterial<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Verification material for an account credential.
     Account(AccountCredentialVerificationMaterial<C>),
+    /// Verification material for an identity credential.
     Identity(IdentityCredentialVerificationMaterial<P, C>),
 }
 
