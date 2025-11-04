@@ -1031,6 +1031,22 @@ impl crate::common::Serial for LinkingProof {
     }
 }
 
+impl crate::common::Deserial for LinkingProof {
+    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> crate::common::ParseResult<Self> {
+        let millis: i64 = crate::common::Deserial::deserial(source)?;
+        let naive = chrono::NaiveDateTime::from_timestamp_millis(millis)
+            .ok_or_else(|| anyhow::anyhow!("invalid timestamp"))?;
+        let created =
+            chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(naive, chrono::Utc);
+
+        let proof_value = crate::common::Deserial::deserial(source)?;
+        Ok(Self {
+            created,
+            proof_value,
+        })
+    }
+}
+
 impl serde::Serialize for LinkingProof {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

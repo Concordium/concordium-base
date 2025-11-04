@@ -53,8 +53,7 @@ impl VerifiablePresentationRequest {
 /// Audit records are used internally by verifiers to maintain complete records
 /// of verification interactions, while only publishing hash-based public records/anchors on-chain
 /// to preserve privacy, see [`VerificationAuditAnchorOnChain`].
-#[derive(Debug, Clone, PartialEq)]
-// TODO: enable traits again: Serialize,
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct VerificationAuditAnchor<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -153,8 +152,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     pub fn hash(&self) -> hashes::Hash {
         use crate::common::Serial;
         let mut hasher = sha2::Sha256::new();
-        // TODO: enable again once `Serialize` is implemented on `PresentationV1`
-        // self.serial(&mut hasher);
+        self.serial(&mut hasher);
         HashBytes::new(hasher.finalize().into())
     }
 
@@ -1064,18 +1062,17 @@ mod tests {
         );
     }
 
-    // TODO: enable again
-    // #[test]
-    // fn test_verification_audit_anchor_serialization_deserialization_roundtrip() {
-    //     let verification_audit_anchor = verification_audit_anchor_fixture();
+    #[test]
+    fn test_verification_audit_anchor_serialization_deserialization_roundtrip() {
+        let verification_audit_anchor = verification_audit_anchor_fixture();
 
-    //     let deserialized =
-    //         serialize_deserialize(&verification_audit_anchor).expect("Deserialization succeeds.");
-    //     assert_eq!(
-    //         verification_audit_anchor, deserialized,
-    //         "Failed verification audit anchor serialization deserialization roundtrip."
-    //     );
-    // }
+        let deserialized =
+            serialize_deserialize(&verification_audit_anchor).expect("Deserialization succeeds.");
+        assert_eq!(
+            verification_audit_anchor, deserialized,
+            "Failed verification audit anchor serialization deserialization roundtrip."
+        );
+    }
 
     // Tests about cbor serialization and deserialization roundtrips for the anchors
 
