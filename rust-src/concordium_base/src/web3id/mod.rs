@@ -2478,32 +2478,15 @@ mod fixtures {
         RevealAttributeStatement,
     };
     use crate::id::types::{
-        ArInfos, AttributeList, AttributeTag, IdentityObjectV1, IpData, IpIdentity, YearMonth,
+        AttributeList, AttributeTag, IpIdentity, YearMonth,
     };
-    use crate::id::{identity_provider, test};
+
     use crate::web3id::{
-        CredentialHolderId, OwnedCommitmentInputs, OwnedIdentityCommitmentInputs, Web3IdAttribute,
+        CredentialHolderId, OwnedCommitmentInputs, Web3IdAttribute,
     };
     use concordium_contracts_common::ContractAddress;
     use rand::SeedableRng;
 
-    pub struct IdentityCredentialsFixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> {
-        pub commitment_inputs:
-            OwnedCommitmentInputs<IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>,
-        pub credential_inputs: CredentialsInputs<IpPairing, ArCurve>,
-        pub issuer: IpIdentity,
-    }
-
-    impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>
-        IdentityCredentialsFixture<AttributeType>
-    {
-        pub fn commitment_inputs(
-            &self,
-        ) -> CommitmentInputs<'_, IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>
-        {
-            CommitmentInputs::from(&self.commitment_inputs)
-        }
-    }
 
     /// Statements and attributes that make the statements true
     pub fn statements_and_attributes<TagType: FromStr + common::Serialize + Ord>() -> (
@@ -2608,86 +2591,6 @@ mod fixtures {
         .collect();
 
         (statements, attributes)
-    }
-
-    fn create_attribute_list<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(
-        alist: BTreeMap<AttributeTag, AttributeType>,
-    ) -> AttributeList<<ArCurve as Curve>::Scalar, AttributeType> {
-        let valid_to = YearMonth::new(2022, 5).unwrap();
-        let created_at = YearMonth::new(2020, 5).unwrap();
-        AttributeList {
-            valid_to,
-            created_at,
-            max_accounts: 237,
-            alist,
-            _phantom: Default::default(),
-        }
-    }
-
-    pub fn identity_credentials_fixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(
-        attrs: BTreeMap<AttributeTag, AttributeType>,
-        global_context: &GlobalContext<ArCurve>,
-    ) -> IdentityCredentialsFixture<AttributeType> {
-        let max_attrs = 10;
-        let num_ars = 5;
-        let IpData {
-            public_ip_info: ip_info,
-            ip_secret_key,
-            ..
-        } = test::test_create_ip_info(&mut seed0(), num_ars, max_attrs);
-
-        let (ars_infos, _ars_secret) = test::test_create_ars(
-            &global_context.on_chain_commitment_key.g,
-            num_ars,
-            &mut seed0(),
-        );
-        let ars_infos = ArInfos {
-            anonymity_revokers: ars_infos,
-        };
-
-        let id_object_use_data = test::test_create_id_use_data(&mut seed0());
-        let (context, pio, _randomness) = test::test_create_pio_v1(
-            &id_object_use_data,
-            &ip_info,
-            &ars_infos.anonymity_revokers,
-            &global_context,
-            num_ars,
-            &mut seed0(),
-        );
-        let alist = create_attribute_list(attrs);
-        let ip_sig = identity_provider::sign_identity_object_v1_with_rng(
-            &pio,
-            context.ip_info,
-            &alist,
-            &ip_secret_key,
-            &mut seed0(),
-        )
-        .expect("sign credentials");
-
-        let id_object = IdentityObjectV1 {
-            pre_identity_object: pio,
-            alist: alist.clone(),
-            signature: ip_sig,
-        };
-
-        let commitment_inputs =
-            OwnedCommitmentInputs::Identity(Box::new(OwnedIdentityCommitmentInputs {
-                ip_info: ip_info.clone(),
-                ar_infos: ars_infos.clone(),
-                id_object,
-                id_object_use_data,
-            }));
-
-        let credential_inputs = CredentialsInputs::Identity {
-            ip_info: ip_info.clone(),
-            ars_infos,
-        };
-
-        IdentityCredentialsFixture {
-            commitment_inputs,
-            credential_inputs,
-            issuer: ip_info.ip_identity,
-        }
     }
 
     pub struct AccountCredentialsFixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> {

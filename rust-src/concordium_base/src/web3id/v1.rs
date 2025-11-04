@@ -990,7 +990,7 @@ pub enum CredentialProofPrivateInputs<
 #[derive(serde::Deserialize)]
 #[serde(bound(deserialize = "AttributeType: DeserializeOwned"))]
 #[serde(rename_all = "camelCase")]
-pub struct OwnedIdentityCredentialVerificationMaterial<
+pub struct OwnedIdentityCredentialProofPrivateInputs<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
@@ -1011,8 +1011,7 @@ pub struct OwnedIdentityCredentialVerificationMaterial<
 #[derive(serde::Deserialize)]
 #[serde(bound(deserialize = "AttributeType: DeserializeOwned"))]
 #[serde(rename_all = "camelCase")]
-pub struct OwnedAccountCredentialVerificationMaterial<C: Curve, AttributeType: Attribute<C::Scalar>>
-{
+pub struct OwnedAccountCredentialProofPrivateInputs<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub issuer: IpIdentity,
     pub values: BTreeMap<AttributeTag, AttributeType>,
     pub randomness: BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
@@ -1028,9 +1027,9 @@ pub enum OwnedCredentialProofPrivateInputs<
     AttributeType: Attribute<C::Scalar>,
 > {
     /// Private inputs for account based credential
-    Account(OwnedAccountCredentialVerificationMaterial<C, AttributeType>),
+    Account(OwnedAccountCredentialProofPrivateInputs<C, AttributeType>),
     /// Private inputs for identity based credential
-    Identity(Box<OwnedIdentityCredentialVerificationMaterial<P, C, AttributeType>>),
+    Identity(Box<OwnedIdentityCredentialProofPrivateInputs<P, C, AttributeType>>),
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
@@ -1102,7 +1101,7 @@ mod tests {
     };
     use crate::id::types::{AttributeTag, GlobalContext};
     use crate::web3id::did::Network;
-    use crate::web3id::{fixtures, Web3IdAttribute};
+    use crate::web3id::{Web3IdAttribute};
     use std::marker::PhantomData;
 
     fn remove_whitespace(str: &str) -> String {
@@ -1830,5 +1829,288 @@ mod tests {
         let proof_deserialized: PresentationV1<IpPairing, ArCurve, Web3IdAttribute> =
             serde_json::from_str(&proof_json).unwrap();
         assert_eq!(proof_deserialized, proof);
+    }
+}
+
+#[cfg(test)]
+mod fixtures {
+    use super::*;
+    use crate::base::CredentialRegistrationID;
+    use crate::common;
+    use crate::curve_arithmetic::Value;
+    use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
+    use crate::id::id_proof_types::{
+        AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
+        RevealAttributeStatement,
+    };
+    use crate::id::types::{
+        ArInfos, AttributeList, AttributeTag, GlobalContext, IdentityObjectV1, IpData, IpIdentity,
+        YearMonth,
+    };
+    use crate::id::{identity_provider, test};
+    use crate::web3id::Web3IdAttribute;
+    use rand::SeedableRng;
+    use std::fmt::Debug;
+    use std::marker::PhantomData;
+    use std::str::FromStr;
+
+    pub struct IdentityCredentialsFixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> {
+        pub commitment_inputs: OwnedCredentialProofPrivateInputs<IpPairing, ArCurve, AttributeType>,
+        pub credential_inputs: CredentialVerificationMaterial<IpPairing, ArCurve>,
+        pub issuer: IpIdentity,
+    }
+
+    impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>
+        IdentityCredentialsFixture<AttributeType>
+    {
+        pub fn commitment_inputs(
+            &self,
+        ) -> CredentialProofPrivateInputs<'_, IpPairing, ArCurve, AttributeType> {
+            self.commitment_inputs.borrow()
+        }
+    }
+
+    /// Statements and attributes that make the statements true
+    pub fn statements_and_attributes<TagType: FromStr + common::Serialize + Ord>() -> (
+        Vec<AtomicStatement<ArCurve, TagType, Web3IdAttribute>>,
+        BTreeMap<TagType, Web3IdAttribute>,
+    )
+    where
+        <TagType as FromStr>::Err: Debug,
+    {
+        let statements = vec![
+            AtomicStatement::AttributeInSet {
+                statement: AttributeInSetStatement {
+                    attribute_tag: AttributeTag(1).to_string().parse().unwrap(),
+                    set: [
+                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    _phantom: PhantomData,
+                },
+            },
+            AtomicStatement::AttributeNotInSet {
+                statement: AttributeNotInSetStatement {
+                    attribute_tag: AttributeTag(2).to_string().parse().unwrap(),
+                    set: [
+                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    _phantom: PhantomData,
+                },
+            },
+            AtomicStatement::AttributeInRange {
+                statement: AttributeInRangeStatement {
+                    attribute_tag: AttributeTag(3).to_string().parse().unwrap(),
+                    lower: Web3IdAttribute::Numeric(80),
+                    upper: Web3IdAttribute::Numeric(1237),
+                    _phantom: PhantomData,
+                },
+            },
+            AtomicStatement::AttributeInRange {
+                statement: AttributeInRangeStatement {
+                    attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
+                    lower: Web3IdAttribute::try_from(
+                        chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                            .unwrap()
+                            .to_utc(),
+                    )
+                    .unwrap(),
+                    upper: Web3IdAttribute::try_from(
+                        chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                            .unwrap()
+                            .to_utc(),
+                    )
+                    .unwrap(),
+                    _phantom: PhantomData,
+                },
+            },
+            AtomicStatement::RevealAttribute {
+                statement: RevealAttributeStatement {
+                    attribute_tag: AttributeTag(5).to_string().parse().unwrap(),
+                },
+            },
+        ];
+
+        let attributes = [
+            (
+                AttributeTag(1).to_string().parse().unwrap(),
+                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+            ),
+            (
+                AttributeTag(2).to_string().parse().unwrap(),
+                Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
+            ),
+            (
+                AttributeTag(3).to_string().parse().unwrap(),
+                Web3IdAttribute::Numeric(137),
+            ),
+            (
+                AttributeTag(4).to_string().parse().unwrap(),
+                Web3IdAttribute::try_from(
+                    chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
+                        .unwrap()
+                        .to_utc(),
+                )
+                .unwrap(),
+            ),
+            (
+                AttributeTag(5).to_string().parse().unwrap(),
+                Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
+            ),
+            (
+                AttributeTag(6).to_string().parse().unwrap(),
+                Web3IdAttribute::String(AttributeKind::try_new("bb".into()).unwrap()),
+            ),
+        ]
+        .into_iter()
+        .collect();
+
+        (statements, attributes)
+    }
+
+    fn create_attribute_list<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(
+        alist: BTreeMap<AttributeTag, AttributeType>,
+    ) -> AttributeList<<ArCurve as Curve>::Scalar, AttributeType> {
+        let valid_to = YearMonth::new(2022, 5).unwrap();
+        let created_at = YearMonth::new(2020, 5).unwrap();
+        AttributeList {
+            valid_to,
+            created_at,
+            max_accounts: 237,
+            alist,
+            _phantom: Default::default(),
+        }
+    }
+
+    pub fn identity_credentials_fixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(
+        attrs: BTreeMap<AttributeTag, AttributeType>,
+        global_context: &GlobalContext<ArCurve>,
+    ) -> IdentityCredentialsFixture<AttributeType> {
+        let max_attrs = 10;
+        let num_ars = 5;
+        let IpData {
+            public_ip_info: ip_info,
+            ip_secret_key,
+            ..
+        } = test::test_create_ip_info(&mut seed0(), num_ars, max_attrs);
+
+        let (ars_infos, _ars_secret) = test::test_create_ars(
+            &global_context.on_chain_commitment_key.g,
+            num_ars,
+            &mut seed0(),
+        );
+        let ars_infos = ArInfos {
+            anonymity_revokers: ars_infos,
+        };
+
+        let id_object_use_data = test::test_create_id_use_data(&mut seed0());
+        let (context, pio, _randomness) = test::test_create_pio_v1(
+            &id_object_use_data,
+            &ip_info,
+            &ars_infos.anonymity_revokers,
+            &global_context,
+            num_ars,
+            &mut seed0(),
+        );
+        let alist = create_attribute_list(attrs);
+        let ip_sig = identity_provider::sign_identity_object_v1_with_rng(
+            &pio,
+            context.ip_info,
+            &alist,
+            &ip_secret_key,
+            &mut seed0(),
+        )
+        .expect("sign credentials");
+
+        let id_object = IdentityObjectV1 {
+            pre_identity_object: pio,
+            alist: alist.clone(),
+            signature: ip_sig,
+        };
+
+        let commitment_inputs = OwnedCredentialProofPrivateInputs::Identity(Box::new(
+            OwnedIdentityCredentialProofPrivateInputs {
+                ip_info: ip_info.clone(),
+                ar_infos: ars_infos.clone(),
+                id_object,
+                id_object_use_data,
+            },
+        ));
+
+        let credential_inputs =
+            CredentialVerificationMaterial::Identity(IdentityCredentialVerificationMaterial {
+                ip_info: ip_info.clone(),
+                ars_infos,
+            });
+
+        IdentityCredentialsFixture {
+            commitment_inputs,
+            credential_inputs,
+            issuer: ip_info.ip_identity,
+        }
+    }
+
+    pub struct AccountCredentialsFixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> {
+        pub commitment_inputs: OwnedCredentialProofPrivateInputs<IpPairing, ArCurve, AttributeType>,
+        pub credential_inputs: CredentialVerificationMaterial<IpPairing, ArCurve>,
+        pub cred_id: CredentialRegistrationID,
+    }
+
+    impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>
+        AccountCredentialsFixture<AttributeType>
+    {
+        pub fn commitment_inputs(
+            &self,
+        ) -> CredentialProofPrivateInputs<'_, IpPairing, ArCurve, AttributeType> {
+            self.commitment_inputs.borrow()
+        }
+    }
+
+    pub fn account_credentials_fixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>(
+        attrs: BTreeMap<AttributeTag, AttributeType>,
+        global_context: &GlobalContext<ArCurve>,
+    ) -> AccountCredentialsFixture<AttributeType> {
+        let cred_id_exp = ArCurve::generate_scalar(&mut seed0());
+        let cred_id = CredentialRegistrationID::from_exponent(&global_context, cred_id_exp);
+
+        let mut attr_rand = BTreeMap::new();
+        let mut attr_cmm = BTreeMap::new();
+        for (tag, attr) in &attrs {
+            let attr_scalar = Value::<ArCurve>::new(attr.to_field_element());
+            let (cmm, cmm_rand) = global_context
+                .on_chain_commitment_key
+                .commit(&attr_scalar, &mut seed0());
+            attr_rand.insert(*tag, cmm_rand);
+            attr_cmm.insert(*tag, cmm);
+        }
+
+        let commitment_inputs =
+            OwnedCredentialProofPrivateInputs::Account(OwnedAccountCredentialProofPrivateInputs {
+                values: attrs,
+                randomness: attr_rand,
+                issuer: IpIdentity::from(17u32),
+            });
+
+        let credential_inputs =
+            CredentialVerificationMaterial::Account(AccountCredentialVerificationMaterial {
+                commitments: attr_cmm,
+            });
+
+        AccountCredentialsFixture {
+            commitment_inputs,
+            credential_inputs,
+            cred_id,
+        }
+    }
+
+    pub fn seed0() -> rand::rngs::StdRng {
+        rand::rngs::StdRng::seed_from_u64(0)
     }
 }

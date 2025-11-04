@@ -1,8 +1,5 @@
 use crate::random_oracle::StructuredDigest;
-use crate::web3id::{
-    LinkingProof, PresentationVerificationError, ProofError,
-    Web3IdSigner,
-};
+use crate::web3id::{LinkingProof, PresentationVerificationError, ProofError};
 use crate::{
     curve_arithmetic::Curve,
     id::types::{Attribute, GlobalContext},
@@ -462,8 +459,8 @@ pub mod tests {
     use crate::id::id_proof_types::{AtomicStatement, AttributeInRangeStatement};
     use crate::id::types::AttributeTag;
     use crate::web3id::did::Network;
-    use crate::web3id::v1::ContextProperty;
-    use crate::web3id::{fixtures, Web3IdAttribute};
+    use crate::web3id::v1::{fixtures, ContextProperty};
+    use crate::web3id::{Web3IdAttribute};
     use std::marker::PhantomData;
 
     fn challenge_fixture() -> ContextChallenge {
@@ -775,8 +772,8 @@ pub mod tests {
             .expect("prove");
 
         // use mismatching type of credential inputs
-        let web3_cred_fixture = fixtures::web3_credentials_fixture(
-            [(3.to_string(), Web3IdAttribute::Numeric(137))]
+        let web3_cred_fixture = fixtures::identity_credentials_fixture(
+            [(3.into(), Web3IdAttribute::Numeric(137))]
                 .into_iter()
                 .collect(),
             &global_context,
