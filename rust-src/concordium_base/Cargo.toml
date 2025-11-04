@@ -29,6 +29,10 @@ serde_with = "3"
 ed25519-dalek = {version = "2.0", features = ["rand_core"]}
 byteorder = "1.3"
 hex = "0.4"
+# Pinned to ignore warnings that versions prior to 1.x are deprecated.
+# This affects sha2 currently. Should be fixed in later versions of rust-crypto crates.
+# See: https://github.com/RustCrypto/traits/issues/2036
+generic-array = "=0.14.7"
 itertools = "0.14.0"
 either = "1.6"
 derive_more = "0.99"
