@@ -18,14 +18,14 @@ use crate::id::types::{
 };
 use crate::pedersen_commitment::Commitment;
 use crate::web3id::v1::{
-    AccountBasedCredentialV1, AccountCredentialProofPrivateInputs, AccountCredentialProofs,
-    AccountCredentialStatementV1, AccountCredentialSubject, AccountCredentialVerificationMaterial,
+    AccountBasedCredentialV1, AccountBasedSubjectClaims, AccountCredentialProofPrivateInputs,
+    AccountCredentialProofs, AccountCredentialSubject, AccountCredentialVerificationMaterial,
     ConcordiumProofType, ConcordiumZKProof, ContextInformation, CredentialMetadataV1,
-    CredentialProofPrivateInputs, CredentialStatementV1, CredentialV1,
-    CredentialVerificationMaterial, IdentityBasedCredentialV1, IdentityCredentialId,
-    IdentityCredentialIdDataRef, IdentityCredentialProofPrivateInputs, IdentityCredentialProofs,
-    IdentityCredentialStatementV1, IdentityCredentialSubject,
-    IdentityCredentialVerificationMaterial, PresentationV1, RequestV1,
+    CredentialProofPrivateInputs, CredentialV1, CredentialVerificationMaterial,
+    IdentityBasedCredentialV1, IdentityBasedSubjectClaims, IdentityCredentialEphemeralId,
+    IdentityCredentialEphemeralIdDataRef, IdentityCredentialProofPrivateInputs,
+    IdentityCredentialProofs, IdentityCredentialSubject, IdentityCredentialVerificationMaterial,
+    PresentationV1, RequestV1, SubjectClaims,
 };
 use rand::{CryptoRng, Rng};
 
@@ -58,7 +58,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 
         let mut request = RequestV1 {
             challenge: self.presentation_context.clone(),
-            credential_statements: Vec::new(),
+            subject_claims: Vec::new(),
         };
 
         if public.len() != self.verifiable_credentials.len() {
@@ -66,7 +66,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         }
 
         for (cred_public, cred_proof) in public.zip(&self.verifiable_credentials) {
-            request.credential_statements.push(cred_proof.statement());
+            request.subject_claims.push(cred_proof.claims());
 
             if !cred_proof.verify(global_context, &mut transcript, cred_public) {
                 return Err(PresentationVerificationError::InvalidCredential);
@@ -103,7 +103,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
         input: &CredentialVerificationMaterial<P, C>,
     ) -> bool {
         let CredentialVerificationMaterial::Account(AccountCredentialVerificationMaterial {
-            commitments,
+            attribute_commitments: commitments,
         }) = input
         else {
             // mismatch in types
@@ -213,7 +213,7 @@ fn verify_statements<
     })
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatementV1<C, AttributeType> {
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C, AttributeType> {
     pub fn prove<P: Pairing<ScalarField = C::Scalar>>(
         self,
         global_context: &GlobalContext<C>,
@@ -223,8 +223,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatementV1
         input: CredentialProofPrivateInputs<P, C, AttributeType>,
     ) -> Result<AccountBasedCredentialV1<C, AttributeType>, ProofError> {
         let CredentialProofPrivateInputs::Account(AccountCredentialProofPrivateInputs {
-            values,
-            randomness,
+            attribute_values: values,
+            attribute_randomness: randomness,
             issuer,
         }) = input
         else {
@@ -256,9 +256,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountCredentialStatementV1
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>>
-    IdentityCredentialStatementV1<C, AttributeType>
-{
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C, AttributeType> {
     pub fn prove<P: Pairing<ScalarField = C::Scalar>>(
         self,
         global_context: &GlobalContext<C>,
@@ -322,10 +320,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>>
             statement_proofs,
         };
 
-        let cred_id = IdentityCredentialId::from_data(IdentityCredentialIdDataRef {
-            ar_data: &id_attr_cred_info.values.ar_data,
-            threshold: id_attr_cred_info.values.threshold,
-        });
+        let cred_id =
+            IdentityCredentialEphemeralId::from_data(IdentityCredentialEphemeralIdDataRef {
+                ar_data: &id_attr_cred_info.values.ar_data,
+                threshold: id_attr_cred_info.values.threshold,
+            });
 
         Ok(IdentityBasedCredentialV1 {
             proof: ConcordiumZKProof {
@@ -374,7 +373,7 @@ fn prove_statements<
         .collect()
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatementV1<C, AttributeType> {
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> SubjectClaims<C, AttributeType> {
     fn prove<P: Pairing<ScalarField = C::Scalar>>(
         self,
         global: &GlobalContext<C>,
@@ -384,10 +383,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatementV1<C, Att
         input: CredentialProofPrivateInputs<P, C, AttributeType>,
     ) -> Result<CredentialV1<P, C, AttributeType>, ProofError> {
         match self {
-            CredentialStatementV1::Account(cred_stmt) => cred_stmt
+            SubjectClaims::Account(cred_stmt) => cred_stmt
                 .prove(global, transcript, csprng, now, input)
                 .map(CredentialV1::Account),
-            CredentialStatementV1::Identity(cred_stmt) => cred_stmt
+            SubjectClaims::Identity(cred_stmt) => cred_stmt
                 .prove(global, transcript, csprng, now, input)
                 .map(CredentialV1::Identity),
         }
@@ -425,10 +424,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
         let mut transcript = RandomOracle::domain("ConcordiumVerifiablePresentationV1");
         append_context(&mut transcript, &self.challenge);
         transcript.append_message(b"ctx", &global_context);
-        if self.credential_statements.len() != attrs.len() {
+        if self.subject_claims.len() != attrs.len() {
             return Err(ProofError::CommitmentsStatementsMismatch);
         }
-        for (cred_statement, attributes) in self.credential_statements.into_iter().zip(attrs) {
+        for (cred_statement, attributes) in self.subject_claims.into_iter().zip(attrs) {
             let proof =
                 cred_statement.prove(global_context, &mut transcript, csprng, now, attributes)?;
             proofs.push(proof);
@@ -495,12 +494,12 @@ pub mod tests {
         let acc_cred_fixture = fixtures::account_credentials_fixture(attributes2, &global_context);
 
         let credential_statements = vec![
-            CredentialStatementV1::Identity(IdentityCredentialStatementV1 {
+            SubjectClaims::Identity(IdentityBasedSubjectClaims {
                 network: Network::Testnet,
                 issuer: id_cred_fixture.issuer,
                 statements: statements1,
             }),
-            CredentialStatementV1::Account(AccountCredentialStatementV1 {
+            SubjectClaims::Account(AccountBasedSubjectClaims {
                 network: Network::Testnet,
                 cred_id: acc_cred_fixture.cred_id,
                 statements: statements2,
@@ -509,7 +508,7 @@ pub mod tests {
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            credential_statements,
+            subject_claims: credential_statements,
         };
 
         let proof = request
@@ -548,17 +547,15 @@ pub mod tests {
 
         let acc_cred_fixture = fixtures::account_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![CredentialStatementV1::Account(
-            AccountCredentialStatementV1 {
-                network: Network::Testnet,
-                cred_id: acc_cred_fixture.cred_id,
-                statements,
-            },
-        )];
+        let credential_statements = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
+            network: Network::Testnet,
+            cred_id: acc_cred_fixture.cred_id,
+            statements,
+        })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            credential_statements,
+            subject_claims: credential_statements,
         };
 
         let proof = request
@@ -589,17 +586,15 @@ pub mod tests {
         let acc_cred_fixture =
             fixtures::account_credentials_fixture(BTreeMap::default(), &global_context);
 
-        let credential_statements = vec![CredentialStatementV1::Account(
-            AccountCredentialStatementV1 {
-                network: Network::Testnet,
-                cred_id: acc_cred_fixture.cred_id,
-                statements: vec![],
-            },
-        )];
+        let credential_statements = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
+            network: Network::Testnet,
+            cred_id: acc_cred_fixture.cred_id,
+            statements: vec![],
+        })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            credential_statements,
+            subject_claims: credential_statements,
         };
 
         let proof = request
@@ -632,17 +627,15 @@ pub mod tests {
 
         let acc_cred_fixture = fixtures::account_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![CredentialStatementV1::Account(
-            AccountCredentialStatementV1 {
-                network: Network::Testnet,
-                cred_id: acc_cred_fixture.cred_id,
-                statements,
-            },
-        )];
+        let credential_statements = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
+            network: Network::Testnet,
+            cred_id: acc_cred_fixture.cred_id,
+            statements,
+        })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            credential_statements,
+            subject_claims: credential_statements,
         };
 
         let mut proof = request
@@ -688,17 +681,15 @@ pub mod tests {
 
         let acc_cred_fixture = fixtures::account_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![CredentialStatementV1::Account(
-            AccountCredentialStatementV1 {
-                network: Network::Testnet,
-                cred_id: acc_cred_fixture.cred_id,
-                statements,
-            },
-        )];
+        let credential_statements = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
+            network: Network::Testnet,
+            cred_id: acc_cred_fixture.cred_id,
+            statements,
+        })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            credential_statements,
+            subject_claims: credential_statements,
         };
 
         let mut proof = request
@@ -753,17 +744,15 @@ pub mod tests {
 
         let acc_cred_fixture = fixtures::account_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![CredentialStatementV1::Account(
-            AccountCredentialStatementV1 {
-                network: Network::Testnet,
-                cred_id: acc_cred_fixture.cred_id,
-                statements,
-            },
-        )];
+        let credential_statements = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
+            network: Network::Testnet,
+            cred_id: acc_cred_fixture.cred_id,
+            statements,
+        })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            credential_statements,
+            subject_claims: credential_statements,
         };
 
         let proof = request
@@ -802,17 +791,15 @@ pub mod tests {
 
         let acc_cred_fixture = fixtures::account_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![CredentialStatementV1::Account(
-            AccountCredentialStatementV1 {
-                network: Network::Testnet,
-                cred_id: acc_cred_fixture.cred_id,
-                statements,
-            },
-        )];
+        let credential_statements = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
+            network: Network::Testnet,
+            cred_id: acc_cred_fixture.cred_id,
+            statements,
+        })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            credential_statements,
+            subject_claims: credential_statements,
         };
 
         let proof = request
@@ -842,17 +829,15 @@ pub mod tests {
 
         let id_cred_fixture = fixtures::identity_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![CredentialStatementV1::Identity(
-            IdentityCredentialStatementV1 {
-                network: Network::Testnet,
-                issuer: id_cred_fixture.issuer,
-                statements,
-            },
-        )];
+        let credential_statements = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
+            network: Network::Testnet,
+            issuer: id_cred_fixture.issuer,
+            statements,
+        })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            credential_statements,
+            subject_claims: credential_statements,
         };
 
         let proof = request
@@ -883,17 +868,15 @@ pub mod tests {
         let id_cred_fixture =
             fixtures::identity_credentials_fixture(BTreeMap::default(), &global_context);
 
-        let credential_statements = vec![CredentialStatementV1::Identity(
-            IdentityCredentialStatementV1 {
-                network: Network::Testnet,
-                issuer: id_cred_fixture.issuer,
-                statements: vec![],
-            },
-        )];
+        let credential_statements = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
+            network: Network::Testnet,
+            issuer: id_cred_fixture.issuer,
+            statements: vec![],
+        })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            credential_statements,
+            subject_claims: credential_statements,
         };
 
         let proof = request
@@ -926,17 +909,15 @@ pub mod tests {
 
         let id_cred_fixture = fixtures::identity_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![CredentialStatementV1::Identity(
-            IdentityCredentialStatementV1 {
-                network: Network::Testnet,
-                issuer: id_cred_fixture.issuer,
-                statements,
-            },
-        )];
+        let credential_statements = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
+            network: Network::Testnet,
+            issuer: id_cred_fixture.issuer,
+            statements,
+        })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            credential_statements,
+            subject_claims: credential_statements,
         };
 
         let mut proof = request
@@ -981,17 +962,15 @@ pub mod tests {
 
         let id_cred_fixture = fixtures::identity_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![CredentialStatementV1::Identity(
-            IdentityCredentialStatementV1 {
-                network: Network::Testnet,
-                issuer: id_cred_fixture.issuer,
-                statements,
-            },
-        )];
+        let credential_statements = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
+            network: Network::Testnet,
+            issuer: id_cred_fixture.issuer,
+            statements,
+        })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            credential_statements,
+            subject_claims: credential_statements,
         };
 
         let mut proof = request
@@ -1046,17 +1025,15 @@ pub mod tests {
 
         let id_cred_fixture = fixtures::identity_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![CredentialStatementV1::Identity(
-            IdentityCredentialStatementV1 {
-                network: Network::Testnet,
-                issuer: id_cred_fixture.issuer,
-                statements,
-            },
-        )];
+        let credential_statements = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
+            network: Network::Testnet,
+            issuer: id_cred_fixture.issuer,
+            statements,
+        })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            credential_statements,
+            subject_claims: credential_statements,
         };
 
         let mut proof = request
@@ -1113,17 +1090,15 @@ pub mod tests {
 
         let id_cred_fixture = fixtures::identity_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![CredentialStatementV1::Identity(
-            IdentityCredentialStatementV1 {
-                network: Network::Testnet,
-                issuer: id_cred_fixture.issuer,
-                statements,
-            },
-        )];
+        let credential_statements = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
+            network: Network::Testnet,
+            issuer: id_cred_fixture.issuer,
+            statements,
+        })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            credential_statements,
+            subject_claims: credential_statements,
         };
 
         let mut proof = request

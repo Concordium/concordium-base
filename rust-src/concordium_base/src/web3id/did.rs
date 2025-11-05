@@ -1,6 +1,6 @@
 //! Definition of Concordium DIDs and their parser.
 
-use crate::web3id::v1::IdentityCredentialId;
+use crate::web3id::v1::IdentityCredentialEphemeralId;
 use crate::{base::CredentialRegistrationID, common::base16_decode_string, id::types::IpIdentity};
 use concordium_contracts_common::{
     AccountAddress, ContractAddress, EntrypointName, OwnedEntrypointName, OwnedParameter,
@@ -91,8 +91,10 @@ pub enum IdentifierType {
     PublicKey { key: ed25519_dalek::VerifyingKey },
     /// Reference to a specific identity provider.
     Idp { idp_identity: IpIdentity },
-    /// Reference to an identity credential via the IdCredPub encryption.
-    EncryptedIdentityCredential { cred_id: IdentityCredentialId },
+    /// Encrypted identifier for an identity credential. It is the encryption of IdCredPub.
+    EncryptedIdentityCredentialId {
+        cred_id: IdentityCredentialEphemeralId,
+    },
 }
 
 impl IdentifierType {
@@ -171,11 +173,14 @@ impl Method {
         }
     }
 
-    /// Construct variant [`IdentityCredential`](IdentifierType::EncryptedIdentityCredential)
-    pub fn new_identity_credential(network: Network, cred_id: IdentityCredentialId) -> Self {
+    /// Construct variant [`IdentityCredential`](IdentifierType::EncryptedIdentityCredentialId)
+    pub fn new_identity_credential(
+        network: Network,
+        cred_id: IdentityCredentialEphemeralId,
+    ) -> Self {
         Self {
             network,
-            ty: IdentifierType::EncryptedIdentityCredential { cred_id },
+            ty: IdentifierType::EncryptedIdentityCredentialId { cred_id },
         }
     }
 }
@@ -250,7 +255,7 @@ impl std::fmt::Display for Method {
             IdentifierType::Idp { idp_identity } => {
                 write!(f, "did:ccd:{}:idp:{idp_identity}", self.network)
             }
-            IdentifierType::EncryptedIdentityCredential { cred_id } => {
+            IdentifierType::EncryptedIdentityCredentialId { cred_id } => {
                 let cred_id_hex = hex::encode(&cred_id.0);
                 write!(f, "did:ccd:{}:encidcred:{cred_id_hex}", self.network)
             }
@@ -312,8 +317,11 @@ fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
         let bytes = hex::decode(input).map_err(|_| {
             nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify))
         })?;
-        let cred_id = IdentityCredentialId(bytes);
-        Ok(("", IdentifierType::EncryptedIdentityCredential { cred_id }))
+        let cred_id = IdentityCredentialEphemeralId(bytes);
+        Ok((
+            "",
+            IdentifierType::EncryptedIdentityCredentialId { cred_id },
+        ))
     };
     let contract = |input| {
         let (input, _) = tag("sci:")(input)?;
@@ -410,7 +418,7 @@ mod tests {
     use crate::elgamal::Cipher;
     use crate::id::types::{ArIdentity, ChainArData};
     use crate::web3id::fixtures;
-    use crate::web3id::v1::IdentityCredentialIdDataRef;
+    use crate::web3id::v1::IdentityCredentialEphemeralIdDataRef;
 
     use crate::id::constants::ArCurve;
     use crate::id::secret_sharing::Threshold;
@@ -627,8 +635,8 @@ mod tests {
         Ok(())
     }
 
-    /// Create an [`IdentityCredentialId`] to use in tests
-    fn identity_cred_id_fixture() -> IdentityCredentialId {
+    /// Create an [`IdentityCredentialEphemeralId`] to use in tests
+    fn identity_cred_id_fixture() -> IdentityCredentialEphemeralId {
         let mut ar_data = BTreeMap::new();
         ar_data.insert(
             ArIdentity::try_from(1).unwrap(),
@@ -649,7 +657,7 @@ mod tests {
             },
         );
 
-        IdentityCredentialId::from_data(IdentityCredentialIdDataRef::<ArCurve> {
+        IdentityCredentialEphemeralId::from_data(IdentityCredentialEphemeralIdDataRef::<ArCurve> {
             ar_data: &ar_data,
             threshold: Threshold(2),
         })
@@ -662,7 +670,7 @@ mod tests {
 
         let target = Method {
             network: Network::Mainnet,
-            ty: IdentifierType::EncryptedIdentityCredential { cred_id },
+            ty: IdentifierType::EncryptedIdentityCredentialId { cred_id },
         };
 
         assert_eq!(

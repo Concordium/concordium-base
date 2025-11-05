@@ -41,17 +41,17 @@ const CONCORDIUM_IDENTITY_BASED_CREDENTIAL_TYPE: &str = "ConcordiumIdBasedCreden
 
 const CONCORDIUM_REQUEST_TYPE: &str = "ConcordiumVerifiablePresentationRequestV1";
 
-const CONCORDIUM_STATEMENT_V1_TYPE: &str = "ConcordiumStatementV1";
-const CONCORDIUM_ACCOUNT_BASED_STATEMENT_TYPE: &str = "ConcordiumAccountBasedStatement";
-const CONCORDIUM_IDENTITY_BASED_STATEMENT_TYPE: &str = "ConcordiumIdBasedStatement";
+const CONCORDIUM_SUBJECT_CLAIMS_V1_TYPE: &str = "ConcordiumSubjectClaimsV1";
+const CONCORDIUM_ACCOUNT_BASED_SUBJECT_CLAIMS_TYPE: &str = "ConcordiumAccountBasedSubjectClaims";
+const CONCORDIUM_IDENTITY_BASED_SUBJECT_CLAIMS_TYPE: &str = "ConcordiumIdBasedSubjectClaims";
 
-/// Context challenge that serves as a distinguishing context when requesting
+/// Verification context information that serves as a distinguishing context when requesting
 /// proofs.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, common::Serialize, Debug)]
 pub struct ContextInformation {
-    /// This part of the challenge is supposed to be provided by the dapp backend (e.g. merchant backend).
+    /// This part of the context is specified by the application requesting a verifiable presentation (e.g. merchant backend).
     pub given: Vec<ContextProperty>,
-    /// This part of the challenge is supposed to be provided by the wallet or ID app.
+    /// This part of the context is filled in by the application creating the verifiable presentation (wallet or ID app).
     pub requested: Vec<ContextProperty>,
 }
 
@@ -110,46 +110,53 @@ pub struct ContextProperty {
     pub context: String,
 }
 
-/// A statement about a single account based credential
+/// Claims about a single account based subject. Accounts are on-chain credentials
+/// deployed from identity credentials.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AccountCredentialStatementV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
+pub struct AccountBasedSubjectClaims<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// Network on which the account exists
     pub network: Network,
+    /// Account registration id
     pub cred_id: CredentialRegistrationID,
+    /// Attribute statements
     pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
 }
 
-/// A statement about a single identity based credential
+/// Claims about a single identity based subject. Identity credentials
+/// are issued by identity providers. The subject is not directly identified in this type,
+/// only the identity provider that issued the identity credentials is identified. The corresponding
+/// credentials will contain and ephemeral id [`IdentityCredentialEphemeralId`] that can be decrypted
+/// by the privacy guardians to IdCredPub, which is an identifier for the identity credentials.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IdentityCredentialStatementV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
+pub struct IdentityBasedSubjectClaims<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// Network to which the identity credentials are issued
     pub network: Network,
+    /// Identity provider which issued the credentials
     pub issuer: IpIdentity,
     /// Attribute statements
     pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
 }
 
-/// A statement about a credential. The credential
-/// is derived from an underlying credential, represented via the different variants:
-/// account credentials and identity credentials.
-/// To prove the statement, the corresponding private input [`CredentialProofPrivateInputs`] is needed.
+/// Claims about a subject.
+/// To prove the claims and create a credential, the corresponding private input [`CredentialProofPrivateInputs`] is needed.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CredentialStatementV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    /// Statement about an account credential derived from an identity issued by an
-    /// identity provider.
-    Account(AccountCredentialStatementV1<C, AttributeType>),
-    /// Statement about an identity based credential derived from an identity credential issued by an
-    /// identity provider.
-    Identity(IdentityCredentialStatementV1<C, AttributeType>),
+pub enum SubjectClaims<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// Claims about an account based subject. Accounts are on-chain credentials
+    /// deployed from identity credentials.
+    Account(AccountBasedSubjectClaims<C, AttributeType>),
+    /// Claims about an identity based subject.
+    Identity(IdentityBasedSubjectClaims<C, AttributeType>),
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
-    for CredentialStatementV1<C, AttributeType>
+    for SubjectClaims<C, AttributeType>
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
         match self {
-            Self::Account(AccountCredentialStatementV1 {
+            Self::Account(AccountBasedSubjectClaims {
                 network,
                 cred_id,
                 statements: statement,
@@ -158,8 +165,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 map.serialize_entry(
                     "type",
                     &[
-                        CONCORDIUM_STATEMENT_V1_TYPE,
-                        CONCORDIUM_ACCOUNT_BASED_STATEMENT_TYPE,
+                        CONCORDIUM_SUBJECT_CLAIMS_V1_TYPE,
+                        CONCORDIUM_ACCOUNT_BASED_SUBJECT_CLAIMS_TYPE,
                     ],
                 )?;
                 let id = did::Method::new_account_credential(*network, *cred_id);
@@ -167,7 +174,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 map.serialize_entry("statement", statement)?;
                 map.end()
             }
-            Self::Identity(IdentityCredentialStatementV1 {
+            Self::Identity(IdentityBasedSubjectClaims {
                 network,
                 issuer,
                 statements: statement,
@@ -176,8 +183,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 map.serialize_entry(
                     "type",
                     &[
-                        CONCORDIUM_STATEMENT_V1_TYPE,
-                        CONCORDIUM_IDENTITY_BASED_STATEMENT_TYPE,
+                        CONCORDIUM_SUBJECT_CLAIMS_V1_TYPE,
+                        CONCORDIUM_IDENTITY_BASED_SUBJECT_CLAIMS_TYPE,
                     ],
                 )?;
                 let issuer = did::Method::new_idp(*network, *issuer);
@@ -190,7 +197,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
 }
 
 impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serde::Deserialize<'de>
-    for CredentialStatementV1<C, AttributeType>
+    for SubjectClaims<C, AttributeType>
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -204,7 +211,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
             Ok(
                 if types
                     .iter()
-                    .any(|ty| ty == CONCORDIUM_ACCOUNT_BASED_STATEMENT_TYPE)
+                    .any(|ty| ty == CONCORDIUM_ACCOUNT_BASED_SUBJECT_CLAIMS_TYPE)
                 {
                     let id: did::Method = take_field_de(&mut value, "id")?;
                     let did::IdentifierType::Credential { cred_id } = id.ty else {
@@ -212,14 +219,14 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
                     };
                     let statement = take_field_de(&mut value, "statement")?;
 
-                    Self::Account(AccountCredentialStatementV1 {
+                    Self::Account(AccountBasedSubjectClaims {
                         network: id.network,
                         cred_id,
                         statements: statement,
                     })
                 } else if types
                     .iter()
-                    .any(|ty| ty == CONCORDIUM_IDENTITY_BASED_STATEMENT_TYPE)
+                    .any(|ty| ty == CONCORDIUM_IDENTITY_BASED_SUBJECT_CLAIMS_TYPE)
                 {
                     let issuer: did::Method = take_field_de(&mut value, "issuer")?;
                     let did::IdentifierType::Idp { idp_identity } = issuer.ty else {
@@ -227,13 +234,13 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
                     };
                     let statement = take_field_de(&mut value, "statement")?;
 
-                    Self::Identity(IdentityCredentialStatementV1 {
+                    Self::Identity(IdentityBasedSubjectClaims {
                         network: issuer.network,
                         issuer: idp_identity,
                         statements: statement,
                     })
                 } else {
-                    bail!("unknown credential types: {}", types.iter().format(","))
+                    bail!("unknown subject claims types: {}", types.iter().format(","))
                 },
             )
         })();
@@ -322,8 +329,9 @@ pub struct AccountBasedCredentialV1<C: Curve, AttributeType: Attribute<C::Scalar
 /// Subject of account based credential
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AccountCredentialSubject<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// Network on which the account credentials exist
     pub network: Network,
-    /// Reference to the credential to which this statement applies.
+    /// Account credentials registration id. Identifies the subject.
     pub cred_id: CredentialRegistrationID,
     /// Proven statements
     pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
@@ -379,6 +387,7 @@ pub struct AccountCredentialProofs<C: Curve, AttributeType: Attribute<C::Scalar>
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, AttributeType> {
+    /// Metadata for the credential
     pub fn metadata(&self) -> AccountCredentialMetadataV1 {
         let AccountBasedCredentialV1 {
             subject: AccountCredentialSubject { cred_id, .. },
@@ -392,8 +401,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
         }
     }
 
-    /// Extract the statement from the proof.
-    pub fn statement(&self) -> AccountCredentialStatementV1<C, AttributeType> {
+    /// Extract the subject claims from the credential.
+    pub fn claims(&self) -> AccountBasedSubjectClaims<C, AttributeType> {
         let AccountBasedCredentialV1 {
             subject:
                 AccountCredentialSubject {
@@ -404,7 +413,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
             ..
         } = self;
 
-        AccountCredentialStatementV1 {
+        AccountBasedSubjectClaims {
             network: *network,
             cred_id: *cred_id,
             statements: statements.clone(),
@@ -412,57 +421,62 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
     }
 }
 
-/// Ephemeral id for identity credentials. It will have a new value for each time credential is proven (the encryption is a randomized function).
-/// The id can be decrypted to IdCredPub by first converting the value to [`IdentityCredentialIdData`].
+/// Encrypted ephemeral id for an identity credential. It will have a new value for each time a credential is proven
+/// derived from the identity credential (the encryption is a randomized function).
+/// The id can be decrypted to IdCredPub by first converting the value to [`IdentityCredentialEphemeralIdData`].
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IdentityCredentialId(pub Vec<u8>);
+pub struct IdentityCredentialEphemeralId(pub Vec<u8>);
 
-/// Ephemeral id for identity credentials. The id can be decrypted to IdCredPub by the privacy guardians (anonymity revokers).
+/// Encrypted ephemeral id for an identity credential. The id can be decrypted to IdCredPub by the privacy guardians (anonymity revokers).
 /// It will have a new value for each time credential is proven (the encryption is a randomized function)
 #[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
-pub struct IdentityCredentialIdData<C: Curve> {
-    /// Decryption threshold of the IdCredPub in [`IdentityCredentialId`]
+pub struct IdentityCredentialEphemeralIdData<C: Curve> {
+    /// Decryption threshold of the IdCredPub in [`IdentityCredentialEphemeralId`]
     pub threshold: Threshold,
-    /// Anonymity revocation data. It is an encryption of shares of IdCredSec,
+    /// Anonymity revocation data. It is an encryption of shares of IdCredPub,
     /// each share encrypted for the privacy guardian (anonymity revoker)
     /// that is the key in the map.
     #[map_size_length = 2]
     pub ar_data: BTreeMap<ArIdentity, ChainArData<C>>,
 }
 
-impl<C: Curve> IdentityCredentialIdData<C> {
-    pub fn as_ref(&self) -> IdentityCredentialIdDataRef<'_, C> {
-        IdentityCredentialIdDataRef {
+impl<C: Curve> IdentityCredentialEphemeralIdData<C> {
+    pub fn as_ref(&self) -> IdentityCredentialEphemeralIdDataRef<'_, C> {
+        IdentityCredentialEphemeralIdDataRef {
             threshold: self.threshold,
             ar_data: &self.ar_data,
         }
     }
 }
 
-/// Ephemeral id for identity credentials. The id can be decrypted to IdCredPub by the privacy guardians (anonymity revokers).
+/// Encrypted ephemeral id for an identity credential. The id can be decrypted to IdCredPub by the privacy guardians (anonymity revokers).
 /// It will have a new value for each time credential is proven (the encryption is a randomized function)
 #[derive(Debug, Clone, PartialEq, Eq, common::Serial)]
-pub struct IdentityCredentialIdDataRef<'a, C: Curve> {
-    /// Decryption threshold of the IdCredPub in [`IdentityCredentialId`]
+pub struct IdentityCredentialEphemeralIdDataRef<'a, C: Curve> {
+    /// Decryption threshold of the IdCredPub in [`IdentityCredentialEphemeralId`]
     pub threshold: Threshold,
-    /// Anonymity revocation data. It is an encryption of shares of IdCredSec,
+    /// Anonymity revocation data. It is an encryption of shares of IdCredPub,
     /// each share encrypted for the privacy guardian (anonymity revoker)
     /// that is the key in the map.
     #[map_size_length = 2]
     pub ar_data: &'a BTreeMap<ArIdentity, ChainArData<C>>,
 }
 
-impl IdentityCredentialId {
-    pub fn try_to_data<C: Curve>(&self) -> common::ParseResult<IdentityCredentialIdData<C>> {
+impl IdentityCredentialEphemeralId {
+    /// Deserialized into id data
+    pub fn try_to_data<C: Curve>(
+        &self,
+    ) -> common::ParseResult<IdentityCredentialEphemeralIdData<C>> {
         common::from_bytes(&mut self.0.as_bytes())
     }
 
-    pub fn from_data<C: Curve>(data_ref: IdentityCredentialIdDataRef<'_, C>) -> Self {
-        IdentityCredentialId(common::to_bytes(&data_ref))
+    /// Serialize from id data
+    pub fn from_data<C: Curve>(data_ref: IdentityCredentialEphemeralIdDataRef<'_, C>) -> Self {
+        IdentityCredentialEphemeralId(common::to_bytes(&data_ref))
     }
 }
 
-/// Identity based credentials. This type of credential is derived from identity credentials issued
+/// Identity based credential. This type of credential is derived from identity credentials issued
 /// by an identity provider. The type contains almost
 /// all the information needed to verify it, except the identity provider and privacy guardian (anonymity revoker) public keys.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -473,7 +487,8 @@ pub struct IdentityBasedCredentialV1<
 > {
     /// Issuer of the underlying identity credential from which this credential is derived.
     pub issuer: IpIdentity,
-    /// Temporal validity of the credential
+    /// Temporal validity of the identity credential. Notice this is the validity period of
+    /// the identity credential on which the present derived credential is based.
     pub validity: CredentialValidity,
     /// Credential subject
     pub subject: IdentityCredentialSubject<C, AttributeType>,
@@ -484,9 +499,10 @@ pub struct IdentityBasedCredentialV1<
 /// Subject of identity based credential
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IdentityCredentialSubject<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// Network to which the credentials are issued
     pub network: Network,
-    /// Ephemeral id for the credential
-    pub cred_id: IdentityCredentialId,
+    /// Ephemeral encrypted id for the credential. This is the subject of the credential.
+    pub cred_id: IdentityCredentialEphemeralId,
     /// Proven statements
     pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
 }
@@ -517,7 +533,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
 
         let result = (|| -> anyhow::Result<Self> {
             let id: did::Method = take_field_de(&mut value, "id")?;
-            let did::IdentifierType::EncryptedIdentityCredential { cred_id } = id.ty else {
+            let did::IdentifierType::EncryptedIdentityCredentialId { cred_id } = id.ty else {
                 bail!("expected identity credential did, was {}", id);
             };
             let statement = take_field_de(&mut value, "statement")?;
@@ -551,6 +567,7 @@ pub struct IdentityCredentialProofs<
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
     IdentityBasedCredentialV1<P, C, AttributeType>
 {
+    /// Metadata for the credential
     pub fn metadata(&self) -> IdentityCredentialMetadataV1 {
         let IdentityBasedCredentialV1 {
             issuer, validity, ..
@@ -562,8 +579,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         }
     }
 
-    /// Extract the statement from the proof.
-    pub fn statement(&self) -> IdentityCredentialStatementV1<C, AttributeType> {
+    /// Extract the subject claims from the credential.
+    pub fn claims(&self) -> IdentityBasedSubjectClaims<C, AttributeType> {
         let IdentityBasedCredentialV1 {
             subject:
                 IdentityCredentialSubject {
@@ -575,7 +592,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             ..
         } = self;
 
-        IdentityCredentialStatementV1 {
+        IdentityBasedSubjectClaims {
             network: *network,
             issuer: *issuer,
             statements: statements.clone(),
@@ -583,12 +600,14 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     }
 }
 
+/// Versioned proof type
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ConcordiumProofType {
     #[serde(rename = "ConcordiumZKProofV4")]
     ConcordiumZKProofV4,
 }
 
+/// Credential proof. Wraps the actual credential specific proof.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(bound(serialize = "T: common::Serial", deserialize = "T: common::Deserial"))]
 pub struct ConcordiumZKProof<T> {
@@ -604,10 +623,10 @@ pub struct ConcordiumZKProof<T> {
     pub proof_type: ConcordiumProofType,
 }
 
-/// Verifiable credential. Embeds and proofs the statements from a [`CredentialStatementV1`]. The credential
-/// is derived from an underlying credential, represented via the different variants:
-/// account credentials and identity credentials.
+/// Verifiable credential. Embeds and proofs the claims from a [`SubjectClaims`].
 /// To verify the credential, the corresponding public input [`CredentialsInputs`](super::CredentialsInputs) is needed.
+/// Also, the data in [`CredentialMetadataV1`] returned by [`CredentialV1::metadata`] must be verified externally in
+/// order to verify the credential.
 // for some reason, version 1.82 clippy thinks the `Identity` variant is 0 bytes and hence gives this warning
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -771,6 +790,7 @@ impl<
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
     CredentialV1<P, C, AttributeType>
 {
+    /// Network on which the credentials are valid
     pub fn network(&self) -> Network {
         match self {
             CredentialV1::Account(acc) => acc.subject.network,
@@ -778,6 +798,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         }
     }
 
+    /// When credentials were created
     pub fn created(&self) -> chrono::DateTime<chrono::Utc> {
         match self {
             CredentialV1::Account(acc) => acc.proof.created_at,
@@ -785,6 +806,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         }
     }
 
+    /// Metadata about the credential. This contains data that must be externally verified
+    /// and also data needed to look up [`CredentialVerificationMaterial`].
     pub fn metadata(&self) -> CredentialMetadataV1 {
         let cred_metadata = match self {
             CredentialV1::Account(cred_proof) => {
@@ -802,31 +825,28 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         }
     }
 
-    /// The statement of the credential.
-    pub fn statement(&self) -> CredentialStatementV1<C, AttributeType> {
+    /// Extract the subject claims from the credential
+    pub fn claims(&self) -> SubjectClaims<C, AttributeType> {
         match self {
-            CredentialV1::Account(cred_proof) => {
-                CredentialStatementV1::Account(cred_proof.statement())
-            }
-            CredentialV1::Identity(cred_proof) => {
-                CredentialStatementV1::Identity(cred_proof.statement())
-            }
+            CredentialV1::Account(cred_proof) => SubjectClaims::Account(cred_proof.claims()),
+            CredentialV1::Identity(cred_proof) => SubjectClaims::Identity(cred_proof.claims()),
         }
     }
 }
 
-/// Verifiable presentation. Is the response to a [`RequestV1`]. It contains proofs for
-/// statements. To verify the proofs, public [`CredentialsInputs`](super::CredentialsInputs) is needed.
+/// Verifiable presentation. Is the response to proving a [`RequestV1`] with [`RequestV1::prove`]. It contains proofs for
+/// the claims in the request. To verify the presentation, use [`PresentationV1::verify`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PresentationV1<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 > {
+    /// Context information for the presentation
     pub presentation_context: ContextInformation,
+    /// The verifiable credentials in the presentation
     pub verifiable_credentials: Vec<CredentialV1<P, C, AttributeType>>,
-    /// Signatures from keys of Web3 credentials (not from ID credentials).
-    /// The order is the same as that in the `credential_proofs` field.
+    /// Proofs linking the credentials to a holder. Currently not used.
     pub linking_proof: LinkingProof,
 }
 
@@ -891,13 +911,14 @@ impl<
     }
 }
 
-/// A request for a verifiable presentation [`PresentationV1`].
-/// Contains statements and a context. The secret data to prove the statements
+/// A request to prove a verifiable presentation [`PresentationV1`]
+/// with [`RequestV1::prove`].
+/// Contains subject claims and a context. The secret data to prove the claims
 /// is input via [`CredentialVerificationMaterial`].
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct RequestV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub challenge: ContextInformation,
-    pub credential_statements: Vec<CredentialStatementV1<C, AttributeType>>,
+    pub subject_claims: Vec<SubjectClaims<C, AttributeType>>,
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
@@ -910,7 +931,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
         let mut map = serializer.serialize_map(None)?;
         map.serialize_entry("type", &CONCORDIUM_REQUEST_TYPE)?;
         map.serialize_entry("context", &self.challenge)?;
-        map.serialize_entry("credentialStatements", &self.credential_statements)?;
+        map.serialize_entry("subjectClaims", &self.subject_claims)?;
         map.end()
     }
 }
@@ -933,11 +954,11 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
             );
 
             let challenge = take_field_de(&mut value, "context")?;
-            let credential_statements = take_field_de(&mut value, "credentialStatements")?;
+            let credential_statements = take_field_de(&mut value, "subjectClaims")?;
 
             Ok(Self {
                 challenge,
-                credential_statements,
+                subject_claims: credential_statements,
             })
         })();
 
@@ -948,11 +969,12 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
 /// Private inputs for an account credential proof.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct AccountCredentialProofPrivateInputs<'a, C: Curve, AttributeType> {
+    /// Issuer of the identity credentials used to deploy the account credentials
     pub issuer: IpIdentity,
-    /// The values that are committed to and are required in the proofs.
-    pub values: &'a BTreeMap<AttributeTag, AttributeType>,
-    /// The randomness to go along with commitments in `values`.
-    pub randomness: &'a BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
+    /// The attribute values that are committed to in the account credentials
+    pub attribute_values: &'a BTreeMap<AttributeTag, AttributeType>,
+    /// The randomness of the attribute commitments in the account credentials
+    pub attribute_randomness: &'a BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
 }
 
 /// Private inputs for an identity credential proof.
@@ -962,7 +984,7 @@ pub struct IdentityCredentialProofPrivateInputs<
     C: Curve<Scalar = P::ScalarField>,
     AttributeType,
 > {
-    /// Context with identity provider data
+    /// Identity provider data
     pub ip_context: IpContextOnly<'a, P, C>,
     /// Identity object. Together with `id_object_use_data`, it constitutes the identity credentials
     pub id_object: &'a dyn HasIdentityObjectFields<P, C, AttributeType>,
@@ -970,7 +992,7 @@ pub struct IdentityCredentialProofPrivateInputs<
     pub id_object_use_data: &'a IdObjectUseData<P, C>,
 }
 
-/// The additional private inputs (mostly secrets), needed to prove the statements
+/// The additional private inputs (mostly secrets), needed to prove the claims
 /// in a [request](RequestV1).
 pub enum CredentialProofPrivateInputs<
     'a,
@@ -1000,9 +1022,9 @@ pub struct OwnedIdentityCredentialProofPrivateInputs<
     /// Must include at least the anonymity revokers supported by the identity provider.
     /// This is used to create and validate credential.
     pub ar_infos: ArInfos<C>,
-    /// Identity object. Together with `id_object_use_data`, it constitutes the identity credentials
+    /// Identity object. Together with `id_object_use_data`, it constitutes the identity credentials.
     pub id_object: IdentityObjectV1<P, C, AttributeType>,
-    /// Identity credentials
+    /// Parts of the identity credentials created locally and not by the identity provider
     pub id_object_use_data: IdObjectUseData<P, C>,
 }
 
@@ -1011,9 +1033,12 @@ pub struct OwnedIdentityCredentialProofPrivateInputs<
 #[serde(bound(deserialize = "AttributeType: DeserializeOwned"))]
 #[serde(rename_all = "camelCase")]
 pub struct OwnedAccountCredentialProofPrivateInputs<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// Issuer of the identity credentials used to deploy the account credentials
     pub issuer: IpIdentity,
-    pub values: BTreeMap<AttributeTag, AttributeType>,
-    pub randomness: BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
+    /// The attribute values that are committed to in the account credentials
+    pub attribute_values: BTreeMap<AttributeTag, AttributeType>,
+    /// The randomness of the attribute commitments in the account credentials
+    pub attribute_randomness: BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
 }
 
 /// An owned version of [`CredentialVerificationMaterial`] that can be deserialized.
@@ -1040,8 +1065,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             OwnedCredentialProofPrivateInputs::Account(acc) => {
                 CredentialProofPrivateInputs::Account(AccountCredentialProofPrivateInputs {
                     issuer: acc.issuer,
-                    values: &acc.values,
-                    randomness: &acc.randomness,
+                    attribute_values: &acc.attribute_values,
+                    attribute_randomness: &acc.attribute_randomness,
                 })
             }
             OwnedCredentialProofPrivateInputs::Identity(id) => {
@@ -1061,10 +1086,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 /// Verification material for an account credential.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct AccountCredentialVerificationMaterial<C: Curve> {
-    // All the commitments of the credential.
-    // In principle, we only ever need to borrow this, but it is simpler to
-    // have the owned map instead of a reference to it.
-    pub commitments: BTreeMap<AttributeTag, pedersen_commitment::Commitment<C>>,
+    // Commitments to attribute values. Are part of the on-chain account credentials.
+    pub attribute_commitments: BTreeMap<AttributeTag, pedersen_commitment::Commitment<C>>,
 }
 
 /// Verification material for an identity credential.
@@ -1079,8 +1102,8 @@ pub struct IdentityCredentialVerificationMaterial<P: Pairing, C: Curve<Scalar = 
     pub ars_infos: ArInfos<C>,
 }
 
-/// The additional public inputs needed to verify the statements
-/// in a [presentation](PresentationV1).
+/// The additional public inputs needed to verify
+/// a [credential](CredentialV1).
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum CredentialVerificationMaterial<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Verification material for an account credential.
@@ -1107,7 +1130,7 @@ mod tests {
         str.chars().filter(|c| !c.is_whitespace()).collect()
     }
 
-    fn identity_cred_id_fixture() -> IdentityCredentialId {
+    fn identity_cred_id_fixture() -> IdentityCredentialEphemeralId {
         let mut ar_data = BTreeMap::new();
         ar_data.insert(
             ArIdentity::try_from(1).unwrap(),
@@ -1128,7 +1151,7 @@ mod tests {
             },
         );
 
-        IdentityCredentialId::from_data(IdentityCredentialIdDataRef::<ArCurve> {
+        IdentityCredentialEphemeralId::from_data(IdentityCredentialEphemeralIdDataRef::<ArCurve> {
             ar_data: &ar_data,
             threshold: Threshold(2),
         })
@@ -1138,7 +1161,7 @@ mod tests {
     fn test_identity_credential_id_serialization() {
         let cred_id = identity_cred_id_fixture();
         let data = cred_id.try_to_data::<ArCurve>().unwrap();
-        let cred_id_deserialized = IdentityCredentialId::from_data(data.as_ref());
+        let cred_id_deserialized = IdentityCredentialEphemeralId::from_data(data.as_ref());
         assert_eq!(cred_id_deserialized, cred_id);
     }
 
@@ -1193,87 +1216,73 @@ mod tests {
             &global_context,
         );
 
-        let credential_statements = vec![CredentialStatementV1::Account(
-            AccountCredentialStatementV1 {
-                network: Network::Testnet,
-                cred_id: acc_cred_fixture.cred_id,
-                statements: vec![
-                    AtomicStatement::AttributeInRange {
-                        statement: AttributeInRangeStatement {
-                            attribute_tag: 3.into(),
-                            lower: Web3IdAttribute::Numeric(80),
-                            upper: Web3IdAttribute::Numeric(1237),
-                            _phantom: PhantomData,
-                        },
+        let credential_statements = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
+            network: Network::Testnet,
+            cred_id: acc_cred_fixture.cred_id,
+            statements: vec![
+                AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: 3.into(),
+                        lower: Web3IdAttribute::Numeric(80),
+                        upper: Web3IdAttribute::Numeric(1237),
+                        _phantom: PhantomData,
                     },
-                    AtomicStatement::AttributeInSet {
-                        statement: AttributeInSetStatement {
-                            attribute_tag: 2.into(),
-                            set: [
-                                Web3IdAttribute::String(
-                                    AttributeKind::try_new("ff".into()).unwrap(),
-                                ),
-                                Web3IdAttribute::String(
-                                    AttributeKind::try_new("aa".into()).unwrap(),
-                                ),
-                                Web3IdAttribute::String(
-                                    AttributeKind::try_new("zz".into()).unwrap(),
-                                ),
-                            ]
-                            .into_iter()
-                            .collect(),
-                            _phantom: PhantomData,
-                        },
+                },
+                AtomicStatement::AttributeInSet {
+                    statement: AttributeInSetStatement {
+                        attribute_tag: 2.into(),
+                        set: [
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                        ]
+                        .into_iter()
+                        .collect(),
+                        _phantom: PhantomData,
                     },
-                    AtomicStatement::AttributeNotInSet {
-                        statement: AttributeNotInSetStatement {
-                            attribute_tag: 1.into(),
-                            set: [
-                                Web3IdAttribute::String(
-                                    AttributeKind::try_new("ff".into()).unwrap(),
-                                ),
-                                Web3IdAttribute::String(
-                                    AttributeKind::try_new("aa".into()).unwrap(),
-                                ),
-                                Web3IdAttribute::String(
-                                    AttributeKind::try_new("zz".into()).unwrap(),
-                                ),
-                            ]
-                            .into_iter()
-                            .collect(),
-                            _phantom: PhantomData,
-                        },
+                },
+                AtomicStatement::AttributeNotInSet {
+                    statement: AttributeNotInSetStatement {
+                        attribute_tag: 1.into(),
+                        set: [
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                        ]
+                        .into_iter()
+                        .collect(),
+                        _phantom: PhantomData,
                     },
-                    AtomicStatement::AttributeInRange {
-                        statement: AttributeInRangeStatement {
-                            attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
-                            lower: Web3IdAttribute::try_from(
-                                chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
-                                    .unwrap()
-                                    .to_utc(),
-                            )
-                            .unwrap(),
-                            upper: Web3IdAttribute::try_from(
-                                chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
-                                    .unwrap()
-                                    .to_utc(),
-                            )
-                            .unwrap(),
-                            _phantom: PhantomData,
-                        },
+                },
+                AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
+                        lower: Web3IdAttribute::try_from(
+                            chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                                .unwrap()
+                                .to_utc(),
+                        )
+                        .unwrap(),
+                        upper: Web3IdAttribute::try_from(
+                            chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                                .unwrap()
+                                .to_utc(),
+                        )
+                        .unwrap(),
+                        _phantom: PhantomData,
                     },
-                    AtomicStatement::RevealAttribute {
-                        statement: RevealAttributeStatement {
-                            attribute_tag: 5.into(),
-                        },
+                },
+                AtomicStatement::RevealAttribute {
+                    statement: RevealAttributeStatement {
+                        attribute_tag: 5.into(),
                     },
-                ],
-            },
-        )];
+                },
+            ],
+        })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            credential_statements,
+            subject_claims: credential_statements,
         };
 
         let request_json = serde_json::to_string_pretty(&request).unwrap();
@@ -1296,11 +1305,11 @@ mod tests {
       }
     ]
   },
-  "credentialStatements": [
+  "subjectClaims": [
     {
       "type": [
-        "ConcordiumStatementV1",
-        "ConcordiumAccountBasedStatement"
+        "ConcordiumSubjectClaimsV1",
+        "ConcordiumAccountBasedSubjectClaims"
       ],
       "id": "did:ccd:testnet:cred:856793e4ba5d058cea0b5c3a1c8affb272efcf53bbab77ee28d3e2270d5041d220c1e1a9c6c8619c84e40ebd70fb583e",
       "statement": [
@@ -1523,87 +1532,73 @@ mod tests {
             &global_context,
         );
 
-        let credential_statements = vec![CredentialStatementV1::Identity(
-            IdentityCredentialStatementV1 {
-                network: Network::Testnet,
-                issuer: id_cred_fixture.issuer,
-                statements: vec![
-                    AtomicStatement::AttributeInRange {
-                        statement: AttributeInRangeStatement {
-                            attribute_tag: 3.into(),
-                            lower: Web3IdAttribute::Numeric(80),
-                            upper: Web3IdAttribute::Numeric(1237),
-                            _phantom: PhantomData,
-                        },
+        let credential_statements = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
+            network: Network::Testnet,
+            issuer: id_cred_fixture.issuer,
+            statements: vec![
+                AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: 3.into(),
+                        lower: Web3IdAttribute::Numeric(80),
+                        upper: Web3IdAttribute::Numeric(1237),
+                        _phantom: PhantomData,
                     },
-                    AtomicStatement::AttributeInSet {
-                        statement: AttributeInSetStatement {
-                            attribute_tag: 2.into(),
-                            set: [
-                                Web3IdAttribute::String(
-                                    AttributeKind::try_new("ff".into()).unwrap(),
-                                ),
-                                Web3IdAttribute::String(
-                                    AttributeKind::try_new("aa".into()).unwrap(),
-                                ),
-                                Web3IdAttribute::String(
-                                    AttributeKind::try_new("zz".into()).unwrap(),
-                                ),
-                            ]
-                            .into_iter()
-                            .collect(),
-                            _phantom: PhantomData,
-                        },
+                },
+                AtomicStatement::AttributeInSet {
+                    statement: AttributeInSetStatement {
+                        attribute_tag: 2.into(),
+                        set: [
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                        ]
+                        .into_iter()
+                        .collect(),
+                        _phantom: PhantomData,
                     },
-                    AtomicStatement::AttributeNotInSet {
-                        statement: AttributeNotInSetStatement {
-                            attribute_tag: 1.into(),
-                            set: [
-                                Web3IdAttribute::String(
-                                    AttributeKind::try_new("ff".into()).unwrap(),
-                                ),
-                                Web3IdAttribute::String(
-                                    AttributeKind::try_new("aa".into()).unwrap(),
-                                ),
-                                Web3IdAttribute::String(
-                                    AttributeKind::try_new("zz".into()).unwrap(),
-                                ),
-                            ]
-                            .into_iter()
-                            .collect(),
-                            _phantom: PhantomData,
-                        },
+                },
+                AtomicStatement::AttributeNotInSet {
+                    statement: AttributeNotInSetStatement {
+                        attribute_tag: 1.into(),
+                        set: [
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                        ]
+                        .into_iter()
+                        .collect(),
+                        _phantom: PhantomData,
                     },
-                    AtomicStatement::AttributeInRange {
-                        statement: AttributeInRangeStatement {
-                            attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
-                            lower: Web3IdAttribute::try_from(
-                                chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
-                                    .unwrap()
-                                    .to_utc(),
-                            )
-                            .unwrap(),
-                            upper: Web3IdAttribute::try_from(
-                                chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
-                                    .unwrap()
-                                    .to_utc(),
-                            )
-                            .unwrap(),
-                            _phantom: PhantomData,
-                        },
+                },
+                AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
+                        lower: Web3IdAttribute::try_from(
+                            chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                                .unwrap()
+                                .to_utc(),
+                        )
+                        .unwrap(),
+                        upper: Web3IdAttribute::try_from(
+                            chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                                .unwrap()
+                                .to_utc(),
+                        )
+                        .unwrap(),
+                        _phantom: PhantomData,
                     },
-                    AtomicStatement::RevealAttribute {
-                        statement: RevealAttributeStatement {
-                            attribute_tag: 5.into(),
-                        },
+                },
+                AtomicStatement::RevealAttribute {
+                    statement: RevealAttributeStatement {
+                        attribute_tag: 5.into(),
                     },
-                ],
-            },
-        )];
+                },
+            ],
+        })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            credential_statements,
+            subject_claims: credential_statements,
         };
 
         let request_json = serde_json::to_string_pretty(&request).unwrap();
@@ -1626,11 +1621,11 @@ mod tests {
       }
     ]
   },
-  "credentialStatements": [
+  "subjectClaims": [
     {
       "type": [
-        "ConcordiumStatementV1",
-        "ConcordiumIdBasedStatement"
+        "ConcordiumSubjectClaimsV1",
+        "ConcordiumIdBasedSubjectClaims"
       ],
       "issuer": "did:ccd:testnet:idp:0",
       "statement": [
@@ -2067,14 +2062,14 @@ mod fixtures {
 
         let commitment_inputs =
             OwnedCredentialProofPrivateInputs::Account(OwnedAccountCredentialProofPrivateInputs {
-                values: attrs,
-                randomness: attr_rand,
+                attribute_values: attrs,
+                attribute_randomness: attr_rand,
                 issuer: IpIdentity::from(17u32),
             });
 
         let credential_inputs =
             CredentialVerificationMaterial::Account(AccountCredentialVerificationMaterial {
-                commitments: attr_cmm,
+                attribute_commitments: attr_cmm,
             });
 
         AccountCredentialsFixture {
