@@ -493,7 +493,7 @@ pub mod tests {
 
         let acc_cred_fixture = fixtures::account_credentials_fixture(attributes2, &global_context);
 
-        let credential_statements = vec![
+        let subject_claims = vec![
             SubjectClaims::Identity(IdentityBasedSubjectClaims {
                 network: Network::Testnet,
                 issuer: id_cred_fixture.issuer,
@@ -508,7 +508,7 @@ pub mod tests {
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            subject_claims: credential_statements,
+            subject_claims,
         };
 
         let proof = request
@@ -547,7 +547,7 @@ pub mod tests {
 
         let acc_cred_fixture = fixtures::account_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
+        let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
             network: Network::Testnet,
             cred_id: acc_cred_fixture.cred_id,
             statements,
@@ -555,7 +555,7 @@ pub mod tests {
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            subject_claims: credential_statements,
+            subject_claims,
         };
 
         let proof = request
@@ -586,7 +586,7 @@ pub mod tests {
         let acc_cred_fixture =
             fixtures::account_credentials_fixture(BTreeMap::default(), &global_context);
 
-        let credential_statements = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
+        let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
             network: Network::Testnet,
             cred_id: acc_cred_fixture.cred_id,
             statements: vec![],
@@ -594,7 +594,7 @@ pub mod tests {
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            subject_claims: credential_statements,
+            subject_claims,
         };
 
         let proof = request
@@ -627,7 +627,7 @@ pub mod tests {
 
         let acc_cred_fixture = fixtures::account_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
+        let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
             network: Network::Testnet,
             cred_id: acc_cred_fixture.cred_id,
             statements,
@@ -635,7 +635,7 @@ pub mod tests {
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            subject_claims: credential_statements,
+            subject_claims,
         };
 
         let mut proof = request
@@ -681,7 +681,7 @@ pub mod tests {
 
         let acc_cred_fixture = fixtures::account_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
+        let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
             network: Network::Testnet,
             cred_id: acc_cred_fixture.cred_id,
             statements,
@@ -689,7 +689,7 @@ pub mod tests {
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            subject_claims: credential_statements,
+            subject_claims,
         };
 
         let mut proof = request
@@ -744,7 +744,7 @@ pub mod tests {
 
         let acc_cred_fixture = fixtures::account_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
+        let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
             network: Network::Testnet,
             cred_id: acc_cred_fixture.cred_id,
             statements,
@@ -752,7 +752,7 @@ pub mod tests {
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            subject_claims: credential_statements,
+            subject_claims,
         };
 
         let proof = request
@@ -791,7 +791,7 @@ pub mod tests {
 
         let acc_cred_fixture = fixtures::account_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
+        let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
             network: Network::Testnet,
             cred_id: acc_cred_fixture.cred_id,
             statements,
@@ -799,7 +799,7 @@ pub mod tests {
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            subject_claims: credential_statements,
+            subject_claims,
         };
 
         let proof = request
@@ -829,7 +829,7 @@ pub mod tests {
 
         let id_cred_fixture = fixtures::identity_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
+        let subject_claims = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
             network: Network::Testnet,
             issuer: id_cred_fixture.issuer,
             statements,
@@ -837,7 +837,7 @@ pub mod tests {
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            subject_claims: credential_statements,
+            subject_claims,
         };
 
         let proof = request
@@ -868,7 +868,7 @@ pub mod tests {
         let id_cred_fixture =
             fixtures::identity_credentials_fixture(BTreeMap::default(), &global_context);
 
-        let credential_statements = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
+        let subject_claims = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
             network: Network::Testnet,
             issuer: id_cred_fixture.issuer,
             statements: vec![],
@@ -876,7 +876,7 @@ pub mod tests {
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            subject_claims: credential_statements,
+            subject_claims,
         };
 
         let proof = request
@@ -909,7 +909,7 @@ pub mod tests {
 
         let id_cred_fixture = fixtures::identity_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
+        let subject_claims = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
             network: Network::Testnet,
             issuer: id_cred_fixture.issuer,
             statements,
@@ -917,7 +917,7 @@ pub mod tests {
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            subject_claims: credential_statements,
+            subject_claims,
         };
 
         let mut proof = request
@@ -962,7 +962,7 @@ pub mod tests {
 
         let id_cred_fixture = fixtures::identity_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
+        let subject_claims = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
             network: Network::Testnet,
             issuer: id_cred_fixture.issuer,
             statements,
@@ -970,7 +970,7 @@ pub mod tests {
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            subject_claims: credential_statements,
+            subject_claims,
         };
 
         let mut proof = request
@@ -1025,7 +1025,7 @@ pub mod tests {
 
         let id_cred_fixture = fixtures::identity_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
+        let subject_claims = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
             network: Network::Testnet,
             issuer: id_cred_fixture.issuer,
             statements,
@@ -1033,7 +1033,7 @@ pub mod tests {
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            subject_claims: credential_statements,
+            subject_claims,
         };
 
         let mut proof = request
@@ -1090,7 +1090,7 @@ pub mod tests {
 
         let id_cred_fixture = fixtures::identity_credentials_fixture(attributes, &global_context);
 
-        let credential_statements = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
+        let subject_claims = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
             network: Network::Testnet,
             issuer: id_cred_fixture.issuer,
             statements,
@@ -1098,7 +1098,7 @@ pub mod tests {
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
             challenge,
-            subject_claims: credential_statements,
+            subject_claims,
         };
 
         let mut proof = request
