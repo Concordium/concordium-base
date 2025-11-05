@@ -288,8 +288,13 @@ pub enum CredentialMetadataTypeV1 {
     Identity(IdentityCredentialMetadataV1),
 }
 
-// todo ar describe credential metadata
 /// Metadata of a credential [`CredentialV1`].
+/// The metadata consists of
+/// * data that is part of the verification presentation and credentials but needs to be verified externally (network is an example of that)
+/// * information about data that must be resolved externally to [`CredentialVerificationMaterial`] in order to verify
+/// the presentation
+/// Hence, proper handling of the metadata is required for verifying the presentation. An implementation of handling
+/// the metadata may be found in the [Rust SDK `web3id` module](https://docs.rs/concordium-rust-sdk/latest/concordium_rust_sdk/web3id/index.html)
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CredentialMetadataV1 {
     /// Timestamp of when the proof was created.
