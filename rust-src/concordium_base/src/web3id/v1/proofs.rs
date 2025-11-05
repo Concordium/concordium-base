@@ -201,20 +201,17 @@ fn verify_statements<
     global_context: &GlobalContext<C>,
     transcript: &mut RandomOracle,
 ) -> bool {
-    statements
-        .into_iter()
-        .zip_longest(proofs.into_iter())
-        .all(|elm| {
-            elm.both().map_or(false, |(statement, proof)| {
-                statement.verify(
-                    ProofVersion::Version2,
-                    global_context,
-                    transcript,
-                    cmm_attributes,
-                    proof,
-                )
-            })
+    statements.into_iter().zip_longest(proofs).all(|elm| {
+        elm.both().map_or(false, |(statement, proof)| {
+            statement.verify(
+                ProofVersion::Version2,
+                global_context,
+                transcript,
+                cmm_attributes,
+                proof,
+            )
         })
+    })
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C, AttributeType> {
