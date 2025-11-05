@@ -253,7 +253,7 @@ impl std::fmt::Display for Method {
             }
             IdentifierType::IdentityCredential { cred_id } => {
                 let cred_id_hex = hex::encode(&cred_id.0);
-                write!(f, "did:ccd:{}:idcred:{cred_id_hex}", self.network)
+                write!(f, "did:ccd:{}:encidcred:{cred_id_hex}", self.network)
             }
         }
     }
@@ -309,7 +309,7 @@ fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
         Ok((input, IdentifierType::AccountCredential { cred_id }))
     };
     let identity_credential = |input: &'a str| {
-        let (input, _) = tag("idcred:")(input)?;
+        let (input, _) = tag("encidcred:")(input)?;
         let bytes = hex::decode(input).map_err(|_| {
             nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify))
         })?;
@@ -667,22 +667,22 @@ mod tests {
         };
 
         assert_eq!(
-            format!("did:ccd:idcred:{cred_id_hex}")
+            format!("did:ccd:encidcred:{cred_id_hex}")
                 .parse::<Method>()
                 .unwrap(),
             target
         );
         assert_eq!(
-            format!("did:ccd:mainnet:idcred:{cred_id_hex}")
+            format!("did:ccd:mainnet:encidcred:{cred_id_hex}")
                 .parse::<Method>()
                 .unwrap(),
             target
         );
         let s = target.to_string();
-        assert_eq!(s, "did:ccd:mainnet:idcred:02000300000001ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e00000002ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e00000003ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e");
+        assert_eq!(s, "did:ccd:mainnet:encidcred:02000300000001ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e00000002ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e00000003ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e");
         assert_eq!(s.parse::<Method>().unwrap(), target);
         assert_eq!(
-            format!("did:ccd:testnet:idcred:{cred_id_hex}")
+            format!("did:ccd:testnet:encidcred:{cred_id_hex}")
                 .parse::<Method>()
                 .unwrap(),
             Method {
@@ -690,6 +690,6 @@ mod tests {
                 ..target
             }
         );
-        assert!("did:ccd:idcred:asdf".parse::<Method>().is_err());
+        assert!("did:ccd:encidcred:asdf".parse::<Method>().is_err());
     }
 }
