@@ -1,4 +1,3 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
@@ -812,7 +811,7 @@ instance ToProto (SupplementedTransactionSummary pv) where
             sender <- case tsSender of
                 Nothing -> Left CEInvalidTransactionResult
                 Just acc -> Right acc
-            details <- convertAccountTransaction @pv tty tsCost sender tsSponsorDetails tsResult
+            details <- convertAccountTransaction tty tsCost sender tsSponsorDetails tsResult
             Right . Proto.make $ do
                 ProtoFields.index .= mkWord64 tsIndex
                 ProtoFields.energyCost .= toProto tsEnergyCost
@@ -1343,7 +1342,7 @@ convertAccountTransaction ::
     -- | The sender of the transaction.
     AccountAddress ->
     -- | The optional sponsor details of the transaction. Present since P10.
-    Conditionally (SupportsSponsoredTransactions pv) (Maybe SponsorDetails) ->
+    Conditionally b (Maybe SponsorDetails) ->
     -- | The result of the transaction. If the transaction was rejected, it contains the reject reason.
     --   Otherwise it contains the events.
     SupplementedValidResult ->
@@ -2668,7 +2667,7 @@ instance ToProto (DryRunResponse (TransactionSummary' pv SupplementedValidResult
             sender <- case tsSender of
                 Nothing -> Left CEInvalidTransactionResult
                 Just acc -> Right acc
-            details <- convertAccountTransaction @pv tty tsCost sender tsSponsorDetails (vrwrResult tsResult)
+            details <- convertAccountTransaction tty tsCost sender tsSponsorDetails (vrwrResult tsResult)
             Right . Proto.make $ do
                 ProtoFields.success
                     .= Proto.make
