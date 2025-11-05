@@ -1,10 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use crate::id::constants::IpPairing;
     use crate::id::{account_holder, chain, identity_provider};
     use crate::web3id::{
-        AccountCredentialStatement, CommitmentInputs, CredentialStatement, CredentialsInputs,
-        Request, Sha256Challenge, Web3IdAttribute,
+        Challenge, CommitmentInputs, CredentialStatement, CredentialsInputs, Request,
+        Web3IdAttribute,
     };
     use crate::{
         base::CredentialRegistrationID,
@@ -145,7 +144,7 @@ mod tests {
             .map(|(a, r)| (*a, r.clone()))
             .collect();
 
-        let secrets = CommitmentInputs::Account::<IpPairing, _, _, KeyPair> {
+        let secrets = CommitmentInputs::Account::<_, _, KeyPair> {
             values: &id_object.alist.alist,
             randomness: &randomness,
             issuer: IpIdentity::from(0u32),
@@ -153,23 +152,22 @@ mod tests {
         let commitment_inputs = [secrets];
 
         // Now generate the proofs with regards to the account credential attribute statements.
-        let challenge = Sha256Challenge::new(rng.gen());
+        let challenge = Challenge::new(rng.gen());
 
         let cred_id = CredentialRegistrationID::new(cdi.values.cred_id);
 
-        let credential_statements =
-            vec![CredentialStatement::Account(AccountCredentialStatement {
-                network: Network::Testnet,
-                cred_id,
-                statements: vec![AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag,
-                        lower: Web3IdAttribute::Numeric(0),
-                        upper: Web3IdAttribute::Numeric(1237),
-                        _phantom: PhantomData,
-                    },
-                }],
-            })];
+        let credential_statements = vec![CredentialStatement::Account {
+            network: Network::Testnet,
+            cred_id,
+            statement: vec![AtomicStatement::AttributeInRange {
+                statement: AttributeInRangeStatement {
+                    attribute_tag,
+                    lower: Web3IdAttribute::Numeric(0),
+                    upper: Web3IdAttribute::Numeric(1237),
+                    _phantom: PhantomData,
+                },
+            }],
+        }];
 
         let request = Request {
             challenge,
@@ -182,7 +180,7 @@ mod tests {
             .expect("Cannot prove");
 
         let commitments = cdi.proofs.id_proofs.commitments.cmm_attributes.clone();
-        let public = vec![CredentialsInputs::Account::<IpPairing, _> { commitments }];
+        let public = vec![CredentialsInputs::Account { commitments }];
 
         assert_eq!(
             proof

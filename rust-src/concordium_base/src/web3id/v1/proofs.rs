@@ -429,7 +429,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
             return Err(ProofError::CommitmentsStatementsMismatch);
         }
         for (cred_statement, attributes) in self.credential_statements.into_iter().zip(attrs) {
-            let proof = cred_statement.prove(global_context, &mut transcript, csprng, now, attributes)?;
+            let proof =
+                cred_statement.prove(global_context, &mut transcript, csprng, now, attributes)?;
             proofs.push(proof);
         }
         // Linking proof
@@ -1147,5 +1148,4 @@ pub mod tests {
             .expect_err("verify");
         assert_eq!(err, PresentationVerificationError::InvalidCredential);
     }
-
 }

@@ -80,7 +80,7 @@ pub enum IdentifierType {
     /// Reference to an account via an address.
     Account { address: AccountAddress },
     /// Reference to an account credential via its the account credential registration ID.
-    AccountCredential { cred_id: CredentialRegistrationID },
+    Credential { cred_id: CredentialRegistrationID },
     /// Reference to a specific smart contract instance.
     ContractData {
         address: ContractAddress,
@@ -92,7 +92,7 @@ pub enum IdentifierType {
     /// Reference to a specific identity provider.
     Idp { idp_identity: IpIdentity },
     /// Reference to an identity credential via the IdCredSec encryption.
-    IdentityCredential { cred_id: IdentityCredentialId },
+    EncryptedIdentityCredential { cred_id: IdentityCredentialId },
 }
 
 impl IdentifierType {
@@ -156,11 +156,11 @@ impl Method {
         }
     }
 
-    /// Construct variant [`AccountCredential`](IdentifierType::AccountCredential)
+    /// Construct variant [`AccountCredential`](IdentifierType::Credential)
     pub fn new_account_credential(network: Network, cred_id: CredentialRegistrationID) -> Self {
         Self {
             network,
-            ty: IdentifierType::AccountCredential { cred_id },
+            ty: IdentifierType::Credential { cred_id },
         }
     }
 
@@ -172,11 +172,11 @@ impl Method {
         }
     }
 
-    /// Construct variant [`IdentityCredential`](IdentifierType::IdentityCredential)
+    /// Construct variant [`IdentityCredential`](IdentifierType::EncryptedIdentityCredential)
     pub fn new_identity_credential(network: Network, cred_id: IdentityCredentialId) -> Self {
         Self {
             network,
-            ty: IdentifierType::IdentityCredential { cred_id },
+            ty: IdentifierType::EncryptedIdentityCredential { cred_id },
         }
     }
 }
@@ -226,7 +226,7 @@ impl std::fmt::Display for Method {
             IdentifierType::Account { address } => {
                 write!(f, "did:ccd:{}:acc:{address}", self.network)
             }
-            IdentifierType::AccountCredential { cred_id } => {
+            IdentifierType::Credential { cred_id } => {
                 write!(f, "did:ccd:{}:cred:{cred_id}", self.network)
             }
             IdentifierType::ContractData {
@@ -251,7 +251,7 @@ impl std::fmt::Display for Method {
             IdentifierType::Idp { idp_identity } => {
                 write!(f, "did:ccd:{}:idp:{idp_identity}", self.network)
             }
-            IdentifierType::IdentityCredential { cred_id } => {
+            IdentifierType::EncryptedIdentityCredential { cred_id } => {
                 let cred_id_hex = hex::encode(&cred_id.0);
                 write!(f, "did:ccd:{}:encidcred:{cred_id_hex}", self.network)
             }
@@ -306,7 +306,7 @@ fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
         let cred_id = data.parse::<CredentialRegistrationID>().map_err(|_| {
             nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify))
         })?;
-        Ok((input, IdentifierType::AccountCredential { cred_id }))
+        Ok((input, IdentifierType::Credential { cred_id }))
     };
     let identity_credential = |input: &'a str| {
         let (input, _) = tag("encidcred:")(input)?;
@@ -314,7 +314,7 @@ fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
             nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify))
         })?;
         let cred_id = IdentityCredentialId(bytes);
-        Ok(("", IdentifierType::IdentityCredential { cred_id }))
+        Ok(("", IdentifierType::EncryptedIdentityCredential { cred_id }))
     };
     let contract = |input| {
         let (input, _) = tag("sci:")(input)?;
@@ -549,7 +549,7 @@ mod tests {
         let cred_id = "a5bedc6d92d6cc8333684aa69091095c425d0b5971f554964a6ac8e297a3074748d25268f1d217234c400f3103669f90".parse()?;
         let target = Method {
             network: Network::Mainnet,
-            ty: IdentifierType::AccountCredential { cred_id },
+            ty: IdentifierType::Credential { cred_id },
         };
         assert_eq!(format!("did:ccd:cred:{cred_id}").parse::<Method>()?, target);
         assert_eq!(
@@ -663,7 +663,7 @@ mod tests {
 
         let target = Method {
             network: Network::Mainnet,
-            ty: IdentifierType::IdentityCredential { cred_id },
+            ty: IdentifierType::EncryptedIdentityCredential { cred_id },
         };
 
         assert_eq!(

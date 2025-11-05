@@ -1,4 +1,8 @@
-//! Concordium Verifiable Presentations V1.
+//! Functionality related to constructing and verifying V1 Concordium Web3ID proofs.
+//!
+//! The main entrypoints in this module are the [`verify`](PresentationV1::verify)
+//! function for verifying presentations in the context of given public
+//! data, and the [`prove`](RequestV1::prove) function for constructing a proof.
 //!
 //! Terminology and model largely follows <https://www.w3.org/TR/vc-data-model-2.0/>
 
@@ -203,7 +207,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
                     .any(|ty| ty == CONCORDIUM_ACCOUNT_BASED_STATEMENT_TYPE)
                 {
                     let id: did::Method = take_field_de(&mut value, "id")?;
-                    let did::IdentifierType::AccountCredential { cred_id } = id.ty else {
+                    let did::IdentifierType::Credential { cred_id } = id.ty else {
                         bail!("expected account credential did, was {}", id);
                     };
                     let statement = take_field_de(&mut value, "statement")?;
@@ -344,7 +348,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
 
         let result = (|| -> anyhow::Result<Self> {
             let id: did::Method = take_field_de(&mut value, "id")?;
-            let did::IdentifierType::AccountCredential { cred_id } = id.ty else {
+            let did::IdentifierType::Credential { cred_id } = id.ty else {
                 bail!("expected identity credential did, was {}", id);
             };
             let statement = take_field_de(&mut value, "statement")?;
@@ -507,7 +511,7 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
 
         let result = (|| -> anyhow::Result<Self> {
             let id: did::Method = take_field_de(&mut value, "id")?;
-            let did::IdentifierType::IdentityCredential { cred_id } = id.ty else {
+            let did::IdentifierType::EncryptedIdentityCredential { cred_id } = id.ty else {
                 bail!("expected identity credential did, was {}", id);
             };
             let statement = take_field_de(&mut value, "statement")?;

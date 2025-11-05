@@ -1,4 +1,4 @@
-//! Functionality related to constructing and verifying Web3ID proofs.
+//! Functionality related to constructing and verifying V0 Concordium Web3ID proofs.
 //!
 //! The main entrypoints in this module are the [`verify`](Presentation::verify)
 //! function for verifying [`Presentation`]s in the context of given public
@@ -11,10 +11,6 @@ pub mod v1;
 #[cfg(test)]
 mod test;
 
-use crate::id::types::{
-    ArInfos, CredentialValidity, HasIdentityObjectFields, IdObjectUseData, IdentityObjectV1,
-    IpContextOnly, IpInfo,
-};
 use crate::{
     base::CredentialRegistrationID,
     cis4_types::IssuerKey,
@@ -33,10 +29,7 @@ use concordium_contracts_common::{
 
 use crate::web3id::did::{IdentifierType, Method, Network};
 
-use crate::common::{SerdeDeserialize, SerdeSerialize};
-use crate::curve_arithmetic::Pairing;
 use serde::de::DeserializeOwned;
-use serde::{Deserializer, Serializer};
 use std::{
     collections::{BTreeMap, BTreeSet},
     marker::PhantomData,
@@ -54,30 +47,7 @@ pub const REVOKE_DOMAIN_STRING: &[u8] = b"WEB3ID:REVOKE";
 /// the credential secret key.
 pub const LINKING_DOMAIN_STRING: &[u8] = b"WEB3ID:LINKING";
 
-/// A statement about a single account based credential
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AccountCredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    pub network: Network,
-    pub cred_id: CredentialRegistrationID,
-    pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
-}
-
-/// A statement about a single Web3 based credential
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Web3IdCredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    /// The credential type. This is chosen by the provider to provide
-    /// some information about what the credential is about.
-    pub ty: BTreeSet<String>,
-    pub network: Network,
-    /// Reference to a specific smart contract instance that issued the
-    /// credential.
-    pub contract: ContractAddress,
-    /// Credential identifier inside the contract.
-    pub credential: CredentialHolderId,
-    pub statements: Vec<AtomicStatement<C, String, AttributeType>>,
-}
-
-/// A statement about a single credential, either an account credential or a
+/// A statement about a single credential, either an identity credential or a
 /// Web3 credential.
 #[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
 #[serde(
@@ -85,12 +55,27 @@ pub struct Web3IdCredentialStatement<C: Curve, AttributeType: Attribute<C::Scala
     bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned")
 )]
 pub enum CredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    /// Statement about an account credential derived from an identity issued by an
+    /// Statement about a credential derived from an identity issued by an
     /// identity provider.
-    Account(AccountCredentialStatement<C, AttributeType>),
+    Account {
+        network: Network,
+        cred_id: CredentialRegistrationID,
+        statement: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
+    },
     /// Statement about a credential issued by a Web3 identity provider, a smart
     /// contract.
-    Web3Id(Web3IdCredentialStatement<C, AttributeType>),
+    Web3Id {
+        /// The credential type. This is chosen by the provider to provide
+        /// some information about what the credential is about.
+        ty: BTreeSet<String>,
+        network: Network,
+        /// Reference to a specific smart contract instance that issued the
+        /// credential.
+        contract: ContractAddress,
+        /// Credential identifier inside the contract.
+        credential: CredentialHolderId,
+        statement: Vec<AtomicStatement<C, String, AttributeType>>,
+    },
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<serde_json::Value>
@@ -104,13 +89,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<s
             anyhow::bail!("id field is not a valid DID");
         };
         match id.ty {
-            IdentifierType::AccountCredential { cred_id } => {
+            IdentifierType::Credential { cred_id } => {
                 let statement = get_field(&mut value, "statement")?;
-                Ok(Self::Account(AccountCredentialStatement {
+                Ok(Self::Account {
                     network: id.network,
                     cred_id,
-                    statements: serde_json::from_value(statement)?,
-                }))
+                    statement: serde_json::from_value(statement)?,
+                })
             }
             IdentifierType::ContractData {
                 address,
@@ -120,15 +105,15 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<s
                 let statement = get_field(&mut value, "statement")?;
                 let ty = get_field(&mut value, "type")?;
                 anyhow::ensure!(entrypoint == "credentialEntry", "Invalid entrypoint.");
-                Ok(Self::Web3Id(Web3IdCredentialStatement {
+                Ok(Self::Web3Id {
                     ty: serde_json::from_value(ty)?,
                     network: id.network,
                     contract: address,
                     credential: CredentialHolderId::new(ed25519_dalek::VerifyingKey::from_bytes(
                         &parameter.as_ref().try_into()?,
                     )?),
-                    statements: serde_json::from_value(statement)?,
-                }))
+                    statement: serde_json::from_value(statement)?,
+                })
             }
             _ => {
                 anyhow::bail!("Only ID credentials and Web3 credentials are supported.")
@@ -145,24 +130,24 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
         S: serde::Serializer,
     {
         match self {
-            CredentialStatement::Account(AccountCredentialStatement {
+            CredentialStatement::Account {
                 network,
                 cred_id,
-                statements: statement,
-            }) => {
+                statement,
+            } => {
                 let json = serde_json::json!({
                     "id": format!("did:ccd:{network}:cred:{cred_id}"),
                     "statement": statement,
                 });
                 json.serialize(serializer)
             }
-            CredentialStatement::Web3Id(Web3IdCredentialStatement {
+            CredentialStatement::Web3Id {
                 network,
                 contract,
                 credential,
-                statements: statement,
+                statement,
                 ty,
-            }) => {
+            } => {
                 let json = serde_json::json!({
                     "type": ty,
                     "id": format!("did:ccd:{network}:sci:{}:{}/credentialEntry/{}", contract.index, contract.subindex, credential),
@@ -180,35 +165,19 @@ pub type StatementWithProof<C, TagType, AttributeType> = (
     AtomicProof<C, AttributeType>,
 );
 
-/// Metadata of an account credentials derived from an identity issued by an
-/// identity provider.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct AccountCredentialMetadata {
-    pub issuer: IpIdentity,
-    pub cred_id: CredentialRegistrationID,
-}
-
-/// Metadata of an identity based credential.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct IdentityCredentialMetadata {
-    pub issuer: IpIdentity,
-    pub validity: CredentialValidity,
-}
-
-/// Metadata of a Web3Id credential.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Web3idCredentialMetadata {
-    pub contract: ContractAddress,
-    pub holder: CredentialHolderId,
-}
-
 /// Metadata of a single credential.
 pub enum CredentialMetadata {
     /// Metadata of an account credential, i.e., a credential derived from an
     /// identity object.
-    Account(AccountCredentialMetadata),
+    Account {
+        issuer: IpIdentity,
+        cred_id: CredentialRegistrationID,
+    },
     /// Metadata of a Web3Id credential.
-    Web3Id(Web3idCredentialMetadata),
+    Web3Id {
+        contract: ContractAddress,
+        holder: CredentialHolderId,
+    },
 }
 
 /// Metadata about a single [`CredentialProof`].
@@ -221,163 +190,113 @@ pub struct ProofMetadata {
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, AttributeType> {
-    pub fn network(&self) -> Network {
-        match self {
-            CredentialProof::Account(acc) => acc.network,
-            CredentialProof::Web3Id(web3) => web3.network,
-        }
-    }
-
-    pub fn created(&self) -> chrono::DateTime<chrono::Utc> {
-        match self {
-            CredentialProof::Account(acc) => acc.created,
-            CredentialProof::Web3Id(web3) => web3.created,
-        }
-    }
-
     pub fn metadata(&self) -> ProofMetadata {
-        let cred_metadata = match self {
-            CredentialProof::Account(cred_proof) => {
-                CredentialMetadata::Account(cred_proof.metadata())
-            }
-            CredentialProof::Web3Id(cred_proof) => {
-                CredentialMetadata::Web3Id(cred_proof.metadata())
-            }
-        };
-
-        ProofMetadata {
-            created: self.created(),
-            network: self.network(),
-            cred_metadata,
+        match self {
+            CredentialProof::Account {
+                created,
+                network,
+                cred_id,
+                issuer,
+                proofs: _,
+            } => ProofMetadata {
+                created: *created,
+                network: *network,
+                cred_metadata: CredentialMetadata::Account {
+                    issuer: *issuer,
+                    cred_id: *cred_id,
+                },
+            },
+            CredentialProof::Web3Id {
+                created,
+                holder,
+                network,
+                contract,
+                ty: _,
+                commitments: _,
+                proofs: _,
+            } => ProofMetadata {
+                created: *created,
+                network: *network,
+                cred_metadata: CredentialMetadata::Web3Id {
+                    contract: *contract,
+                    holder: *holder,
+                },
+            },
         }
     }
 
     /// Extract the statement from the proof.
     pub fn statement(&self) -> CredentialStatement<C, AttributeType> {
         match self {
-            CredentialProof::Account(cred_proof) => {
-                CredentialStatement::Account(cred_proof.statement())
-            }
-            CredentialProof::Web3Id(cred_proof) => {
-                CredentialStatement::Web3Id(cred_proof.statement())
-            }
+            CredentialProof::Account {
+                network,
+                cred_id,
+                proofs,
+                ..
+            } => CredentialStatement::Account {
+                network: *network,
+                cred_id: *cred_id,
+                statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
+            },
+            CredentialProof::Web3Id {
+                holder,
+                network,
+                contract,
+                ty,
+                proofs,
+                ..
+            } => CredentialStatement::Web3Id {
+                ty: ty.clone(),
+                network: *network,
+                contract: *contract,
+                credential: *holder,
+                statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
+            },
         }
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredential<C, AttributeType> {
-    pub fn metadata(&self) -> AccountCredentialMetadata {
-        let AccountBasedCredential {
-            cred_id, issuer, ..
-        } = self;
-
-        AccountCredentialMetadata {
-            issuer: *issuer,
-            cred_id: *cred_id,
-        }
-    }
-
-    /// Extract the statement from the proof.
-    pub fn statement(&self) -> AccountCredentialStatement<C, AttributeType> {
-        let AccountBasedCredential {
-            network,
-            cred_id,
-            proofs,
-            ..
-        } = self;
-
-        AccountCredentialStatement {
-            network: *network,
-            cred_id: *cred_id,
-            statements: proofs.iter().map(|(x, _)| x.clone()).collect(),
-        }
-    }
-}
-
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> Web3IdBasedCredential<C, AttributeType> {
-    pub fn metadata(&self) -> Web3idCredentialMetadata {
-        let Web3IdBasedCredential {
-            holder, contract, ..
-        } = self;
-
-        Web3idCredentialMetadata {
-            contract: *contract,
-            holder: *holder,
-        }
-    }
-
-    /// Extract the statement from the proof.
-    pub fn statement(&self) -> Web3IdCredentialStatement<C, AttributeType> {
-        let Web3IdBasedCredential {
-            holder,
-            network,
-            contract,
-            ty,
-            proofs,
-            ..
-        } = self;
-
-        Web3IdCredentialStatement {
-            ty: ty.clone(),
-            network: *network,
-            contract: *contract,
-            credential: *holder,
-            statements: proofs.iter().map(|(x, _)| x.clone()).collect(),
-        }
-    }
-}
-
-/// Account based credentials. This contains almost
-/// all the information needed to verify it, except the public commitments.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AccountBasedCredential<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    /// Creation timestamp of the proof.
-    pub created: chrono::DateTime<chrono::Utc>,
-    pub network: Network,
-    /// Reference to the credential to which this statement applies.
-    pub cred_id: CredentialRegistrationID,
-    /// Issuer of this credential, the identity provider index on the
-    /// relevant network.
-    pub issuer: IpIdentity,
-    pub proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
-}
-
-/// A proof of Web3 credentials. This contains almost
-/// all the information needed to verify it, except the issuer's public key.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Web3IdBasedCredential<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    /// Creation timestamp of the proof.
-    pub created: chrono::DateTime<chrono::Utc>,
-    /// Owner of the credential, a public key.
-    pub holder: CredentialHolderId,
-    pub network: Network,
-    /// Reference to a specific smart contract instance.
-    pub contract: ContractAddress,
-    /// The credential type. This is chosen by the provider to provide
-    /// some information about what the credential is about.
-    pub ty: BTreeSet<String>,
-    /// Commitments that the user has. These are all the commitments that
-    /// are part of the credential, indexed by the attribute tag.
-    pub commitments: SignedCommitments<C>,
-    /// Individual proofs for statements.
-    pub proofs: Vec<StatementWithProof<C, String, AttributeType>>,
-}
-
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
+#[serde(bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"))]
+#[serde(try_from = "serde_json::Value")]
 /// A proof corresponding to one [`CredentialStatement`]. This contains almost
 /// all the information needed to verify it, except the issuer's public key in
 /// case of the `Web3Id` proof, and the public commitments in case of the
 /// `Account` proof.
-#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
-#[serde(bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"))]
-#[serde(try_from = "serde_json::Value")]
 pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    Account(AccountBasedCredential<C, AttributeType>),
-    Web3Id(Web3IdBasedCredential<C, AttributeType>),
+    Account {
+        /// Creation timestamp of the proof.
+        created: chrono::DateTime<chrono::Utc>,
+        network: Network,
+        /// Reference to the credential to which this statement applies.
+        cred_id: CredentialRegistrationID,
+        /// Issuer of this credential, the identity provider index on the
+        /// relevant network.
+        issuer: IpIdentity,
+        proofs: Vec<StatementWithProof<C, AttributeTag, AttributeType>>,
+    },
+    Web3Id {
+        /// Creation timestamp of the proof.
+        created: chrono::DateTime<chrono::Utc>,
+        /// Owner of the credential, a public key.
+        holder: CredentialHolderId,
+        network: Network,
+        /// Reference to a specific smart contract instance.
+        contract: ContractAddress,
+        /// The credential type. This is chosen by the provider to provide
+        /// some information about what the credential is about.
+        ty: BTreeSet<String>,
+        /// Commitments that the user has. These are all the commitments that
+        /// are part of the credential, indexed by the attribute tag.
+        commitments: SignedCommitments<C>,
+        /// Individual proofs for statements.
+        proofs: Vec<StatementWithProof<C, String, AttributeType>>,
+    },
 }
 
 /// Commitments signed by the issuer.
 #[derive(
-    serde::Serialize, serde::Deserialize, Clone, Eq, PartialEq, Debug, crate::common::Serialize,
+    serde::Serialize, serde::Deserialize, Clone, Debug, Eq, PartialEq, crate::common::Serialize,
 )]
 #[serde(bound = "C: Curve")]
 pub struct SignedCommitments<C: Curve> {
@@ -450,13 +369,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
         S: serde::Serializer,
     {
         match self {
-            CredentialProof::Account(AccountBasedCredential {
+            CredentialProof::Account {
                 created,
                 network,
                 cred_id,
                 issuer,
                 proofs,
-            }) => {
+            } => {
                 let json = serde_json::json!({
                     "type": ["VerifiableCredential", "ConcordiumVerifiableCredential"],
                     "issuer": format!("did:ccd:{network}:idp:{issuer}"),
@@ -472,7 +391,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 });
                 json.serialize(serializer)
             }
-            CredentialProof::Web3Id(Web3IdBasedCredential {
+            CredentialProof::Web3Id {
                 created,
                 network,
                 contract,
@@ -480,7 +399,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 commitments,
                 proofs,
                 holder,
-            }) => {
+            } => {
                 let json = serde_json::json!({
                     "type": ty,
                     "issuer": format!("did:ccd:{network}:sci:{}:{}/issuer", contract.index, contract.subindex),
@@ -546,7 +465,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                 let Some(Ok(id)) = id.as_str().map(did::parse_did) else {
                     anyhow::bail!("Credential ID invalid.")
                 };
-                let IdentifierType::AccountCredential { cred_id } = id.1.ty else {
+                let IdentifierType::Credential { cred_id } = id.1.ty else {
                     anyhow::bail!("Credential identifier must be a public key.")
                 };
                 anyhow::ensure!(issuer.network == id.1.network);
@@ -567,13 +486,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
 
                 anyhow::ensure!(proof_value.len() == statement.len());
                 let proofs = statement.into_iter().zip(proof_value).collect();
-                Ok(Self::Account(AccountBasedCredential {
+                Ok(Self::Account {
                     created,
                     network: issuer.network,
                     cred_id,
                     issuer: idp_identity,
                     proofs,
-                }))
+                })
             }
             IdentifierType::ContractData {
                 address,
@@ -614,7 +533,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                 anyhow::ensure!(proof_value.len() == statement.len());
                 let proofs = statement.into_iter().zip(proof_value).collect();
 
-                Ok(Self::Web3Id(Web3IdBasedCredential {
+                Ok(Self::Web3Id {
                     created,
                     holder: CredentialHolderId::new(key),
                     network: issuer.network,
@@ -622,7 +541,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                     commitments,
                     proofs,
                     ty,
-                }))
+                })
             }
             _ => anyhow::bail!("Only IDPs and smart contracts can be issuers."),
         }
@@ -634,13 +553,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
 {
     fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
         match self {
-            CredentialProof::Account(AccountBasedCredential {
+            CredentialProof::Account {
                 created,
                 network,
                 cred_id,
                 proofs,
                 issuer,
-            }) => {
+            } => {
                 0u8.serial(out);
                 created.timestamp_millis().serial(out);
                 network.serial(out);
@@ -648,7 +567,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
                 issuer.serial(out);
                 proofs.serial(out)
             }
-            CredentialProof::Web3Id(Web3IdBasedCredential {
+            CredentialProof::Web3Id {
                 created,
                 network,
                 contract,
@@ -656,7 +575,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
                 proofs,
                 holder,
                 ty,
-            }) => {
+            } => {
                 1u8.serial(out);
                 created.timestamp_millis().serial(out);
                 let len = ty.len() as u8;
@@ -683,51 +602,45 @@ pub enum Web3IdChallengeMarker {}
 
 /// Sha256 challenge string that serves as a distinguishing context when requesting
 /// proofs.
-pub type Sha256Challenge = HashBytes<Web3IdChallengeMarker>;
+pub type Challenge = HashBytes<Web3IdChallengeMarker>;
 
-/// A request for a proof. This type is an enumeration over the supported request
-/// versions.
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub enum VersionedRequest<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    V0(Request<C, AttributeType>),
-    V1(v1::RequestV1<C, AttributeType>),
+/// Context challenge that serves as a distinguishing context when requesting
+/// proofs.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, serde::Deserialize, serde::Serialize, Debug)]
+pub struct Context {
+    /// This part of the challenge is supposed to be provided by the dapp backend (e.g. merchant backend).
+    pub given: Vec<GivenContext>,
+    /// This part of the challenge is supposed to be provided by the wallet or ID app.
+    pub requested: Vec<GivenContext>,
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> SerdeSerialize
-    for VersionedRequest<C, AttributeType>
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            VersionedRequest::V0(req) => req.serialize(serializer),
-            VersionedRequest::V1(req) => req.serialize(serializer),
-        }
-    }
+#[derive(
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    serde::Deserialize,
+    serde::Serialize,
+    crate::common::Serial,
+    crate::common::Deserial,
+    Debug,
+)]
+pub struct GivenContext {
+    pub label: String,
+    pub context: String,
 }
 
-impl<'de, C: Curve, AttributeType: Attribute<C::Scalar>> SerdeDeserialize<'de>
-    for VersionedRequest<C, AttributeType>
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        todo!() // todo ar
-    }
-}
-
-/// A request for a proof. This is the statement and challenge. The secret data
-/// comes separately.
 #[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "camelCase")]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"
 ))]
+/// A request for a proof. This is the statement and challenge. The secret data
+/// comes separately.
 pub struct Request<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    pub challenge: Sha256Challenge,
+    pub challenge: Challenge,
     pub credential_statements: Vec<CredentialStatement<C, AttributeType>>,
 }
 
@@ -894,61 +807,21 @@ pub enum CredentialHolderIdRole {}
 /// The owner of a Web3Id credential.
 pub type CredentialHolderId = Ed25519PublicKey<CredentialHolderIdRole>;
 
-/// A presentation is the response to a [`VersionedRequest`]. This type is an enumeration
-/// over the supported presentation versions.
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub enum VersionedPresentation<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
-> {
-    V0(Presentation<C, AttributeType>),
-    V1(v1::PresentationV1<P, C, AttributeType>),
-}
-
-impl<
-        P: Pairing,
-        C: Curve<Scalar = P::ScalarField>,
-        AttributeType: Attribute<C::Scalar> + serde::Serialize,
-    > SerdeSerialize for VersionedPresentation<P, C, AttributeType>
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            VersionedPresentation::V0(pres) => pres.serialize(serializer),
-            VersionedPresentation::V1(pres) => pres.serialize(serializer),
-        }
-    }
-}
-
-impl<'de, P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
-    SerdeDeserialize<'de> for VersionedPresentation<P, C, AttributeType>
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        todo!() // todo ar
-    }
-}
-
+#[derive(Debug, Eq, PartialEq, serde::Deserialize)]
+#[serde(bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"))]
+#[serde(try_from = "serde_json::Value")]
 /// A presentation is the response to a [`Request`]. It contains proofs for
 /// statements, ownership proof for all Web3 credentials, and a context. The
 /// only missing part to verify the proof are the public commitments.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
-#[serde(bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"))]
-#[serde(try_from = "serde_json::Value")]
 pub struct Presentation<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    pub presentation_context: Sha256Challenge,
+    pub presentation_context: Challenge,
     pub verifiable_credential: Vec<CredentialProof<C, AttributeType>>,
     /// Signatures from keys of Web3 credentials (not from ID credentials).
     /// The order is the same as that in the `credential_proofs` field.
     pub linking_proof: LinkingProof,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, thiserror::Error)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, thiserror::Error)]
 #[non_exhaustive]
 pub enum PresentationVerificationError {
     #[error("The linking proof was incomplete.")]
@@ -1114,32 +987,16 @@ impl Web3IdSigner for ed25519_dalek::SecretKey {
     }
 }
 
-/// The additional private inputs (mostly secrets), needed to prove the statements
-/// in a [request](VersionedRequest).
-pub enum CommitmentInputs<
-    'a,
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
-    AttributeType,
-    Web3IdSigner,
-> {
-    /// Inputs are for an account credential derived from an identity issued by an
-    /// identity provider.
+/// The additional inputs, additional to the [`Request`] that are needed to
+/// produce a [`Presentation`].
+pub enum CommitmentInputs<'a, C: Curve, AttributeType, Web3IdSigner> {
+    /// Inputs are for an identity credential issued by an identity provider.
     Account {
         issuer: IpIdentity,
         /// The values that are committed to and are required in the proofs.
         values: &'a BTreeMap<AttributeTag, AttributeType>,
         /// The randomness to go along with commitments in `values`.
         randomness: &'a BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
-    },
-    /// Inputs are for an identity credential issued by an identity provider.
-    Identity {
-        /// Context with identity provider data
-        ip_context: IpContextOnly<'a, P, C>,
-        /// Identity object. Together with `id_object_use_data`, it constitutes the identity credentials
-        id_object: &'a dyn HasIdentityObjectFields<P, C, AttributeType>,
-        /// Identity credentials
-        id_object_use_data: &'a IdObjectUseData<P, C>,
     },
     /// Inputs are for a credential issued by Web3ID issuer.
     Web3Issuer {
@@ -1386,10 +1243,10 @@ impl<C: Curve, AttributeType: DeserializeOwned> TryFrom<serde_json::Value>
 
 impl<C: Curve, AttributeType> Web3IdCredential<C, AttributeType> {
     /// Convert the credential into inputs for a proof.
-    pub fn into_inputs<'a, P: Pairing<ScalarField = C::Scalar>, S: Web3IdSigner>(
+    pub fn into_inputs<'a, S: Web3IdSigner>(
         &'a self,
         signer: &'a S,
-    ) -> CommitmentInputs<'a, P, C, AttributeType, S> {
+    ) -> CommitmentInputs<'a, C, AttributeType, S> {
         CommitmentInputs::Web3Issuer {
             signature: self.signature,
             signer,
@@ -1399,38 +1256,12 @@ impl<C: Curve, AttributeType> Web3IdCredential<C, AttributeType> {
     }
 }
 
-/// An owned version of [`CommitmentInputs`] that can be deserialized.
-#[derive(serde::Deserialize)]
-#[serde(bound(deserialize = "AttributeType: DeserializeOwned"))]
-#[serde(rename_all = "camelCase")]
-pub struct OwnedIdentityCommitmentInputs<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
-> {
-    /// Identity provider information
-    pub ip_info: IpInfo<P>,
-    /// Public information on the __supported__ anonymity revokers.
-    /// Must include at least the anonymity revokers supported by the identity provider.
-    /// This is used to create and validate credential.
-    pub ar_infos: ArInfos<C>,
-    /// Identity object. Together with `id_object_use_data`, it constitutes the identity credentials
-    pub id_object: IdentityObjectV1<P, C, AttributeType>,
-    /// Identity credentials
-    pub id_object_use_data: IdObjectUseData<P, C>,
-}
-
 #[serde_with::serde_as]
 #[derive(serde::Deserialize)]
 #[serde(bound(deserialize = "AttributeType: DeserializeOwned, Web3IdSigner: DeserializeOwned"))]
 #[serde(rename_all = "camelCase", tag = "type")]
 /// An owned version of [`CommitmentInputs`] that can be deserialized.
-pub enum OwnedCommitmentInputs<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
-    Web3IdSigner,
-> {
+pub enum OwnedCommitmentInputs<C: Curve, AttributeType, Web3IdSigner> {
     #[serde(rename_all = "camelCase")]
     Account {
         issuer: IpIdentity,
@@ -1439,7 +1270,6 @@ pub enum OwnedCommitmentInputs<
         #[serde_as(as = "BTreeMap<serde_with::DisplayFromStr, _>")]
         randomness: BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
     },
-    Identity(Box<OwnedIdentityCommitmentInputs<P, C, AttributeType>>),
     #[serde(rename_all = "camelCase")]
     Web3Issuer {
         signer: Web3IdSigner,
@@ -1458,18 +1288,13 @@ pub enum OwnedCommitmentInputs<
     },
 }
 
-impl<
-        'a,
-        P: Pairing,
-        C: Curve<Scalar = P::ScalarField>,
-        AttributeType: Attribute<C::Scalar>,
-        Web3IdSigner,
-    > From<&'a OwnedCommitmentInputs<P, C, AttributeType, Web3IdSigner>>
-    for CommitmentInputs<'a, P, C, AttributeType, Web3IdSigner>
+impl<'a, C: Curve, AttributeType, Web3IdSigner>
+    From<&'a OwnedCommitmentInputs<C, AttributeType, Web3IdSigner>>
+    for CommitmentInputs<'a, C, AttributeType, Web3IdSigner>
 {
     fn from(
-        owned: &'a OwnedCommitmentInputs<P, C, AttributeType, Web3IdSigner>,
-    ) -> CommitmentInputs<'a, P, C, AttributeType, Web3IdSigner> {
+        owned: &'a OwnedCommitmentInputs<C, AttributeType, Web3IdSigner>,
+    ) -> CommitmentInputs<'a, C, AttributeType, Web3IdSigner> {
         match owned {
             OwnedCommitmentInputs::Account {
                 issuer,
@@ -1480,23 +1305,6 @@ impl<
                 values,
                 randomness,
             },
-            OwnedCommitmentInputs::Identity(inputs) => {
-                let OwnedIdentityCommitmentInputs {
-                    ip_info,
-                    ar_infos,
-                    id_object,
-                    id_object_use_data,
-                } = &**inputs;
-
-                CommitmentInputs::Identity {
-                    ip_context: IpContextOnly {
-                        ip_info,
-                        ars_infos: &ar_infos.anonymity_revokers,
-                    },
-                    id_object,
-                    id_object_use_data,
-                }
-            }
             OwnedCommitmentInputs::Web3Issuer {
                 signer,
                 values,
@@ -1513,7 +1321,7 @@ impl<
 }
 
 #[derive(thiserror::Error, Debug)]
-/// An error that can occur when attempting to produce a proof.
+/// An error that can occurr when attempting to produce a proof.
 pub enum ProofError {
     #[error("Too many attributes to produce a proof.")]
     TooManyAttributes,
@@ -1533,8 +1341,10 @@ pub enum ProofError {
     IdentityAttributeCredentials(String),
 }
 
-/// The additional public inputs needed to verify the statements
-/// in a [presentation](VersionedPresentation).
+/// Public inputs to the verification function. These are the public commitments
+/// that are contained in the credentials for identity credentials, and the
+/// issuer's public key for Web3ID credentials which do not store commitments on
+/// the chain.
 #[derive(Debug, serde::Deserialize)]
 #[serde(
     bound = "C: Curve",
@@ -1542,21 +1352,12 @@ pub enum ProofError {
     rename_all_fields = "camelCase",
     tag = "type"
 )]
-pub enum CredentialsInputs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+pub enum CredentialsInputs<C: Curve> {
     Account {
         // All the commitments of the credential.
-        // In principle, we only ever need to borrow this, but it is simpler to
+        // In principle we only ever need to borrow this, but it is simpler to
         // have the owned map instead of a reference to it.
         commitments: BTreeMap<AttributeTag, pedersen_commitment::Commitment<C>>,
-    },
-    Identity {
-        /// Public information on the chosen identity provider.
-        ip_info: IpInfo<P>,
-        /// Public information on the __supported__ anonymity revokers.
-        /// This is used by the identity provider and the chain to
-        /// validate the identity object requests, to validate credentials,
-        /// as well as by the account holder to create a credential.
-        ars_infos: ArInfos<C>,
     },
     Web3 {
         /// The public key of the issuer.
@@ -1596,6 +1397,7 @@ impl TryFrom<chrono::DateTime<chrono::Utc>> for Web3IdAttribute {
 
     fn try_from(value: chrono::DateTime<chrono::Utc>) -> Result<Self, Self::Error> {
         use anyhow::Context;
+
         // We construct a timestamp in milliseconds from the lowest possible value, and
         // add the offset to align with the previously defined lowest possible
         // value.
@@ -1852,7 +1654,7 @@ mod tests {
     /// uses account credentials.
     #[test]
     fn test_request_and_presentation_account_json() {
-        let challenge = Sha256Challenge::new(fixtures::seed0().gen());
+        let challenge = Challenge::new(fixtures::seed0().gen());
 
         let global_context = GlobalContext::generate("Test".into());
 
@@ -1886,82 +1688,69 @@ mod tests {
             &global_context,
         );
 
-        let credential_statements =
-            vec![CredentialStatement::Account(AccountCredentialStatement {
-                network: Network::Testnet,
-                cred_id: acc_cred_fixture.cred_id,
-                statements: vec![
-                    AtomicStatement::AttributeInRange {
-                        statement: AttributeInRangeStatement {
-                            attribute_tag: 3.into(),
-                            lower: Web3IdAttribute::Numeric(80),
-                            upper: Web3IdAttribute::Numeric(1237),
-                            _phantom: PhantomData,
-                        },
+        let credential_statements = vec![CredentialStatement::Account {
+            network: Network::Testnet,
+            cred_id: acc_cred_fixture.cred_id,
+            statement: vec![
+                AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: 3.into(),
+                        lower: Web3IdAttribute::Numeric(80),
+                        upper: Web3IdAttribute::Numeric(1237),
+                        _phantom: PhantomData,
                     },
-                    AtomicStatement::AttributeInSet {
-                        statement: AttributeInSetStatement {
-                            attribute_tag: 2.into(),
-                            set: [
-                                Web3IdAttribute::String(
-                                    AttributeKind::try_new("ff".into()).unwrap(),
-                                ),
-                                Web3IdAttribute::String(
-                                    AttributeKind::try_new("aa".into()).unwrap(),
-                                ),
-                                Web3IdAttribute::String(
-                                    AttributeKind::try_new("zz".into()).unwrap(),
-                                ),
-                            ]
-                            .into_iter()
-                            .collect(),
-                            _phantom: PhantomData,
-                        },
+                },
+                AtomicStatement::AttributeInSet {
+                    statement: AttributeInSetStatement {
+                        attribute_tag: 2.into(),
+                        set: [
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                        ]
+                        .into_iter()
+                        .collect(),
+                        _phantom: PhantomData,
                     },
-                    AtomicStatement::AttributeNotInSet {
-                        statement: AttributeNotInSetStatement {
-                            attribute_tag: 1.into(),
-                            set: [
-                                Web3IdAttribute::String(
-                                    AttributeKind::try_new("ff".into()).unwrap(),
-                                ),
-                                Web3IdAttribute::String(
-                                    AttributeKind::try_new("aa".into()).unwrap(),
-                                ),
-                                Web3IdAttribute::String(
-                                    AttributeKind::try_new("zz".into()).unwrap(),
-                                ),
-                            ]
-                            .into_iter()
-                            .collect(),
-                            _phantom: PhantomData,
-                        },
+                },
+                AtomicStatement::AttributeNotInSet {
+                    statement: AttributeNotInSetStatement {
+                        attribute_tag: 1.into(),
+                        set: [
+                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                        ]
+                        .into_iter()
+                        .collect(),
+                        _phantom: PhantomData,
                     },
-                    AtomicStatement::AttributeInRange {
-                        statement: AttributeInRangeStatement {
-                            attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
-                            lower: Web3IdAttribute::try_from(
-                                chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
-                                    .unwrap()
-                                    .to_utc(),
-                            )
-                            .unwrap(),
-                            upper: Web3IdAttribute::try_from(
-                                chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
-                                    .unwrap()
-                                    .to_utc(),
-                            )
-                            .unwrap(),
-                            _phantom: PhantomData,
-                        },
+                },
+                AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement {
+                        attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
+                        lower: Web3IdAttribute::try_from(
+                            chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                                .unwrap()
+                                .to_utc(),
+                        )
+                        .unwrap(),
+                        upper: Web3IdAttribute::try_from(
+                            chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                                .unwrap()
+                                .to_utc(),
+                        )
+                        .unwrap(),
+                        _phantom: PhantomData,
                     },
-                    AtomicStatement::RevealAttribute {
-                        statement: RevealAttributeStatement {
-                            attribute_tag: 5.into(),
-                        },
+                },
+                AtomicStatement::RevealAttribute {
+                    statement: RevealAttributeStatement {
+                        attribute_tag: 5.into(),
                     },
-                ],
-            })];
+                },
+            ],
+        }];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
             challenge,
@@ -2153,7 +1942,7 @@ mod tests {
     /// uses web3 credentials.
     #[test]
     fn test_request_and_presentation_web3_json() {
-        let challenge = Sha256Challenge::new(fixtures::seed0().gen());
+        let challenge = Challenge::new(fixtures::seed0().gen());
 
         let global_context = GlobalContext::generate("Test".into());
 
@@ -2187,7 +1976,7 @@ mod tests {
             &global_context,
         );
 
-        let credential_statements = vec![CredentialStatement::Web3Id(Web3IdCredentialStatement {
+        let credential_statements = vec![CredentialStatement::Web3Id {
             ty: [
                 "VerifiableCredential".into(),
                 "ConcordiumVerifiableCredential".into(),
@@ -2198,7 +1987,7 @@ mod tests {
             network: Network::Testnet,
             contract: web3_cred_fixture.contract,
             credential: web3_cred_fixture.cred_id,
-            statements: vec![
+            statement: vec![
                 AtomicStatement::AttributeInRange {
                     statement: AttributeInRangeStatement {
                         attribute_tag: "3".into(),
@@ -2257,7 +2046,7 @@ mod tests {
                     },
                 },
             ],
-        })];
+        }];
 
         let request = Request::<ArCurve, Web3IdAttribute> {
             challenge,
@@ -2472,7 +2261,7 @@ mod fixtures {
 
     use crate::common;
     use crate::curve_arithmetic::Value;
-    use crate::id::constants::{ArCurve, IpPairing};
+    use crate::id::constants::ArCurve;
     use crate::id::id_proof_types::{
         AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
         RevealAttributeStatement,
@@ -2590,8 +2379,8 @@ mod fixtures {
 
     pub struct AccountCredentialsFixture<AttributeType: Attribute<<ArCurve as Curve>::Scalar>> {
         pub commitment_inputs:
-            OwnedCommitmentInputs<IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>,
-        pub credential_inputs: CredentialsInputs<IpPairing, ArCurve>,
+            OwnedCommitmentInputs<ArCurve, AttributeType, ed25519_dalek::SigningKey>,
+        pub credential_inputs: CredentialsInputs<ArCurve>,
         pub cred_id: CredentialRegistrationID,
     }
 
@@ -2600,8 +2389,7 @@ mod fixtures {
     {
         pub fn commitment_inputs(
             &self,
-        ) -> CommitmentInputs<'_, IpPairing, ArCurve, AttributeType, ed25519_dalek::SigningKey>
-        {
+        ) -> CommitmentInputs<'_, ArCurve, AttributeType, ed25519_dalek::SigningKey> {
             CommitmentInputs::from(&self.commitment_inputs)
         }
     }
@@ -2643,8 +2431,8 @@ mod fixtures {
 
     pub struct Web3CredentialsFixture {
         pub commitment_inputs:
-            OwnedCommitmentInputs<IpPairing, ArCurve, Web3IdAttribute, ed25519_dalek::SigningKey>,
-        pub credential_inputs: CredentialsInputs<IpPairing, ArCurve>,
+            OwnedCommitmentInputs<ArCurve, Web3IdAttribute, ed25519_dalek::SigningKey>,
+        pub credential_inputs: CredentialsInputs<ArCurve>,
         pub cred_id: CredentialHolderId,
         pub contract: ContractAddress,
         pub issuer_key: ed25519_dalek::SigningKey,
@@ -2653,8 +2441,7 @@ mod fixtures {
     impl Web3CredentialsFixture {
         pub fn commitment_inputs(
             &self,
-        ) -> CommitmentInputs<'_, IpPairing, ArCurve, Web3IdAttribute, ed25519_dalek::SigningKey>
-        {
+        ) -> CommitmentInputs<'_, ArCurve, Web3IdAttribute, ed25519_dalek::SigningKey> {
             CommitmentInputs::from(&self.commitment_inputs)
         }
     }
