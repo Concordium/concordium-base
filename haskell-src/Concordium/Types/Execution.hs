@@ -2516,6 +2516,7 @@ instance AE.FromJSON TransactionSummaryType where
             AE.String "updateTransaction" -> TSTUpdateTransaction <$> v .: "contents"
             _ -> fail "Cannot parse JSON TransactionSummaryType"
 
+-- | The details of the sponsor of a transaction.
 data SponsorDetails = SponsorDetails
     { -- | The transaction sponsor.
       sdSponsor :: !AccountAddress,
