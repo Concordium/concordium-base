@@ -33,20 +33,21 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     PresentationV1<P, C, AttributeType>
 {
     /// Get an iterator over the metadata for each of the verifiable credentials
-    /// in the order they appear in the presentation.
+    /// in the order they appear in the presentation. This contains data that need to be
+    /// verified externally and also data that is needed to look up [`CredentialVerificationMaterial`].
+    /// Hence, proper handling of the metadata is required for verifying the presentation. An implementation of handling
+    /// the metadata may be found in the [Rust SDK `web3id` module](https://docs.rs/concordium-rust-sdk/latest/concordium_rust_sdk/web3id/index.html)
     pub fn metadata(&self) -> impl ExactSizeIterator<Item = CredentialMetadataV1> + '_ {
         self.verifiable_credentials.iter().map(|cp| cp.metadata())
     }
 
-    /// Verify a presentation in the context of the provided public data and
-    /// cryptographic parameters.
-    ///
-    /// In case of success returns the [`RequestV1`] for which the presentation
+    /// Verify a presentation and the contained credentials in the context of the provided verification material.
+    /// In case of success, returns the [`RequestV1`] which contains the claims the presentation
     /// verifies.
     ///
-    /// **NB:** This only verifies the cryptographic consistency of the data.
+    /// Notice: This only verifies the cryptographic consistency of the data.
     /// It does not check metadata, such as expiry. This should be checked
-    /// separately by the verifier.
+    /// separately by the verifier. See [`CredentialMetadataV1`].
     pub fn verify<'a>(
         &self,
         global_context: &GlobalContext<C>,
@@ -96,7 +97,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, AttributeType> {
-    pub fn verify<P: Pairing<ScalarField = C::Scalar>>(
+    fn verify<P: Pairing<ScalarField = C::Scalar>>(
         &self,
         global_context: &GlobalContext<C>,
         transcript: &mut RandomOracle,
@@ -111,8 +112,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
         };
 
         verify_statements(
-            self.subject.statements.iter(),
-            self.proof.proof.statement_proofs.iter(),
+            &self.subject.statements,
+            &self.proof.proof.statement_proofs,
             commitments,
             global_context,
             transcript,
@@ -123,7 +124,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
     IdentityBasedCredentialV1<P, C, AttributeType>
 {
-    pub fn verify(
+    fn verify(
         &self,
         global_context: &GlobalContext<C>,
         transcript: &mut RandomOracle,
@@ -179,8 +180,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             .collect();
 
         verify_statements(
-            self.subject.statements.iter(),
-            self.proof.proof.statement_proofs.iter(),
+            &self.subject.statements,
+            &self.proof.proof.statement_proofs,
             &cmm_attributes,
             global_context,
             transcript,
@@ -194,27 +195,30 @@ fn verify_statements<
     AttributeType: Attribute<C::Scalar> + 'a,
     TagType: Ord + crate::common::Serialize + 'a,
 >(
-    statements: impl ExactSizeIterator<Item = &'a AtomicStatement<C, TagType, AttributeType>>,
-    proofs: impl ExactSizeIterator<Item = &'a AtomicProof<C, AttributeType>>,
+    statements: impl IntoIterator<Item = &'a AtomicStatement<C, TagType, AttributeType>>,
+    proofs: impl IntoIterator<Item = &'a AtomicProof<C, AttributeType>>,
     cmm_attributes: &BTreeMap<TagType, Commitment<C>>,
     global_context: &GlobalContext<C>,
     transcript: &mut RandomOracle,
 ) -> bool {
-    statements.zip_longest(proofs).all(|elm| {
-        elm.both().map_or(false, |(statement, proof)| {
-            statement.verify(
-                ProofVersion::Version2,
-                global_context,
-                transcript,
-                cmm_attributes,
-                proof,
-            )
+    statements
+        .into_iter()
+        .zip_longest(proofs.into_iter())
+        .all(|elm| {
+            elm.both().map_or(false, |(statement, proof)| {
+                statement.verify(
+                    ProofVersion::Version2,
+                    global_context,
+                    transcript,
+                    cmm_attributes,
+                    proof,
+                )
+            })
         })
-    })
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C, AttributeType> {
-    pub fn prove<P: Pairing<ScalarField = C::Scalar>>(
+    fn prove<P: Pairing<ScalarField = C::Scalar>>(
         self,
         global_context: &GlobalContext<C>,
         transcript: &mut RandomOracle,
@@ -257,7 +261,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C, AttributeType> {
-    pub fn prove<P: Pairing<ScalarField = C::Scalar>>(
+    fn prove<P: Pairing<ScalarField = C::Scalar>>(
         self,
         global_context: &GlobalContext<C>,
         transcript: &mut RandomOracle,
@@ -394,8 +398,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> SubjectClaims<C, AttributeTy
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> {
-    /// Construct a proof for the [`RequestV1`] using the provided cryptographic
-    /// parameters and secrets.
+    /// Prove the claims in the given [`RequestV1`] using the provided cryptographic
+    /// parameters and secrets and return a [`PresentationV1`] embedding the claims and proofs.
     pub fn prove<'a, P: Pairing<ScalarField = C::Scalar>>(
         self,
         params: &GlobalContext<C>,
@@ -407,8 +411,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
         self.prove_with_rng(params, attrs, &mut rand::thread_rng(), chrono::Utc::now())
     }
 
-    /// Construct a proof for the [`RequestV1`] using the provided cryptographic
-    /// parameters and secrets. The source of randomness and "now" are given
+    /// Prove the claims in the given [`RequestV1`] using the provided cryptographic
+    /// parameters and secrets and return a [`PresentationV1`] embedding the claims and proofs.
+    /// The source of randomness and "now" are given
     /// as arguments.
     pub fn prove_with_rng<'a, P: Pairing<ScalarField = C::Scalar>>(
         self,
