@@ -20,7 +20,7 @@ use crate::pedersen_commitment::Commitment;
 use crate::web3id::v1::{
     AccountBasedCredentialV1, AccountCredentialProofPrivateInputs, AccountCredentialProofs,
     AccountCredentialStatementV1, AccountCredentialSubject, AccountCredentialVerificationMaterial,
-    ConcordiumProofType, ConcordiumZKProof, ContextChallenge, CredentialMetadataV1,
+    ConcordiumProofType, ConcordiumZKProof, ContextInformation, CredentialMetadataV1,
     CredentialProofPrivateInputs, CredentialStatementV1, CredentialV1,
     CredentialVerificationMaterial, IdentityBasedCredentialV1, IdentityCredentialId,
     IdentityCredentialIdDataRef, IdentityCredentialProofPrivateInputs, IdentityCredentialProofs,
@@ -447,7 +447,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
     }
 }
 
-fn append_context(digest: &mut impl StructuredDigest, context: &ContextChallenge) {
+fn append_context(digest: &mut impl StructuredDigest, context: &ContextInformation) {
     digest.add_bytes("ConcordiumContextInformationV1");
     digest.append_message("given", &context.given);
     digest.append_message("requested", &context.requested);
@@ -466,8 +466,8 @@ pub mod tests {
     use crate::web3id::Web3IdAttribute;
     use std::marker::PhantomData;
 
-    fn challenge_fixture() -> ContextChallenge {
-        ContextChallenge {
+    fn challenge_fixture() -> ContextInformation {
+        ContextInformation {
             given: vec![ContextProperty {
                 label: "prop1".to_string(),
                 context: "val1".to_string(),

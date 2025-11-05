@@ -48,14 +48,14 @@ const CONCORDIUM_IDENTITY_BASED_STATEMENT_TYPE: &str = "ConcordiumIdBasedStateme
 /// Context challenge that serves as a distinguishing context when requesting
 /// proofs.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, common::Serialize, Debug)]
-pub struct ContextChallenge {
+pub struct ContextInformation {
     /// This part of the challenge is supposed to be provided by the dapp backend (e.g. merchant backend).
     pub given: Vec<ContextProperty>,
     /// This part of the challenge is supposed to be provided by the wallet or ID app.
     pub requested: Vec<ContextProperty>,
 }
 
-impl serde::Serialize for ContextChallenge {
+impl serde::Serialize for ContextInformation {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -68,7 +68,7 @@ impl serde::Serialize for ContextChallenge {
     }
 }
 
-impl<'de> serde::Deserialize<'de> for ContextChallenge {
+impl<'de> serde::Deserialize<'de> for ContextInformation {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -93,7 +93,7 @@ impl<'de> serde::Deserialize<'de> for ContextChallenge {
     }
 }
 
-/// Property value used in [`ContextChallenge`]
+/// Property value used in [`ContextInformation`]
 #[derive(
     Clone,
     Eq,
@@ -815,7 +815,7 @@ pub struct PresentationV1<
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 > {
-    pub presentation_context: ContextChallenge,
+    pub presentation_context: ContextInformation,
     pub verifiable_credentials: Vec<CredentialV1<P, C, AttributeType>>,
     /// Signatures from keys of Web3 credentials (not from ID credentials).
     /// The order is the same as that in the `credential_proofs` field.
@@ -888,7 +888,7 @@ impl<
 /// is input via [`CredentialVerificationMaterial`].
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct RequestV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    pub challenge: ContextChallenge,
+    pub challenge: ContextInformation,
     pub credential_statements: Vec<CredentialStatementV1<C, AttributeType>>,
 }
 
@@ -1138,7 +1138,7 @@ mod tests {
     /// uses account credentials.
     #[test]
     fn test_request_and_presentation_account_json() {
-        let challenge = ContextChallenge {
+        let challenge = ContextInformation {
             given: vec![ContextProperty {
                 label: "prop1".to_string(),
                 context: "val1".to_string(),
@@ -1468,7 +1468,7 @@ mod tests {
     /// Tests JSON serialization and deserialization of request and presentation.
     #[test]
     fn test_request_and_presentation_identity_json() {
-        let challenge = ContextChallenge {
+        let challenge = ContextInformation {
             given: vec![ContextProperty {
                 label: "prop1".to_string(),
                 context: "val1".to_string(),
