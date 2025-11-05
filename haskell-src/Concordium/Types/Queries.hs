@@ -378,32 +378,6 @@ instance ToJSON (SupplementedTransactionStatus pv) where
               "outcomes" .= Map.singleton bh outcome
             ]
 
--- | The status of a transaction with respect to a specified block
-data BlockTransactionStatus (pv :: ProtocolVersion)
-    = -- | Either the transaction is not in that block, or that block is not live
-      BTSNotInBlock
-    | -- | The transaction was received but not known to be in that block
-      BTSReceived
-    | -- | The transaction is in that (non-finalized) block
-      BTSCommitted (Maybe (SupplementedTransactionSummary pv))
-    | -- | The transaction is in that (finalized) block
-      BTSFinalized (Maybe (SupplementedTransactionSummary pv))
-    deriving (Show)
-
-instance ToJSON (BlockTransactionStatus pv) where
-    toJSON BTSNotInBlock = Null
-    toJSON BTSReceived = object ["status" .= String "received"]
-    toJSON (BTSCommitted outcome) =
-        object
-            [ "status" .= String "committed",
-              "result" .= outcome
-            ]
-    toJSON (BTSFinalized outcome) =
-        object
-            [ "status" .= String "finalized",
-              "result" .= outcome
-            ]
-
 -- | A pending change (if any) to a baker pool.
 --
 --  The JSON encoding uses a tag "pendingChangeType", which is "NoChange",
