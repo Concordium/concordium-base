@@ -20,7 +20,7 @@ import Prelude hiding (fail)
 import Control.Monad
 
 import Concordium.Utils.Serialization
-import Data.Aeson ((.:), (.=))
+import Data.Aeson ((.:), (.=), (.:?))
 import qualified Data.Aeson as AE
 import Data.Aeson.TH
 import Data.Aeson.Types (Parser)
@@ -2572,7 +2572,7 @@ instance (AE.ToJSON a) => AE.ToJSON (TransactionSummary' pv a) where
               "result" .= tsResult,
               "index" .= tsIndex
             ]
-                ++ ["sponsorDetails" .= sd | CTrue sd <- [tsSponsorDetails]]
+                ++ ["sponsorDetails" .= sd | CTrue (Just sd) <- [tsSponsorDetails]]
 
 -- | Lens for accessing the result field of a 'TransactionSummary''.
 summaryResult :: Lens (TransactionSummary' pv a) (TransactionSummary' pv b) a b
