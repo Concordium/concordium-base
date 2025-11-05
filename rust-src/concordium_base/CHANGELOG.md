@@ -1,5 +1,8 @@
 ## Unreleased
 
+- Implemented new version of verifiable presentations in `web3id::v1` that includes account based and identity based credentials.
+  The primary types are `v1::PresentationV1` and `v1::RequestV1`.
+
 ## 9.0.0 (2025-10-29)
 
 - Changed `Debug` implementation of secret keys and cleartext values to not print the key or value.
