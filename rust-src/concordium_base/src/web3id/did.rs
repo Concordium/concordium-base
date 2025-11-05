@@ -91,7 +91,7 @@ pub enum IdentifierType {
     PublicKey { key: ed25519_dalek::VerifyingKey },
     /// Reference to a specific identity provider.
     Idp { idp_identity: IpIdentity },
-    /// Reference to an identity credential via the IdCredSec encryption.
+    /// Reference to an identity credential via the IdCredPub encryption.
     EncryptedIdentityCredential { cred_id: IdentityCredentialId },
 }
 
@@ -130,7 +130,6 @@ impl IdentifierType {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(try_from = "String", into = "String")]
-#[serde(bound(serialize = "", deserialize = ""))]
 /// A DID method.
 pub struct Method {
     /// The network part of the method.

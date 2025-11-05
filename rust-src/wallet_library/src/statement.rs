@@ -88,8 +88,6 @@ pub enum RequestCheckError {
     EmptySet,
     #[error("The tag `{0}` is not allowed to be used for set statements")]
     IllegalSetTag(String),
-    #[error("Credential type `{0}` is not supported")]
-    UnsupportedCredentials(String),
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> AcceptableRequest<C, AttributeType>
