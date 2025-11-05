@@ -1084,14 +1084,18 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 }
 
 /// Verification material for an account credential.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, serde::Deserialize)]
+#[serde(bound(deserialize = ""))]
+#[serde(rename_all = "camelCase")]
 pub struct AccountCredentialVerificationMaterial<C: Curve> {
     // Commitments to attribute values. Are part of the on-chain account credentials.
     pub attribute_commitments: BTreeMap<AttributeTag, pedersen_commitment::Commitment<C>>,
 }
 
 /// Verification material for an identity credential.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, serde::Deserialize)]
+#[serde(bound(deserialize = ""))]
+#[serde(rename_all = "camelCase")]
 pub struct IdentityCredentialVerificationMaterial<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Public information on the chosen identity provider.
     pub ip_info: IpInfo<P>,
@@ -1104,7 +1108,10 @@ pub struct IdentityCredentialVerificationMaterial<P: Pairing, C: Curve<Scalar = 
 
 /// The additional public inputs needed to verify
 /// a [credential](CredentialV1).
-#[derive(Debug, PartialEq, Eq, Clone)]
+
+#[derive(Debug, PartialEq, Eq, Clone, serde::Deserialize)]
+#[serde(bound(deserialize = ""))]
+#[serde(rename_all = "camelCase", tag = "type")]
 pub enum CredentialVerificationMaterial<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Verification material for an account credential.
     Account(AccountCredentialVerificationMaterial<C>),
