@@ -90,8 +90,14 @@ mod tests {
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut rng);
 
         let id_use_data = test_create_id_use_data(&mut rng);
-        let (context, pio, randomness) =
-            test_create_pio_v1(&id_use_data, &ip_info, &ars_infos, &global_ctx, num_ars);
+        let (context, pio, randomness) = test_create_pio_v1(
+            &id_use_data,
+            &ip_info,
+            &ars_infos,
+            &global_ctx,
+            num_ars,
+            &mut rng,
+        );
         assert!(
             *randomness == *id_use_data.randomness,
             "Returned randomness is not equal to used randomness."

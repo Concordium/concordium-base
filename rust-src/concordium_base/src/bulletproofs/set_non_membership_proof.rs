@@ -12,7 +12,7 @@ use rand::*;
 use std::iter::once;
 
 /// Bulletproof style set-non-membership proof
-#[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
+#[derive(Clone, Eq, PartialEq, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
 pub struct SetNonMembershipProof<C: Curve> {
     /// Commitments to the multiplicative inverse of `v-s_i` for each `i`, and
