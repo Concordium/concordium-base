@@ -1040,8 +1040,10 @@ pub struct OwnedAccountCredentialProofPrivateInputs<C: Curve, AttributeType: Att
     /// Issuer of the identity credentials used to deploy the account credentials
     pub issuer: IpIdentity,
     /// The attribute values that are committed to in the account credentials
+    #[serde(rename = "values")]
     pub attribute_values: BTreeMap<AttributeTag, AttributeType>,
     /// The randomness of the attribute commitments in the account credentials
+    #[serde(rename = "randomness")]
     pub attribute_randomness: BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
 }
 
