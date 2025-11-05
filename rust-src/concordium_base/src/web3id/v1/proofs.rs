@@ -97,6 +97,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, AttributeType> {
+    /// Proof described in "15.4.1 Account Based Presentations" (blue paper v2.2.0)
     fn verify<P: Pairing<ScalarField = C::Scalar>>(
         &self,
         global_context: &GlobalContext<C>,
@@ -124,6 +125,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
     IdentityBasedCredentialV1<P, C, AttributeType>
 {
+    /// Proof described in "15.4.2 Identity Based Credential" (blue paper v2.2.0)
     fn verify(
         &self,
         global_context: &GlobalContext<C>,
@@ -215,6 +217,7 @@ fn verify_statements<
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C, AttributeType> {
+    /// Proof described in "15.4.1 Account Based Presentations" (blue paper v2.2.0)
     fn prove<P: Pairing<ScalarField = C::Scalar>>(
         self,
         global_context: &GlobalContext<C>,
@@ -258,6 +261,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C, AttributeType> {
+    /// Proof described in "15.4.2 Identity Based Credential" (blue paper v2.2.0)
     fn prove<P: Pairing<ScalarField = C::Scalar>>(
         self,
         global_context: &GlobalContext<C>,
