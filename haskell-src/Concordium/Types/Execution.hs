@@ -2558,7 +2558,7 @@ instance (AE.FromJSON a, IsProtocolVersion pv) => AE.FromJSON (TransactionSummar
         tsType <- o .: "type"
         tsResult <- o .: "result"
         tsIndex <- o .: "index"
-        tsSponsorDetails <- conditionallyA (sSupportsSponsoredTransactions (sing @pv)) (o .: "sponsorDetails")
+        tsSponsorDetails <- conditionallyA (sSupportsSponsoredTransactions (sing @pv)) (o .:? "sponsorDetails")
         return $ TransactionSummary{..}
 
 instance (AE.ToJSON a) => AE.ToJSON (TransactionSummary' pv a) where
