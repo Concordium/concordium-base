@@ -602,6 +602,8 @@ pub struct ConcordiumZKProof<T> {
 /// is derived from an underlying credential, represented via the different variants:
 /// account credentials and identity credentials.
 /// To verify the credential, the corresponding public input [`CredentialsInputs`](super::CredentialsInputs) is needed.
+#[expect(clippy::large_enum_variant)]
+// for some reason, version 1.82 clippy thinks the `Identity` variant is 0 bytes and hence gives this warning
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CredentialV1<
     P: Pairing,
