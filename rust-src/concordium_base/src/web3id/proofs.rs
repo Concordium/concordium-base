@@ -201,7 +201,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                         .ok_or(ProofError::MissingAttribute)?;
                     proofs.push((statement, proof));
                 }
-                let created = chrono::Utc::now();
+                let created = now;
                 Ok(CredentialProof::Account {
                     cred_id,
                     proofs,
