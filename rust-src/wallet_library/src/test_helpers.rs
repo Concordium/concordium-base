@@ -60,10 +60,3 @@ pub fn read_web3_id_request() -> Web3IdProofInput {
         .expect("Should have been able to read the file");
     serde_json::from_str(&request_contents).unwrap()
 }
-
-pub fn read_web3_id_request_v1challenge() -> Web3IdProofInput {
-    let base_path = base_path();
-    let request_contents = fs::read_to_string(base_path.join("web3_id_request_v1challenge.json"))
-        .expect("Should have been able to read the file");
-    serde_json::from_str(&request_contents).unwrap()
-}
