@@ -1104,6 +1104,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 #[serde(rename_all = "camelCase")]
 pub struct AccountCredentialVerificationMaterial<C: Curve> {
     // Commitments to attribute values. Are part of the on-chain account credentials.
+    #[serde(rename = "commitments")]
     pub attribute_commitments: BTreeMap<AttributeTag, pedersen_commitment::Commitment<C>>,
 }
 
