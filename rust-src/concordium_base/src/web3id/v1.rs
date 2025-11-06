@@ -1025,7 +1025,7 @@ pub struct OwnedIdentityCredentialProofPrivateInputs<
     /// Public information on the __supported__ anonymity revokers.
     /// Must include at least the anonymity revokers supported by the identity provider.
     /// This is used to create and validate credential.
-    pub ar_infos: ArInfos<C>,
+    pub ars_infos: ArInfos<C>,
     /// Identity object. Together with `id_object_use_data`, it constitutes the identity credentials.
     pub id_object: IdentityObjectV1<P, C, AttributeType>,
     /// Parts of the identity credentials created locally and not by the identity provider
@@ -1079,7 +1079,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
                 CredentialProofPrivateInputs::Identity(IdentityCredentialProofPrivateInputs {
                     ip_context: IpContextOnly {
                         ip_info: &id.ip_info,
-                        ars_infos: &id.ar_infos.anonymity_revokers,
+                        ars_infos: &id.ars_infos.anonymity_revokers,
                     },
                     id_object: &id.id_object,
                     id_object_use_data: &id.id_object_use_data,
@@ -2020,7 +2020,7 @@ mod fixtures {
         let commitment_inputs = OwnedCredentialProofPrivateInputs::Identity(Box::new(
             OwnedIdentityCredentialProofPrivateInputs {
                 ip_info: ip_info.clone(),
-                ar_infos: ars_infos.clone(),
+                ars_infos: ars_infos.clone(),
                 id_object,
                 id_object_use_data,
             },

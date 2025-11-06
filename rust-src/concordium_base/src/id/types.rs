@@ -162,7 +162,6 @@ impl AccountOwnershipProof {
     From,
     Serialize,
     SerdeSerialize,
-    SerdeDeserialize,
     FromStr,
 )]
 #[repr(transparent)]
@@ -171,6 +170,57 @@ impl AccountOwnershipProof {
 /// In credential deployments, and other interactions with the chain this is
 /// used to identify which identity provider is meant.
 pub struct IpIdentity(pub u32);
+
+impl<'de> serde::Deserialize<'de> for IpIdentity {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct IpIdentityVisitor;
+
+        impl serde::de::Visitor<'_> for IpIdentityVisitor {
+            type Value = IpIdentity;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a u32 or string representing a u32")
+            }
+
+            fn visit_u32<E>(self, v: u32) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(IpIdentity(v))
+            }
+
+            fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                if v > u32::MAX as u64 {
+                    return Err(E::custom("value too large for u32"));
+                }
+                Ok(IpIdentity(v as u32))
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                let x = u32::from_str(v).map_err(E::custom)?;
+                Ok(IpIdentity(x))
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                self.visit_str(&v)
+            }
+        }
+
+        deserializer.deserialize_any(IpIdentityVisitor)
+    }
+}
 
 impl fmt::Display for IpIdentity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -189,12 +239,62 @@ impl fmt::Display for IpIdentity {
     Hash,
     Serial,
     SerdeSerialize,
-    SerdeDeserialize,
 )]
-#[serde(into = "u32", try_from = "u32")]
+#[serde(into = "u32")]
 /// Identity of the anonymity revoker on the chain. This defines their
 /// evaluation point for secret sharing, and thus it cannot be 0.
 pub struct ArIdentity(u32);
+
+impl<'de> serde::Deserialize<'de> for ArIdentity {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct ArIdentityVisitor;
+
+        impl serde::de::Visitor<'_> for ArIdentityVisitor {
+            type Value = ArIdentity;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a u32 or string representing a non-zero u32")
+            }
+
+            fn visit_u32<E>(self, v: u32) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                ArIdentity::try_from(v).map_err(E::custom)
+            }
+
+            fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                if v > u32::MAX as u64 {
+                    return Err(E::custom("value too large for u32"));
+                }
+                ArIdentity::try_from(v as u32).map_err(E::custom)
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                let x = u32::from_str(v).map_err(E::custom)?;
+                ArIdentity::try_from(x).map_err(E::custom)
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                self.visit_str(&v)
+            }
+        }
+
+        deserializer.deserialize_any(ArIdentityVisitor)
+    }
+}
 
 impl Deserial for ArIdentity {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
@@ -234,6 +334,15 @@ impl TryFrom<u32> for ArIdentity {
         } else {
             Ok(ArIdentity(value))
         }
+    }
+}
+
+impl TryFrom<String> for ArIdentity {
+    type Error = &'static str;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        let x = u32::from_str(&s).map_err(|_| "Could not read u32.")?;
+        ArIdentity::try_from(x)
     }
 }
 
@@ -441,7 +550,7 @@ impl YearMonth {
         let date = date.checked_add_months(chrono::Months::new(1))?;
         let dt = date
             .and_time(time)
-            .checked_add_signed(TimeDelta::seconds(-1))?;
+            .checked_add_signed(TimeDelta::try_seconds(-1)?)?;
         Some(chrono::Utc.from_utc_datetime(&dt))
     }
 }
@@ -473,7 +582,7 @@ impl<'de> SerdeDeserialize<'de> for YearMonth {
 
 struct YearMonthVisitor;
 
-impl<'de> Visitor<'de> for YearMonthVisitor {
+impl Visitor<'_> for YearMonthVisitor {
     type Value = YearMonth;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -1187,7 +1296,6 @@ pub struct ArInfos<C: Curve> {
 /// A helper trait to access only the public key of the ArInfo structure.
 /// We use this to have functions work both on a map of public keys only, as
 /// well as on maps of ArInfos, see [super::chain::verify_cdi].
-
 pub trait HasArPublicKey<C: Curve> {
     fn get_public_key(&self) -> &ArPublicKey<C>;
 }
@@ -1939,7 +2047,7 @@ pub struct IpContext<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub global_context: &'a GlobalContext<C>,
 }
 
-impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IpContext<'a, P, C> {}
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IpContext<'_, P, C> {}
 
 #[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
@@ -2078,7 +2186,7 @@ pub struct IpContextOnly<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub ars_infos: &'a BTreeMap<ArIdentity, ArInfo<C>>,
 }
 
-impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IpContextOnly<'a, P, C> {}
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IpContextOnly<'_, P, C> {}
 
 /// A helper trait to access the public parts of the InitialAccountData
 /// structure. We use this to allow implementations that do not give or have
@@ -2972,7 +3080,7 @@ mod tests {
                     .verify(message, &ed25519_dalek::Signature::from_bytes(&signature.0))
                     .expect("Should be a valid signature");
             }
-            _ => assert!(false, "Could not get signature"),
+            _ => unreachable!("Could not get signature"),
         }
     }
 
