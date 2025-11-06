@@ -356,13 +356,13 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower}
 
 -- | The status of a transaction that is present in the transaction table or a finalized block,
 --  as returned by the @getTransactionStatus@ gRPC query.
-data SupplementedTransactionStatus (pv :: ProtocolVersion)
+data SupplementedTransactionStatus
     = -- | Transaction was received but is not in any blocks
       Received
     | -- | Transaction was received and is present in some (non-finalized) block(s)
-      Committed (Map.Map BlockHash (Maybe (SupplementedTransactionSummary pv)))
+      Committed (Map.Map BlockHash (Maybe SupplementedTransactionSummary))
     | -- | Transaction has been finalized in a block
-      Finalized BlockHash (Maybe (SupplementedTransactionSummary pv))
+      Finalized BlockHash (Maybe SupplementedTransactionSummary)
     deriving (Show)
 
 -- | A pending change (if any) to a baker pool.

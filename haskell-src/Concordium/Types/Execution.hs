@@ -25,6 +25,7 @@ import qualified Data.Aeson as AE
 import Data.Aeson.TH
 import Data.Aeson.Types (Parser)
 import Data.Bits
+import Data.Bool.Singletons
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import qualified Data.HashMap.Strict as HMap
@@ -2537,38 +2538,57 @@ instance S.Serialize SponsorDetails where
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''SponsorDetails)
 
 -- | Result of a valid transaction is a transaction summary.
-data TransactionSummary' (pv :: ProtocolVersion) a = TransactionSummary
-    { tsSender :: !(Maybe AccountAddress),
-      tsHash :: !TransactionHash,
-      -- | The transaction cost paid for by the sender
-      tsCost :: !Amount,
-      tsEnergyCost :: !Energy,
-      tsType :: !TransactionSummaryType,
-      tsResult :: !a,
-      tsIndex :: !TransactionIndex,
-      tsSponsorDetails :: !(Conditionally (SupportsSponsoredTransactions pv) (Maybe SponsorDetails))
-    }
+data TransactionSummary' a where
+    TransactionSummaryV0 ::
+        { tsSender :: !(Maybe AccountAddress),
+          tsHash :: !TransactionHash,
+          -- | The transaction cost paid for by the sender
+          tsCost :: !Amount,
+          tsEnergyCost :: !Energy,
+          tsType :: !TransactionSummaryType,
+          tsResult :: !a,
+          tsIndex :: !TransactionIndex
+        } ->
+        TransactionSummary' a
+    TransactionSummaryV1 ::
+        { tsSender :: !(Maybe AccountAddress),
+          tsHash :: !TransactionHash,
+          -- | The transaction cost paid for by the sender
+          tsCost :: !Amount,
+          tsEnergyCost :: !Energy,
+          tsType :: !TransactionSummaryType,
+          tsResult :: !a,
+          tsIndex :: !TransactionIndex,
+          -- | The details of the optional sponsor. Available since P10.
+          tsSponsorDetails :: !(Maybe SponsorDetails)
+        } ->
+        TransactionSummary' a
     deriving (Eq, Show, Generic)
 
 -- | Lens for accessing the result field of a 'TransactionSummary''.
-summaryResult :: Lens (TransactionSummary' pv a) (TransactionSummary' pv b) a b
+summaryResult :: Lens (TransactionSummary' a) (TransactionSummary' b) a b
 summaryResult =
     lens
         tsResult
-        (\TransactionSummary{..} newRes -> TransactionSummary{tsResult = newRes, ..})
+        ( \txSummary newRes -> case txSummary of
+            TransactionSummaryV0{..} -> TransactionSummaryV0{tsResult = newRes, ..}
+            TransactionSummaryV1{..} -> TransactionSummaryV1{tsResult = newRes, ..}
+        )
 
 -- | A transaction summary parameterized with an outcome of a valid transaction
 --  containing either a 'TxSuccess' or 'TxReject'.
-type TransactionSummary (pv :: ProtocolVersion) = TransactionSummary' pv ValidResult
+type TransactionSummary = TransactionSummary' ValidResult
 
 -- | A transaction summary parameterized with an outcome of a valid transaction
 --  containing either a 'TxSuccess' or 'TxReject'.
-type SupplementedTransactionSummary (pv :: ProtocolVersion) = TransactionSummary' pv (ValidResult' True)
+type SupplementedTransactionSummary = TransactionSummary' (ValidResult' True)
 
-instance (SupplementEvents a) => SupplementEvents (TransactionSummary' (pv :: ProtocolVersion) a) where
-    type Supplemented (TransactionSummary' pv a) = TransactionSummary' pv (Supplemented a)
-    supplementEvents f TransactionSummary{..} =
-        (\res -> TransactionSummary{tsResult = res, ..}) <$> supplementEvents f tsResult
+instance (SupplementEvents a) => SupplementEvents (TransactionSummary' a) where
+    type Supplemented (TransactionSummary' a) = TransactionSummary' (Supplemented a)
+    supplementEvents f TransactionSummaryV0{..} =
+        (\res -> TransactionSummaryV0{tsResult = res, ..}) <$> supplementEvents f tsResult
+    supplementEvents f TransactionSummaryV1{..} =
+        (\res -> TransactionSummaryV1{tsResult = res, ..}) <$> supplementEvents f tsResult
 
 -- | An abstraction for constructing the result of a transaction.
 --  This is instantiated by both 'ValidResult' and 'ValidResultWithReturn'.
@@ -2697,10 +2717,18 @@ instance S.Serialize TransactionSummaryType where
             2 -> TSTUpdateTransaction <$> S.get
             _ -> fail "Unsupported transaction summary type."
 
-putTransactionSummary :: S.Putter (TransactionSummary pv)
-putTransactionSummary TransactionSummary{..} =
+putTransactionSummary :: S.Putter TransactionSummary
+putTransactionSummary TransactionSummaryV0{..} =
     putMaybe S.put tsSender
-        <> mapM_ (putMaybe S.put) tsSponsorDetails
+        <> S.put tsHash
+        <> S.put tsCost
+        <> S.put tsEnergyCost
+        <> S.put tsType
+        <> putValidResult tsResult
+        <> S.put tsIndex
+putTransactionSummary TransactionSummaryV1{..} =
+    putMaybe S.put tsSender
+        <> putMaybe S.put tsSponsorDetails
         <> S.put tsHash
         <> S.put tsCost
         <> S.put tsEnergyCost
@@ -2708,17 +2736,26 @@ putTransactionSummary TransactionSummary{..} =
         <> putValidResult tsResult
         <> S.put tsIndex
 
-getTransactionSummary :: SProtocolVersion pv -> S.Get (TransactionSummary pv)
-getTransactionSummary spv = do
+getTransactionSummary :: SProtocolVersion pv -> S.Get TransactionSummary
+getTransactionSummary spv | SFalse <- sSupportsSponsoredTransactions spv = do
     tsSender <- getMaybe S.get
-    tsSponsorDetails <- conditionallyA (sSupportsSponsoredTransactions spv) (getMaybe S.get)
     tsHash <- S.get
     tsCost <- S.get
     tsEnergyCost <- S.get
     tsType <- S.get
     tsResult <- getValidResult spv
     tsIndex <- S.get
-    return TransactionSummary{..}
+    return TransactionSummaryV0{..}
+getTransactionSummary spv | STrue <- sSupportsSponsoredTransactions spv = do
+    tsSender <- getMaybe S.get
+    tsSponsorDetails <- getMaybe S.get
+    tsHash <- S.get
+    tsCost <- S.get
+    tsEnergyCost <- S.get
+    tsType <- S.get
+    tsResult <- getValidResult spv
+    tsIndex <- S.get
+    return TransactionSummaryV1{..}
 
 -- | Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
 --  Must be kept in sync with 'showRejectReason' in concordium-client (Output.hs).
@@ -3037,7 +3074,7 @@ data FailureKind
       InvalidTokenModuleRef !TokenModuleRef
     deriving (Eq, Show)
 
-data TxResult (pv :: ProtocolVersion) = TxValid !(TransactionSummary pv) | TxInvalid !FailureKind
+data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind
 
 -- | Generate the challenge for adding a baker.
 addBakerChallenge :: AccountAddress -> BakerElectionVerifyKey -> BakerSignVerifyKey -> BakerAggregationVerifyKey -> BS.ByteString

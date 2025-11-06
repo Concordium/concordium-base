@@ -171,6 +171,15 @@ module Concordium.Types.ProtocolVersion (
     -- | The transaction outcomes version for a given protocol version (on singletons).
     sTransactionOutcomesVersionFor,
 
+    -- * Transaction summary version
+    TransactionSummaryVersion (..),
+    STransactionSummaryVersion (..),
+    IsTransactionSummaryVersion,
+    transactionSummaryVersion,
+    TransactionSummaryVersionFor,
+    sTransactionSummaryVersionFor,
+    transactionSummaryVersionFor,
+
     -- * Delegation support
 
     -- | Determine whether delegation is supported for a particular account version.
@@ -403,6 +412,23 @@ $( singletons
         transactionOutcomesVersionFor P8 = TOV2
         transactionOutcomesVersionFor P9 = TOV2
 
+        data TransactionSummaryVersion
+            = TSV0
+            | TSV1
+
+        transactionSummaryVersionFor :: ProtocolVersion -> TransactionSummaryVersion
+        transactionSummaryVersionFor P1 = TSV0
+        transactionSummaryVersionFor P2 = TSV0
+        transactionSummaryVersionFor P3 = TSV0
+        transactionSummaryVersionFor P4 = TSV0
+        transactionSummaryVersionFor P5 = TSV0
+        transactionSummaryVersionFor P6 = TSV0
+        transactionSummaryVersionFor P7 = TSV0
+        transactionSummaryVersionFor P8 = TSV0
+        transactionSummaryVersionFor P9 = TSV0
+
+        -- transactionSummaryVersionFor P10 = TSV1
+
         supportsDelegation :: AccountVersion -> Bool
         supportsDelegation AccountV0 = False
         supportsDelegation AccountV1 = True
@@ -563,6 +589,10 @@ type IsAuthorizationsVersion (auv :: AuthorizationsVersion) = SingI auv
 --  'STransactionOutcomesVersion' (see 'transactionOutcomesVersion'). (An alias for 'SingI'.)
 type IsTransactionOutcomesVersion (tov :: TransactionOutcomesVersion) = SingI tov
 
+-- | Constraint on a type level 'TransactionSummaryVersion' that can be used to get a corresponding
+--  'STransactionSummaryVersion' (see 'transactionSummaryVersion'). (An alias for 'SingI'.)
+type IsTransactionSummaryVersion (tsv :: TransactionSummaryVersion) = SingI tsv
+
 -- | Constraint on a type level 'BlockHashVersion' that can be used to get a corresponding
 --  'SBlockHashVersion' (see 'blockHashVersion'). (An alias for 'SingI'.)
 type IsBlockHashVersion (bhv :: BlockHashVersion) = SingI bhv
@@ -633,6 +663,9 @@ authorizationsVersion = sing
 -- | Produce the singleton 'STransactionOutcomesVersion' from an 'IsTransactionOutcomesVersion' constraint.
 transactionOutcomesVersion :: (IsTransactionOutcomesVersion tov) => STransactionOutcomesVersion tov
 transactionOutcomesVersion = sing
+
+transactionSummaryVersion :: (IsTransactionSummaryVersion tsv) => STransactionSummaryVersion tsv
+transactionSummaryVersion = sing
 
 -- | Demote a singleton 'SChainParametersVersion' to a 'ChainParametersVersion'.
 demoteChainParameterVersion :: SChainParametersVersion cpv -> ChainParametersVersion
