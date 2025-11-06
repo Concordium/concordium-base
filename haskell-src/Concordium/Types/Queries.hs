@@ -365,19 +365,6 @@ data SupplementedTransactionStatus (pv :: ProtocolVersion)
       Finalized BlockHash (Maybe (SupplementedTransactionSummary pv))
     deriving (Show)
 
-instance ToJSON (SupplementedTransactionStatus pv) where
-    toJSON Received = object ["status" .= String "received"]
-    toJSON (Committed m) =
-        object
-            [ "status" .= String "committed",
-              "outcomes" .= m
-            ]
-    toJSON (Finalized bh outcome) =
-        object
-            [ "status" .= String "finalized",
-              "outcomes" .= Map.singleton bh outcome
-            ]
-
 -- | A pending change (if any) to a baker pool.
 --
 --  The JSON encoding uses a tag "pendingChangeType", which is "NoChange",

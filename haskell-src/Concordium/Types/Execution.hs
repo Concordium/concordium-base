@@ -2550,31 +2550,6 @@ data TransactionSummary' (pv :: ProtocolVersion) a = TransactionSummary
     }
     deriving (Eq, Show, Generic)
 
-instance (AE.FromJSON a, IsProtocolVersion pv) => AE.FromJSON (TransactionSummary' pv a) where
-    parseJSON = AE.withObject "Transaction summary" $ \o -> do
-        tsSender <- o .: "sender"
-        tsHash <- o .: "hash"
-        tsCost <- o .: "cost"
-        tsEnergyCost <- o .: "energyCost"
-        tsType <- o .: "type"
-        tsResult <- o .: "result"
-        tsIndex <- o .: "index"
-        tsSponsorDetails <- conditionallyA (sSupportsSponsoredTransactions (sing @pv)) (o .:? "sponsorDetails")
-        return $ TransactionSummary{..}
-
-instance (AE.ToJSON a) => AE.ToJSON (TransactionSummary' pv a) where
-    toJSON TransactionSummary{..} =
-        AE.object $
-            [ "sender" .= tsSender,
-              "hash" .= tsHash,
-              "cost" .= tsCost,
-              "energyCost" .= tsEnergyCost,
-              "type" .= tsType,
-              "result" .= tsResult,
-              "index" .= tsIndex
-            ]
-                ++ ["sponsorDetails" .= sd | CTrue (Just sd) <- [tsSponsorDetails]]
-
 -- | Lens for accessing the result field of a 'TransactionSummary''.
 summaryResult :: Lens (TransactionSummary' pv a) (TransactionSummary' pv b) a b
 summaryResult =
