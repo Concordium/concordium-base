@@ -20,7 +20,7 @@ import Prelude hiding (fail)
 import Control.Monad
 
 import Concordium.Utils.Serialization
-import Data.Aeson ((.:), (.:?), (.=))
+import Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as AE
 import Data.Aeson.TH
 import Data.Aeson.Types (Parser)
