@@ -18,7 +18,7 @@ use crate::web3id::did::Network;
 use crate::web3id::sdk::protocol::{FullContext, GivenContext};
 use crate::web3id::{did, AccountCredentialMetadata, IdentityCredentialMetadata, LinkingProof};
 use anyhow::{bail, ensure, Context};
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use itertools::Itertools;
 
 use nom::AsBytes;
@@ -56,8 +56,8 @@ pub struct ContextChallenge {
 impl From<FullContext> for ContextChallenge {
     fn from(context: FullContext) -> Self {
         Self {
-            given: context.given.iter().map(|x| x.clone().into()).collect(),
-            requested: context.requested.iter().map(|x| x.clone().into()).collect(),
+            given: context.given.into_iter().map(Into::into).collect(),
+            requested: context.requested.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -121,7 +121,7 @@ impl From<GivenContext> for ContextProperty {
     fn from(given_context: GivenContext) -> Self {
         match given_context {
             GivenContext::Nonce(nonce) => Self {
-                label: "nonce".to_string(),
+                label: "Nonce".to_string(),
                 context: hex::encode(nonce),
             },
             GivenContext::PaymentHash(hash_bytes) => Self {
@@ -695,9 +695,10 @@ where
 {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let millis: i64 = Deserial::deserial(source)?;
-        let naive = NaiveDateTime::from_timestamp_millis(millis)
-            .ok_or_else(|| anyhow::anyhow!("invalid timestamp"))?;
-        let created_at = DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc);
+        let naive_utc = DateTime::from_timestamp_millis(millis)
+            .ok_or_else(|| anyhow::anyhow!("invalid timestamp"))?
+            .naive_utc();
+        let created_at = DateTime::<Utc>::from_naive_utc_and_offset(naive_utc, Utc);
 
         let proof = Deserial::deserial(source)?;
 

@@ -28,6 +28,7 @@ use crate::{
     },
     pedersen_commitment,
 };
+use chrono::DateTime;
 use concordium_contracts_common::{
     hashes::HashBytes, ContractAddress, OwnedEntrypointName, OwnedParameter, Timestamp,
 };
@@ -1034,10 +1035,11 @@ impl crate::common::Serial for LinkingProof {
 impl crate::common::Deserial for LinkingProof {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> crate::common::ParseResult<Self> {
         let millis: i64 = crate::common::Deserial::deserial(source)?;
-        let naive = chrono::NaiveDateTime::from_timestamp_millis(millis)
-            .ok_or_else(|| anyhow::anyhow!("invalid timestamp"))?;
+        let naive_utc = DateTime::from_timestamp_millis(millis)
+            .ok_or_else(|| anyhow::anyhow!("invalid timestamp"))?
+            .naive_utc();
         let created =
-            chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(naive, chrono::Utc);
+            chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(naive_utc, chrono::Utc);
 
         let proof_value = crate::common::Deserial::deserial(source)?;
         Ok(Self {

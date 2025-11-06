@@ -1,25 +1,21 @@
 //! Types used in Concordium verifiable presentation protocol version 1.
 use crate::common::{cbor, Buffer, Deserial, Get, ParseResult, ReadBytesExt, Serial, Serialize};
-use crate::curve_arithmetic::{Curve, Pairing};
 use crate::id::{
-    constants::ArCurve,
+    constants::{ArCurve, IpPairing},
     id_proof_types::AtomicStatement,
-    types::{Attribute, AttributeTag},
+    types::AttributeTag,
 };
 use crate::web3id::v1::{PresentationV1, RequestV1};
 use crate::web3id::{did, Web3IdAttribute};
 use crate::{hashes, id};
-use anyhow::{ensure, Context as AnyhowContext};
+use anyhow::Context as AnyhowContext;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::hashes::HashBytes;
-use serde::de::{DeserializeOwned, Error as _};
-use serde::ser::SerializeMap;
-use serde::Deserializer;
+use serde::de::DeserializeOwned;
 use sha2::Digest;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 
 const PROTOCOL_VERSION: u16 = 1u16;
-const CONCORDIUM_VERIFICATION_AUDIT_RECORD: &str = "ConcordiumVerificationAuditRecord";
 
 /// Extract the value at the given key. This mutates the `value` replacing the
 /// value at the provided key with `Null`.
@@ -47,12 +43,9 @@ pub fn take_field_de<T: DeserializeOwned>(
 /// Audit records are used internally by verifiers to maintain complete records
 /// of verification interactions, while only publishing hash-based public records/anchors on-chain
 /// to preserve privacy, see [`VerificationAuditAnchor`].
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct VerificationAuditRecord<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
-> {
+#[derive(Debug, Clone, PartialEq, Serialize, serde::Deserialize, serde::Serialize)]
+#[serde(tag = "type", rename = "ConcordiumVerificationAuditRecord")]
+pub struct VerificationAuditRecord {
     /// Version integer, for now it is always 1.
     pub version: u16,
     /// The verifiable presentation request to record.
@@ -60,75 +53,15 @@ pub struct VerificationAuditRecord<
     /// Unique identifier chosen by the requester/merchant.
     pub id: String,
     /// The verifiable presentation including the proof.
-    pub presentation: PresentationV1<P, C, AttributeType>,
+    pub presentation: PresentationV1<IpPairing, ArCurve, Web3IdAttribute>,
 }
 
-impl<
-        P: Pairing,
-        C: Curve<Scalar = P::ScalarField>,
-        AttributeType: Attribute<C::Scalar> + serde::Serialize,
-    > serde::Serialize for VerificationAuditRecord<P, C, AttributeType>
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut map = serializer.serialize_map(None)?;
-        map.serialize_entry("type", &[CONCORDIUM_VERIFICATION_AUDIT_RECORD])?;
-        map.serialize_entry("version", &self.version)?;
-        map.serialize_entry("request", &self.request)?;
-        map.serialize_entry("id", &self.id)?;
-        map.serialize_entry("presentation", &self.presentation)?;
-        map.end()
-    }
-}
-
-impl<
-        'de,
-        P: Pairing,
-        C: Curve<Scalar = P::ScalarField>,
-        AttributeType: Attribute<C::Scalar> + DeserializeOwned,
-    > serde::Deserialize<'de> for VerificationAuditRecord<P, C, AttributeType>
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let mut value = serde_json::Value::deserialize(deserializer)?;
-
-        let result = (|| -> anyhow::Result<Self> {
-            let types: BTreeSet<String> = take_field_de(&mut value, "type")?;
-            ensure!(
-                types.contains(CONCORDIUM_VERIFICATION_AUDIT_RECORD),
-                "expected type {}",
-                CONCORDIUM_VERIFICATION_AUDIT_RECORD
-            );
-
-            let version = take_field_de(&mut value, "version")?;
-            let request = take_field_de(&mut value, "request")?;
-            let id = take_field_de(&mut value, "id")?;
-            let presentation = take_field_de(&mut value, "presentation")?;
-
-            Ok(Self {
-                version,
-                request,
-                id,
-                presentation,
-            })
-        })();
-
-        result.map_err(|err| D::Error::custom(format!("{:#}", err)))
-    }
-}
-
-impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
-    VerificationAuditRecord<P, C, AttributeType>
-{
+impl VerificationAuditRecord {
     /// Create a new verifiable audit anchor using the hardcoded version [`PROTOCOL_VERSION`].
     pub fn new(
         request: RequestV1<ArCurve, Web3IdAttribute>,
         id: String,
-        presentation: PresentationV1<P, C, AttributeType>,
+        presentation: PresentationV1<IpPairing, ArCurve, Web3IdAttribute>,
     ) -> Self {
         Self {
             version: PROTOCOL_VERSION,
@@ -153,9 +86,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     /// Generates the [`VerificationAuditAnchor`], a hash-based public record/anchor that can be published on-chain,
     /// from the internal audit anchor [`VerificationAuditRecord`] type. Verifiers maintain the private [`VerificationAuditAnchor`]
     /// in their backend database.
-    pub fn anchor(
+    pub fn to_anchor(
         &self,
-        public_info: Option<HashMap<String, cbor::value::Value>>,
+        public_info: HashMap<String, cbor::value::Value>,
     ) -> VerificationAuditAnchor {
         VerificationAuditAnchor {
             // Concordium Verification Audit Anchor
@@ -179,7 +112,7 @@ pub struct VerificationAuditAnchor {
     /// Hash computed from the [`VerificationAuditRecord`].
     pub hash: hashes::Hash,
     /// Optional public information.
-    pub public: Option<HashMap<String, cbor::value::Value>>,
+    pub public: HashMap<String, cbor::value::Value>,
 }
 
 /// Description of the presentation being requested from a credential holder.
@@ -227,9 +160,9 @@ impl VerificationRequestData {
 
     /// Generates the [`VerificationRequestAnchor`], a hash-based public record/anchor that can be published on-chain,
     /// from the the [`VerificationRequestData`] type.
-    pub fn anchor(
+    pub fn to_anchor(
         &self,
-        public_info: Option<HashMap<String, cbor::value::Value>>,
+        public_info: HashMap<String, cbor::value::Value>,
     ) -> VerificationRequestAnchor {
         VerificationRequestAnchor {
             // Concordium Verification Request Anchor
@@ -337,7 +270,7 @@ pub struct VerificationRequestAnchor {
     /// Hash computed from the [`VerificationRequestData`].
     pub hash: hashes::Hash,
     /// Optional public information.
-    pub public: Option<HashMap<String, cbor::value::Value>>,
+    pub public: HashMap<String, cbor::value::Value>,
 }
 
 /// The credential statements being requested.
@@ -826,11 +759,10 @@ mod tests {
         let mut public_info = HashMap::new();
         public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
 
-        request_data.anchor(Some(public_info))
+        request_data.to_anchor(public_info)
     }
 
-    fn verification_audit_anchor_fixture(
-    ) -> VerificationAuditRecord<IpPairing, ArCurve, Web3IdAttribute> {
+    fn verification_audit_anchor_fixture() -> VerificationAuditRecord {
         let context_challenge = FullContext::new()
             // While a simple context is used in practice,
             // we add all possible context variants to ensure test coverage.
@@ -1003,16 +935,13 @@ mod tests {
     }
 
     fn verification_audit_anchor_on_chain_fixture() -> VerificationAuditAnchor {
-        let verification_audit_anchor: VerificationAuditRecord<
-            IpPairing,
-            ArCurve,
-            Web3IdAttribute,
-        > = verification_audit_anchor_fixture();
+        let verification_audit_anchor: VerificationAuditRecord =
+            verification_audit_anchor_fixture();
 
         let mut public_info = HashMap::new();
         public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
 
-        verification_audit_anchor.anchor(Some(public_info))
+        verification_audit_anchor.to_anchor(public_info)
     }
 
     // Tests about JSON serialization and deserialization roundtrips
