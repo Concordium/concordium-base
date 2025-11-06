@@ -780,8 +780,8 @@ instance ToProto RejectReason where
 --   The protobuf type is better structured and removes the need for handling impossible cases.
 --   For example the case of an account transfer resulting in a smart contract update, which is a
 --   technical possibility in the way that the node's trx status is defined.
-instance ToProto (QueryTypes.SupplementedTransactionStatus pv) where
-    type Output (QueryTypes.SupplementedTransactionStatus pv) = Either ConversionError Proto.BlockItemStatus
+instance ToProto QueryTypes.SupplementedTransactionStatus where
+    type Output QueryTypes.SupplementedTransactionStatus = Either ConversionError Proto.BlockItemStatus
     toProto ts = case ts of
         QueryTypes.Received -> Right . Proto.make $ ProtoFields.received .= Proto.defMessage
         QueryTypes.Finalized bh trx -> do
@@ -794,7 +794,7 @@ instance ToProto (QueryTypes.SupplementedTransactionStatus pv) where
       where
         -- \|Convert a transaction summary to a proto block item summary.
         --  The transaction summary can technically be Nothing, but it should never occur.
-        toBis :: Maybe (SupplementedTransactionSummary pv) -> Either ConversionError Proto.BlockItemSummary
+        toBis :: Maybe SupplementedTransactionSummary -> Either ConversionError Proto.BlockItemSummary
         toBis Nothing = Left CEInvalidTransactionResult
         toBis (Just t) = toProto t
 
@@ -804,20 +804,20 @@ instance ToProto (QueryTypes.SupplementedTransactionStatus pv) where
 
 -- | Attempt to convert a SupplementedTransactionSummary type into the protobuf BlockItemSummary
 --   type. See @toBlockItemStatus@ for more context.
-instance ToProto (SupplementedTransactionSummary pv) where
-    type Output (SupplementedTransactionSummary pv) = Either ConversionError Proto.BlockItemSummary
-    toProto TransactionSummary{..} = case tsType of
+instance ToProto SupplementedTransactionSummary where
+    type Output SupplementedTransactionSummary = Either ConversionError Proto.BlockItemSummary
+    toProto TransactionSummary0{..} = case ts0Type of
         TSTAccountTransaction tty -> do
-            sender <- case tsSender of
+            sender <- case ts0Sender of
                 Nothing -> Left CEInvalidTransactionResult
                 Just acc -> Right acc
-            details <- convertAccountTransaction tty tsCost sender tsSponsorDetails tsResult
+            details <- convertAccountTransaction tty ts0Cost sender ts0SponsorDetails ts0Result
             Right . Proto.make $ do
-                ProtoFields.index .= mkWord64 tsIndex
-                ProtoFields.energyCost .= toProto tsEnergyCost
-                ProtoFields.hash .= toProto tsHash
+                ProtoFields.index .= mkWord64 ts0Index
+                ProtoFields.energyCost .= toProto ts0EnergyCost
+                ProtoFields.hash .= toProto ts0Hash
                 ProtoFields.accountTransaction .= details
-        TSTCredentialDeploymentTransaction ct -> case tsResult of
+        TSTCredentialDeploymentTransaction ct -> case ts0Result of
             TxReject _ -> Left CEFailedAccountCreation
             TxSuccess events -> case events of
                 [AccountCreated addr, CredentialDeployed{..}] ->
@@ -828,12 +828,12 @@ instance ToProto (SupplementedTransactionSummary pv) where
                             ProtoFields.regId .= toProto ecdRegId
                     in
                         Right . Proto.make $ do
-                            ProtoFields.index .= mkWord64 tsIndex
-                            ProtoFields.energyCost .= toProto tsEnergyCost
-                            ProtoFields.hash .= toProto tsHash
+                            ProtoFields.index .= mkWord64 ts0Index
+                            ProtoFields.energyCost .= toProto ts0EnergyCost
+                            ProtoFields.hash .= toProto ts0Hash
                             ProtoFields.accountCreation .= details
                 _ -> Left CEInvalidAccountCreation
-        TSTUpdateTransaction ut -> case tsResult of
+        TSTUpdateTransaction ut -> case ts0Result of
             TxReject _ -> Left CEFailedUpdate
             TxSuccess events -> case events of
                 [UpdateEnqueued{..}] -> do
@@ -842,18 +842,18 @@ instance ToProto (SupplementedTransactionSummary pv) where
                         ProtoFields.effectiveTime .= toProto ueEffectiveTime
                         ProtoFields.payload .= payload
                     Right . Proto.make $ do
-                        ProtoFields.index .= mkWord64 tsIndex
-                        ProtoFields.energyCost .= toProto tsEnergyCost
-                        ProtoFields.hash .= toProto tsHash
+                        ProtoFields.index .= mkWord64 ts0Index
+                        ProtoFields.energyCost .= toProto ts0EnergyCost
+                        ProtoFields.hash .= toProto ts0Hash
                         ProtoFields.update .= details
                 (TokenCreated createPLT : initEvents) -> do
                     protoEvents <-
                         left (const CEInvalidUpdateResult) $
                             mapM tokenUpdateEventToProto initEvents
                     Right . Proto.make $ do
-                        ProtoFields.index .= mkWord64 tsIndex
-                        ProtoFields.energyCost .= toProto tsEnergyCost
-                        ProtoFields.hash .= toProto tsHash
+                        ProtoFields.index .= mkWord64 ts0Index
+                        ProtoFields.energyCost .= toProto ts0EnergyCost
+                        ProtoFields.hash .= toProto ts0Hash
                         ProtoFields.tokenCreation
                             .= Proto.make
                                 ( do
@@ -1342,12 +1342,12 @@ convertAccountTransaction ::
     -- | The sender of the transaction.
     AccountAddress ->
     -- | The optional sponsor details of the transaction. Present since P10.
-    Conditionally b (Maybe SponsorDetails) ->
+    Maybe SponsorDetails ->
     -- | The result of the transaction. If the transaction was rejected, it contains the reject reason.
     --   Otherwise it contains the events.
     SupplementedValidResult ->
     Either ConversionError Proto.AccountTransactionDetails
-convertAccountTransaction ty cost sender condSponsorDetails result = case ty of
+convertAccountTransaction ty cost sender mbSponsorDetails result = case ty of
     Nothing -> Right . mkNone $ SerializationFailure
     Just ty' -> case result of
         TxReject rejectReason -> Right . mkNone $ rejectReason
@@ -1688,17 +1688,13 @@ convertAccountTransaction ty cost sender condSponsorDetails result = case ty of
         ProtoFields.cost .= toProto cost
         ProtoFields.sender .= toProto sender
         ProtoFields.effects .= effects
-        ProtoFields.maybe'sponsor .= case condSponsorDetails of
-            CTrue mbSponsorDetails -> fmap mkSponsorDetails mbSponsorDetails
-            CFalse -> Nothing
+        ProtoFields.maybe'sponsor .= fmap mkSponsorDetails mbSponsorDetails
 
     mkNone :: RejectReason -> Proto.AccountTransactionDetails
     mkNone rr = Proto.make $ do
         ProtoFields.cost .= toProto cost
         ProtoFields.sender .= toProto sender
-        ProtoFields.maybe'sponsor .= case condSponsorDetails of
-            CTrue mbSponsorDetails -> fmap mkSponsorDetails mbSponsorDetails
-            CFalse -> Nothing
+        ProtoFields.maybe'sponsor .= fmap mkSponsorDetails mbSponsorDetails
         ProtoFields.effects
             . ProtoFields.none
             .= ( Proto.make $ do
@@ -2658,24 +2654,24 @@ instance ToProto (DryRunResponse InvokeContract.InvokeContractResult) where
                         )
                 ProtoFields.quotaRemaining .= toProto quotaRem
 
-instance ToProto (DryRunResponse (TransactionSummary' pv SupplementedValidResultWithReturn)) where
+instance ToProto (DryRunResponse (TransactionSummary0 SupplementedValidResultWithReturn)) where
     type
-        Output (DryRunResponse (TransactionSummary' pv SupplementedValidResultWithReturn)) =
+        Output (DryRunResponse (TransactionSummary0 SupplementedValidResultWithReturn)) =
             Either ConversionError Proto.DryRunResponse
-    toProto (DryRunResponse TransactionSummary{..} quotaRem) = case tsType of
+    toProto (DryRunResponse TransactionSummary0{..} quotaRem) = case ts0Type of
         TSTAccountTransaction tty -> do
-            sender <- case tsSender of
+            sender <- case ts0Sender of
                 Nothing -> Left CEInvalidTransactionResult
                 Just acc -> Right acc
-            details <- convertAccountTransaction tty tsCost sender tsSponsorDetails (vrwrResult tsResult)
+            details <- convertAccountTransaction tty ts0Cost sender ts0SponsorDetails (vrwrResult ts0Result)
             Right . Proto.make $ do
                 ProtoFields.success
                     .= Proto.make
                         ( ProtoFields.transactionExecuted
                             .= Proto.make
                                 ( do
-                                    mapM_ (ProtoFields.returnValue .=) $ vrwrReturnValue tsResult
-                                    ProtoFields.energyCost .= toProto tsEnergyCost
+                                    mapM_ (ProtoFields.returnValue .=) $ vrwrReturnValue ts0Result
+                                    ProtoFields.energyCost .= toProto ts0EnergyCost
                                     ProtoFields.details .= details
                                 )
                         )

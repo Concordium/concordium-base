@@ -2537,7 +2537,7 @@ instance S.Serialize SponsorDetails where
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''SponsorDetails)
 
 -- | Result of a valid transaction is a transaction summary.
-data TransactionSummary' (pv :: ProtocolVersion) a = TransactionSummary
+data TransactionSummary' tov a = TransactionSummary
     { tsSender :: !(Maybe AccountAddress),
       tsHash :: !TransactionHash,
       -- | The transaction cost paid for by the sender
@@ -2546,9 +2546,40 @@ data TransactionSummary' (pv :: ProtocolVersion) a = TransactionSummary
       tsType :: !TransactionSummaryType,
       tsResult :: !a,
       tsIndex :: !TransactionIndex,
-      tsSponsorDetails :: !(Conditionally (SupportsSponsoredTransactions pv) (Maybe SponsorDetails))
+      tsSponsorDetails :: !(Conditionally (HasSponsorDetails tov) (Maybe SponsorDetails))
     }
     deriving (Eq, Show, Generic)
+
+-- | Result of a valid transaction is a transaction summary. This type is used
+--  in queries and its fields are independent of the protocol version.
+data TransactionSummary0 a = TransactionSummary0
+    { ts0Sender :: !(Maybe AccountAddress),
+      ts0Hash :: !TransactionHash,
+      -- | The transaction cost paid for by the sender
+      ts0Cost :: !Amount,
+      ts0EnergyCost :: !Energy,
+      ts0Type :: !TransactionSummaryType,
+      ts0Result :: !a,
+      ts0Index :: !TransactionIndex,
+      ts0SponsorDetails :: !(Maybe SponsorDetails)
+    }
+    deriving (Eq, Show, Generic)
+
+-- | Convert a `TransactionSummary'` to a `TransactionSummary0` by forgetting
+--  the `TransactionOutcomeVersion` parameter. The conditionally present
+--  `SponsorDetails` are set to `Nothing` if not present.
+toTransactionSummary0 :: forall tov a. TransactionSummary' tov a -> TransactionSummary0 a
+toTransactionSummary0 TransactionSummary{..} =
+    TransactionSummary0
+        { ts0Sender = tsSender,
+          ts0Hash = tsHash,
+          ts0Cost = tsCost,
+          ts0EnergyCost = tsEnergyCost,
+          ts0Type = tsType,
+          ts0Result = tsResult,
+          ts0Index = tsIndex,
+          ts0SponsorDetails = fromCondDef tsSponsorDetails Nothing
+        }
 
 -- | Lens for accessing the result field of a 'TransactionSummary''.
 summaryResult :: Lens (TransactionSummary' pv a) (TransactionSummary' pv b) a b
@@ -2559,16 +2590,16 @@ summaryResult =
 
 -- | A transaction summary parameterized with an outcome of a valid transaction
 --  containing either a 'TxSuccess' or 'TxReject'.
-type TransactionSummary (pv :: ProtocolVersion) = TransactionSummary' pv ValidResult
+type TransactionSummary tov = TransactionSummary' tov ValidResult
 
 -- | A transaction summary parameterized with an outcome of a valid transaction
 --  containing either a 'TxSuccess' or 'TxReject'.
-type SupplementedTransactionSummary (pv :: ProtocolVersion) = TransactionSummary' pv (ValidResult' True)
+type SupplementedTransactionSummary = TransactionSummary0 (ValidResult' True)
 
-instance (SupplementEvents a) => SupplementEvents (TransactionSummary' (pv :: ProtocolVersion) a) where
-    type Supplemented (TransactionSummary' pv a) = TransactionSummary' pv (Supplemented a)
-    supplementEvents f TransactionSummary{..} =
-        (\res -> TransactionSummary{tsResult = res, ..}) <$> supplementEvents f tsResult
+instance (SupplementEvents a) => SupplementEvents (TransactionSummary0 a) where
+    type Supplemented (TransactionSummary0 a) = TransactionSummary0 (Supplemented a)
+    supplementEvents f TransactionSummary0{..} =
+        (\res -> TransactionSummary0{ts0Result = res, ..}) <$> supplementEvents f ts0Result
 
 -- | An abstraction for constructing the result of a transaction.
 --  This is instantiated by both 'ValidResult' and 'ValidResultWithReturn'.
@@ -2708,10 +2739,10 @@ putTransactionSummary TransactionSummary{..} =
         <> putValidResult tsResult
         <> S.put tsIndex
 
-getTransactionSummary :: SProtocolVersion pv -> S.Get (TransactionSummary pv)
+getTransactionSummary :: SProtocolVersion pv -> S.Get (TransactionSummary (TransactionOutcomesVersionFor pv))
 getTransactionSummary spv = do
     tsSender <- getMaybe S.get
-    tsSponsorDetails <- conditionallyA (sSupportsSponsoredTransactions spv) (getMaybe S.get)
+    tsSponsorDetails <- conditionallyA (sHasSponsorDetails (sTransactionOutcomesVersionFor spv)) (getMaybe S.get)
     tsHash <- S.get
     tsCost <- S.get
     tsEnergyCost <- S.get
@@ -3037,7 +3068,7 @@ data FailureKind
       InvalidTokenModuleRef !TokenModuleRef
     deriving (Eq, Show)
 
-data TxResult (pv :: ProtocolVersion) = TxValid !(TransactionSummary pv) | TxInvalid !FailureKind
+data TxResult tov = TxValid !(TransactionSummary tov) | TxInvalid !FailureKind
 
 -- | Generate the challenge for adding a baker.
 addBakerChallenge :: AccountAddress -> BakerElectionVerifyKey -> BakerSignVerifyKey -> BakerAggregationVerifyKey -> BS.ByteString

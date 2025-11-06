@@ -890,10 +890,12 @@ genSponsorDetails = do
     sdCost <- genAmount
     return SponsorDetails{..}
 
-genTransactionSummary :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen (TransactionSummary pv)
+genTransactionSummary :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen (TransactionSummary (TransactionOutcomesVersionFor pv))
 genTransactionSummary spv = do
     tsSender <- oneof [return Nothing, Just <$> genAccountAddress]
-    tsSponsorDetails <- conditionally (sSupportsSponsoredTransactions spv) <$> oneof [return Nothing, Just <$> genSponsorDetails]
+    tsSponsorDetails <-
+        conditionally (sHasSponsorDetails (sTransactionOutcomesVersionFor spv))
+            <$> oneof [return Nothing, Just <$> genSponsorDetails]
     tsHash <- TransactionHashV0 . SHA256.Hash . FBS.pack <$> vector 32
     tsCost <- genAmount
     tsEnergyCost <- Energy <$> arbitrary
