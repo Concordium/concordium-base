@@ -2,13 +2,14 @@
 use crate::common::{cbor, Buffer, Deserial, Get, ParseResult, ReadBytesExt, Serial, Serialize};
 use crate::curve_arithmetic::{Curve, Pairing};
 use crate::id::{
+    constants::ArCurve,
     id_proof_types::AtomicStatement,
     types::{Attribute, AttributeTag},
 };
-use crate::web3id::v1::{take_field_de, PresentationV1};
+use crate::web3id::v1::{PresentationV1, RequestV1};
 use crate::web3id::{did, Web3IdAttribute};
 use crate::{hashes, id};
-use anyhow::ensure;
+use anyhow::{ensure, Context as AnyhowContext};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::hashes::HashBytes;
 use serde::de::{DeserializeOwned, Error as _};
@@ -18,32 +19,25 @@ use sha2::Digest;
 use std::collections::{BTreeSet, HashMap};
 
 const PROTOCOL_VERSION: u16 = 1u16;
-const CONCORDIUM_VERIFICATION_AUDIT_ANCHOR: &str = "ConcordiumVerificationAuditAnchor";
+const CONCORDIUM_VERIFICATION_AUDIT_RECORD: &str = "ConcordiumVerificationAuditRecord";
 
-/// A verifiable presentation request that specifies what credentials and proofs
-/// are being requested from a credential holder.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Serialize)]
-#[serde(tag = "type", rename = "ConcordiumVPRequestV1")]
-pub struct VerifiablePresentationRequest {
-    /// Presentation being requested.
-    #[serde(flatten)]
-    pub request: VerificationRequestData,
-    /// Blockchain transaction hash that anchors the request.
-    #[serde(rename = "transactionRef")]
-    pub anchor_transaction_hash: hashes::TransactionHash,
+/// Extract the value at the given key. This mutates the `value` replacing the
+/// value at the provided key with `Null`.
+fn take_field(value: &mut serde_json::Value, field: &str) -> anyhow::Result<serde_json::Value> {
+    Ok(value
+        .get_mut(field)
+        .with_context(|| format!("field {field} is not present"))?
+        .take())
 }
 
-impl VerifiablePresentationRequest {
-    /// Create a new verifiable presentation request.
-    pub fn new(
-        request: VerificationRequestData,
-        anchor_transaction_hash: hashes::TransactionHash,
-    ) -> Self {
-        Self {
-            request,
-            anchor_transaction_hash,
-        }
-    }
+/// Extract the value at the given key and deserializes it. This mutates the `value` replacing the
+/// value at the provided key with `Null`.
+pub fn take_field_de<T: DeserializeOwned>(
+    value: &mut serde_json::Value,
+    field: &str,
+) -> anyhow::Result<T> {
+    serde_json::from_value(take_field(value, field)?)
+        .with_context(|| format!("deserialize {}", field))
 }
 
 /// A verification audit record that contains the complete verifiable presentation
@@ -52,9 +46,9 @@ impl VerifiablePresentationRequest {
 ///
 /// Audit records are used internally by verifiers to maintain complete records
 /// of verification interactions, while only publishing hash-based public records/anchors on-chain
-/// to preserve privacy, see [`VerificationAuditAnchorOnChain`].
+/// to preserve privacy, see [`VerificationAuditAnchor`].
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct VerificationAuditAnchor<
+pub struct VerificationAuditRecord<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
@@ -62,7 +56,7 @@ pub struct VerificationAuditAnchor<
     /// Version integer, for now it is always 1.
     pub version: u16,
     /// The verifiable presentation request to record.
-    pub request: VerifiablePresentationRequest,
+    pub request: RequestV1<ArCurve, Web3IdAttribute>,
     /// Unique identifier chosen by the requester/merchant.
     pub id: String,
     /// The verifiable presentation including the proof.
@@ -73,14 +67,14 @@ impl<
         P: Pairing,
         C: Curve<Scalar = P::ScalarField>,
         AttributeType: Attribute<C::Scalar> + serde::Serialize,
-    > serde::Serialize for VerificationAuditAnchor<P, C, AttributeType>
+    > serde::Serialize for VerificationAuditRecord<P, C, AttributeType>
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
         let mut map = serializer.serialize_map(None)?;
-        map.serialize_entry("type", &[CONCORDIUM_VERIFICATION_AUDIT_ANCHOR])?;
+        map.serialize_entry("type", &[CONCORDIUM_VERIFICATION_AUDIT_RECORD])?;
         map.serialize_entry("version", &self.version)?;
         map.serialize_entry("request", &self.request)?;
         map.serialize_entry("id", &self.id)?;
@@ -94,7 +88,7 @@ impl<
         P: Pairing,
         C: Curve<Scalar = P::ScalarField>,
         AttributeType: Attribute<C::Scalar> + DeserializeOwned,
-    > serde::Deserialize<'de> for VerificationAuditAnchor<P, C, AttributeType>
+    > serde::Deserialize<'de> for VerificationAuditRecord<P, C, AttributeType>
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -105,9 +99,9 @@ impl<
         let result = (|| -> anyhow::Result<Self> {
             let types: BTreeSet<String> = take_field_de(&mut value, "type")?;
             ensure!(
-                types.contains(CONCORDIUM_VERIFICATION_AUDIT_ANCHOR),
+                types.contains(CONCORDIUM_VERIFICATION_AUDIT_RECORD),
                 "expected type {}",
-                CONCORDIUM_VERIFICATION_AUDIT_ANCHOR
+                CONCORDIUM_VERIFICATION_AUDIT_RECORD
             );
 
             let version = take_field_de(&mut value, "version")?;
@@ -128,11 +122,11 @@ impl<
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
-    VerificationAuditAnchor<P, C, AttributeType>
+    VerificationAuditRecord<P, C, AttributeType>
 {
     /// Create a new verifiable audit anchor using the hardcoded version [`PROTOCOL_VERSION`].
     pub fn new(
-        request: VerifiablePresentationRequest,
+        request: RequestV1<ArCurve, Web3IdAttribute>,
         id: String,
         presentation: PresentationV1<P, C, AttributeType>,
     ) -> Self {
@@ -156,14 +150,14 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         HashBytes::new(hasher.finalize().into())
     }
 
-    /// Generates the [`VerificationAuditAnchorOnChain`], a hash-based public record/anchor that can be published on-chain,
-    /// from the internal audit anchor [`VerificationAuditAnchor`] type. Verifiers maintain the private [`VerificationAuditAnchor`]
+    /// Generates the [`VerificationAuditAnchor`], a hash-based public record/anchor that can be published on-chain,
+    /// from the internal audit anchor [`VerificationAuditRecord`] type. Verifiers maintain the private [`VerificationAuditAnchor`]
     /// in their backend database.
     pub fn anchor(
         &self,
         public_info: Option<HashMap<String, cbor::value::Value>>,
-    ) -> VerificationAuditAnchorOnChain {
-        VerificationAuditAnchorOnChain {
+    ) -> VerificationAuditAnchor {
+        VerificationAuditAnchor {
             // Concordium Verification Audit Anchor
             r#type: "CCDVAA".to_string(),
             version: PROTOCOL_VERSION,
@@ -177,12 +171,12 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 ///
 /// This format is used when anchoring a verification audit on the Concordium blockchain.
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
-pub struct VerificationAuditAnchorOnChain {
+pub struct VerificationAuditAnchor {
     /// Type identifier for Concordium Verifiable Request Audit Anchor/Record. Always set to "CCDVAA".
     pub r#type: String,
     /// Data format version integer, for now it is always 1.
     pub version: u16,
-    /// Hash computed from the [`VerificationAuditAnchor`].
+    /// Hash computed from the [`VerificationAuditRecord`].
     pub hash: hashes::Hash,
     /// Optional public information.
     pub public: Option<HashMap<String, cbor::value::Value>>,
@@ -190,9 +184,10 @@ pub struct VerificationAuditAnchorOnChain {
 
 /// Description of the presentation being requested from a credential holder.
 ///
-/// This is also used to compute the hash for in the [`VerificationRequestAnchorOnChain`].
+/// This is also used to compute the hash for in the [`VerificationRequestAnchor`].
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(tag = "type", rename = "ConcordiumVerificationRequestDataV1")]
 pub struct VerificationRequestData {
     /// Context information for a verifiable presentation request.
     pub request_context: Context,
@@ -230,13 +225,13 @@ impl VerificationRequestData {
         HashBytes::new(hasher.finalize().into())
     }
 
-    /// Generates the [`VerificationRequestAnchorOnChain`], a hash-based public record/anchor that can be published on-chain,
+    /// Generates the [`VerificationRequestAnchor`], a hash-based public record/anchor that can be published on-chain,
     /// from the the [`VerificationRequestData`] type.
     pub fn anchor(
         &self,
         public_info: Option<HashMap<String, cbor::value::Value>>,
-    ) -> VerificationRequestAnchorOnChain {
-        VerificationRequestAnchorOnChain {
+    ) -> VerificationRequestAnchor {
+        VerificationRequestAnchor {
             // Concordium Verification Request Anchor
             r#type: "CCDVRA".to_string(),
             version: PROTOCOL_VERSION,
@@ -288,7 +283,7 @@ impl Context {
     /// - `nonce` Cryptographic nonce for preventing replay attacks and should be at least of length bytes32.
     /// - `connectionId` Identifier for the verification session (e.g. wallet-connect topic).
     /// - `contextString` Additional context information.
-    pub fn new_simple(nonce: Vec<u8>, connection_id: String, context_string: String) -> Self {
+    pub fn new_simple(nonce: [u8; 32], connection_id: String, context_string: String) -> Self {
         Self::default()
             .add_context(GivenContext::Nonce(nonce))
             .add_context(GivenContext::ConnectionId(connection_id))
@@ -298,11 +293,43 @@ impl Context {
     }
 }
 
+/// FullContext information for a verifiable presentation.
+///
+/// Contains both the context data that is already known (given) and
+/// the context data that had been requested by the wallets (requested).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Serialize, Default)]
+#[serde(tag = "type", rename = "ConcordiumFullContextInformationV1")]
+pub struct FullContext {
+    /// Context information that is already provided.
+    pub given: Vec<GivenContext>,
+    /// Context information that must be provided by the wallet/ID app.
+    pub requested: Vec<GivenContext>,
+}
+
+impl FullContext {
+    /// Create an empty context.
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Add to the given context.
+    pub fn add_context(mut self, context: impl Into<GivenContext>) -> Self {
+        self.given.push(context.into());
+        self
+    }
+
+    /// Add to the requested context.
+    pub fn add_request(mut self, context: impl Into<GivenContext>) -> Self {
+        self.requested.push(context.into());
+        self
+    }
+}
+
 /// Data structure for CBOR-encoded verifiable presentation request anchors.
 ///
 /// This format is used when anchoring presentation requests on the Concordium blockchain.
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
-pub struct VerificationRequestAnchorOnChain {
+pub struct VerificationRequestAnchor {
     /// Type identifier for Concordium Verification Request Anchor. Always set to "CCDVRA".
     pub r#type: String,
     /// Data format version integer, for now it is always 1.
@@ -580,7 +607,7 @@ impl TryFrom<did::Method> for IdentityProviderMethod {
 #[serde(into = "GivenContextJson", try_from = "GivenContextJson")]
 pub enum GivenContext {
     /// Cryptographic nonce context which should be at least of length bytes32.
-    Nonce(Vec<u8>),
+    Nonce([u8; 32]),
     /// Payment hash context (Concordium transaction hash).
     PaymentHash(hashes::Hash),
     /// Concordium block hash context.
@@ -714,9 +741,16 @@ impl TryFrom<GivenContextJson> for GivenContext {
             ContextLabel::ContextString => Ok(Self::ContextString(value.context)),
             ContextLabel::ResourceId => Ok(Self::ResourceId(value.context)),
             ContextLabel::ConnectionId => Ok(Self::ConnectionId(value.context)),
-            ContextLabel::Nonce => Ok(Self::Nonce(
-                hex::decode(value.context).map_err(TryFromGivenContextJsonError::Nonce)?,
-            )),
+            ContextLabel::Nonce => {
+                let bytes =
+                    hex::decode(value.context).map_err(TryFromGivenContextJsonError::Nonce)?;
+
+                let arr: [u8; 32] = bytes.try_into().map_err(|_| {
+                    TryFromGivenContextJsonError::Nonce(hex::FromHexError::InvalidStringLength)
+                })?;
+
+                Ok(Self::Nonce(arr))
+            }
             ContextLabel::BlockHash => Ok(Self::BlockHash(
                 value
                     .context
@@ -741,6 +775,12 @@ mod tests {
         id::{
             constants::{ArCurve, IpPairing},
             id_proof_types::AttributeInRangeStatement,
+            types::GlobalContext,
+        },
+        web3id::{
+            did::Network,
+            fixtures,
+            v1::{AccountCredentialStatementV1, CredentialStatementV1},
         },
     };
     use concordium_contracts_common::hashes::Hash;
@@ -749,14 +789,14 @@ mod tests {
 
     fn verification_request_data_fixture() -> VerificationRequestData {
         let context = Context::new_simple(
-            vec![0u8; 32],
+            [0u8; 32],
             "MyConnection".to_string(),
             "MyDappContext".to_string(),
         )
         // While above simple context is used in practice,
         // we add all possible context variants and context label variants to ensure test coverage.
-        .add_context(GivenContext::PaymentHash(hashes::Hash::new([0u8; 32])))
-        .add_context(GivenContext::BlockHash(hashes::BlockHash::new([1u8; 32])))
+        .add_context(GivenContext::PaymentHash(hashes::Hash::new([1u8; 32])))
+        .add_context(GivenContext::BlockHash(hashes::BlockHash::new([2u8; 32])))
         .add_context(GivenContext::ResourceId("MyRescourceId".to_string()))
         .add_request(ContextLabel::Nonce)
         .add_request(ContextLabel::PaymentHash)
@@ -774,13 +814,13 @@ mod tests {
 
         VerificationRequestData::new(context).add_statement_request(
             IdentityStatementRequest::default()
-                .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
+                .add_issuer(IdentityProviderMethod::new(3u32, did::Network::Testnet))
                 .add_source(CredentialType::Identity)
                 .add_statement(attribute_in_range_statement),
         )
     }
 
-    fn verification_request_anchor_on_chain_fixture() -> VerificationRequestAnchorOnChain {
+    fn verification_request_anchor_on_chain_fixture() -> VerificationRequestAnchor {
         let request_data = verification_request_data_fixture();
 
         let mut public_info = HashMap::new();
@@ -790,44 +830,41 @@ mod tests {
     }
 
     fn verification_audit_anchor_fixture(
-    ) -> VerificationAuditAnchor<IpPairing, ArCurve, Web3IdAttribute> {
-        let context = Context::new_simple(
-            vec![1; 32],
-            "MyConnection".to_string(),
-            "MyDappContext".to_string(),
-        )
-        // While above simple context is used in practice,
-        // we add all possible context variants and context label variants to ensure test coverage.
-        .add_context(GivenContext::PaymentHash(hashes::Hash::new([2u8; 32])))
-        .add_context(GivenContext::BlockHash(hashes::BlockHash::new([3u8; 32])))
-        .add_context(GivenContext::ResourceId("MyRescourceId".to_string()))
-        .add_request(ContextLabel::Nonce)
-        .add_request(ContextLabel::PaymentHash)
-        .add_request(ContextLabel::ConnectionId)
-        .add_request(ContextLabel::ContextString);
+    ) -> VerificationAuditRecord<IpPairing, ArCurve, Web3IdAttribute> {
+        let context_challenge = FullContext::new()
+            // While a simple context is used in practice,
+            // we add all possible context variants to ensure test coverage.
+            .add_context(GivenContext::Nonce([0u8; 32]))
+            .add_context(GivenContext::PaymentHash(hashes::Hash::new([1u8; 32])))
+            .add_context(GivenContext::BlockHash(hashes::BlockHash::new([2u8; 32])))
+            .add_context(GivenContext::ConnectionId("MyConnectionId".to_string()))
+            .add_context(GivenContext::ResourceId("MyRescourceId".to_string()))
+            .add_context(GivenContext::ContextString("MyContextString".to_string()))
+            .add_request(GivenContext::Nonce([3u8; 32]))
+            .add_request(GivenContext::PaymentHash(hashes::Hash::new([4u8; 32])))
+            .add_request(GivenContext::BlockHash(hashes::BlockHash::new([5u8; 32])))
+            .add_request(GivenContext::ConnectionId("MyConnectionId".to_string()))
+            .add_request(GivenContext::ResourceId("MyRescourceId".to_string()))
+            .add_request(GivenContext::ContextString("MyContextString".to_string()));
 
-        let attribute_in_range_statement = AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
-                attribute_tag: 17.into(),
-                lower: Web3IdAttribute::Numeric(80),
-                upper: Web3IdAttribute::Numeric(1237),
-                _phantom: PhantomData,
+        let global_context = GlobalContext::generate("Test".into());
+
+        let (statements, attributes) = fixtures::statements_and_attributes();
+
+        let acc_cred_fixture = fixtures::account_credentials_fixture(attributes, &global_context);
+
+        let credential_statements = vec![CredentialStatementV1::Account(
+            AccountCredentialStatementV1 {
+                network: Network::Testnet,
+                cred_id: acc_cred_fixture.cred_id,
+                statements,
             },
+        )];
+
+        let presentation_request = RequestV1::<ArCurve, Web3IdAttribute> {
+            challenge: context_challenge.into(),
+            credential_statements,
         };
-
-        let request_data = VerificationRequestData::new(context).add_statement_request(
-            IdentityStatementRequest::default()
-                .add_issuer(IdentityProviderMethod::new(0u32, did::Network::Testnet))
-                .add_source(CredentialType::Identity)
-                .add_statement(attribute_in_range_statement),
-        );
-
-        let verification_request_anchor_transaction_hash = hashes::TransactionHash::new([2u8; 32]);
-
-        let presentation_request = VerifiablePresentationRequest::new(
-            request_data,
-            verification_request_anchor_transaction_hash,
-        );
 
         let presentation_json = r#"
 {
@@ -962,11 +999,11 @@ mod tests {
             serde_json::from_str(&presentation_json).unwrap();
         let id = "MyUUID".to_string();
 
-        VerificationAuditAnchor::new(presentation_request, id, presentation_deserialized)
+        VerificationAuditRecord::new(presentation_request, id, presentation_deserialized)
     }
 
-    fn verification_audit_anchor_on_chain_fixture() -> VerificationAuditAnchorOnChain {
-        let verification_audit_anchor: VerificationAuditAnchor<
+    fn verification_audit_anchor_on_chain_fixture() -> VerificationAuditAnchor {
+        let verification_audit_anchor: VerificationAuditRecord<
             IpPairing,
             ArCurve,
             Web3IdAttribute,
@@ -982,14 +1019,40 @@ mod tests {
 
     #[test]
     fn test_verification_presentation_request_json_roundtrip() -> anyhow::Result<()> {
-        let request_data = verification_request_data_fixture();
+        let context_challenge = FullContext::new()
+            // While a simple context is used in practice,
+            // we add all possible context variants to ensure test coverage.
+            .add_context(GivenContext::Nonce([0u8; 32]))
+            .add_context(GivenContext::PaymentHash(hashes::Hash::new([1u8; 32])))
+            .add_context(GivenContext::BlockHash(hashes::BlockHash::new([2u8; 32])))
+            .add_context(GivenContext::ConnectionId("MyConnectionId".to_string()))
+            .add_context(GivenContext::ResourceId("MyRescourceId".to_string()))
+            .add_context(GivenContext::ContextString("MyContextString".to_string()))
+            .add_request(GivenContext::Nonce([3u8; 32]))
+            .add_request(GivenContext::PaymentHash(hashes::Hash::new([4u8; 32])))
+            .add_request(GivenContext::BlockHash(hashes::BlockHash::new([5u8; 32])))
+            .add_request(GivenContext::ConnectionId("MyConnectionId".to_string()))
+            .add_request(GivenContext::ResourceId("MyRescourceId".to_string()))
+            .add_request(GivenContext::ContextString("MyContextString".to_string()));
 
-        let verification_request_anchor_transaction_hash = hashes::TransactionHash::new([0u8; 32]);
+        let global_context = GlobalContext::generate("Test".into());
 
-        let presentation_request = VerifiablePresentationRequest::new(
-            request_data,
-            verification_request_anchor_transaction_hash,
-        );
+        let (statements, attributes) = fixtures::statements_and_attributes();
+
+        let acc_cred_fixture = fixtures::account_credentials_fixture(attributes, &global_context);
+
+        let credential_statements = vec![CredentialStatementV1::Account(
+            AccountCredentialStatementV1 {
+                network: Network::Testnet,
+                cred_id: acc_cred_fixture.cred_id,
+                statements,
+            },
+        )];
+
+        let presentation_request = RequestV1::<ArCurve, Web3IdAttribute> {
+            challenge: context_challenge.into(),
+            credential_statements,
+        };
 
         let json = anyhow::Context::context(
             serde_json::to_value(&presentation_request),
@@ -1082,9 +1145,9 @@ mod tests {
 
         let cbor = cbor::cbor_encode(&verification_request_anchor).unwrap();
 
-        assert_eq!(hex::encode(&cbor), "a46468617368582053e6987f48f1ac15bf7fe183849bb63255ab4134ff246b8c5c9e5aa2d37c553a667075626c6963a1636b65790466722374797065664343445652416776657273696f6e01");
+        assert_eq!(hex::encode(&cbor), "a4646861736858205e7d3a608cb004f22633c958b2a203c516d0d4b3ad47f310d5fc29e606138a21667075626c6963a1636b65790466722374797065664343445652416776657273696f6e01");
 
-        let decoded: VerificationRequestAnchorOnChain = cbor::cbor_decode(&cbor).unwrap();
+        let decoded: VerificationRequestAnchor = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(decoded, verification_request_anchor);
     }
 
@@ -1093,9 +1156,9 @@ mod tests {
         let verification_audit_anchor_on_chain = verification_audit_anchor_on_chain_fixture();
 
         let cbor = cbor::cbor_encode(&verification_audit_anchor_on_chain).unwrap();
-        assert_eq!(hex::encode(&cbor), "a464686173685820e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855667075626c6963a1636b65790466722374797065664343445641416776657273696f6e01");
+        assert_eq!(hex::encode(&cbor), "a464686173685820361d865a0bd772b36d079f81449364f78ee22ffefc90b67ddb8720e6bf39cc75667075626c6963a1636b65790466722374797065664343445641416776657273696f6e01");
 
-        let decoded: VerificationAuditAnchorOnChain = cbor::cbor_decode(&cbor).unwrap();
+        let decoded: VerificationAuditAnchor = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(decoded, verification_audit_anchor_on_chain);
     }
 
@@ -1107,7 +1170,7 @@ mod tests {
 
         let expected_verification_request_anchor_hash = Hash::new(
             <[u8; 32]>::from_hex(
-                "53e6987f48f1ac15bf7fe183849bb63255ab4134ff246b8c5c9e5aa2d37c553a",
+                "5e7d3a608cb004f22633c958b2a203c516d0d4b3ad47f310d5fc29e606138a21",
             )
             .expect("Invalid hex"),
         );
@@ -1123,10 +1186,9 @@ mod tests {
     #[test]
     fn test_compute_the_correct_verification_audit_anchor() -> anyhow::Result<()> {
         let verification_audit_anchor_hash = verification_audit_anchor_on_chain_fixture().hash;
-
         let expected_verification_audit_anchor_hash = Hash::new(
             <[u8; 32]>::from_hex(
-                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "361d865a0bd772b36d079f81449364f78ee22ffefc90b67ddb8720e6bf39cc75",
             )
             .expect("Invalid hex"),
         );

@@ -15,6 +15,7 @@ use crate::id::types::{
     IdentityAttributesCredentialsProofs, IpIdentity, YearMonth,
 };
 use crate::web3id::did::Network;
+use crate::web3id::sdk::protocol::{FullContext, GivenContext};
 use crate::web3id::{did, AccountCredentialMetadata, IdentityCredentialMetadata, LinkingProof};
 use anyhow::{bail, ensure, Context};
 use chrono::{DateTime, NaiveDateTime, Utc};
@@ -50,6 +51,15 @@ pub struct ContextChallenge {
     pub given: Vec<ContextProperty>,
     /// This part of the challenge is supposed to be provided by the wallet or ID app.
     pub requested: Vec<ContextProperty>,
+}
+
+impl From<FullContext> for ContextChallenge {
+    fn from(context: FullContext) -> Self {
+        Self {
+            given: context.given.iter().map(|x| x.clone().into()).collect(),
+            requested: context.requested.iter().map(|x| x.clone().into()).collect(),
+        }
+    }
 }
 
 impl serde::Serialize for ContextChallenge {
@@ -107,8 +117,39 @@ pub struct ContextProperty {
     pub context: String,
 }
 
+impl From<GivenContext> for ContextProperty {
+    fn from(given_context: GivenContext) -> Self {
+        match given_context {
+            GivenContext::Nonce(nonce) => Self {
+                label: "nonce".to_string(),
+                context: hex::encode(nonce),
+            },
+            GivenContext::PaymentHash(hash_bytes) => Self {
+                label: "PaymentHash".to_string(),
+                context: hex::encode(hash_bytes),
+            },
+            GivenContext::BlockHash(hash_bytes) => Self {
+                label: "BlockHash".to_string(),
+                context: hex::encode(hash_bytes),
+            },
+            GivenContext::ConnectionId(connection_id) => Self {
+                label: "ConnectionId".to_string(),
+                context: connection_id,
+            },
+            GivenContext::ResourceId(rescource_id) => Self {
+                label: "ResourceId".to_string(),
+                context: rescource_id,
+            },
+            GivenContext::ContextString(string) => Self {
+                label: "ContextString".to_string(),
+                context: string,
+            },
+        }
+    }
+}
+
 /// A statement about a single account based credential
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AccountCredentialStatementV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub network: Network,
     pub cred_id: CredentialRegistrationID,
@@ -117,7 +158,7 @@ pub struct AccountCredentialStatementV1<C: Curve, AttributeType: Attribute<C::Sc
 }
 
 /// A statement about a single identity based credential
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct IdentityCredentialStatementV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub network: Network,
     // todo ar should the identity provider be here? document what is here and what is not (maybe fail in prover also)
@@ -138,6 +179,41 @@ pub enum CredentialStatementV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Statement about an identity based credential derived from an identity credential issued by an
     /// identity provider.
     Identity(IdentityCredentialStatementV1<C, AttributeType>),
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial
+    for CredentialStatementV1<C, AttributeType>
+{
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            CredentialStatementV1::Account(account_credential_statement) => {
+                0u8.serial(out);
+                account_credential_statement.serial(out);
+            }
+            CredentialStatementV1::Identity(identity_credential_statement) => {
+                1u8.serial(out);
+                identity_credential_statement.serial(out);
+            }
+        }
+    }
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial
+    for CredentialStatementV1<C, AttributeType>
+{
+    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        match u8::deserial(source)? {
+            0u8 => {
+                let account_credential_statement = source.get()?;
+                Ok(Self::Account(account_credential_statement))
+            }
+            1u8 => {
+                let identity_credential_statement = source.get()?;
+                Ok(Self::Identity(identity_credential_statement))
+            }
+            n => anyhow::bail!("Unrecognized CredentialStatementV1 tag {n}"),
+        }
+    }
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
@@ -252,7 +328,7 @@ fn take_field(value: &mut serde_json::Value, field: &str) -> anyhow::Result<serd
 
 /// Extract the value at the given key and deserializes it. This mutates the `value` replacing the
 /// value at the provided key with `Null`.
-pub fn take_field_de<T: DeserializeOwned>(
+fn take_field_de<T: DeserializeOwned>(
     value: &mut serde_json::Value,
     field: &str,
 ) -> anyhow::Result<T> {
@@ -967,7 +1043,7 @@ impl<
 /// A request for a verifiable presentation [`PresentationV1`].
 /// Contains statements and a context. The secret data to prove the statements
 /// is input via [`CommitmentInputs`](super::CommitmentInputs).
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 pub struct RequestV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub challenge: ContextChallenge,
     pub credential_statements: Vec<CredentialStatementV1<C, AttributeType>>,
