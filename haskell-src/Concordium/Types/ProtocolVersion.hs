@@ -226,6 +226,13 @@ module Concordium.Types.ProtocolVersion (
     -- | Determine whether a specific protocol version supports protocol level tokens.
     PVSupportsPLT,
 
+    -- * Sponsored transactions support
+
+    -- | Determine whether sponsored transactions are supported.
+    SupportsSponsoredTransactions,
+    supportsSponsoredTransactions,
+    sSupportsSponsoredTransactions,
+
     -- * Block hash version
 
     -- | The version of the block hashing structure.
@@ -427,6 +434,19 @@ $( singletons
         supportsPLT AccountV3 = False
         supportsPLT AccountV4 = False
         supportsPLT AccountV5 = True
+
+        supportsSponsoredTransactions :: ProtocolVersion -> Bool
+        supportsSponsoredTransactions P1 = False
+        supportsSponsoredTransactions P2 = False
+        supportsSponsoredTransactions P3 = False
+        supportsSponsoredTransactions P4 = False
+        supportsSponsoredTransactions P5 = False
+        supportsSponsoredTransactions P6 = False
+        supportsSponsoredTransactions P7 = False
+        supportsSponsoredTransactions P8 = False
+        supportsSponsoredTransactions P9 = False
+
+        -- supportsSponsoredTransactions P10 = True
 
         -- \| A type representing the different hashing structures used for the block hash depending on
         -- the protocol version.
