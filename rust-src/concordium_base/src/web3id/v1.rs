@@ -1097,8 +1097,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 }
 
 /// Verification material for an account credential.
-#[derive(Debug, PartialEq, Eq, Clone, serde::Deserialize)]
-#[serde(bound(deserialize = ""))]
+#[derive(Debug, PartialEq, Eq, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(bound(serialize = "", deserialize = ""))]
 #[serde(rename_all = "camelCase")]
 pub struct AccountCredentialVerificationMaterial<C: Curve> {
     // Commitments to attribute values. Are part of the on-chain account credentials.
@@ -1106,8 +1106,8 @@ pub struct AccountCredentialVerificationMaterial<C: Curve> {
 }
 
 /// Verification material for an identity credential.
-#[derive(Debug, PartialEq, Eq, Clone, serde::Deserialize)]
-#[serde(bound(deserialize = ""))]
+#[derive(Debug, PartialEq, Eq, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(bound(serialize = "", deserialize = ""))]
 #[serde(rename_all = "camelCase")]
 pub struct IdentityCredentialVerificationMaterial<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Public information on the chosen identity provider.
@@ -1122,8 +1122,8 @@ pub struct IdentityCredentialVerificationMaterial<P: Pairing, C: Curve<Scalar = 
 /// The additional public inputs needed to verify
 /// a [credential](CredentialV1).
 
-#[derive(Debug, PartialEq, Eq, Clone, serde::Deserialize)]
-#[serde(bound(deserialize = ""))]
+#[derive(Debug, PartialEq, Eq, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(bound(serialize = "", deserialize = ""))]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum CredentialVerificationMaterial<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Verification material for an account credential.
@@ -1543,6 +1543,34 @@ mod tests {
         let proof_deserialized: PresentationV1<IpPairing, ArCurve, Web3IdAttribute> =
             serde_json::from_str(&proof_json).unwrap();
         assert_eq!(proof_deserialized, proof);
+
+        let verification_material_json =
+            serde_json::to_string_pretty(&acc_cred_fixture.verification_material).unwrap();
+        println!("verification material:\n{}", verification_material_json);
+        let expected_verification_material_json = r#"
+{
+  "type": "account",
+  "attributeCommitments": {
+    "lastName": "9443780e625e360547c5a6a948de645e92b84d91425f4d9c0455bcf6040ef06a741b6977da833a1552e081fb9c4c9318",
+    "sex": "83a4e3bc337339a16a97dfa4bfb426f7e660c61168f3ed922dcf26d7711e083faa841d7e70d44a5f090a9a6a67eff5ad",
+    "dob": "a26ce49a7a289e68eaa43a0c4c33b2055be159f044eabf7d0282d1d9f6a0109956d7fb7b6d08c9f0f2ac6a42d2c68a47",
+    "countryOfResidence": "8e3c148518f00cd370cfeebdf0b09bec7376b859419e2585157adb38f4e87df35f70b087427fd22cac5d19d095dae8b2",
+    "nationality": "8ae7a7fc631dc8566d0db1ce0258ae9b025ac5535bc7206db92775459ba291789ae6c40687763918c6c297b636b3991c",
+    "idDocType": "aa3f03d85c333c66260a088ab10b778ab8796700f3def762ed881cdf5bfe37a72251bc329c7b553521fc49d5fac43ded"
+  }
+}
+        "#;
+        assert_eq!(
+            remove_whitespace(&verification_material_json),
+            remove_whitespace(expected_verification_material_json),
+            "verification material json"
+        );
+        let verification_material_deserialized: CredentialVerificationMaterial<IpPairing, ArCurve> =
+            serde_json::from_str(&verification_material_json).unwrap();
+        assert!(
+            verification_material_deserialized == acc_cred_fixture.verification_material,
+            "verification material"
+        );
     }
 
     /// Tests JSON serialization and deserialization of request and presentation.
@@ -2013,6 +2041,83 @@ mod tests {
         let proof_deserialized: PresentationV1<IpPairing, ArCurve, Web3IdAttribute> =
             serde_json::from_str(&proof_json).unwrap();
         assert_eq!(proof_deserialized, proof);
+
+        let verification_material_json =
+            serde_json::to_string_pretty(&id_cred_fixture.verification_material).unwrap();
+        println!("verification material:\n{}", verification_material_json);
+        let expected_verification_material_json = r#"
+{
+  "type": "identity",
+  "ipInfo": {
+    "ipIdentity": 0,
+    "ipDescription": {
+      "name": "IP0",
+      "url": "IP0.com",
+      "description": "IP0"
+    },
+    "ipVerifyKey": "97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb800000014b9ac0998207f2313a6108aa5b79ac1f43440390d173d8f155567e9d66e379f959b1625b21f0a90e9cb741a33f8f30f8b8cd5c323290ce730dc0d46036b0b17b9e67ee192926d2f6d43eeb6cd2b3ef2e01c3082d8ae79ac7b21e03fea2e3d8be6a994a4f67adaaa5f595809c1eb09e329d9217030e204203009acb39768f29d8ee7ea9cac577426e60a4b6092b06434edaa9453c337ccba9aed254158238fa981d8771f9828c35dc7536dff17d1aafa2596c91b5208ee4122f2f8834ffde44466b5f8e84a6df5094b7152e891d69cd65eae54e3ac1661c7f9f344b92cb5a8f81ab439b87a5779598299fc13999b9cfe4788ce41f0d0071988ab052828d5463e17afb402a5bd627b923541fc25b572b756052f574e14a328afed2d06cad3c717349862ba5b2fc1490bd02dd78bb98e5eb32e47913d167243c130422c196c4027f806621065be565b4338fe7b410bf3bf6386ccee2c114c4bdcc48ba355e7c85debc67c612268fbdc3739d9636b1502e356e92415dd56bc30e6128acf0759b80fcaaa554b2c97dd223164bea0301ed858473aeaade0848ca1ecac1185241115e5f27c4752dce5eb2bb77caa166f021cec9d89b4f1fafdadffdb1d33d0662976a6397b3e29c127e22e31d462422d28f205ba90c215b0debfff9a7e72089e29b677679130150226672d4b9922e4fc65ed2f5a714197c282968754ee8ba82692d0a02eced66617dcefb35fc4590a61089cdb6f81957624d37d5033289f4f049912ab3f065f8e5c6fb6e1c0350a1ffc9596c9d8983a91d3023283db5f1cf86f15bbb0bc94c76439dee9ec503fff630b56d4a23317dca826f881bb396acbcd9dac8197bed966cdaea2d9e39e9d0076c787eeb40fb52777ea2af213164698e43ea1602f52f02fe1d23ec12a74a2076fe9aac071cff13755c446e0827b9d13043a89a78e6d8020b943073aa8921f400272fa4956895a1c6ab9014a86cb0a975ee6ff78f9481644225baad638b58a680363861a96bc89bed7c42d80311dd500be28de1a9414aba5cb962b3cc30f8d4968d9a472056156cbcd688db43731b354b5d3a39a5932b77612d665885f0d65639f86a68e2f18b3a1ebb6bba682b201a8676417afb8067eb0b36547514166d12de0bcc337c519a77f234e59bed337fe86f458476c325fa44f4abf5730d58a27a0d58209b56d18c2cc03fa09e83337c0cc3b6733605bfa8145b4361816ddaa5444b9633f2a1fabb932719825e6470148f57259d172b326a9b6029bd0495cc3c06b85054a8dfcc883e46a093ee3edc77ddb858dbf037a40ee9611cab1eed5631d60f2f2650d2329ef989defc64b19978e6487bedbcd969800000014ab8b28bfbb362a4effde28779dd580e2f0f413be25c5eae1c4b791c823053a39576e75936e6bc478cf567ecec0d647c116cf205ef41016494f9d9e5cd42f8d43c14048450a175084e2d89de8371eab8356613efc2f59b541023e7e382bb01e4b8a151d3998bc783629fa35c1f90b27f506be14a5f3f10289612d0fc87407a1a776249b2f6fa8a97fd94d37cdec154f6e192fee739a8e8685289bca273713bc0d8defd5734bc36b84e6cd3ba1fccf7eb115c26510719859257e02381b93888ac382e5aaa6633064a32c42f2d2d0f92d15a846a9f3dbfb867cc1c2aa515193736306adc92f61bcd21d29304794f54c91c6078af67f16ff449e1b8c25a76f2ad48e08fdd0338dd4c1168caa6f0c868bf7930cf61176a52d2f1ca77bbdf78fc48a8ab65ddc3d69eb833f917eaf280aeae14327f89a9f7e240e2bf34385e59bc7e3e77ac67cea40c4908fbbed6b1f22be5497058effea4557a29c013f8c952e340c9fee45a003f354ee9377e5d83dc35e742af600eafa79aa08941f7d3f44bb1c2468ad50a3aba1a90893fe241477b1a8d73d568e8c46759f8f650fa8ffdff4b041a49ed94a618459c7a1bbf6ab03b647bbf50d32e37663684a3e72ab63b97da818001646b1bfc76ab0ade98438706d6ca52c63502b61d110d750c09c8c8e7d5ca782a26d349123e48d57c4ff9d377748e64c6bd5f92b2ba908f1f9b4fc0cad0f590ca612384550dbe3e33cd57253c7c38e870f63751b47bf2e308d74cd2204ea6c311f399d6d91c5a4a66f01dee587418692eed0949679a89227c3018d37f70b202bb44c5ee8a41edcde3053e33971a48523c728fd956216331654fcb2e87a32ef3e8c4032db5275c556b1eb6b9d0bfe0eac0f44b2667cf9cb4c45af4c530406c6862f67ee508ad6a3961aa472f5a5037fe7251f2897c90624a07742258f7b0cfdec9438e2950347e5536d54ba09b0af2545b4f24de31d91575ebb28119baab4b2b863791e5cee31dbb30e4164213d7d5c7c0f9eb8f2b81e7de271b7d9f4606565af36766c9324e75d1c4061d31c79939f9ab83986b98459bd80f16ef519859eceedb79b40be49c0fdcdda821091a7cc79d853858709eda69916a8ac0c2b845c0ae33e75c31f8e7bc6a0d2d9098914643d6b0136b28d072c9759bb2f79826cceb7ad5bc089c186b5ecc332d5931d43a7d35f11fdd4398f236b05cb46f5cc0f82c23f98e2d0a4e797bb087edf5e34abd4f13a52b5a9a4d45461c02412a71ac64d221e006911248a5114248b83cf93332db0e90c605d10174688454495d348aa0a8f7973e2c76a0b0f411087aa211194726fe458e5ef69e962b7a88c73d9b471ae74b5a20cb9c783b97a21dcd35f90bf1d4260e5f6f35e8812a47d98142bf9cacbfa6a55dc649d9a931195509430f6542ca2541751bb80ccd3f9678b08a89fd69f115b04e0bc2ab0a77ab7cf48291fdcdd16eb2603acd60cfcffbaf7406e5eeb4955c28ee6b3bf572831c5560ae5f04d8a7d5cdc1b3d213505cef4d3668e03a196cd95bed961e2fede8200ec6d4da38ca6593909e10691b5d67efbc7bc329576d1809190cbc28a2be9e2d0ed16a2b8346419e19346f7f786119f03b316d0b389e8e1ceb5c823da009c0095a92718da957eba9482a0a2120ece8cd375ee17fe6f06a1272712c95c182e3c4fd13d4b4ca84998d70ea9ce3a801b1fa3cace5eb38741b33c034d7c757b779675235d8816ff52d17a430d00f404086bce79bb28755db93d79aff5e56c8961c7aeb260bd4b10d46c9f266d76f4d0f72eec3f0b52e9f49c56f9df5305e1340579afec7be028b134fd50080a880db8d61c39b94640adc9e519823913a9fc25d185436f22ff25c766f5a4f611830f1ee00e2c7a6ab33519497d898c56ac9d0133d0c34e27c146dac04c69f84a623aea2c3483545206d300ddb59af081d2dc3182603591d61e0dce6d330f12f360b1597761d274995e8518ab2d254c437e635b62cb426255d496af2f2fdd55aa8f839bca8052e3009f88606b20d7987c5dd21ac801511862d0b591edf137b198043ffb8b4b67386d456e5673bd63fab29a58aaf79027279118c0c1abefe106f7e7e9b49c63f945e4ad012d449f19508fbacd35e4931c769e49cd5a81b71451fa4ea6f001f1436236f3540302d1a7a3e58b26378ef8a0987fcf629ccb9a11a16562f790c2f8e3d16aa05372a4834861886afc01ad8ca2d43e48b7d0b1e5f9067d720316f2f4f6b607d0405ae766b57193bf1114f7be1353c33e2f2caaf67afc218297914eb43b38395c937b7183a0adc2b0c6a4714bec6805e373c4be12ec36084c2c58a3126fdfc884a852fdbff82b15023462737eedf78fdd565c0566440c10c8ad2508ad61d2f3aa52b307e7552039a1f645b5bbc75e6f24fa3d3946c39507f522504b223a305093ac33a5c84f90517f4368a639f34500410ee6731eda080da4f1a75bf962f1aee4d5289327a00e2bf2d90dcbffa5400b33c66ecf25620bfc638aa216d13bdb5832985a8d6892e3a0bb6474a6b2d9b5f59908feb6974592f02a743fe5c6a3cf6d4aa1a54154fea9f125af029473dea702dabebada9c2542783a224cf36c9e5626fc9f3af4e5c28283b15a10879df9989ba31758b5b715195ae93dd222319933d62a45a8572db0c317b28ddc86fd40f625275f6e4ea987576f60563636e002973a986acf34b4deaebf77892292ca20404bbb9455a2c3afc186c84e57de3626d3ad964b8d172ee7220fb72d1ff5e8a219b751a0c0532af50ca2ee0b7d7212800da6587cb7f530ab145e39a12089174c3fe120a8b7ca7b758c8e34b84ce9b4812ac73a2a0a2380b8",
+    "ipCdiVerifyKey": "cd73dfc58e9f095f91726019504f8274b48e6689258f90a6139056119ac1b337"
+  },
+  "arsInfos": {
+    "1": {
+      "arIdentity": 1,
+      "arDescription": {
+        "name": "AnonymityRevoker1",
+        "url": "AnonymityRevoker1.com",
+        "description": "AnonymityRevoker1"
+      },
+      "arPublicKey": "b14cbfe44a02c6b1f78711176d5f437295367aa4f2a8c2551ee10d25a03adc69d61a332a058971919dad7312e1fc94c5856793e4ba5d058cea0b5c3a1c8affb272efcf53bbab77ee28d3e2270d5041d220c1e1a9c6c8619c84e40ebd70fb583e"
+    },
+    "2": {
+      "arIdentity": 2,
+      "arDescription": {
+        "name": "AnonymityRevoker2",
+        "url": "AnonymityRevoker2.com",
+        "description": "AnonymityRevoker2"
+      },
+      "arPublicKey": "b14cbfe44a02c6b1f78711176d5f437295367aa4f2a8c2551ee10d25a03adc69d61a332a058971919dad7312e1fc94c5adffda1428112cc19e05f32e63aec7d686ad0cb2abbe0b46b46e94927e007b1372114ffc7bd37b28d878f9afbb59dd0e"
+    },
+    "3": {
+      "arIdentity": 3,
+      "arDescription": {
+        "name": "AnonymityRevoker3",
+        "url": "AnonymityRevoker3.com",
+        "description": "AnonymityRevoker3"
+      },
+      "arPublicKey": "b14cbfe44a02c6b1f78711176d5f437295367aa4f2a8c2551ee10d25a03adc69d61a332a058971919dad7312e1fc94c583ed439dbadc3de91ab451aa82203c1079ee7ca62eebf57f042e7993abd9512776a215be1eef3ca99f19346260b1651b"
+    },
+    "4": {
+      "arIdentity": 4,
+      "arDescription": {
+        "name": "AnonymityRevoker4",
+        "url": "AnonymityRevoker4.com",
+        "description": "AnonymityRevoker4"
+      },
+      "arPublicKey": "b14cbfe44a02c6b1f78711176d5f437295367aa4f2a8c2551ee10d25a03adc69d61a332a058971919dad7312e1fc94c5a95e8adf80e1ecefda3594baa96507bfea76ef1d4176e00bd2ce295ba901d93e6a2ffdc4492707b3c79a54fb50bacc9d"
+    },
+    "5": {
+      "arIdentity": 5,
+      "arDescription": {
+        "name": "AnonymityRevoker5",
+        "url": "AnonymityRevoker5.com",
+        "description": "AnonymityRevoker5"
+      },
+      "arPublicKey": "b14cbfe44a02c6b1f78711176d5f437295367aa4f2a8c2551ee10d25a03adc69d61a332a058971919dad7312e1fc94c582917ec5cf87f432d508e5e9441c42e963c6a976b38688a204c399674da3cd0d20f1771116756f55443bad87bdf90cb8"
+    }
+  }
+}
+        "#;
+        assert_eq!(
+            remove_whitespace(&verification_material_json),
+            remove_whitespace(expected_verification_material_json),
+            "verification material json"
+        );
+        let verification_material_deserialized: CredentialVerificationMaterial<IpPairing, ArCurve> =
+            serde_json::from_str(&verification_material_json).unwrap();
+        assert!(
+            verification_material_deserialized == id_cred_fixture.verification_material,
+            "verification material"
+        );
     }
 }
 
