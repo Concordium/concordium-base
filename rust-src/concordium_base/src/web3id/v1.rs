@@ -15,7 +15,6 @@ use crate::id::types::{
     IdentityAttributesCredentialsProofs, IpIdentity, YearMonth,
 };
 use crate::web3id::did::Network;
-use crate::web3id::sdk::protocol::{FullContext, GivenContext};
 use crate::web3id::{did, AccountCredentialMetadata, IdentityCredentialMetadata, LinkingProof};
 use anyhow::{bail, ensure, Context};
 use chrono::{DateTime, Utc};
@@ -51,15 +50,6 @@ pub struct ContextChallenge {
     pub given: Vec<ContextProperty>,
     /// This part of the challenge is supposed to be provided by the wallet or ID app.
     pub requested: Vec<ContextProperty>,
-}
-
-impl From<FullContext> for ContextChallenge {
-    fn from(context: FullContext) -> Self {
-        Self {
-            given: context.given.into_iter().map(Into::into).collect(),
-            requested: context.requested.into_iter().map(Into::into).collect(),
-        }
-    }
 }
 
 impl serde::Serialize for ContextChallenge {
@@ -115,37 +105,6 @@ impl<'de> serde::Deserialize<'de> for ContextChallenge {
 pub struct ContextProperty {
     pub label: String,
     pub context: String,
-}
-
-impl From<GivenContext> for ContextProperty {
-    fn from(given_context: GivenContext) -> Self {
-        match given_context {
-            GivenContext::Nonce(nonce) => Self {
-                label: "Nonce".to_string(),
-                context: hex::encode(nonce),
-            },
-            GivenContext::PaymentHash(hash_bytes) => Self {
-                label: "PaymentHash".to_string(),
-                context: hex::encode(hash_bytes),
-            },
-            GivenContext::BlockHash(hash_bytes) => Self {
-                label: "BlockHash".to_string(),
-                context: hex::encode(hash_bytes),
-            },
-            GivenContext::ConnectionId(connection_id) => Self {
-                label: "ConnectionId".to_string(),
-                context: connection_id,
-            },
-            GivenContext::ResourceId(rescource_id) => Self {
-                label: "ResourceId".to_string(),
-                context: rescource_id,
-            },
-            GivenContext::ContextString(string) => Self {
-                label: "ContextString".to_string(),
-                context: string,
-            },
-        }
-    }
 }
 
 /// A statement about a single account based credential
