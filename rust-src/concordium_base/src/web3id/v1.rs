@@ -272,7 +272,7 @@ fn take_field_de<T: DeserializeOwned>(
         .with_context(|| format!("deserialize {}", field))
 }
 
-/// Metadata of an account credentials derived from an identity issued by an
+/// Metadata of an account credential derived from an identity issued by an
 /// identity provider.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct AccountCredentialMetadataV1 {
@@ -432,7 +432,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
 pub struct IdentityCredentialEphemeralId(pub Vec<u8>);
 
 /// Encrypted ephemeral id for an identity credential. The id can be decrypted to IdCredPub by the privacy guardians (anonymity revokers).
-/// It will have a new value for each time credential is proven (the encryption is a randomized function)
+/// It will have a new value for each time credential is proven (the encryption is a randomized function).
 #[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
 pub struct IdentityCredentialEphemeralIdData<C: Curve> {
     /// Decryption threshold of the IdCredPub in [`IdentityCredentialEphemeralId`]
@@ -918,10 +918,12 @@ impl<
 /// A request to prove a verifiable presentation [`PresentationV1`]
 /// with [`RequestV1::prove`].
 /// Contains subject claims and a context. The secret data to prove the claims
-/// is input via [`CredentialVerificationMaterial`].
+/// is input via [`CredentialProofPrivateInputs`].
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct RequestV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// Context challenge for the proof
     pub challenge: ContextInformation,
+    /// Claims to prove
     pub subject_claims: Vec<SubjectClaims<C, AttributeType>>,
 }
 
@@ -1011,7 +1013,7 @@ pub enum CredentialProofPrivateInputs<
     Identity(IdentityCredentialProofPrivateInputs<'a, P, C, AttributeType>),
 }
 
-/// An owned version of [`CredentialVerificationMaterial`] that can be deserialized.
+/// An owned version of [`IdentityCredentialProofPrivateInputs`] that can be deserialized.
 #[derive(Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(bound(
     serialize = "AttributeType: serde::Serialize",
@@ -1035,7 +1037,7 @@ pub struct OwnedIdentityCredentialProofPrivateInputs<
     pub id_object_use_data: IdObjectUseData<P, C>,
 }
 
-/// An owned version of [`CredentialVerificationMaterial`] that can be deserialized.
+/// An owned version of [`AccountCredentialProofPrivateInputs`] that can be deserialized.
 #[derive(Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(bound(
     serialize = "AttributeType: serde::Serialize",
@@ -1053,7 +1055,7 @@ pub struct OwnedAccountCredentialProofPrivateInputs<C: Curve, AttributeType: Att
     pub attribute_randomness: BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
 }
 
-/// An owned version of [`CredentialVerificationMaterial`] that can be deserialized.
+/// An owned version of [`CredentialProofPrivateInputs`] that can be deserialized.
 #[derive(Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(bound(
     serialize = "AttributeType: serde::Serialize",
@@ -1124,7 +1126,6 @@ pub struct IdentityCredentialVerificationMaterial<P: Pairing, C: Curve<Scalar = 
 
 /// The additional public inputs needed to verify
 /// a [credential](CredentialV1).
-
 #[derive(Debug, PartialEq, Eq, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(bound(serialize = "", deserialize = ""))]
 #[serde(rename_all = "camelCase", tag = "type")]
@@ -1133,6 +1134,29 @@ pub enum CredentialVerificationMaterial<P: Pairing, C: Curve<Scalar = P::ScalarF
     Account(AccountCredentialVerificationMaterial<C>),
     /// Verification material for an identity credential.
     Identity(IdentityCredentialVerificationMaterial<P, C>),
+}
+
+/// Error proving claims in a request
+#[derive(thiserror::Error, Debug)]
+pub enum ProveError {
+    #[error("failure to prove atomic statement")]
+    AtomicStatementProof,
+    #[error(
+        "the number of private inputs or their type does not match the subject claims to prove"
+    )]
+    PrivateInputsMismatch,
+    #[error("cannot prove identity attribute credentials: {0}")]
+    IdentityAttributeCredentials(String),
+}
+
+/// Error verifying presentation
+#[derive(Debug, Clone, Hash, Eq, PartialEq, thiserror::Error)]
+#[non_exhaustive]
+pub enum VerifyError {
+    #[error("the number of verification material inputs does not match the credentials to verify")]
+    VeficationMaterialMismatch,
+    #[error("the credential was not valid (index {0})")]
+    InvalidCredential(usize),
 }
 
 #[cfg(test)]
@@ -1158,19 +1182,19 @@ mod tests {
         ar_data.insert(
             ArIdentity::try_from(1).unwrap(),
             ChainArData {
-                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed0()),
+                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed(0)),
             },
         );
         ar_data.insert(
             ArIdentity::try_from(2).unwrap(),
             ChainArData {
-                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed0()),
+                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed(1)),
             },
         );
         ar_data.insert(
             ArIdentity::try_from(3).unwrap(),
             ChainArData {
-                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed0()),
+                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed(2)),
             },
         );
 
@@ -2403,6 +2427,10 @@ mod fixtures {
     }
 
     pub fn seed0() -> rand::rngs::StdRng {
-        rand::rngs::StdRng::seed_from_u64(0)
+        seed(0)
+    }
+
+    pub fn seed(seed: u64) -> rand::rngs::StdRng {
+        rand::rngs::StdRng::seed_from_u64(seed)
     }
 }

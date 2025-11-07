@@ -1337,8 +1337,6 @@ pub enum ProofError {
     CommitmentsStatementsMismatch,
     #[error("The ID in the statement and in the provided signer do not match.")]
     InconsistentIds,
-    #[error("Cannot prove identity attribute credentials: {0}")]
-    IdentityAttributeCredentials(String),
 }
 
 /// Public inputs to the verification function. These are the public commitments
@@ -1939,9 +1937,9 @@ mod tests {
     }
 
     /// Tests JSON serialization and deserialization of request and presentation. Test
-    /// uses web3 credentials.
+    /// uses web3id credentials.
     #[test]
-    fn test_request_and_presentation_web3_json() {
+    fn test_request_and_presentation_web3id_json() {
         let challenge = Challenge::new(fixtures::seed0().gen());
 
         let global_context = GlobalContext::generate("Test".into());
@@ -2447,7 +2445,11 @@ mod fixtures {
     }
 
     pub fn seed0() -> rand::rngs::StdRng {
-        rand::rngs::StdRng::seed_from_u64(0)
+        seed(0)
+    }
+
+    pub fn seed(seed: u64) -> rand::rngs::StdRng {
+        rand::rngs::StdRng::seed_from_u64(seed)
     }
 
     pub fn web3_credentials_fixture(
