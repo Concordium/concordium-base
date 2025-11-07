@@ -1011,7 +1011,7 @@ pub enum CredentialProofPrivateInputs<
     Identity(IdentityCredentialProofPrivateInputs<'a, P, C, AttributeType>),
 }
 
-/// An owned version of [`CredentialVerificationMaterial`] that can be deserialized.
+/// An owned version of [`IdentityCredentialProofPrivateInputs`] that can be deserialized.
 #[derive(serde::Deserialize)]
 #[serde(bound(deserialize = "AttributeType: DeserializeOwned"))]
 #[serde(rename_all = "camelCase")]
@@ -1032,7 +1032,7 @@ pub struct OwnedIdentityCredentialProofPrivateInputs<
     pub id_object_use_data: IdObjectUseData<P, C>,
 }
 
-/// An owned version of [`CredentialVerificationMaterial`] that can be deserialized.
+/// An owned version of [`AccountCredentialProofPrivateInputs`] that can be deserialized.
 #[derive(serde::Deserialize)]
 #[serde(bound(deserialize = "AttributeType: DeserializeOwned"))]
 #[serde(rename_all = "camelCase")]
@@ -1047,7 +1047,7 @@ pub struct OwnedAccountCredentialProofPrivateInputs<C: Curve, AttributeType: Att
     pub attribute_randomness: BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
 }
 
-/// An owned version of [`CredentialVerificationMaterial`] that can be deserialized.
+/// An owned version of [`CredentialProofPrivateInputs`] that can be deserialized.
 #[derive(serde::Deserialize)]
 #[serde(bound(deserialize = "AttributeType: DeserializeOwned"))]
 #[serde(rename_all = "camelCase", tag = "type")]
@@ -1114,7 +1114,6 @@ pub struct IdentityCredentialVerificationMaterial<P: Pairing, C: Curve<Scalar = 
 
 /// The additional public inputs needed to verify
 /// a [credential](CredentialV1).
-
 #[derive(Debug, PartialEq, Eq, Clone, serde::Deserialize)]
 #[serde(bound(deserialize = ""))]
 #[serde(rename_all = "camelCase", tag = "type")]
@@ -1123,6 +1122,18 @@ pub enum CredentialVerificationMaterial<P: Pairing, C: Curve<Scalar = P::ScalarF
     Account(AccountCredentialVerificationMaterial<C>),
     /// Verification material for an identity credential.
     Identity(IdentityCredentialVerificationMaterial<P, C>),
+}
+
+
+/// An error that can occour when attempting to produce a proof
+#[derive(thiserror::Error, Debug)]
+pub enum ProofErrorV1 {
+    #[error("failure to prove atomic statement")]
+    AtomicStatementProof,
+    #[error("type of or number of of private inputs does not match the subject claims to prove")]
+    PrivateInputsMismatch,
+    #[error("cannot prove identity attribute credentials: {0}")]
+    IdentityAttributeCredentials(String),
 }
 
 #[cfg(test)]

@@ -1337,8 +1337,6 @@ pub enum ProofError {
     CommitmentsStatementsMismatch,
     #[error("The ID in the statement and in the provided signer do not match.")]
     InconsistentIds,
-    #[error("Cannot prove identity attribute credentials: {0}")]
-    IdentityAttributeCredentials(String),
 }
 
 /// Public inputs to the verification function. These are the public commitments

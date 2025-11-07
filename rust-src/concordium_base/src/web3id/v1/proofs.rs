@@ -1,5 +1,5 @@
 use crate::random_oracle::StructuredDigest;
-use crate::web3id::{LinkingProof, PresentationVerificationError, ProofError};
+use crate::web3id::{LinkingProof, PresentationVerificationError};
 use crate::{
     curve_arithmetic::Curve,
     id::types::{Attribute, GlobalContext},
@@ -17,16 +17,7 @@ use crate::id::types::{
     IdentityAttributesCredentialsInfo, IdentityAttributesCredentialsValues, IpContextOnly,
 };
 use crate::pedersen_commitment::Commitment;
-use crate::web3id::v1::{
-    AccountBasedCredentialV1, AccountBasedSubjectClaims, AccountCredentialProofPrivateInputs,
-    AccountCredentialProofs, AccountCredentialSubject, AccountCredentialVerificationMaterial,
-    ConcordiumProofType, ConcordiumZKProof, ContextInformation, CredentialMetadataV1,
-    CredentialProofPrivateInputs, CredentialV1, CredentialVerificationMaterial,
-    IdentityBasedCredentialV1, IdentityBasedSubjectClaims, IdentityCredentialEphemeralId,
-    IdentityCredentialEphemeralIdDataRef, IdentityCredentialProofPrivateInputs,
-    IdentityCredentialProofs, IdentityCredentialSubject, IdentityCredentialVerificationMaterial,
-    PresentationV1, RequestV1, SubjectClaims,
-};
+use crate::web3id::v1::{AccountBasedCredentialV1, AccountBasedSubjectClaims, AccountCredentialProofPrivateInputs, AccountCredentialProofs, AccountCredentialSubject, AccountCredentialVerificationMaterial, ConcordiumProofType, ConcordiumZKProof, ContextInformation, CredentialMetadataV1, CredentialProofPrivateInputs, CredentialV1, CredentialVerificationMaterial, IdentityBasedCredentialV1, IdentityBasedSubjectClaims, IdentityCredentialEphemeralId, IdentityCredentialEphemeralIdDataRef, IdentityCredentialProofPrivateInputs, IdentityCredentialProofs, IdentityCredentialSubject, IdentityCredentialVerificationMaterial, PresentationV1, ProofErrorV1, RequestV1, SubjectClaims};
 use rand::{CryptoRng, Rng};
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
@@ -51,7 +42,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     pub fn verify<'a>(
         &self,
         global_context: &GlobalContext<C>,
-        public: impl ExactSizeIterator<Item = &'a CredentialVerificationMaterial<P, C>>,
+        verification_material: impl ExactSizeIterator<Item = &'a CredentialVerificationMaterial<P, C>>,
     ) -> Result<RequestV1<C, AttributeType>, PresentationVerificationError> {
         let mut transcript = RandomOracle::domain("ConcordiumVerifiablePresentationV1");
         append_context(&mut transcript, &self.presentation_context);
@@ -62,14 +53,14 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             subject_claims: Vec::new(),
         };
 
-        if public.len() != self.verifiable_credentials.len() {
+        if verification_material.len() != self.verifiable_credentials.len() {
             return Err(PresentationVerificationError::InconsistentPublicData);
         }
 
-        for (i, (cred_public, cred_proof)) in public.zip(&self.verifiable_credentials).enumerate() {
-            request.subject_claims.push(cred_proof.claims());
+        for (i, (verification_material, credential)) in verification_material.zip(&self.verifiable_credentials).enumerate() {
+            request.subject_claims.push(credential.claims());
 
-            if !cred_proof.verify(global_context, &mut transcript, cred_public) {
+            if !credential.verify(global_context, &mut transcript, verification_material) {
                 return Err(PresentationVerificationError::InvalidCredential(i));
             }
         }
@@ -87,11 +78,11 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         &self,
         global: &GlobalContext<C>,
         transcript: &mut RandomOracle,
-        public: &CredentialVerificationMaterial<P, C>,
+        verification_material: &CredentialVerificationMaterial<P, C>,
     ) -> bool {
         match self {
-            CredentialV1::Account(cred_proof) => cred_proof.verify(global, transcript, public),
-            CredentialV1::Identity(cred_proof) => cred_proof.verify(global, transcript, public),
+            CredentialV1::Account(cred_proof) => cred_proof.verify(global, transcript, verification_material),
+            CredentialV1::Identity(cred_proof) => cred_proof.verify(global, transcript, verification_material),
         }
     }
 }
@@ -102,11 +93,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
         &self,
         global_context: &GlobalContext<C>,
         transcript: &mut RandomOracle,
-        input: &CredentialVerificationMaterial<P, C>,
+        verification_material: &CredentialVerificationMaterial<P, C>,
     ) -> bool {
         let CredentialVerificationMaterial::Account(AccountCredentialVerificationMaterial {
             attribute_commitments: commitments,
-        }) = input
+        }) = verification_material
         else {
             // mismatch in types
             return false;
@@ -130,12 +121,12 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         &self,
         global_context: &GlobalContext<C>,
         transcript: &mut RandomOracle,
-        input: &CredentialVerificationMaterial<P, C>,
+        verification_material: &CredentialVerificationMaterial<P, C>,
     ) -> bool {
         let CredentialVerificationMaterial::Identity(IdentityCredentialVerificationMaterial {
             ip_info,
             ars_infos,
-        }) = input
+        }) = verification_material
         else {
             // mismatch in types
             return false;
@@ -224,15 +215,15 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
         transcript: &mut RandomOracle,
         csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
-        input: CredentialProofPrivateInputs<P, C, AttributeType>,
-    ) -> Result<AccountBasedCredentialV1<C, AttributeType>, ProofError> {
+        private_input: CredentialProofPrivateInputs<P, C, AttributeType>,
+    ) -> Result<AccountBasedCredentialV1<C, AttributeType>, ProofErrorV1> {
         let CredentialProofPrivateInputs::Account(AccountCredentialProofPrivateInputs {
             attribute_values: values,
             attribute_randomness: randomness,
             issuer,
-        }) = input
+        }) = private_input
         else {
-            return Err(ProofError::CommitmentsStatementsMismatch);
+            return Err(ProofErrorV1::PrivateInputsMismatch);
         };
 
         let statement_proofs = prove_statements(
@@ -268,15 +259,15 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
         transcript: &mut RandomOracle,
         csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
-        input: CredentialProofPrivateInputs<P, C, AttributeType>,
-    ) -> Result<IdentityBasedCredentialV1<P, C, AttributeType>, ProofError> {
+        private_input: CredentialProofPrivateInputs<P, C, AttributeType>,
+    ) -> Result<IdentityBasedCredentialV1<P, C, AttributeType>, ProofErrorV1> {
         let CredentialProofPrivateInputs::Identity(IdentityCredentialProofPrivateInputs {
             ip_context,
             id_object,
             id_object_use_data,
-        }) = input
+        }) = private_input
         else {
-            return Err(ProofError::CommitmentsStatementsMismatch);
+            return Err(ProofErrorV1::PrivateInputsMismatch);
         };
 
         let attributes_handling: BTreeMap<_, _> = self
@@ -308,7 +299,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
                 csprng,
                 transcript,
             )
-            .map_err(|err| ProofError::IdentityAttributeCredentials(err.to_string()))?;
+            .map_err(|err| ProofErrorV1::IdentityAttributeCredentials(err.to_string()))?;
 
         let statement_proofs = prove_statements(
             &self.statements,
@@ -360,7 +351,7 @@ fn prove_statements<
     global_context: &GlobalContext<C>,
     transcript: &mut RandomOracle,
     csprng: &mut (impl Rng + CryptoRng),
-) -> Result<Vec<AtomicProof<C, AttributeType>>, ProofError> {
+) -> Result<Vec<AtomicProof<C, AttributeType>>, ProofErrorV1> {
     statements
         .into_iter()
         .map(|statement| {
@@ -373,7 +364,7 @@ fn prove_statements<
                     attribute_values,
                     attribute_randomness,
                 )
-                .ok_or(ProofError::MissingAttribute)
+                .ok_or(ProofErrorV1::AtomicStatementProof)
         })
         .collect()
 }
@@ -381,18 +372,18 @@ fn prove_statements<
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> SubjectClaims<C, AttributeType> {
     fn prove<P: Pairing<ScalarField = C::Scalar>>(
         self,
-        global: &GlobalContext<C>,
+        global_context: &GlobalContext<C>,
         transcript: &mut RandomOracle,
         csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
-        input: CredentialProofPrivateInputs<P, C, AttributeType>,
-    ) -> Result<CredentialV1<P, C, AttributeType>, ProofError> {
+        private_input: CredentialProofPrivateInputs<P, C, AttributeType>,
+    ) -> Result<CredentialV1<P, C, AttributeType>, ProofErrorV1> {
         match self {
             SubjectClaims::Account(cred_stmt) => cred_stmt
-                .prove(global, transcript, csprng, now, input)
+                .prove(global_context, transcript, csprng, now, private_input)
                 .map(CredentialV1::Account),
             SubjectClaims::Identity(cred_stmt) => cred_stmt
-                .prove(global, transcript, csprng, now, input)
+                .prove(global_context, transcript, csprng, now, private_input)
                 .map(CredentialV1::Identity),
         }
     }
@@ -404,12 +395,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
     pub fn prove<'a, P: Pairing<ScalarField = C::Scalar>>(
         self,
         params: &GlobalContext<C>,
-        attrs: impl ExactSizeIterator<Item = CredentialProofPrivateInputs<'a, P, C, AttributeType>>,
-    ) -> Result<PresentationV1<P, C, AttributeType>, ProofError>
+        private_inputs: impl ExactSizeIterator<Item = CredentialProofPrivateInputs<'a, P, C, AttributeType>>,
+    ) -> Result<PresentationV1<P, C, AttributeType>, ProofErrorV1>
     where
         AttributeType: 'a,
     {
-        self.prove_with_rng(params, attrs, &mut rand::thread_rng(), chrono::Utc::now())
+        self.prove_with_rng(params, private_inputs, &mut rand::thread_rng(), chrono::Utc::now())
     }
 
     /// Prove the claims in the given [`RequestV1`] using the provided cryptographic
@@ -419,24 +410,24 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
     pub fn prove_with_rng<'a, P: Pairing<ScalarField = C::Scalar>>(
         self,
         global_context: &GlobalContext<C>,
-        attrs: impl ExactSizeIterator<Item = CredentialProofPrivateInputs<'a, P, C, AttributeType>>,
+        private_inputs: impl ExactSizeIterator<Item = CredentialProofPrivateInputs<'a, P, C, AttributeType>>,
         csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
-    ) -> Result<PresentationV1<P, C, AttributeType>, ProofError>
+    ) -> Result<PresentationV1<P, C, AttributeType>, ProofErrorV1>
     where
         AttributeType: 'a,
     {
-        let mut proofs = Vec::with_capacity(attrs.len());
+        let mut verifiable_credentials = Vec::with_capacity(private_inputs.len());
         let mut transcript = RandomOracle::domain("ConcordiumVerifiablePresentationV1");
         append_context(&mut transcript, &self.challenge);
         transcript.append_message(b"ctx", &global_context);
-        if self.subject_claims.len() != attrs.len() {
-            return Err(ProofError::CommitmentsStatementsMismatch);
+        if self.subject_claims.len() != private_inputs.len() {
+            return Err(ProofErrorV1::PrivateInputsMismatch);
         }
-        for (cred_statement, attributes) in self.subject_claims.into_iter().zip(attrs) {
-            let proof =
-                cred_statement.prove(global_context, &mut transcript, csprng, now, attributes)?;
-            proofs.push(proof);
+        for (subject_claims, private_inputs) in self.subject_claims.into_iter().zip(private_inputs) {
+            let credential =
+                subject_claims.prove(global_context, &mut transcript, csprng, now, private_inputs)?;
+            verifiable_credentials.push(credential);
         }
         // Linking proof
         let proof_value = Vec::new();
@@ -447,7 +438,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
         Ok(PresentationV1 {
             presentation_context: self.challenge,
             linking_proof,
-            verifiable_credentials: proofs,
+            verifiable_credentials,
         })
     }
 }
