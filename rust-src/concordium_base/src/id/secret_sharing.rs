@@ -24,7 +24,7 @@ impl<'de> SerdeDeserialize<'de> for Threshold {
     {
         let val = u8::deserialize(deserializer)?;
 
-        Self::try_new(val).map_err(|err| D::Error::custom(err))
+        Self::try_new(val).map_err(D::Error::custom)
     }
 }
 
