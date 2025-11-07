@@ -8,6 +8,8 @@
 - Made `find_authorized_keys` public for easier re-use.
 - Changed value inside `AttributeKind` to be non-public since it has a length constraint. Implemented `AttributeKind::try_new`, `AsRef<str> for AttributeKind` and `From<AttributeKind> for String`
   to allow constructing and accessing values.
+- Changed value inside `Threshold` to be non-public since it has a non-zero constraint. Implemented `Threshold::try_new` and `Threshold::threshold`
+  to allow constructing and accessing values. 
 - Added `Eq` and `PartialEq` instances for
   - `UpdateKeysThreshold`
   - `InclusiveRange<T>`
