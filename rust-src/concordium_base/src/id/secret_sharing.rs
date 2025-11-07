@@ -6,15 +6,27 @@ use crate::{
 };
 use anyhow::bail;
 use rand::*;
+use serde::de::Error;
 use serde_json::{json, Value};
 use std::convert::TryFrom;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serial)]
 /// Revealing threshold, i.e., degree of the polynomial + 1.
 /// This value must always be at least 1.
-#[derive(SerdeSerialize, SerdeDeserialize)]
+#[derive(SerdeSerialize)]
 #[serde(transparent)]
 pub struct Threshold(pub u8);
+
+impl<'de> SerdeDeserialize<'de> for Threshold {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: SerdeDeserializer<'de>,
+    {
+        let val = u8::deserialize(deserializer)?;
+
+        Self::try_from(val).map_err(|_| D::Error::custom("threshold cannot be zero"))
+    }
+}
 
 impl Deserial for Threshold {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
