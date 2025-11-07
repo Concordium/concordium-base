@@ -147,7 +147,7 @@ fn main() {
     let id_use_data = IdObjectUseData { aci, randomness };
     let (pio, _) = generate_pio(
         &context,
-        Threshold(ars_infos.anonymity_revokers.len() as u8),
+        Threshold::try_new(ars_infos.anonymity_revokers.len() as u8).expect("create threshold"),
         &id_use_data,
         &initial_acc_data,
     )
@@ -441,7 +441,7 @@ fn main() {
         };
         let (pio, _) = generate_pio(
             &context,
-            Threshold(ars_infos.anonymity_revokers.len() as u8),
+            Threshold::try_new(ars_infos.anonymity_revokers.len() as u8).expect("create threshold"),
             &id_use_data,
             &initial_acc_data,
         )

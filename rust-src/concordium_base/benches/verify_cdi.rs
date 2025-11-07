@@ -139,8 +139,13 @@ fn bench_parts(c: &mut Criterion) {
         threshold: SignatureThreshold::TWO,
     };
 
-    let (pio, _) = generate_pio(&context, Threshold(2), &id_use_data, &initial_acc_data)
-        .expect("Generating the pre-identity object succeed.");
+    let (pio, _) = generate_pio(
+        &context,
+        Threshold::try_new(2).expect("threshold"),
+        &id_use_data,
+        &initial_acc_data,
+    )
+    .expect("Generating the pre-identity object succeed.");
     let pio_ser = to_bytes(&pio);
     let ip_info_ser = to_bytes(&ip_info);
     let pio_des = from_bytes(&mut Cursor::new(&pio_ser)).unwrap();
@@ -211,8 +216,9 @@ fn bench_parts(c: &mut Criterion) {
         ar4_secret_key.decrypt(&fourth_ar.enc_id_cred_pub_share),
     );
 
-    let bench_pio =
-        move |b: &mut Bencher, x: &(_, _, _)| b.iter(|| generate_pio(x.0, Threshold(2), x.1, x.2));
+    let bench_pio = move |b: &mut Bencher, x: &(_, _, _)| {
+        b.iter(|| generate_pio(x.0, Threshold::try_new(2).expect("threshold"), x.1, x.2))
+    };
     c.bench_with_input(
         BenchmarkId::new("Generate ID request", ""),
         &(&context, &id_use_data, &initial_acc_data),

@@ -247,7 +247,10 @@ fn handle_sign_pio_v0(app: IpV0) -> anyhow::Result<()> {
             .interact()
             .context("Could not read attribute LEI")?;
         if !s.is_empty() {
-            alist.insert(ATTRIBUTE_TAG_LEI, AttributeKind(s));
+            alist.insert(
+                ATTRIBUTE_TAG_LEI,
+                AttributeKind::try_new(s).context("create attribute")?,
+            );
         }
         alist
     };
@@ -412,7 +415,10 @@ fn handle_sign_pio_v1(app: IpV1) -> anyhow::Result<()> {
             .interact()
             .context("Could not read attribute LEI")?;
         if !s.is_empty() {
-            alist.insert(ATTRIBUTE_TAG_LEI, AttributeKind(s));
+            alist.insert(
+                ATTRIBUTE_TAG_LEI,
+                AttributeKind::try_new(s).context("create attribute")?,
+            );
         }
         alist
     };

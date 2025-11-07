@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+- Removed native support for `concordium_cfg_test`.
+
 ## concordium-contracts-common-derive 4.1.0 (2024-03-25)
 
 - Attribute macro `#[concordium_quickcheck]` generates code referencing `concordium_std` rather than `::concordium_std` allowing for user-provided `concordium_std`.

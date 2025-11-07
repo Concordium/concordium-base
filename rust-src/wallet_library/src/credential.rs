@@ -196,7 +196,7 @@ mod tests {
             "0029723ec9a0b4ca16d5d548b676a1a0adbecdedc5446894151acb7699293d69b1"
         );
         assert_eq!(threshold, 1);
-        assert_eq!(values.threshold.0, 1);
+        assert_eq!(values.threshold.threshold(), 1);
     }
 
     fn create_unsigned_credential() -> UnsignedCredentialDeploymentInfoWithRandomness {

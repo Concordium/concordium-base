@@ -640,7 +640,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
                 num_of_ars >= usize::from(threshold),
                 "Number of anonymity revokers in arsInfos should be at least arThreshold."
             );
-            Threshold(threshold)
+            Threshold::try_new(threshold)?
         }
         None => {
             // arThreshold not specified, use `number of anonymity revokers` - 1 or 1 in the
@@ -649,7 +649,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
                 num_of_ars > 0,
                 "arsInfos should have at least 1 anonymity revoker."
             );
-            Threshold(max((num_of_ars - 1).try_into().unwrap_or(255), 1))
+            Threshold::try_new(max((num_of_ars - 1).try_into().unwrap_or(255), 1))?
         }
     };
 
@@ -753,7 +753,7 @@ fn create_id_request_and_private_data_v1_aux(input: &str) -> anyhow::Result<Stri
                 num_of_ars >= usize::from(threshold),
                 "Number of anonymity revokers in arsInfos should be at least arThreshold."
             );
-            Threshold(threshold)
+            Threshold::try_new(threshold)?
         }
         None => {
             // arThreshold not specified, use `number of anonymity revokers` - 1 or 1 in the
@@ -762,7 +762,7 @@ fn create_id_request_and_private_data_v1_aux(input: &str) -> anyhow::Result<Stri
                 num_of_ars > 0,
                 "arsInfos should have at least 1 anonymity revoker."
             );
-            Threshold(max((num_of_ars - 1).try_into().unwrap_or(255), 1))
+            Threshold::try_new(max((num_of_ars - 1).try_into().unwrap_or(255), 1))?
         }
     };
 

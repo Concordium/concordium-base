@@ -13,7 +13,6 @@ use crate::{
     },
     pedersen_commitment::{Randomness, Value},
     random_oracle::RandomOracle,
-    updates::{GASRewards, GASRewardsV1},
 };
 use concordium_contracts_common::AccountAddress;
 pub use concordium_contracts_common::{
@@ -517,11 +516,6 @@ impl Deserial for ProtocolVersion {
     }
 }
 
-pub struct ChainParameterVersion0;
-pub struct ChainParameterVersion1;
-pub struct ChainParameterVersion2;
-pub struct ChainParameterVersion3;
-
 /// Height of a block since chain genesis.
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
@@ -921,7 +915,9 @@ impl From<&UpdateKeyPair> for UpdatePublicKey {
     }
 }
 
-#[derive(Debug, Clone, Copy, SerdeSerialize, SerdeDeserialize, Serialize, Into, Display)]
+#[derive(
+    Debug, Clone, Copy, SerdeSerialize, SerdeDeserialize, Serialize, Into, Display, Eq, PartialEq,
+)]
 #[serde(transparent)]
 /// A lower bound on the number of signatures needed to sign a valid update
 /// message of a particular type. This is never 0.
@@ -1091,7 +1087,7 @@ pub struct CommissionRanges {
     pub transaction: InclusiveRange<AmountFraction>,
 }
 
-#[derive(Debug, Copy, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Copy, Clone, SerdeSerialize, SerdeDeserialize, Eq, PartialEq)]
 pub struct InclusiveRange<T> {
     pub min: T,
     pub max: T,
@@ -1119,7 +1115,7 @@ impl<T: Ord> InclusiveRange<T> {
     }
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, Serial, Debug, Clone, Copy)]
+#[derive(SerdeSerialize, SerdeDeserialize, Serial, Debug, Clone, Copy, Eq, PartialEq)]
 #[serde(try_from = "leverage_factor_json::LeverageFactorRaw")]
 /// The amount of leverage that a baker can get from delegation. A leverage
 /// factor of 1 means that a baker does not gain anything from delegation.
@@ -1239,63 +1235,17 @@ impl Deserial for MintDistributionV1 {
     }
 }
 
-/// Trait used to define mapping from a type to a `MintDistribution` type.
-pub trait MintDistributionFamily {
-    type Output;
-}
-
-impl MintDistributionFamily for ChainParameterVersion0 {
-    type Output = MintDistributionV0;
-}
-
-impl MintDistributionFamily for ChainParameterVersion1 {
-    type Output = MintDistributionV1;
-}
-
-impl MintDistributionFamily for ChainParameterVersion2 {
-    type Output = MintDistributionV1;
-}
-
-impl MintDistributionFamily for ChainParameterVersion3 {
-    type Output = MintDistributionV1;
-}
-
-/// Type family mapping a `ChainParameterVersion` to its corresponding type for
-/// the `MintDistribution`.
-pub type MintDistribution<CPV> = <CPV as MintDistributionFamily>::Output;
-
-/// Trait used to define mapping from a type to a `GasRewards` type.
-pub trait GASRewardsFamily {
-    type Output;
-}
-
-impl GASRewardsFamily for ChainParameterVersion0 {
-    type Output = GASRewards;
-}
-
-impl GASRewardsFamily for ChainParameterVersion1 {
-    type Output = GASRewards;
-}
-
-impl GASRewardsFamily for ChainParameterVersion2 {
-    type Output = GASRewardsV1;
-}
-
-impl GASRewardsFamily for ChainParameterVersion3 {
-    type Output = GASRewardsV1;
-}
-
-/// Type family mapping a `ChainParameterVersion` to its corresponding type for
-/// the `GasRewards`.
-pub type GASRewardsFor<CPV> = <CPV as GASRewardsFamily>::Output;
-
-#[derive(Debug, Serialize, Clone, Copy)]
+#[derive(Debug, Serialize, Clone, Copy, Eq, PartialEq)]
 /// Rate of creation of new CCDs. For example, A value of `0.05` would mean an
 /// increase of 5 percent per unit of time. This value does not specify the time
 /// unit, and this differs based on the protocol version.
 ///
 /// The representation is base-10 floating point number representation.
 /// The value is `mantissa * 10^(-exponent)`.
+///
+/// Note that the `Eq` instance is representational, so it is possible for
+/// two `MintRate`s that represent the same number not be be equal. (For
+/// example, 1 * 10^(-1) and 10 * 10^(-2).)
 pub struct MintRate {
     pub mantissa: u32,
     pub exponent: u8,
@@ -1345,7 +1295,9 @@ impl AmountFraction {
 }
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, SerdeSerialize, SerdeDeserialize, Serialize, FromStr)]
+#[derive(
+    Debug, Clone, Copy, SerdeSerialize, SerdeDeserialize, Serialize, FromStr, Eq, PartialEq,
+)]
 #[serde(transparent)]
 /// A bound on the relative share of the total staked capital that a baker can
 /// have as its stake. This is required to be greater than 0.
