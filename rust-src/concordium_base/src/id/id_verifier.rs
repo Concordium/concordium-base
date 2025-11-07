@@ -379,7 +379,8 @@ mod tests {
     fn test_verify_attribute() {
         let mut csprng = thread_rng();
         let keys = PedersenKey::<G1>::generate(&mut csprng);
-        let attribute = AttributeKind("some attribute value".to_string());
+        let attribute =
+            AttributeKind::try_new("some attribute value".to_string()).expect("attribute kind");
         let value = Value::<G1>::new(attribute.to_field_element());
         let (commitment, randomness) = keys.commit(&value, &mut csprng);
 
@@ -395,9 +396,9 @@ mod tests {
         let global = GlobalContext::<G1>::generate(String::from("genesis_string"));
         let keys = global.on_chain_commitment_key;
         let gens = global.bulletproof_generators();
-        let lower = AttributeKind("20000102".to_string());
-        let attribute = AttributeKind("20000102".to_string());
-        let upper = AttributeKind("20000103".to_string());
+        let lower = AttributeKind::try_new("20000102".to_string()).expect("attribute kind");
+        let attribute = AttributeKind::try_new("20000102".to_string()).expect("attribute kind");
+        let upper = AttributeKind::try_new("20000103".to_string()).expect("attribute kind");
         let value = Value::<G1>::new(attribute.to_field_element());
         let (commitment, randomness) = keys.commit(&value, &mut csprng);
         let mut transcript = RandomOracle::domain("Test");
@@ -468,9 +469,9 @@ mod tests {
         let global = GlobalContext::<G1>::generate(String::from("genesis_string"));
         let keys = global.on_chain_commitment_key;
         let gens = global.bulletproof_generators();
-        let lower = AttributeKind("20000102".to_string());
-        let attribute = AttributeKind("20000102".to_string());
-        let upper = AttributeKind("20000103".to_string());
+        let lower = AttributeKind::try_new("20000102".to_string()).expect("attribute kind");
+        let attribute = AttributeKind::try_new("20000102".to_string()).expect("attribute kind");
+        let upper = AttributeKind::try_new("20000103".to_string()).expect("attribute kind");
         let value = Value::<G1>::new(attribute.to_field_element());
         let (commitment, randomness) = keys.commit(&value, &mut csprng);
         let mut transcript = RandomOracle::domain("Test");
@@ -485,8 +486,8 @@ mod tests {
             &upper,
             &randomness,
         );
-        let lower_shifted = AttributeKind("20000107".to_string());
-        let upper_shifted = AttributeKind("20000108".to_string());
+        let lower_shifted = AttributeKind::try_new("20000107".to_string()).expect("attribute kind");
+        let upper_shifted = AttributeKind::try_new("20000108".to_string()).expect("attribute kind");
         let five = G1::scalar_from_u64(5);
         let five_value: Value<G1> = Value::new(five);
         let five_com = keys.hide(&five_value, &PedersenRandomness::zero());
@@ -541,10 +542,12 @@ mod tests {
         let cmm_prf = Commitment(point);
         let cmm_max_accounts = Commitment(point);
         let cmm_cred_counter = Commitment(point);
-        let attribute_name = AttributeKind(String::from("Foo")); // first name
-        let attribute_country = AttributeKind(String::from("DK")); // country
-        let attribute_dob = AttributeKind(String::from("19970505")); // dob
-        let attribute_doc_expiry = AttributeKind(String::from("20250505")); // doc expiry
+        let attribute_name = AttributeKind::try_new(String::from("Foo")).expect("attribute kind"); // first name
+        let attribute_country = AttributeKind::try_new(String::from("DK")).expect("attribute kind"); // country
+        let attribute_dob =
+            AttributeKind::try_new(String::from("19970505")).expect("attribute kind"); // dob
+        let attribute_doc_expiry =
+            AttributeKind::try_new(String::from("20250505")).expect("attribute kind"); // doc expiry
 
         // Reveal first name
         let reveal_statement = RevealAttributeStatement {
@@ -552,11 +555,11 @@ mod tests {
         };
 
         // Country (not) in set
-        let dk = AttributeKind(String::from("DK"));
-        let no = AttributeKind(String::from("NO"));
-        let se = AttributeKind(String::from("SE"));
-        let de = AttributeKind(String::from("DE"));
-        let uk = AttributeKind(String::from("UK"));
+        let dk = AttributeKind::try_new(String::from("DK")).expect("attribute kind");
+        let no = AttributeKind::try_new(String::from("NO")).expect("attribute kind");
+        let se = AttributeKind::try_new(String::from("SE")).expect("attribute kind");
+        let de = AttributeKind::try_new(String::from("DE")).expect("attribute kind");
+        let uk = AttributeKind::try_new(String::from("UK")).expect("attribute kind");
         let set = BTreeSet::from([dk, no, se, de.clone(), uk.clone()]);
         let set2 = BTreeSet::from([de, uk]);
         let set_statement = AttributeInSetStatement::<G1, _, AttributeKind> {
@@ -568,8 +571,8 @@ mod tests {
         // DOB in range
         let range_statement = AttributeInRangeStatement {
             attribute_tag: AttributeTag::from(3u8),
-            lower: AttributeKind(String::from("19950505")),
-            upper: AttributeKind(String::from("19990505")),
+            lower: AttributeKind::try_new(String::from("19950505")).expect("attribute kind"),
+            upper: AttributeKind::try_new(String::from("19990505")).expect("attribute kind"),
             _phantom: PhantomData::default(),
         };
 
@@ -601,7 +604,9 @@ mod tests {
             .unwrap()
             .residence_not_in(set2)
             .unwrap()
-            .doc_expiry_no_earlier_than(AttributeKind(String::from("20240304")))
+            .doc_expiry_no_earlier_than(
+                AttributeKind::try_new(String::from("20240304")).expect("attribute kind"),
+            )
             .unwrap();
         let full_statement2 = StatementWithContext {
             credential: point,

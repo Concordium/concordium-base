@@ -31,10 +31,29 @@ pub type BaseField = <IpPairing as Pairing>::ScalarField;
 /// Index used to create the RegId of the initial credential.
 pub const INITIAL_CREDENTIAL_INDEX: u8 = 0;
 
-#[derive(Clone, PartialEq, Eq, Debug, PartialOrd, Ord)]
+const MAX_ATTRIBUTE_LENGTH: u8 = 31;
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 /// Concrete attribute values.
 /// All currently supported attributes are string values.
-pub struct AttributeKind(pub String);
+pub struct AttributeKind(String);
+
+impl AttributeKind {
+    /// Create `AttributeKind` value from a string. Returns error if the string is longer than
+    /// 31 bytes.
+    pub fn try_new(value: String) -> Result<Self, AttributeValueTooLong> {
+        if value.len() > MAX_ATTRIBUTE_LENGTH as usize {
+            Err(AttributeValueTooLong)
+        } else {
+            Ok(Self(value))
+        }
+    }
+}
+
+/// Value was too long to be represented in an attribute
+#[derive(Debug, Error)]
+#[error("attribute value too long")]
+pub struct AttributeValueTooLong;
 
 impl SerdeSerialize for AttributeKind {
     fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
@@ -54,11 +73,8 @@ impl<'de> SerdeDeserialize<'de> for AttributeKind {
             }
 
             fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-                if v.as_bytes().len() > 31 {
-                    Err(de::Error::custom("Value too big."))
-                } else {
-                    Ok(AttributeKind(v.to_string()))
-                }
+                AttributeKind::try_new(v.to_string())
+                    .map_err(|_| de::Error::custom("Value too big."))
             }
         }
         des.deserialize_str(AttributeKindVisitor)
@@ -68,7 +84,7 @@ impl<'de> SerdeDeserialize<'de> for AttributeKind {
 impl Deserial for AttributeKind {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let len: u8 = source.get()?;
-        if len <= 31 {
+        if len <= MAX_ATTRIBUTE_LENGTH {
             let mut buf = vec![0u8; len as usize];
             source.read_exact(&mut buf)?;
             Ok(AttributeKind(String::from_utf8(buf)?))
@@ -97,17 +113,25 @@ impl FromStr for AttributeKind {
     type Err = ParseAttributeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.as_bytes().len() <= 31 {
-            Ok(AttributeKind(s.to_string()))
-        } else {
-            Err(ParseAttributeError::ValueTooLarge)
-        }
+        Self::try_new(s.to_string()).map_err(|_| ParseAttributeError::ValueTooLarge)
     }
 }
 
 impl fmt::Display for AttributeKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl AsRef<str> for AttributeKind {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<AttributeKind> for String {
+    fn from(value: AttributeKind) -> Self {
+        value.0
     }
 }
 
@@ -125,5 +149,107 @@ impl Attribute<<ArkGroup<G1Projective> as Curve>::Scalar> for AttributeKind {
         buf[0] = len as u8; // this should be valid because len <= 31 so the first two bits will be unset
         <<ArkGroup<G1Projective> as Curve>::Scalar as Deserial>::deserial(&mut Cursor::new(&buf))
             .expect("31 bytes + length fits into a scalar.")
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::common;
+    use crate::id::constants::AttributeKind;
+    use nom::AsBytes;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_try_new() {
+        let attr = AttributeKind::try_new("".to_string()).expect("try_new");
+        assert_eq!(attr.as_ref(), "");
+
+        let attr = AttributeKind::try_new("abc".to_string()).expect("try_new");
+        assert_eq!(attr.as_ref(), "abc");
+
+        let attr = AttributeKind::try_new("a".repeat(31)).expect("try_new");
+        assert_eq!(attr.as_ref(), "a".repeat(31));
+
+        AttributeKind::try_new("a".repeat(32)).expect_err("try_new");
+    }
+
+    #[test]
+    fn test_from_str() {
+        let attr = AttributeKind::from_str("").expect("from_str");
+        assert_eq!(attr.as_ref(), "");
+
+        let attr = AttributeKind::from_str("abc").expect("from_str");
+        assert_eq!(attr.as_ref(), "abc");
+
+        let attr = AttributeKind::from_str(&"a".repeat(31)).expect("from_str");
+        assert_eq!(attr.as_ref(), "a".repeat(31));
+
+        AttributeKind::from_str(&"a".repeat(32)).expect_err("from_str");
+    }
+
+    #[test]
+    fn test_serial_deserial() {
+        let attr = AttributeKind::try_new("".to_string()).unwrap();
+        let bytes_hex = hex::encode(common::to_bytes(&attr));
+        assert_eq!(bytes_hex, "00");
+        let attr_deserial: AttributeKind =
+            common::from_bytes(&mut hex::decode(bytes_hex).unwrap().as_bytes()).expect("deserial");
+        assert_eq!(attr_deserial, attr);
+
+        let attr = AttributeKind::try_new("abc".to_string()).unwrap();
+        let bytes_hex = hex::encode(common::to_bytes(&attr));
+        assert_eq!(bytes_hex, "03616263");
+        let attr_deserial: AttributeKind =
+            common::from_bytes(&mut hex::decode(bytes_hex).unwrap().as_bytes()).expect("deserial");
+        assert_eq!(attr_deserial, attr);
+
+        let attr = AttributeKind::try_new("a".repeat(31)).unwrap();
+        let bytes_hex = hex::encode(common::to_bytes(&attr));
+        assert_eq!(
+            bytes_hex,
+            "1f61616161616161616161616161616161616161616161616161616161616161"
+        );
+        let attr_deserial: AttributeKind =
+            common::from_bytes(&mut hex::decode(bytes_hex).unwrap().as_bytes()).expect("deserial");
+        assert_eq!(attr_deserial, attr);
+
+        let bytes_hex = "206161616161616161616161616161616161616161616161616161616161616161";
+        let err =
+            common::from_bytes::<AttributeKind, _>(&mut hex::decode(bytes_hex).unwrap().as_bytes())
+                .expect_err("deserial");
+        assert!(
+            err.to_string().contains("Attributes can be at most"),
+            "message: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_serde_serialize_deserialize() {
+        let attr = AttributeKind::try_new("".to_string()).unwrap();
+        let json = serde_json::to_string(&attr).expect("serialize");
+        assert_eq!(json, r#""""#);
+        let attr_deserialized: AttributeKind = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(attr_deserialized, attr);
+
+        let attr = AttributeKind::try_new("abc".to_string()).unwrap();
+        let json = serde_json::to_string(&attr).expect("serialize");
+        assert_eq!(json, r#""abc""#);
+        let attr_deserialized: AttributeKind = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(attr_deserialized, attr);
+
+        let attr = AttributeKind::try_new("a".repeat(31)).unwrap();
+        let json = serde_json::to_string(&attr).expect("serialize");
+        assert_eq!(json, r#""aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa""#);
+        let attr_deserialized: AttributeKind = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(attr_deserialized, attr);
+
+        let json = r#""aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa""#;
+        let err = serde_json::from_str::<AttributeKind>(&json).expect_err("deserial");
+        assert!(
+            err.to_string().contains("Value too big"),
+            "message: {}",
+            err
+        );
     }
 }
