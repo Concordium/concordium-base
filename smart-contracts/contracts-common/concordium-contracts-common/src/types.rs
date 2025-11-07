@@ -1482,7 +1482,7 @@ impl OwnedContractName {
 
     /// Convert to [`ContractName`] by reference.
     #[inline(always)]
-    pub fn as_contract_name(&self) -> ContractName {
+    pub fn as_contract_name(&self) -> ContractName<'_> {
         ContractName(self.0.as_str())
     }
 }
@@ -1709,7 +1709,7 @@ impl OwnedReceiveName {
     /// Convert to [`ReceiveName`]. See [`ReceiveName`] for additional methods
     /// available on the type.
     #[inline(always)]
-    pub fn as_receive_name(&self) -> ReceiveName {
+    pub fn as_receive_name(&self) -> ReceiveName<'_> {
         ReceiveName(self.0.as_str())
     }
 }
@@ -1840,7 +1840,7 @@ impl OwnedEntrypointName {
 
     /// Convert to an [`EntrypointName`] by reference.
     #[inline(always)]
-    pub fn as_entrypoint_name(&self) -> EntrypointName {
+    pub fn as_entrypoint_name(&self) -> EntrypointName<'_> {
         EntrypointName(self.0.as_str())
     }
 }
@@ -1993,7 +1993,7 @@ impl fmt::Display for OwnedParameter {
 
 impl OwnedParameter {
     /// Get [`Self`] as the borrowed variant [`Parameter`].
-    pub fn as_parameter(&self) -> Parameter {
+    pub fn as_parameter(&self) -> Parameter<'_> {
         Parameter(self.0.as_ref())
     }
 
