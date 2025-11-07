@@ -8,39 +8,18 @@ use crate::id::{
 use crate::web3id::v1::PresentationV1;
 use crate::web3id::{did, Web3IdAttribute};
 use crate::{hashes, id};
-use anyhow::Context as AnyhowContext;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::hashes::HashBytes;
-use serde::de::DeserializeOwned;
 use sha2::Digest;
 use std::collections::HashMap;
 
 const PROTOCOL_VERSION: u16 = 1u16;
 
-/// Extract the value at the given key. This mutates the `value` replacing the
-/// value at the provided key with `Null`.
-fn take_field(value: &mut serde_json::Value, field: &str) -> anyhow::Result<serde_json::Value> {
-    Ok(value
-        .get_mut(field)
-        .with_context(|| format!("field {field} is not present"))?
-        .take())
-}
-
-/// Extract the value at the given key and deserializes it. This mutates the `value` replacing the
-/// value at the provided key with `Null`.
-pub fn take_field_de<T: DeserializeOwned>(
-    value: &mut serde_json::Value,
-    field: &str,
-) -> anyhow::Result<T> {
-    serde_json::from_value(take_field(value, field)?)
-        .with_context(|| format!("deserialize {}", field))
-}
-
 /// A verifiable presentation request that specifies what credentials and proofs
 /// are being requested from a credential holder.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Serialize)]
 #[serde(tag = "type", rename = "ConcordiumVerificationRequestV1")]
-pub struct VerifiablePresentationRequest {
+pub struct VerificationRequest {
     /// Presentation being requested.
     #[serde(flatten)]
     pub request: VerificationRequestData,
@@ -62,7 +41,7 @@ pub struct VerificationAuditRecord {
     /// Version integer, for now it is always 1.
     pub version: u16,
     /// The verifiable presentation request to record.
-    pub request: VerifiablePresentationRequest,
+    pub request: VerificationRequest,
     /// Unique identifier chosen by the requester/merchant.
     pub id: String,
     /// The verifiable presentation including the proof.
@@ -72,7 +51,7 @@ pub struct VerificationAuditRecord {
 impl VerificationAuditRecord {
     /// Create a new verifiable audit anchor using the hardcoded version [`PROTOCOL_VERSION`].
     pub fn new(
-        request: VerifiablePresentationRequest,
+        request: VerificationRequest,
         id: String,
         presentation: PresentationV1<IpPairing, ArCurve, Web3IdAttribute>,
     ) -> Self {
@@ -137,8 +116,8 @@ pub struct VerificationAuditAnchor {
 pub struct VerificationRequestData {
     /// Context information for a verifiable presentation request.
     pub context: Context,
-    /// The credential statements being requested.
-    pub credential_statements: Vec<CredentialStatementRequest>,
+    /// The claims for a list of subjects containing requested statements about the subjects.
+    pub subject_claims: Vec<CredentialStatementRequest>,
 }
 
 impl VerificationRequestData {
@@ -146,7 +125,7 @@ impl VerificationRequestData {
     pub fn new(context: Context) -> Self {
         Self {
             context,
-            credential_statements: Vec::new(),
+            subject_claims: Vec::new(),
         }
     }
 
@@ -155,7 +134,7 @@ impl VerificationRequestData {
         mut self,
         statement_request: impl Into<CredentialStatementRequest>,
     ) -> Self {
-        self.credential_statements.push(statement_request.into());
+        self.subject_claims.push(statement_request.into());
         self
     }
 
@@ -322,7 +301,7 @@ impl IdentityStatementRequest {
     }
 
     /// Add sources to the given identity statement request.
-    pub fn add_sources(mut self, sources: Vec<CredentialType>) -> Self {
+    pub fn add_sources(mut self, sources: impl IntoIterator<Item = CredentialType>) -> Self {
         for src in sources {
             if !self.source.contains(&src) {
                 self.source.push(src);
@@ -340,7 +319,10 @@ impl IdentityStatementRequest {
     }
 
     /// Add issuers to the given identity statement request.
-    pub fn add_issuers(mut self, issuers: Vec<IdentityProviderMethod>) -> Self {
+    pub fn add_issuers(
+        mut self,
+        issuers: impl IntoIterator<Item = IdentityProviderMethod>,
+    ) -> Self {
         for issuer in issuers {
             if !self.issuers.contains(&issuer) {
                 self.issuers.push(issuer);
@@ -685,6 +667,7 @@ impl TryFrom<GivenContextJson> for GivenContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hashes::Hash;
     use crate::{
         common::serialize_deserialize,
         id::{
@@ -692,7 +675,7 @@ mod tests {
             id_proof_types::AttributeInRangeStatement,
         },
     };
-    use concordium_contracts_common::hashes::Hash;
+    use anyhow::Context as AnyhowContext;
     use hex::FromHex;
     use std::marker::PhantomData;
 
@@ -772,7 +755,7 @@ mod tests {
 
         let verification_request_anchor_transaction_hash = hashes::TransactionHash::new([2u8; 32]);
 
-        let presentation_request = VerifiablePresentationRequest {
+        let presentation_request = VerificationRequest {
             request: request_data,
             anchor_transaction_hash: verification_request_anchor_transaction_hash,
         };
@@ -931,19 +914,15 @@ mod tests {
 
         let verification_request_anchor_transaction_hash = hashes::TransactionHash::new([0u8; 32]);
 
-        let presentation_request = VerifiablePresentationRequest {
+        let presentation_request = VerificationRequest {
             request: request_data,
             anchor_transaction_hash: verification_request_anchor_transaction_hash,
         };
 
-        let json = anyhow::Context::context(
-            serde_json::to_value(&presentation_request),
-            "Failed verifiable presentation request to JSON value.",
-        )?;
-        let roundtrip = anyhow::Context::context(
-            serde_json::from_value(json),
-            "Failed verifiable presentation request from JSON value.",
-        )?;
+        let json = serde_json::to_value(&presentation_request)
+            .context("Failed verifiable presentation request to JSON value.")?;
+        let roundtrip = serde_json::from_value(json)
+            .context("Failed verifiable presentation request from JSON value.")?;
         assert_eq!(
             presentation_request, roundtrip,
             "Failed verifiable presentation request JSON roundtrip."
@@ -956,14 +935,10 @@ mod tests {
     fn test_verification_request_anchor_json_roundtrip() -> anyhow::Result<()> {
         let verification_request_anchor = verification_request_data_fixture();
 
-        let json = anyhow::Context::context(
-            serde_json::to_value(&verification_request_anchor),
-            "Failed verification request anchor to JSON value.",
-        )?;
-        let roundtrip = anyhow::Context::context(
-            serde_json::from_value(json),
-            "Failed verification request anchor from JSON value.",
-        )?;
+        let json = serde_json::to_value(&verification_request_anchor)
+            .context("Failed verification request anchor to JSON value.")?;
+        let roundtrip = serde_json::from_value(json)
+            .context("Failed verification request anchor from JSON value.")?;
         assert_eq!(
             verification_request_anchor, roundtrip,
             "Failed verification request anchor JSON roundtrip."
@@ -976,15 +951,11 @@ mod tests {
     fn test_verification_audit_anchor_json_roundtrip() -> anyhow::Result<()> {
         let verification_audit_anchor = verification_audit_anchor_fixture();
 
-        let json = anyhow::Context::context(
-            serde_json::to_value(&verification_audit_anchor),
-            "Failed verification audit anchor to JSON value.",
-        )?;
+        let json = serde_json::to_value(&verification_audit_anchor)
+            .context("Failed verification audit anchor to JSON value.")?;
         println!("{}", json);
-        let roundtrip = anyhow::Context::context(
-            serde_json::from_value(json),
-            "Failed verification audit anchor from JSON value.",
-        )?;
+        let roundtrip = serde_json::from_value(json)
+            .context("Failed verification audit anchor from JSON value.")?;
         assert_eq!(
             verification_audit_anchor, roundtrip,
             "Failed verification audit anchor JSON roundtrip."
@@ -999,7 +970,7 @@ mod tests {
     fn test_reading_verification_request_data_fixture_from_json() -> anyhow::Result<()> {
         let verification_request_data_fixture = r#"
     {
-        "type": "ConcordiumVerificationRequestV1",
+        "type": "ConcordiumVerificationRequestDataV1",
         "context": {
             "type": "ConcordiumUnfilledContextInformationV1",
             "given": [
@@ -1021,7 +992,7 @@ mod tests {
                 "ResourceID"
             ]
         },
-        "credentialStatements": [
+        "subjectClaims": [
             {
                 "type": "identity",
                 "source": [
@@ -1075,7 +1046,7 @@ mod tests {
                 "ResourceID"
             ]
         },
-        "credentialStatements": [
+        "subjectClaims": [
             {
                 "type": "identity",
                 "source": [
