@@ -2801,7 +2801,7 @@ pub struct CredentialValidity {
     pub created_at: YearMonth,
 }
 
-/// Attribute value as represented in the identity attribute credential values. An attribute value has ither been committed to,
+/// Attribute value as represented in the identity attribute credential values. An attribute value has either been committed to,
 /// revealed, or just proven known.
 #[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone)]
 #[serde(bound(
