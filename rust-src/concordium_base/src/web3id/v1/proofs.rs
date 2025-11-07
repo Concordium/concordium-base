@@ -17,7 +17,16 @@ use crate::id::types::{
     IdentityAttributesCredentialsInfo, IdentityAttributesCredentialsValues, IpContextOnly,
 };
 use crate::pedersen_commitment::Commitment;
-use crate::web3id::v1::{AccountBasedCredentialV1, AccountBasedSubjectClaims, AccountCredentialProofPrivateInputs, AccountCredentialProofs, AccountCredentialSubject, AccountCredentialVerificationMaterial, ConcordiumProofType, ConcordiumZKProof, ContextInformation, CredentialMetadataV1, CredentialProofPrivateInputs, CredentialV1, CredentialVerificationMaterial, IdentityBasedCredentialV1, IdentityBasedSubjectClaims, IdentityCredentialEphemeralId, IdentityCredentialEphemeralIdDataRef, IdentityCredentialProofPrivateInputs, IdentityCredentialProofs, IdentityCredentialSubject, IdentityCredentialVerificationMaterial, PresentationV1, ProveError, RequestV1, SubjectClaims, VerifyError};
+use crate::web3id::v1::{
+    AccountBasedCredentialV1, AccountBasedSubjectClaims, AccountCredentialProofPrivateInputs,
+    AccountCredentialProofs, AccountCredentialSubject, AccountCredentialVerificationMaterial,
+    ConcordiumProofType, ConcordiumZKProof, ContextInformation, CredentialMetadataV1,
+    CredentialProofPrivateInputs, CredentialV1, CredentialVerificationMaterial,
+    IdentityBasedCredentialV1, IdentityBasedSubjectClaims, IdentityCredentialEphemeralId,
+    IdentityCredentialEphemeralIdDataRef, IdentityCredentialProofPrivateInputs,
+    IdentityCredentialProofs, IdentityCredentialSubject, IdentityCredentialVerificationMaterial,
+    PresentationV1, ProveError, RequestV1, SubjectClaims, VerifyError,
+};
 use rand::{CryptoRng, Rng};
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
@@ -57,7 +66,10 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             return Err(VerifyError::VeficationMaterialMismatch);
         }
 
-        for (i, (verification_material, credential)) in verification_material.zip(&self.verifiable_credentials).enumerate() {
+        for (i, (verification_material, credential)) in verification_material
+            .zip(&self.verifiable_credentials)
+            .enumerate()
+        {
             request.subject_claims.push(credential.claims());
 
             if !credential.verify(global_context, &mut transcript, verification_material) {
@@ -81,8 +93,12 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         verification_material: &CredentialVerificationMaterial<P, C>,
     ) -> bool {
         match self {
-            CredentialV1::Account(cred_proof) => cred_proof.verify(global, transcript, verification_material),
-            CredentialV1::Identity(cred_proof) => cred_proof.verify(global, transcript, verification_material),
+            CredentialV1::Account(cred_proof) => {
+                cred_proof.verify(global, transcript, verification_material)
+            }
+            CredentialV1::Identity(cred_proof) => {
+                cred_proof.verify(global, transcript, verification_material)
+            }
         }
     }
 }
@@ -395,12 +411,19 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
     pub fn prove<'a, P: Pairing<ScalarField = C::Scalar>>(
         self,
         params: &GlobalContext<C>,
-        private_inputs: impl ExactSizeIterator<Item = CredentialProofPrivateInputs<'a, P, C, AttributeType>>,
+        private_inputs: impl ExactSizeIterator<
+            Item = CredentialProofPrivateInputs<'a, P, C, AttributeType>,
+        >,
     ) -> Result<PresentationV1<P, C, AttributeType>, ProveError>
     where
         AttributeType: 'a,
     {
-        self.prove_with_rng(params, private_inputs, &mut rand::thread_rng(), chrono::Utc::now())
+        self.prove_with_rng(
+            params,
+            private_inputs,
+            &mut rand::thread_rng(),
+            chrono::Utc::now(),
+        )
     }
 
     /// Prove the claims in the given [`RequestV1`] using the provided cryptographic
@@ -410,7 +433,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
     pub fn prove_with_rng<'a, P: Pairing<ScalarField = C::Scalar>>(
         self,
         global_context: &GlobalContext<C>,
-        private_inputs: impl ExactSizeIterator<Item = CredentialProofPrivateInputs<'a, P, C, AttributeType>>,
+        private_inputs: impl ExactSizeIterator<
+            Item = CredentialProofPrivateInputs<'a, P, C, AttributeType>,
+        >,
         csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
     ) -> Result<PresentationV1<P, C, AttributeType>, ProveError>
@@ -424,9 +449,15 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
         if self.subject_claims.len() != private_inputs.len() {
             return Err(ProveError::PrivateInputsMismatch);
         }
-        for (subject_claims, private_inputs) in self.subject_claims.into_iter().zip(private_inputs) {
-            let credential =
-                subject_claims.prove(global_context, &mut transcript, csprng, now, private_inputs)?;
+        for (subject_claims, private_inputs) in self.subject_claims.into_iter().zip(private_inputs)
+        {
+            let credential = subject_claims.prove(
+                global_context,
+                &mut transcript,
+                csprng,
+                now,
+                private_inputs,
+            )?;
             verifiable_credentials.push(credential);
         }
         // Linking proof
@@ -458,10 +489,10 @@ pub mod tests {
     use crate::id::id_proof_types::{AtomicStatement, AttributeInRangeStatement};
     use crate::id::types::AttributeTag;
     use crate::web3id::did::Network;
+    use crate::web3id::v1::VerifyError::VeficationMaterialMismatch;
     use crate::web3id::v1::{fixtures, ContextProperty};
     use crate::web3id::Web3IdAttribute;
     use std::marker::PhantomData;
-    use crate::web3id::v1::VerifyError::VeficationMaterialMismatch;
 
     fn challenge_fixture() -> ContextInformation {
         ContextInformation {

@@ -58,8 +58,6 @@ mod tests {
     /// A test flow of the on-chain account creation proof where the generated
     /// credentials/commitments/randomness are reused to produce an additional
     /// zero-knowledge proof (as done in user wallets) for a given account credential statement.
-    ///
-    /// JSON serialization of requests and presentations is also tested.
     #[test]
     fn test_deploy_account_credentials_and_test_verifiable_presentation_from_account_credentials() {
         let mut rng = rand::thread_rng();

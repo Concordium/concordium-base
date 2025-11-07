@@ -79,7 +79,7 @@ impl crate::common::Deserial for Network {
 pub enum IdentifierType {
     /// Reference to an account via an address.
     Account { address: AccountAddress },
-    /// Reference to an account credential via its the account credential registration ID.
+    /// Reference to an account credential via the account credential registration ID.
     Credential { cred_id: CredentialRegistrationID },
     /// Reference to a specific smart contract instance.
     ContractData {

@@ -272,7 +272,7 @@ fn take_field_de<T: DeserializeOwned>(
         .with_context(|| format!("deserialize {}", field))
 }
 
-/// Metadata of an account credentials derived from an identity issued by an
+/// Metadata of an account credential derived from an identity issued by an
 /// identity provider.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct AccountCredentialMetadataV1 {
@@ -432,7 +432,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
 pub struct IdentityCredentialEphemeralId(pub Vec<u8>);
 
 /// Encrypted ephemeral id for an identity credential. The id can be decrypted to IdCredPub by the privacy guardians (anonymity revokers).
-/// It will have a new value for each time credential is proven (the encryption is a randomized function)
+/// It will have a new value for each time credential is proven (the encryption is a randomized function).
 #[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
 pub struct IdentityCredentialEphemeralIdData<C: Curve> {
     /// Decryption threshold of the IdCredPub in [`IdentityCredentialEphemeralId`]
@@ -918,10 +918,12 @@ impl<
 /// A request to prove a verifiable presentation [`PresentationV1`]
 /// with [`RequestV1::prove`].
 /// Contains subject claims and a context. The secret data to prove the claims
-/// is input via [`CredentialVerificationMaterial`].
+/// is input via [`CredentialProofPrivateInputs`].
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct RequestV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// Context challenge for the proof
     pub challenge: ContextInformation,
+    /// Claims to prove
     pub subject_claims: Vec<SubjectClaims<C, AttributeType>>,
 }
 
@@ -1124,13 +1126,14 @@ pub enum CredentialVerificationMaterial<P: Pairing, C: Curve<Scalar = P::ScalarF
     Identity(IdentityCredentialVerificationMaterial<P, C>),
 }
 
-
 /// Error proving claims in a request
 #[derive(thiserror::Error, Debug)]
 pub enum ProveError {
     #[error("failure to prove atomic statement")]
     AtomicStatementProof,
-    #[error("the number of private inputs or their type does not match the subject claims to prove")]
+    #[error(
+        "the number of private inputs or their type does not match the subject claims to prove"
+    )]
     PrivateInputsMismatch,
     #[error("cannot prove identity attribute credentials: {0}")]
     IdentityAttributeCredentials(String),
