@@ -58,7 +58,7 @@ pub fn create_identity_object_request_v1_aux(
         "Number of anonymity revokers in arsInfos should be at least arThreshold."
     );
 
-    let threshold = Threshold(input.ar_threshold);
+    let threshold = Threshold::try_new(input.ar_threshold)?;
     let chi = CredentialHolderInfo::<ArCurve> { id_cred };
     let aci = AccCredentialInfo {
         cred_holder_info: chi,
@@ -158,7 +158,7 @@ mod tests {
                 .value
                 .choice_ar_parameters
                 .threshold
-                .0,
+                .threshold(),
             ar_threshold
         );
     }
