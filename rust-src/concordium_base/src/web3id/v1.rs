@@ -1125,15 +1125,25 @@ pub enum CredentialVerificationMaterial<P: Pairing, C: Curve<Scalar = P::ScalarF
 }
 
 
-/// An error that can occour when attempting to produce a proof
+/// Error proving claims in a request
 #[derive(thiserror::Error, Debug)]
-pub enum ProofErrorV1 {
+pub enum ProveError {
     #[error("failure to prove atomic statement")]
     AtomicStatementProof,
-    #[error("type of or number of of private inputs does not match the subject claims to prove")]
+    #[error("the number of private inputs or their type does not match the subject claims to prove")]
     PrivateInputsMismatch,
     #[error("cannot prove identity attribute credentials: {0}")]
     IdentityAttributeCredentials(String),
+}
+
+/// Error verifying presentation
+#[derive(Debug, Clone, Hash, Eq, PartialEq, thiserror::Error)]
+#[non_exhaustive]
+pub enum VerifyError {
+    #[error("the number of verification material inputs does not match the credentials to verify")]
+    VeficationMaterialMismatch,
+    #[error("the credential was not valid (index {0})")]
+    InvalidCredential(usize),
 }
 
 #[cfg(test)]

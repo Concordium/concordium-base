@@ -17,7 +17,7 @@ use crate::id::types::{
     IdentityAttributesCredentialsInfo, IdentityAttributesCredentialsValues, IpContextOnly,
 };
 use crate::pedersen_commitment::Commitment;
-use crate::web3id::v1::{AccountBasedCredentialV1, AccountBasedSubjectClaims, AccountCredentialProofPrivateInputs, AccountCredentialProofs, AccountCredentialSubject, AccountCredentialVerificationMaterial, ConcordiumProofType, ConcordiumZKProof, ContextInformation, CredentialMetadataV1, CredentialProofPrivateInputs, CredentialV1, CredentialVerificationMaterial, IdentityBasedCredentialV1, IdentityBasedSubjectClaims, IdentityCredentialEphemeralId, IdentityCredentialEphemeralIdDataRef, IdentityCredentialProofPrivateInputs, IdentityCredentialProofs, IdentityCredentialSubject, IdentityCredentialVerificationMaterial, PresentationV1, ProofErrorV1, RequestV1, SubjectClaims};
+use crate::web3id::v1::{AccountBasedCredentialV1, AccountBasedSubjectClaims, AccountCredentialProofPrivateInputs, AccountCredentialProofs, AccountCredentialSubject, AccountCredentialVerificationMaterial, ConcordiumProofType, ConcordiumZKProof, ContextInformation, CredentialMetadataV1, CredentialProofPrivateInputs, CredentialV1, CredentialVerificationMaterial, IdentityBasedCredentialV1, IdentityBasedSubjectClaims, IdentityCredentialEphemeralId, IdentityCredentialEphemeralIdDataRef, IdentityCredentialProofPrivateInputs, IdentityCredentialProofs, IdentityCredentialSubject, IdentityCredentialVerificationMaterial, PresentationV1, ProveError, RequestV1, SubjectClaims, VerifyError};
 use rand::{CryptoRng, Rng};
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
@@ -43,7 +43,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         &self,
         global_context: &GlobalContext<C>,
         verification_material: impl ExactSizeIterator<Item = &'a CredentialVerificationMaterial<P, C>>,
-    ) -> Result<RequestV1<C, AttributeType>, PresentationVerificationError> {
+    ) -> Result<RequestV1<C, AttributeType>, VerifyError> {
         let mut transcript = RandomOracle::domain("ConcordiumVerifiablePresentationV1");
         append_context(&mut transcript, &self.presentation_context);
         transcript.append_message(b"ctx", &global_context);
@@ -54,14 +54,14 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         };
 
         if verification_material.len() != self.verifiable_credentials.len() {
-            return Err(PresentationVerificationError::InconsistentPublicData);
+            return Err(VerifyError::VeficationMaterialMismatch);
         }
 
         for (i, (verification_material, credential)) in verification_material.zip(&self.verifiable_credentials).enumerate() {
             request.subject_claims.push(credential.claims());
 
             if !credential.verify(global_context, &mut transcript, verification_material) {
-                return Err(PresentationVerificationError::InvalidCredential(i));
+                return Err(VerifyError::InvalidCredential(i));
             }
         }
 
@@ -216,14 +216,14 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
         csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
         private_input: CredentialProofPrivateInputs<P, C, AttributeType>,
-    ) -> Result<AccountBasedCredentialV1<C, AttributeType>, ProofErrorV1> {
+    ) -> Result<AccountBasedCredentialV1<C, AttributeType>, ProveError> {
         let CredentialProofPrivateInputs::Account(AccountCredentialProofPrivateInputs {
             attribute_values: values,
             attribute_randomness: randomness,
             issuer,
         }) = private_input
         else {
-            return Err(ProofErrorV1::PrivateInputsMismatch);
+            return Err(ProveError::PrivateInputsMismatch);
         };
 
         let statement_proofs = prove_statements(
@@ -260,14 +260,14 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
         csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
         private_input: CredentialProofPrivateInputs<P, C, AttributeType>,
-    ) -> Result<IdentityBasedCredentialV1<P, C, AttributeType>, ProofErrorV1> {
+    ) -> Result<IdentityBasedCredentialV1<P, C, AttributeType>, ProveError> {
         let CredentialProofPrivateInputs::Identity(IdentityCredentialProofPrivateInputs {
             ip_context,
             id_object,
             id_object_use_data,
         }) = private_input
         else {
-            return Err(ProofErrorV1::PrivateInputsMismatch);
+            return Err(ProveError::PrivateInputsMismatch);
         };
 
         let attributes_handling: BTreeMap<_, _> = self
@@ -299,7 +299,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
                 csprng,
                 transcript,
             )
-            .map_err(|err| ProofErrorV1::IdentityAttributeCredentials(err.to_string()))?;
+            .map_err(|err| ProveError::IdentityAttributeCredentials(err.to_string()))?;
 
         let statement_proofs = prove_statements(
             &self.statements,
@@ -351,7 +351,7 @@ fn prove_statements<
     global_context: &GlobalContext<C>,
     transcript: &mut RandomOracle,
     csprng: &mut (impl Rng + CryptoRng),
-) -> Result<Vec<AtomicProof<C, AttributeType>>, ProofErrorV1> {
+) -> Result<Vec<AtomicProof<C, AttributeType>>, ProveError> {
     statements
         .into_iter()
         .map(|statement| {
@@ -364,7 +364,7 @@ fn prove_statements<
                     attribute_values,
                     attribute_randomness,
                 )
-                .ok_or(ProofErrorV1::AtomicStatementProof)
+                .ok_or(ProveError::AtomicStatementProof)
         })
         .collect()
 }
@@ -377,7 +377,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> SubjectClaims<C, AttributeTy
         csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
         private_input: CredentialProofPrivateInputs<P, C, AttributeType>,
-    ) -> Result<CredentialV1<P, C, AttributeType>, ProofErrorV1> {
+    ) -> Result<CredentialV1<P, C, AttributeType>, ProveError> {
         match self {
             SubjectClaims::Account(cred_stmt) => cred_stmt
                 .prove(global_context, transcript, csprng, now, private_input)
@@ -396,7 +396,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
         self,
         params: &GlobalContext<C>,
         private_inputs: impl ExactSizeIterator<Item = CredentialProofPrivateInputs<'a, P, C, AttributeType>>,
-    ) -> Result<PresentationV1<P, C, AttributeType>, ProofErrorV1>
+    ) -> Result<PresentationV1<P, C, AttributeType>, ProveError>
     where
         AttributeType: 'a,
     {
@@ -413,7 +413,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
         private_inputs: impl ExactSizeIterator<Item = CredentialProofPrivateInputs<'a, P, C, AttributeType>>,
         csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
-    ) -> Result<PresentationV1<P, C, AttributeType>, ProofErrorV1>
+    ) -> Result<PresentationV1<P, C, AttributeType>, ProveError>
     where
         AttributeType: 'a,
     {
@@ -422,7 +422,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
         append_context(&mut transcript, &self.challenge);
         transcript.append_message(b"ctx", &global_context);
         if self.subject_claims.len() != private_inputs.len() {
-            return Err(ProofErrorV1::PrivateInputsMismatch);
+            return Err(ProveError::PrivateInputsMismatch);
         }
         for (subject_claims, private_inputs) in self.subject_claims.into_iter().zip(private_inputs) {
             let credential =
@@ -461,6 +461,7 @@ pub mod tests {
     use crate::web3id::v1::{fixtures, ContextProperty};
     use crate::web3id::Web3IdAttribute;
     use std::marker::PhantomData;
+    use crate::web3id::v1::VerifyError::VeficationMaterialMismatch;
 
     fn challenge_fixture() -> ContextInformation {
         ContextInformation {
@@ -663,7 +664,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
+        assert_eq!(err, VerifyError::InvalidCredential(0));
     }
 
     /// Test prove and verify presentation for account credentials where
@@ -726,7 +727,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
+        assert_eq!(err, VerifyError::InvalidCredential(0));
     }
 
     /// Test verify fails if the credentials and credential inputs have
@@ -773,7 +774,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
+        assert_eq!(err, VerifyError::InvalidCredential(0));
     }
 
     /// Test verify fails if the credentials and credential inputs have
@@ -812,7 +813,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InconsistentPublicData);
+        assert_eq!(err, VerifyError::VeficationMaterialMismatch);
     }
 
     /// Test prove and verify presentation for identity credentials.
@@ -944,7 +945,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
+        assert_eq!(err, VerifyError::InvalidCredential(0));
     }
 
     /// Test prove and verify presentation for identity credentials where
@@ -1007,7 +1008,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
+        assert_eq!(err, VerifyError::InvalidCredential(0));
     }
 
     /// Test prove and verify presentation for identity credentials where
@@ -1072,7 +1073,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
+        assert_eq!(err, VerifyError::InvalidCredential(0));
     }
 
     /// Test prove and verify presentation for identity credentials where
@@ -1118,6 +1119,6 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
+        assert_eq!(err, VerifyError::InvalidCredential(0));
     }
 }

@@ -78,7 +78,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
             return Err(PresentationVerificationError::InconsistentPublicData);
         }
 
-        for (i, (cred_public, cred_proof)) in public.zip(&self.verifiable_credential).enumerate() {
+        for (cred_public, cred_proof) in public.zip(&self.verifiable_credential) {
             request.credential_statements.push(cred_proof.statement());
             if let CredentialProof::Web3Id { holder: owner, .. } = &cred_proof {
                 let Some(sig) = linking_proof_iter.next() else {
@@ -89,7 +89,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
                 }
             }
             if !verify_single_credential(params, &mut transcript, cred_proof, cred_public) {
-                return Err(PresentationVerificationError::InvalidCredential(i));
+                return Err(PresentationVerificationError::InvalidCredential);
             }
         }
 
@@ -522,7 +522,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
+        assert_eq!(err, PresentationVerificationError::InvalidCredential);
     }
 
     fn fix_weak_link_proof(
@@ -596,7 +596,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
+        assert_eq!(err, PresentationVerificationError::InvalidCredential);
     }
 
     /// Prove and verify where verification fails because
@@ -872,7 +872,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
+        assert_eq!(err, PresentationVerificationError::InvalidCredential);
     }
 
     /// Test verify fails if the credentials and credential inputs have
@@ -919,7 +919,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
+        assert_eq!(err, PresentationVerificationError::InvalidCredential);
     }
 
     /// Test verify fails if the credentials and credential inputs have
@@ -974,7 +974,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
+        assert_eq!(err, PresentationVerificationError::InvalidCredential);
     }
 
     /// Test verify fails if the credentials and credential inputs have
