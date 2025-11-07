@@ -92,7 +92,7 @@ pub struct PsSigCommitSecret<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 type CommitSecretMsg<C> = PsSigWitnessMsg<C>;
 
 /// How to handle a signed message
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum PsSigWitnessMsg<C: Curve> {
     /// The value/message part $m_i$ is proven known and equal to a commitment to the value under the randomness $r_i$
     EqualToCommitment(Value<C>, Randomness<C>),
@@ -152,7 +152,7 @@ pub struct PsSigWitness<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 type ResponseMsg<C> = PsSigWitnessMsg<C>;
 
 /// Response in sigma protocol
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize)]
 pub struct Response<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// The response corresponding to $r'$
     resp_r_prime: P::ScalarField,

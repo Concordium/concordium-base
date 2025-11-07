@@ -8,7 +8,7 @@ use crate::{
 };
 
 /// Inner product proof
-#[derive(Clone, Serialize, Debug)]
+#[derive(Clone, Eq, PartialEq, Serialize, Debug)]
 pub struct InnerProductProof<C: Curve> {
     #[size_length = 4]
     pub lr_vec: Vec<(C, C)>,

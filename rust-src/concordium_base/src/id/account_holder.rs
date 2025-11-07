@@ -191,6 +191,26 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     crate::ps_sig::SigRetrievalRandomness<P>,
 )> {
     let mut csprng = thread_rng();
+    generate_pio_v1_with_rng(context, threshold, id_use_data, &mut csprng)
+}
+
+/// Generate a version 1 PreIdentityObject out of the account holder
+/// information, the chosen anonymity revoker information, and the necessary
+/// contextual information (group generators, shared commitment keys, etc).
+/// NB: In this method we assume that all the anonymity revokers in context
+/// are to be used.
+///
+/// This version of the function takes the randomness source `csprng` as argument.
+pub fn generate_pio_v1_with_rng<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
+    // TODO: consider renaming this function
+    context: &IpContext<P, C>,
+    threshold: Threshold,
+    id_use_data: &IdObjectUseData<P, C>,
+    csprng: &mut (impl Rng + CryptoRng),
+) -> Option<(
+    PreIdentityObjectV1<P, C>,
+    crate::ps_sig::SigRetrievalRandomness<P>,
+)> {
     let mut transcript = RandomOracle::domain("PreIdentityProof");
     let CommonPioGenerationOutput {
         prover,
@@ -200,13 +220,7 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         choice_ar_parameters,
         cmm_prf_sharing_coeff,
         id_cred_pub,
-    } = generate_pio_common(
-        &mut transcript,
-        &mut csprng,
-        context,
-        threshold,
-        id_use_data,
-    )?;
+    } = generate_pio_common(&mut transcript, csprng, context, threshold, id_use_data)?;
     transcript.append_message(b"bulletproofs", &bulletproofs);
     // Randomness to retrieve the signature
     // We add randomness from both of the commitments.
@@ -214,7 +228,7 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let mut sig_retrieval_rand = P::ScalarField::zero();
     sig_retrieval_rand.add_assign(&secret.0 .0 .1.r);
     sig_retrieval_rand.add_assign(&secret.0 .1.rand_cmm_1);
-    let proof = prove(&mut transcript, &prover, secret, &mut csprng)?;
+    let proof = prove(&mut transcript, &prover, secret, csprng)?;
 
     let ip_ar_data = ip_ar_data
         .iter()
@@ -277,7 +291,12 @@ struct CommonPioGenerationOutput<'a, P: Pairing, C: Curve<Scalar = P::ScalarFiel
 /// includes constructing the sigma protocol prover that are used by both
 /// `generate_pio` and `generate_pio_v1` to generate a version 0 and version 1
 /// pre-identity object, respectively.
-fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: rand::Rng>(
+fn generate_pio_common<
+    'a,
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    R: rand::Rng + rand::CryptoRng,
+>(
     transcript: &mut RandomOracle,
     csprng: &mut R,
     context: &IpContext<'a, P, C>,
@@ -298,6 +317,7 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
         context.ars_infos,
         threshold,
         context.global_context,
+        csprng,
     );
     let number_of_ars = context.ars_infos.len();
     let mut ip_ar_data = Vec::with_capacity(number_of_ars);
@@ -507,15 +527,15 @@ pub fn compute_sharing_data<'a, C: Curve>(
     ar_parameters: &'a BTreeMap<ArIdentity, ArInfo<C>>, // Chosen anonimity revokers.
     threshold: Threshold,                               // Anonymity revocation threshold.
     commitment_key: &PedersenKey<C>,                    // commitment key
+    csprng: &mut (impl Rng + CryptoRng),                // randomness source
 ) -> SharingData<'a, C> {
     let n = ar_parameters.len() as u32;
-    let mut csprng = thread_rng();
     // first commit to the scalar
-    let (cmm_scalar, cmm_scalar_rand) = commitment_key.commit(&shared_scalar, &mut csprng);
+    let (cmm_scalar, cmm_scalar_rand) = commitment_key.commit(&shared_scalar, csprng);
     // We evaluate the polynomial at ar_identities.
     let share_points = ar_parameters.keys().copied();
     // share the scalar on ar_identity points.
-    let sharing_data = share::<C, _, _, _>(shared_scalar, share_points, threshold, &mut csprng);
+    let sharing_data = share::<C, _, _, _>(shared_scalar, share_points, threshold, csprng);
     // commitments to the sharing coefficients
     let mut cmm_sharing_coefficients: Vec<Commitment<C>> = Vec::with_capacity(threshold.into());
     // first coefficient is the shared scalar
@@ -526,7 +546,7 @@ pub fn compute_sharing_data<'a, C: Curve>(
     cmm_coeff_randomness.push(cmm_scalar_rand);
     // fill the rest
     for coeff in sharing_data.coefficients.iter() {
-        let (cmm, rnd) = commitment_key.commit(coeff, &mut csprng);
+        let (cmm, rnd) = commitment_key.commit(coeff, csprng);
         cmm_sharing_coefficients.push(cmm);
         cmm_coeff_randomness.push(rnd);
     }
@@ -538,7 +558,7 @@ pub fn compute_sharing_data<'a, C: Curve>(
         let si = ar.ar_identity;
         let pk = ar.ar_public_key;
         // encrypt the share
-        let (cipher, rnd2) = pk.encrypt_exponent_rand(&mut csprng, &share);
+        let (cipher, rnd2) = pk.encrypt_exponent_rand(csprng, &share);
         // compute the commitment to this share from the commitment to the coeff
         let (cmm, rnd) =
             commitment_to_share_and_rand(si, &cmm_sharing_coefficients, &cmm_coeff_randomness);
@@ -588,16 +608,16 @@ pub fn compute_sharing_data_prf<'a, C: Curve>(
     ar_parameters: &'a BTreeMap<ArIdentity, ArInfo<C>>, // Chosen anonimity revokers.
     threshold: Threshold,                               // Anonymity revocation threshold.
     global_context: &GlobalContext<C>,                  // commitment key
+    csprng: &mut (impl Rng + CryptoRng),
 ) -> SharingDataPrf<'a, C> {
     let commitment_key = &global_context.on_chain_commitment_key;
     let n = ar_parameters.len() as u32;
-    let mut csprng = thread_rng();
     // first commit to the scalar
-    let (cmm_scalar, cmm_scalar_rand) = commitment_key.commit(&shared_scalar, &mut csprng);
+    let (cmm_scalar, cmm_scalar_rand) = commitment_key.commit(&shared_scalar, csprng);
     // We evaluate the polynomial at ar_identities.
     let share_points = ar_parameters.keys().copied();
     // share the scalar on ar_identity points.
-    let sharing_data = share::<C, _, _, _>(shared_scalar, share_points, threshold, &mut csprng);
+    let sharing_data = share::<C, _, _, _>(shared_scalar, share_points, threshold, csprng);
     // commitments to the sharing coefficients
     let mut cmm_sharing_coefficients: Vec<Commitment<C>> = Vec::with_capacity(threshold.into());
     // first coefficient is the shared scalar
@@ -608,7 +628,7 @@ pub fn compute_sharing_data_prf<'a, C: Curve>(
     cmm_coeff_randomness.push(cmm_scalar_rand);
     // fill the rest
     for coeff in sharing_data.coefficients.iter() {
-        let (cmm, rnd) = commitment_key.commit(coeff, &mut csprng);
+        let (cmm, rnd) = commitment_key.commit(coeff, csprng);
         cmm_sharing_coefficients.push(cmm);
         cmm_coeff_randomness.push(rnd);
     }
@@ -622,7 +642,7 @@ pub fn compute_sharing_data_prf<'a, C: Curve>(
         // encrypt the share
         // let (cipher, rnd2) = pk.encrypt_exponent_rand(&mut csprng, &share);
         let (ciphers, rnd2, share_in_chunks) =
-            utils::encrypt_prf_share(global_context, &pk, &share, &mut csprng);
+            utils::encrypt_prf_share(global_context, &pk, &share, csprng);
         // compute the commitment to this share from the commitment to the coeff
         let (cmm, rnd) =
             commitment_to_share_and_rand(si, &cmm_sharing_coefficients, &cmm_coeff_randomness);
@@ -783,6 +803,7 @@ pub fn create_unsigned_credential<
         &chosen_ars,
         prio.choice_ar_parameters.threshold,
         &context.global_context.on_chain_commitment_key,
+        &mut csprng,
     );
 
     let number_of_ars = prio.choice_ar_parameters.ar_identities.len();
@@ -1370,7 +1391,7 @@ mod tests {
 
         // Act
         let (ar_datas, _comms, _rands) =
-            compute_sharing_data(&value, &ars_infos, Threshold(threshold), &ck);
+            compute_sharing_data(&value, &ars_infos, Threshold(threshold), &ck, &mut csprng);
 
         // Assert ArData's are good
         for data in ar_datas.iter() {
