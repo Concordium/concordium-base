@@ -1,5 +1,5 @@
 use crate::random_oracle::StructuredDigest;
-use crate::web3id::{LinkingProof, PresentationVerificationError};
+use crate::web3id::LinkingProof;
 use crate::{
     curve_arithmetic::Curve,
     id::types::{Attribute, GlobalContext},
@@ -489,7 +489,6 @@ pub mod tests {
     use crate::id::id_proof_types::{AtomicStatement, AttributeInRangeStatement};
     use crate::id::types::AttributeTag;
     use crate::web3id::did::Network;
-    use crate::web3id::v1::VerifyError::VeficationMaterialMismatch;
     use crate::web3id::v1::{fixtures, ContextProperty};
     use crate::web3id::Web3IdAttribute;
     use std::marker::PhantomData;

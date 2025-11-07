@@ -641,19 +641,19 @@ mod tests {
         ar_data.insert(
             ArIdentity::try_from(1).unwrap(),
             ChainArData {
-                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed0()),
+                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed(0)),
             },
         );
         ar_data.insert(
             ArIdentity::try_from(2).unwrap(),
             ChainArData {
-                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed0()),
+                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed(1)),
             },
         );
         ar_data.insert(
             ArIdentity::try_from(3).unwrap(),
             ChainArData {
-                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed0()),
+                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed(2)),
             },
         );
 

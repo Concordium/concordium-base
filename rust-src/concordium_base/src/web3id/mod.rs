@@ -2445,7 +2445,11 @@ mod fixtures {
     }
 
     pub fn seed0() -> rand::rngs::StdRng {
-        rand::rngs::StdRng::seed_from_u64(0)
+        seed(0)
+    }
+
+    pub fn seed(seed: u64) -> rand::rngs::StdRng {
+        rand::rngs::StdRng::seed_from_u64(seed)
     }
 
     pub fn web3_credentials_fixture(
