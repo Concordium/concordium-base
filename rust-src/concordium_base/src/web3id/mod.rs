@@ -832,8 +832,8 @@ pub enum PresentationVerificationError {
     InvalidLinkinProof,
     #[error("The public data did not match the credentials.")]
     InconsistentPublicData,
-    #[error("The credential was not valid.")]
-    InvalidCredential,
+    #[error("The credential was not valid (index {0}).")]
+    InvalidCredential(usize),
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<serde_json::Value>

@@ -66,11 +66,11 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             return Err(PresentationVerificationError::InconsistentPublicData);
         }
 
-        for (cred_public, cred_proof) in public.zip(&self.verifiable_credentials) {
+        for (i, (cred_public, cred_proof)) in public.zip(&self.verifiable_credentials).enumerate() {
             request.subject_claims.push(cred_proof.claims());
 
             if !cred_proof.verify(global_context, &mut transcript, cred_public) {
-                return Err(PresentationVerificationError::InvalidCredential);
+                return Err(PresentationVerificationError::InvalidCredential(i));
             }
         }
 
@@ -672,7 +672,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential);
+        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
     }
 
     /// Test prove and verify presentation for account credentials where
@@ -735,7 +735,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential);
+        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
     }
 
     /// Test verify fails if the credentials and credential inputs have
@@ -782,7 +782,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential);
+        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
     }
 
     /// Test verify fails if the credentials and credential inputs have
@@ -953,7 +953,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential);
+        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
     }
 
     /// Test prove and verify presentation for identity credentials where
@@ -1016,7 +1016,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential);
+        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
     }
 
     /// Test prove and verify presentation for identity credentials where
@@ -1081,7 +1081,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential);
+        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
     }
 
     /// Test prove and verify presentation for identity credentials where
@@ -1127,6 +1127,6 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, PresentationVerificationError::InvalidCredential);
+        assert_eq!(err, PresentationVerificationError::InvalidCredential(0));
     }
 }
