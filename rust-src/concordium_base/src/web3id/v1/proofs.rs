@@ -293,13 +293,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
                 AtomicStatement::RevealAttribute { statement } => {
                     (statement.attribute_tag, IdentityAttributeHandling::Commit)
                 }
-                AtomicStatement::AttributeInRange { statement } => {
-                    (statement.attribute_tag, IdentityAttributeHandling::Commit)
-                }
-                AtomicStatement::AttributeInSet { statement } => {
-                    (statement.attribute_tag, IdentityAttributeHandling::Commit)
-                }
-                AtomicStatement::AttributeNotInSet { statement } => {
+                AtomicStatement::AttributeInRange { statement }
+                | AtomicStatement::AttributeInSet { statement }
+                | AtomicStatement::AttributeNotInSet { statement } => {
                     (statement.attribute_tag, IdentityAttributeHandling::Commit)
                 }
             })
