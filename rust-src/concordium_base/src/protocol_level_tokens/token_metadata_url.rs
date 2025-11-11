@@ -36,6 +36,16 @@ pub struct MetadataUrl {
     pub additional: HashMap<String, value::Value>,
 }
 
+impl From<String> for MetadataUrl {
+    fn from(url: String) -> Self {
+        Self{
+            url,
+            checksum_sha_256: None,
+            additional: HashMap::new(),
+        }
+    }
+}
+
 /// Serialize `Bytes` as a hex string.
 fn serialize_hex_bytes<S>(bytes: &Option<Hash>, serializer: S) -> Result<S::Ok, S::Error>
 where
