@@ -9,7 +9,10 @@ use itertools::Itertools;
 use std::collections::BTreeMap;
 
 use crate::curve_arithmetic::Pairing;
-use crate::id::id_proof_types::{AtomicProof, AtomicStatement, ProofVersion};
+use crate::id::id_proof_types::{
+    AtomicProof, AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement,
+    AttributeNotInSetStatement, ProofVersion,
+};
 use crate::id::identity_attributes_credentials;
 use crate::id::identity_attributes_credentials::IdentityAttributeHandling;
 use crate::id::types::{
@@ -293,15 +296,15 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
                 AtomicStatement::RevealAttribute { statement } => {
                     (statement.attribute_tag, IdentityAttributeHandling::Commit)
                 }
-                AtomicStatement::AttributeInRange { statement } => {
-                    (statement.attribute_tag, IdentityAttributeHandling::Commit)
+                AtomicStatement::AttributeInRange {
+                    statement: AttributeInRangeStatement { attribute_tag, .. },
                 }
-                AtomicStatement::AttributeInSet { statement } => {
-                    (statement.attribute_tag, IdentityAttributeHandling::Commit)
+                | AtomicStatement::AttributeInSet {
+                    statement: AttributeInSetStatement { attribute_tag, .. },
                 }
-                AtomicStatement::AttributeNotInSet { statement } => {
-                    (statement.attribute_tag, IdentityAttributeHandling::Commit)
-                }
+                | AtomicStatement::AttributeNotInSet {
+                    statement: AttributeNotInSetStatement { attribute_tag, .. },
+                } => (*attribute_tag, IdentityAttributeHandling::Commit),
             })
             .collect();
 
