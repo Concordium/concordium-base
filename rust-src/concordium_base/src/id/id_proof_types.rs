@@ -238,10 +238,7 @@ impl<C: Curve, TagType: Serialize, AttributeType: Attribute<C::Scalar>> Deserial
 
 /// Proof that the attribute value in a commitment is equal to a public value
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, SerdeSerialize, SerdeDeserialize)]
-#[serde(bound(
-    serialize = "C: Curve",
-    deserialize = "C: Curve"
-))]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct AttributeValueProof<C: Curve> {
     /// Revealing an attribute and a proof that it equals the attribute value
     /// inside the attribute commitment.
@@ -656,4 +653,90 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
 ))]
 pub struct Proof<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub proofs: Vec<AtomicProof<C, AttributeType>>,
+}
+
+/// Statements are composed of one or more atomic statements.
+/// This type defines the different types of atomic statements.
+#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize, Eq)]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize, TagType: \
+                 SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>, \
+                   TagType: SerdeDeserialize<'de>"
+))]
+#[serde(tag = "type")]
+pub enum AtomicStatementV1<C: Curve, TagType: Serialize, AttributeType: Attribute<C::Scalar>> {
+    /// The atomic statement stating that an attribute should be revealed.
+    AttributeValue(AttributeValueStatement<C, TagType, AttributeType>),
+    /// The atomic statement stating that an attribute is in a range.
+    AttributeInRange(AttributeInRangeStatement<C, TagType, AttributeType>),
+    /// The atomic statement stating that an attribute is in a set.
+    AttributeInSet(AttributeInSetStatement<C, TagType, AttributeType>),
+    /// The atomic statement stating that an attribute is not in a set.
+    AttributeNotInSet(AttributeNotInSetStatement<C, TagType, AttributeType>),
+}
+
+impl<C: Curve, TagType: Serialize + Copy, AttributeType: Attribute<C::Scalar>>
+    AtomicStatementV1<C, TagType, AttributeType>
+{
+    /// Attribute to which this statement applies.
+    pub fn attribute(&self) -> TagType {
+        match self {
+            Self::AttributeValue(statement) => statement.attribute_tag,
+            Self::AttributeInRange(statement) => statement.attribute_tag,
+            Self::AttributeInSet(statement) => statement.attribute_tag,
+            Self::AttributeNotInSet(statement) => statement.attribute_tag,
+        }
+    }
+}
+
+impl<C: Curve, TagType: Serialize, AttributeType: Attribute<C::Scalar>> Serial
+    for AtomicStatementV1<C, TagType, AttributeType>
+{
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            Self::AttributeValue(statement) => {
+                0u8.serial(out);
+                statement.serial(out);
+            }
+            Self::AttributeInRange(statement) => {
+                1u8.serial(out);
+                statement.serial(out);
+            }
+            Self::AttributeInSet(statement) => {
+                2u8.serial(out);
+                statement.serial(out);
+            }
+            Self::AttributeNotInSet(statement) => {
+                3u8.serial(out);
+                statement.serial(out);
+            }
+        }
+    }
+}
+
+impl<C: Curve, TagType: Serialize, AttributeType: Attribute<C::Scalar>> Deserial
+    for AtomicStatementV1<C, TagType, AttributeType>
+{
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        match u8::deserial(source)? {
+            0u8 => {
+                let statement = source.get()?;
+                Ok(Self::AttributeValue(statement))
+            }
+            1u8 => {
+                let statement = source.get()?;
+                Ok(Self::AttributeInRange(statement))
+            }
+            2u8 => {
+                let statement = source.get()?;
+                Ok(Self::AttributeInSet(statement))
+            }
+            3u8 => {
+                let statement = source.get()?;
+                Ok(Self::AttributeNotInSet(statement))
+            }
+            n => anyhow::bail!("Unknown statement tag: {}.", n),
+        }
+    }
 }
