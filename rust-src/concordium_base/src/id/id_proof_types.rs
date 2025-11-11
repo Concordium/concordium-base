@@ -740,3 +740,63 @@ impl<C: Curve, TagType: Serialize, AttributeType: Attribute<C::Scalar>> Deserial
         }
     }
 }
+
+/// The different types of proofs, corresponding to the statements above.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum AtomicProofV1<C: Curve> {
+    /// A proof that an attribute is equal to a public value
+    AttributeValue(AttributeValueProof<C>),
+    /// A proof that an attribute is in a range
+    AttributeInRange(RangeProof<C>),
+    /// A proof that an attribute is in a set
+    AttributeInSet(SetMembershipProof<C>),
+    /// A proof that an attribute is not in a set
+    AttributeNotInSet(SetNonMembershipProof<C>),
+}
+
+impl<C: Curve> Serial for AtomicProofV1<C> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            Self::AttributeValue(proof) => {
+                0u8.serial(out);
+                proof.serial(out);
+            }
+            Self::AttributeInRange(proof) => {
+                1u8.serial(out);
+                proof.serial(out);
+            }
+            Self::AttributeInSet(proof) => {
+                2u8.serial(out);
+                proof.serial(out);
+            }
+            Self::AttributeNotInSet(proof) => {
+                3u8.serial(out);
+                proof.serial(out);
+            }
+        }
+    }
+}
+
+impl<C: Curve> Deserial for AtomicProofV1<C> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        match u8::deserial(source)? {
+            0u8 => {
+                let proof = source.get()?;
+                Ok(Self::AttributeValue(proof))
+            }
+            1u8 => {
+                let proof = source.get()?;
+                Ok(Self::AttributeInRange(proof))
+            }
+            2u8 => {
+                let proof = source.get()?;
+                Ok(Self::AttributeInSet(proof))
+            }
+            3u8 => {
+                let proof = source.get()?;
+                Ok(Self::AttributeNotInSet(proof))
+            }
+            n => anyhow::bail!("Unknown proof type tag: {}", n),
+        }
+    }
+}
