@@ -1088,13 +1088,21 @@ pub mod tests {
             .keys();
         let ar1 = *ar_keys.next().unwrap();
         let ar2 = *ar_keys.next().unwrap();
-        let tmp = proofs.proof_value.identity_attributes_proofs.proof_id_cred_pub[&ar1].clone();
+        let tmp = proofs
+            .proof_value
+            .identity_attributes_proofs
+            .proof_id_cred_pub[&ar1]
+            .clone();
         *proofs
             .proof_value
             .identity_attributes_proofs
             .proof_id_cred_pub
             .get_mut(&ar1)
-            .unwrap() = proofs.proof_value.identity_attributes_proofs.proof_id_cred_pub[&ar2].clone();
+            .unwrap() = proofs
+            .proof_value
+            .identity_attributes_proofs
+            .proof_id_cred_pub[&ar2]
+            .clone();
         *proofs
             .proof_value
             .identity_attributes_proofs
