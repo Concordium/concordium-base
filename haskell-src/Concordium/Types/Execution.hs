@@ -2550,22 +2550,6 @@ data TransactionSummary' tov a = TransactionSummary
     }
     deriving (Eq, Show, Generic)
 
--- | Convert a `TransactionSummary'` to a `TransactionSummary0` by forgetting
---  the `TransactionOutcomeVersion` parameter. The conditionally present
---  `SponsorDetails` are set to `Nothing` if not present.
-toSupplementedTransactionSummary :: forall tov a. TransactionSummary' tov a -> SupplementedTransactionSummary a
-toSupplementedTransactionSummary TransactionSummary{..} =
-    SupplementedTransactionSummary
-        { stsSender = tsSender,
-          stsHash = tsHash,
-          stsCost = tsCost,
-          stsEnergyCost = tsEnergyCost,
-          stsType = tsType,
-          stsResult = tsResult,
-          stsIndex = tsIndex,
-          stsSponsorDetails = fromCondDef tsSponsorDetails Nothing
-        }
-
 -- | Lens for accessing the result field of a 'TransactionSummary''.
 summaryResult :: Lens (TransactionSummary' pv a) (TransactionSummary' pv b) a b
 summaryResult =
@@ -2577,24 +2561,10 @@ summaryResult =
 --  containing either a 'TxSuccess' or 'TxReject'.
 type TransactionSummary tov = TransactionSummary' tov ValidResult
 
--- | A transaction summary parameterized with an outcome of a valid transaction
---  containing either a 'TxSuccess' or 'TxReject'.
-data SupplementedTransactionSummary = SupplementedTransactionSummary
-    { stsSender :: !(Maybe AccountAddress),
-      stsHash :: !TransactionHash,
-      -- | The transaction cost paid for by the sender
-      stsCost :: !Amount,
-      stsEnergyCost :: !Energy,
-      stsType :: !TransactionSummaryType,
-      stsResult :: !SupplementedValidResult,
-      stsIndex :: !TransactionIndex,
-      stsSponsorDetails :: !(Maybe SponsorDetails)
-    } deriving Show
-
-instance (SupplementEvents a) => SupplementEvents (TransactionSummary' a) where
-    type Supplemented (TransactionSummary' a) = TransactionSummary' (Supplemented a)
-    supplementEvents f TransactionSummary'{..} =
-        (\res -> TransactionSummary'{ts0Result = res, ..}) <$> supplementEvents f ts0Result
+instance (SupplementEvents a) => SupplementEvents (TransactionSummary' tov a) where
+    type Supplemented (TransactionSummary' tov a) = TransactionSummary' tov (Supplemented a)
+    supplementEvents f TransactionSummary{..} =
+        (\res -> TransactionSummary{tsResult = res, ..}) <$> supplementEvents f tsResult
 
 -- | An abstraction for constructing the result of a transaction.
 --  This is instantiated by both 'ValidResult' and 'ValidResultWithReturn'.
