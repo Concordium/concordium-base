@@ -199,6 +199,8 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 /// contextual information (group generators, shared commitment keys, etc).
 /// NB: In this method we assume that all the anonymity revokers in context
 /// are to be used.
+///
+/// This version of the function takes the randomness source `csprng` as argument.
 pub fn generate_pio_v1_with_rng<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // TODO: consider renaming this function
     context: &IpContext<P, C>,
@@ -525,7 +527,7 @@ pub fn compute_sharing_data<'a, C: Curve>(
     ar_parameters: &'a BTreeMap<ArIdentity, ArInfo<C>>, // Chosen anonimity revokers.
     threshold: Threshold,                               // Anonymity revocation threshold.
     commitment_key: &PedersenKey<C>,                    // commitment key
-    csprng: &mut (impl Rng + CryptoRng),
+    csprng: &mut (impl Rng + CryptoRng),                // randomness source
 ) -> SharingData<'a, C> {
     let n = ar_parameters.len() as u32;
     // first commit to the scalar

@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Implemented new version of verifiable presentations in `web3id::v1` that includes account based and identity based credentials.
+  The primary types are `v1::PresentationV1` and `v1::RequestV1`.
 - Add context types `ContextLabel`, `Context`, and `GivenContext` to generate structured context to be used as a challenge for ZK proofs.
 - Add request types `CredentialType`, `IdentityProviderMethod`, `IdentityStatementRequest`, and `VerifiablePresentationRequest` to generate a request to be used for the verifiable presentation V1 protocol.
 - Add verification request anchor types `VerificationRequestData`, and `VerificationRequestAnchor` to generate an anchor and computes its anchor hash to be used for the verifiable presentation V1 protocol.
