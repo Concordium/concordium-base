@@ -506,6 +506,8 @@ pub struct IdentityCredentialSubject<C: Curve, AttributeType: Attribute<C::Scala
     /// Network to which the credentials are issued
     pub network: Network,
     /// Ephemeral encrypted id for the credential. This is the subject of the credential.
+    ///
+    /// Since the id is ephemeral, the identity derived credential is an [unlinkable disclosure](https://www.w3.org/TR/vc-data-model-2.0/#dfn-unlinkable-disclosure)
     pub cred_id: IdentityCredentialEphemeralId,
     /// Proven statements
     pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
