@@ -2654,33 +2654,6 @@ instance ToProto (DryRunResponse InvokeContract.InvokeContractResult) where
                         )
                 ProtoFields.quotaRemaining .= toProto quotaRem
 
-instance ToProto (DryRunResponse (TransactionSummary0 SupplementedValidResultWithReturn)) where
-    type
-        Output (DryRunResponse (TransactionSummary0 SupplementedValidResultWithReturn)) =
-            Either ConversionError Proto.DryRunResponse
-    toProto (DryRunResponse TransactionSummary0{..} quotaRem) = case ts0Type of
-        TSTAccountTransaction tty -> do
-            sender <- case ts0Sender of
-                Nothing -> Left CEInvalidTransactionResult
-                Just acc -> Right acc
-            details <- convertAccountTransaction tty ts0Cost sender ts0SponsorDetails (vrwrResult ts0Result)
-            Right . Proto.make $ do
-                ProtoFields.success
-                    .= Proto.make
-                        ( ProtoFields.transactionExecuted
-                            .= Proto.make
-                                ( do
-                                    mapM_ (ProtoFields.returnValue .=) $ vrwrReturnValue ts0Result
-                                    ProtoFields.energyCost .= toProto ts0EnergyCost
-                                    ProtoFields.details .= details
-                                )
-                        )
-                ProtoFields.quotaRemaining .= toProto quotaRem
-        _ -> do
-            -- Since only account transactions can be executed in a dry run, we should not have
-            -- other transaction summary types.
-            Left CEInvalidTransactionResult
-
 instance ToProto BlockSignature.Signature where
     type Output BlockSignature.Signature = Proto.BlockSignature
     toProto = mkSerialize

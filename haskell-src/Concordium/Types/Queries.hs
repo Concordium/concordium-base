@@ -27,7 +27,8 @@ import Concordium.Types
 import Concordium.Types.Accounts
 import qualified Concordium.Types.AnonymityRevokers as ARS
 import Concordium.Types.Block
-import Concordium.Types.Execution (SupplementedTransactionSummary)
+import Concordium.Types.Conditionally
+import Concordium.Types.Execution (SponsorDetails, SupplementedValidResult, TransactionIndex, TransactionSummary' (..), TransactionSummaryType)
 import qualified Concordium.Types.IdentityProviders as IPS
 import Concordium.Types.Parameters (
     ChainParameters',
@@ -353,6 +354,37 @@ data BlockBirkParameters = BlockBirkParameters
     deriving (Show)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BlockBirkParameters)
+
+-- | A transaction summary parameterized with an outcome of a valid transaction
+--  containing either a 'TxSuccess' or 'TxReject'.
+data SupplementedTransactionSummary = SupplementedTransactionSummary
+    { stsSender :: !(Maybe AccountAddress),
+      stsHash :: !TransactionHash,
+      -- | The transaction cost paid for by the sender
+      stsCost :: !Amount,
+      stsEnergyCost :: !Energy,
+      stsType :: !TransactionSummaryType,
+      stsResult :: !SupplementedValidResult,
+      stsIndex :: !TransactionIndex,
+      stsSponsorDetails :: !(Maybe SponsorDetails)
+    }
+    deriving (Show)
+
+-- | Convert a `TransactionSummary'` to a `TransactionSummary0` by forgetting
+--  the `TransactionOutcomeVersion` parameter. The conditionally present
+--  `SponsorDetails` are set to `Nothing` if not present.
+toSupplementedTransactionSummary :: forall tov. TransactionSummary' tov SupplementedValidResult -> SupplementedTransactionSummary
+toSupplementedTransactionSummary TransactionSummary{..} =
+    SupplementedTransactionSummary
+        { stsSender = tsSender,
+          stsHash = tsHash,
+          stsCost = tsCost,
+          stsEnergyCost = tsEnergyCost,
+          stsType = tsType,
+          stsResult = tsResult,
+          stsIndex = tsIndex,
+          stsSponsorDetails = fromCondDef tsSponsorDetails Nothing
+        }
 
 -- | The status of a transaction that is present in the transaction table or a finalized block,
 --  as returned by the @getTransactionStatus@ gRPC query.
