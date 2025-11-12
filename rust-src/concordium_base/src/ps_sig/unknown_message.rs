@@ -38,7 +38,7 @@ impl<P: Pairing> From<Commitment<P::G1>> for UnknownMessage<P> {
 
 /// Randomness used to retrieve signature on the message from signature on an
 /// unknown message.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Eq, PartialEq, Serialize)]
 #[repr(transparent)]
 pub struct SigRetrievalRandomness<P: Pairing> {
     pub randomness: Rc<Secret<P::ScalarField>>,
