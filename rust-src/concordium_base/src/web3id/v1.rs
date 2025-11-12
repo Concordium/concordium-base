@@ -564,9 +564,13 @@ pub struct IdentityCredentialProofs<
 > {
     /// The attributes that are part of the underlying identity credential from which this credential is derived
     pub identity_attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
-    /// Proof that the attributes and the other values in [`IdentityBasedCredentialV1`] are correct
+    /// Proof of:
+    /// * knowledge of a signature from the identity provider on the attributes
+    ///   in `identity_attributes` and on [`IdentityBasedCredentialV1::validity`]
+    /// * correctness of the encryption of IdCredPub in [`IdentityCredentialSubject::cred_id`]
     pub identity_attributes_proofs: IdentityAttributesCredentialsProofs<P, C>,
-    /// Proofs of the atomic statements on attributes
+    /// Proofs for the atomic statements based on the attribute commitments
+    /// and values in `identity_attributes`
     pub statement_proofs: Vec<AtomicProof<C, AttributeType>>,
 }
 
@@ -992,11 +996,11 @@ pub struct IdentityCredentialProofPrivateInputs<
     C: Curve<Scalar = P::ScalarField>,
     AttributeType,
 > {
-    /// Identity provider data
+    /// Information on the identity provider and the privacy guardians public keys
     pub ip_context: IpContextOnly<'a, P, C>,
     /// Identity object. Together with `id_object_use_data`, it constitutes the identity credentials
     pub id_object: &'a dyn HasIdentityObjectFields<P, C, AttributeType>,
-    /// Identity credentials
+    /// Identity credential
     pub id_object_use_data: &'a IdObjectUseData<P, C>,
 }
 
