@@ -395,9 +395,9 @@ $( singletons
         --  exact reject reasons for failed transactions are omitted from the hash.
         --  * 'TOV2' is used in P7 and onwards. The hash is computed similarly to 'TOV1',
         --  except the merkle trees are hashed to include the size.
-        --    * 'TOV3' is used in P10 and onwards. The hash is computed as before,
-        --      but the `TransactionSummary` contains a new `SponsorDetails` field
-        --      that is included in the hashing.
+        --  * 'TOV3' is used in P10 and onwards. The hash is computed as before,
+        --    but the `TransactionSummary` contains a new `SponsorDetails` field
+        --    that is included in the hashing.
         data TransactionOutcomesVersion
             = TOV0
             | TOV1
