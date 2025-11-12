@@ -19,7 +19,17 @@ use crate::id::types::{
     IdentityAttributesCredentialsInfo, IdentityAttributesCredentialsValues, IpContextOnly,
 };
 use crate::pedersen_commitment::Commitment;
-use crate::web3id::v1::{AccountBasedCredentialV1, AccountBasedSubjectClaims, AccountCredentialProofPrivateInputs, AccountCredentialProofs, AccountCredentialSubject, AccountCredentialVerificationMaterial, ConcordiumLinkingProofVersion, ConcordiumZKProof, ConcordiumZKProofVersion, ContextInformation, CredentialMetadataV1, CredentialProofPrivateInputs, CredentialV1, CredentialVerificationMaterial, IdentityBasedCredentialV1, IdentityBasedSubjectClaims, IdentityCredentialEphemeralId, IdentityCredentialEphemeralIdDataRef, IdentityCredentialProofPrivateInputs, IdentityCredentialProofs, IdentityCredentialSubject, IdentityCredentialVerificationMaterial, LinkingProofV1, PresentationV1, ProveError, RequestV1, SubjectClaims, VerifyError};
+use crate::web3id::v1::{
+    AccountBasedCredentialV1, AccountBasedSubjectClaims, AccountCredentialProofPrivateInputs,
+    AccountCredentialProofs, AccountCredentialSubject, AccountCredentialVerificationMaterial,
+    ConcordiumLinkingProofVersion, ConcordiumZKProof, ConcordiumZKProofVersion, ContextInformation,
+    CredentialMetadataV1, CredentialProofPrivateInputs, CredentialV1,
+    CredentialVerificationMaterial, IdentityBasedCredentialV1, IdentityBasedSubjectClaims,
+    IdentityCredentialEphemeralId, IdentityCredentialEphemeralIdDataRef,
+    IdentityCredentialProofPrivateInputs, IdentityCredentialProofs, IdentityCredentialSubject,
+    IdentityCredentialVerificationMaterial, LinkingProofV1, PresentationV1, ProveError, RequestV1,
+    SubjectClaims, VerifyError,
+};
 use rand::{CryptoRng, Rng};
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
