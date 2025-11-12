@@ -811,7 +811,7 @@ instance ToProto SupplementedTransactionSummary where
             sender <- case stsSender of
                 Nothing -> Left CEInvalidTransactionResult
                 Just acc -> Right acc
-            details <- convertAccountTransaction tty stsCost sender stsSponsorDetails stsResult
+            details <- convertAccountTransaction tty stsCost sender (CTrue stsSponsorDetails) stsResult
             Right . Proto.make $ do
                 ProtoFields.index .= mkWord64 stsIndex
                 ProtoFields.energyCost .= toProto stsEnergyCost
@@ -1342,7 +1342,7 @@ convertAccountTransaction ::
     -- | The sender of the transaction.
     AccountAddress ->
     -- | The optional sponsor details of the transaction. Present since P10.
-    Maybe SponsorDetails ->
+    Conditionally b (Maybe SponsorDetails) ->
     -- | The result of the transaction. If the transaction was rejected, it contains the reject reason.
     --   Otherwise it contains the events.
     SupplementedValidResult ->
@@ -1688,13 +1688,13 @@ convertAccountTransaction ty cost sender mbSponsorDetails result = case ty of
         ProtoFields.cost .= toProto cost
         ProtoFields.sender .= toProto sender
         ProtoFields.effects .= effects
-        ProtoFields.maybe'sponsor .= fmap mkSponsorDetails mbSponsorDetails
+        ProtoFields.maybe'sponsor .= fmap mkSponsorDetails (fromCondDef mbSponsorDetails Nothing)
 
     mkNone :: RejectReason -> Proto.AccountTransactionDetails
     mkNone rr = Proto.make $ do
         ProtoFields.cost .= toProto cost
         ProtoFields.sender .= toProto sender
-        ProtoFields.maybe'sponsor .= fmap mkSponsorDetails mbSponsorDetails
+        ProtoFields.maybe'sponsor .= fmap mkSponsorDetails (fromCondDef mbSponsorDetails Nothing)
         ProtoFields.effects
             . ProtoFields.none
             .= ( Proto.make $ do
@@ -2653,6 +2653,33 @@ instance ToProto (DryRunResponse InvokeContract.InvokeContractResult) where
                                 )
                         )
                 ProtoFields.quotaRemaining .= toProto quotaRem
+
+instance ToProto (DryRunResponse (TransactionSummary' pv SupplementedValidResultWithReturn)) where
+    type
+        Output (DryRunResponse (TransactionSummary' pv SupplementedValidResultWithReturn)) =
+            Either ConversionError Proto.DryRunResponse
+    toProto (DryRunResponse TransactionSummary{..} quotaRem) = case tsType of
+        TSTAccountTransaction tty -> do
+            sender <- case tsSender of
+                Nothing -> Left CEInvalidTransactionResult
+                Just acc -> Right acc
+            details <- convertAccountTransaction tty tsCost sender tsSponsorDetails (vrwrResult tsResult)
+            Right . Proto.make $ do
+                ProtoFields.success
+                    .= Proto.make
+                        ( ProtoFields.transactionExecuted
+                            .= Proto.make
+                                ( do
+                                    mapM_ (ProtoFields.returnValue .=) $ vrwrReturnValue tsResult
+                                    ProtoFields.energyCost .= toProto tsEnergyCost
+                                    ProtoFields.details .= details
+                                )
+                        )
+                ProtoFields.quotaRemaining .= toProto quotaRem
+        _ -> do
+            -- Since only account transactions can be executed in a dry run, we should not have
+            -- other transaction summary types.
+            Left CEInvalidTransactionResult
 
 instance ToProto BlockSignature.Signature where
     type Output BlockSignature.Signature = Proto.BlockSignature
