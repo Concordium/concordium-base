@@ -3035,6 +3035,10 @@ data FailureKind
       TokenInitializeFailure !String
     | -- | The token module reference is unknown or invalid.
       InvalidTokenModuleRef !TokenModuleRef
+    | -- | The transaction has a sponsor signature, but no sponsor.
+      MissingSponsorAccount
+    | -- | The transaction has a sponsor account, but no sponsor signature.
+      MissingSponsorSignature
     deriving (Eq, Show)
 
 data TxResult (pv :: ProtocolVersion) = TxValid !(TransactionSummary pv) | TxInvalid !FailureKind
