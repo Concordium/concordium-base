@@ -2594,7 +2594,17 @@ type TransactionSummary tov = TransactionSummary' tov ValidResult
 
 -- | A transaction summary parameterized with an outcome of a valid transaction
 --  containing either a 'TxSuccess' or 'TxReject'.
-type SupplementedTransactionSummary = TransactionSummary0 (ValidResult' True)
+data SupplementedTransactionSummary = SupplementedTransactionSummary
+    { stsSender :: !(Maybe AccountAddress),
+      stsHash :: !TransactionHash,
+      -- | The transaction cost paid for by the sender
+      stsCost :: !Amount,
+      stsEnergyCost :: !Energy,
+      stsType :: !TransactionSummaryType,
+      stsResult :: !SupplementedValidResult,
+      stsIndex :: !TransactionIndex,
+      stsSponsorDetails :: !(Maybe SponsorDetails)
+    }
 
 instance (SupplementEvents a) => SupplementEvents (TransactionSummary0 a) where
     type Supplemented (TransactionSummary0 a) = TransactionSummary0 (Supplemented a)
