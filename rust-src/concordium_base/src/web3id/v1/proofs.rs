@@ -124,7 +124,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
 
         verify_statements(
             &self.subject.statements,
-            &self.proof.proof.statement_proofs,
+            &self.proof.proof_value.statement_proofs,
             commitments,
             global_context,
             transcript,
@@ -160,10 +160,10 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
                 ip_identity: self.issuer,
                 threshold: cred_id_data.threshold,
                 ar_data: cred_id_data.ar_data,
-                attributes: self.proof.proof.identity_attributes.clone(),
+                attributes: self.proof.proof_value.identity_attributes.clone(),
                 validity: self.validity.clone(),
             },
-            proofs: self.proof.proof.identity_attributes_proofs.clone(),
+            proofs: self.proof.proof_value.identity_attributes_proofs.clone(),
         };
 
         if identity_attributes_credentials::verify_identity_attributes(
@@ -182,7 +182,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 
         let cmm_attributes: BTreeMap<_, _> = self
             .proof
-            .proof
+            .proof_value
             .identity_attributes
             .iter()
             .filter_map(|(tag, attr)| match attr {
@@ -193,7 +193,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 
         verify_statements(
             &self.subject.statements,
-            &self.proof.proof.statement_proofs,
+            &self.proof.proof_value.statement_proofs,
             &cmm_attributes,
             global_context,
             transcript,
@@ -257,7 +257,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
         Ok(AccountBasedCredentialV1 {
             proof: ConcordiumZKProof {
                 created_at: now,
-                proof: AccountCredentialProofs { statement_proofs },
+                proof_value: AccountCredentialProofs { statement_proofs },
                 proof_type: ConcordiumProofType::ConcordiumZKProofV4,
             },
             subject: AccountCredentialSubject {
@@ -344,7 +344,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
         Ok(IdentityBasedCredentialV1 {
             proof: ConcordiumZKProof {
                 created_at: now,
-                proof,
+                proof_value: proof,
                 proof_type: ConcordiumProofType::ConcordiumZKProofV4,
             },
             subject: IdentityCredentialSubject {
@@ -1082,21 +1082,21 @@ pub mod tests {
             panic!("should be account proof");
         };
         let mut ar_keys = proofs
-            .proof
+            .proof_value
             .identity_attributes_proofs
             .proof_id_cred_pub
             .keys();
         let ar1 = *ar_keys.next().unwrap();
         let ar2 = *ar_keys.next().unwrap();
-        let tmp = proofs.proof.identity_attributes_proofs.proof_id_cred_pub[&ar1].clone();
+        let tmp = proofs.proof_value.identity_attributes_proofs.proof_id_cred_pub[&ar1].clone();
         *proofs
-            .proof
+            .proof_value
             .identity_attributes_proofs
             .proof_id_cred_pub
             .get_mut(&ar1)
-            .unwrap() = proofs.proof.identity_attributes_proofs.proof_id_cred_pub[&ar2].clone();
+            .unwrap() = proofs.proof_value.identity_attributes_proofs.proof_id_cred_pub[&ar2].clone();
         *proofs
-            .proof
+            .proof_value
             .identity_attributes_proofs
             .proof_id_cred_pub
             .get_mut(&ar2)
