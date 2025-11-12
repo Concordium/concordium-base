@@ -1,5 +1,4 @@
 use crate::random_oracle::StructuredDigest;
-use crate::web3id::LinkingProof;
 use crate::{
     curve_arithmetic::Curve,
     id::types::{Attribute, GlobalContext},
@@ -20,16 +19,7 @@ use crate::id::types::{
     IdentityAttributesCredentialsInfo, IdentityAttributesCredentialsValues, IpContextOnly,
 };
 use crate::pedersen_commitment::Commitment;
-use crate::web3id::v1::{
-    AccountBasedCredentialV1, AccountBasedSubjectClaims, AccountCredentialProofPrivateInputs,
-    AccountCredentialProofs, AccountCredentialSubject, AccountCredentialVerificationMaterial,
-    ConcordiumProofType, ConcordiumZKProof, ContextInformation, CredentialMetadataV1,
-    CredentialProofPrivateInputs, CredentialV1, CredentialVerificationMaterial,
-    IdentityBasedCredentialV1, IdentityBasedSubjectClaims, IdentityCredentialEphemeralId,
-    IdentityCredentialEphemeralIdDataRef, IdentityCredentialProofPrivateInputs,
-    IdentityCredentialProofs, IdentityCredentialSubject, IdentityCredentialVerificationMaterial,
-    PresentationV1, ProveError, RequestV1, SubjectClaims, VerifyError,
-};
+use crate::web3id::v1::{AccountBasedCredentialV1, AccountBasedSubjectClaims, AccountCredentialProofPrivateInputs, AccountCredentialProofs, AccountCredentialSubject, AccountCredentialVerificationMaterial, ConcordiumLinkingProofVersion, ConcordiumZKProof, ConcordiumZKProofVersion, ContextInformation, CredentialMetadataV1, CredentialProofPrivateInputs, CredentialV1, CredentialVerificationMaterial, IdentityBasedCredentialV1, IdentityBasedSubjectClaims, IdentityCredentialEphemeralId, IdentityCredentialEphemeralIdDataRef, IdentityCredentialProofPrivateInputs, IdentityCredentialProofs, IdentityCredentialSubject, IdentityCredentialVerificationMaterial, LinkingProofV1, PresentationV1, ProveError, RequestV1, SubjectClaims, VerifyError};
 use rand::{CryptoRng, Rng};
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
@@ -258,7 +248,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
             proof: ConcordiumZKProof {
                 created_at: now,
                 proof_value: AccountCredentialProofs { statement_proofs },
-                proof_type: ConcordiumProofType::ConcordiumZKProofV4,
+                proof_type: ConcordiumZKProofVersion::ConcordiumZKProofV4,
             },
             subject: AccountCredentialSubject {
                 cred_id: self.cred_id,
@@ -345,7 +335,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
             proof: ConcordiumZKProof {
                 created_at: now,
                 proof_value: proof,
-                proof_type: ConcordiumProofType::ConcordiumZKProofV4,
+                proof_type: ConcordiumZKProofVersion::ConcordiumZKProofV4,
             },
             subject: IdentityCredentialSubject {
                 cred_id,
@@ -449,6 +439,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
         let mut transcript = RandomOracle::domain("ConcordiumVerifiablePresentationV1");
         append_context(&mut transcript, &self.challenge);
         transcript.append_message(b"ctx", &global_context);
+
         if self.subject_claims.len() != private_inputs.len() {
             return Err(ProveError::PrivateInputsMismatch);
         }
@@ -463,12 +454,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
             )?;
             verifiable_credentials.push(credential);
         }
-        // Linking proof
-        let proof_value = Vec::new();
-        let linking_proof = LinkingProof {
-            created: now,
-            proof_value,
+
+        let linking_proof = LinkingProofV1 {
+            created_at: now,
+            proof_value: [],
+            proof_type: ConcordiumLinkingProofVersion::ConcordiumWeakLinkingProofV1,
         };
+
         Ok(PresentationV1 {
             presentation_context: self.challenge,
             linking_proof,
