@@ -392,9 +392,9 @@ data SupplementedTransactionStatus
     = -- | Transaction was received but is not in any blocks
       Received
     | -- | Transaction was received and is present in some (non-finalized) block(s)
-      Committed (Map.Map BlockHash (Maybe (SupplementedTransactionSummary)))
+      Committed (Map.Map BlockHash (Maybe SupplementedTransactionSummary))
     | -- | Transaction has been finalized in a block
-      Finalized BlockHash (Maybe (SupplementedTransactionSummary))
+      Finalized BlockHash (Maybe SupplementedTransactionSummary)
     deriving (Show)
 
 -- | A pending change (if any) to a baker pool.
