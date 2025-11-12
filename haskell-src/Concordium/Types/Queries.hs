@@ -355,8 +355,8 @@ data BlockBirkParameters = BlockBirkParameters
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BlockBirkParameters)
 
--- | A transaction summary parameterized with an outcome of a valid transaction
---  containing either a 'TxSuccess' or 'TxReject'.
+-- | A transaction summary parameterized with an outcome of a
+--  `SupplementedValidResult` and unconditionally present `SponsorDetails` field.
 data SupplementedTransactionSummary = SupplementedTransactionSummary
     { stsSender :: !(Maybe AccountAddress),
       stsHash :: !TransactionHash,
@@ -370,7 +370,7 @@ data SupplementedTransactionSummary = SupplementedTransactionSummary
     }
     deriving (Show)
 
--- | Convert a `TransactionSummary'` to a `TransactionSummary0` by forgetting
+-- | Convert a `TransactionSummary'` to a `SupplementedTransactionSummary` by forgetting
 --  the `TransactionOutcomeVersion` parameter. The conditionally present
 --  `SponsorDetails` are set to `Nothing` if not present.
 toSupplementedTransactionSummary :: forall tov. TransactionSummary' tov SupplementedValidResult -> SupplementedTransactionSummary
