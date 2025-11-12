@@ -287,6 +287,10 @@ module Concordium.Types.ProtocolVersion (
     P7Sym0,
     P8Sym0,
     P9Sym0,
+    TOV0Sym0,
+    TOV1Sym0,
+    TOV2Sym0,
+    TOV3Sym0,
 ) where
 
 import Control.Monad.Except (ExceptT)
@@ -402,8 +406,7 @@ $( singletons
             = TOV0
             | TOV1
             | TOV2
-
-        -- \| TOV3
+            | TOV3
 
         -- \|Projection of 'ProtocolVersion' to 'TransactionOutcomesVersion'.
         transactionOutcomesVersionFor :: ProtocolVersion -> TransactionOutcomesVersion
