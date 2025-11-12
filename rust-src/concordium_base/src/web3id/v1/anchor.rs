@@ -1,4 +1,3 @@
-//! Types used in Concordium verifiable presentation protocol version 1.
 use crate::common::{cbor, Buffer, Deserial, Get, ParseResult, ReadBytesExt, Serial, Serialize};
 use crate::id::{
     constants::{ArCurve, IpPairing},

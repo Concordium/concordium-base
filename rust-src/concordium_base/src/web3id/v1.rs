@@ -10,6 +10,9 @@
 //! "15.4 Identity Presentations using Zero-Knowledge Proofs" and
 //! "17 Web3 Verifiable Credentials"
 
+/// Types defining the verification request anchor (VRA) and verification audit anchor (VAA)
+/// These types are part of the higher level verification flow.
+pub mod anchor;
 mod proofs;
 
 use crate::base::CredentialRegistrationID;
