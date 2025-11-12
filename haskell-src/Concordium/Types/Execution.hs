@@ -2605,6 +2605,7 @@ data SupplementedTransactionSummary = SupplementedTransactionSummary
       stsIndex :: !TransactionIndex,
       stsSponsorDetails :: !(Maybe SponsorDetails)
     }
+    deriving (Show)
 
 instance (SupplementEvents a) => SupplementEvents (TransactionSummary0 a) where
     type Supplemented (TransactionSummary0 a) = TransactionSummary0 (Supplemented a)

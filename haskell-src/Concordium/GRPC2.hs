@@ -806,18 +806,18 @@ instance ToProto QueryTypes.SupplementedTransactionStatus where
 --   type. See @toBlockItemStatus@ for more context.
 instance ToProto SupplementedTransactionSummary where
     type Output SupplementedTransactionSummary = Either ConversionError Proto.BlockItemSummary
-    toProto TransactionSummary0{..} = case ts0Type of
+    toProto SupplementedTransactionSummary{..} = case stsType of
         TSTAccountTransaction tty -> do
-            sender <- case ts0Sender of
+            sender <- case stsSender of
                 Nothing -> Left CEInvalidTransactionResult
                 Just acc -> Right acc
-            details <- convertAccountTransaction tty ts0Cost sender ts0SponsorDetails ts0Result
+            details <- convertAccountTransaction tty stsCost sender stsSponsorDetails stsResult
             Right . Proto.make $ do
-                ProtoFields.index .= mkWord64 ts0Index
-                ProtoFields.energyCost .= toProto ts0EnergyCost
-                ProtoFields.hash .= toProto ts0Hash
+                ProtoFields.index .= mkWord64 stsIndex
+                ProtoFields.energyCost .= toProto stsEnergyCost
+                ProtoFields.hash .= toProto stsHash
                 ProtoFields.accountTransaction .= details
-        TSTCredentialDeploymentTransaction ct -> case ts0Result of
+        TSTCredentialDeploymentTransaction ct -> case stsResult of
             TxReject _ -> Left CEFailedAccountCreation
             TxSuccess events -> case events of
                 [AccountCreated addr, CredentialDeployed{..}] ->
@@ -828,12 +828,12 @@ instance ToProto SupplementedTransactionSummary where
                             ProtoFields.regId .= toProto ecdRegId
                     in
                         Right . Proto.make $ do
-                            ProtoFields.index .= mkWord64 ts0Index
-                            ProtoFields.energyCost .= toProto ts0EnergyCost
-                            ProtoFields.hash .= toProto ts0Hash
+                            ProtoFields.index .= mkWord64 stsIndex
+                            ProtoFields.energyCost .= toProto stsEnergyCost
+                            ProtoFields.hash .= toProto stsHash
                             ProtoFields.accountCreation .= details
                 _ -> Left CEInvalidAccountCreation
-        TSTUpdateTransaction ut -> case ts0Result of
+        TSTUpdateTransaction ut -> case stsResult of
             TxReject _ -> Left CEFailedUpdate
             TxSuccess events -> case events of
                 [UpdateEnqueued{..}] -> do
@@ -842,18 +842,18 @@ instance ToProto SupplementedTransactionSummary where
                         ProtoFields.effectiveTime .= toProto ueEffectiveTime
                         ProtoFields.payload .= payload
                     Right . Proto.make $ do
-                        ProtoFields.index .= mkWord64 ts0Index
-                        ProtoFields.energyCost .= toProto ts0EnergyCost
-                        ProtoFields.hash .= toProto ts0Hash
+                        ProtoFields.index .= mkWord64 stsIndex
+                        ProtoFields.energyCost .= toProto stsEnergyCost
+                        ProtoFields.hash .= toProto stsHash
                         ProtoFields.update .= details
                 (TokenCreated createPLT : initEvents) -> do
                     protoEvents <-
                         left (const CEInvalidUpdateResult) $
                             mapM tokenUpdateEventToProto initEvents
                     Right . Proto.make $ do
-                        ProtoFields.index .= mkWord64 ts0Index
-                        ProtoFields.energyCost .= toProto ts0EnergyCost
-                        ProtoFields.hash .= toProto ts0Hash
+                        ProtoFields.index .= mkWord64 stsIndex
+                        ProtoFields.energyCost .= toProto stsEnergyCost
+                        ProtoFields.hash .= toProto stsHash
                         ProtoFields.tokenCreation
                             .= Proto.make
                                 ( do
