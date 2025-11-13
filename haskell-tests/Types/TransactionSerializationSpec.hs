@@ -3,9 +3,9 @@ module Types.TransactionSerializationSpec where
 import Test.Hspec
 import Test.QuickCheck as QC
 
-import Data.Serialize
-
 import qualified Data.ByteString as BS
+import Data.Monoid (getSum)
+import Data.Serialize
 
 import Concordium.Types
 import Concordium.Types.Transactions
@@ -93,6 +93,24 @@ testGetTransactionV1HeaderPayloadSize = forAll genAccountTransactionV1 $ \Accoun
     fromIntegral (BS.length (runPut $ put atrv1Header <> putEncodedPayload atrv1Payload))
         === getTransactionV1HeaderPayloadSize atrv1Header
 
+-- | Test 'transactionBaseCost' for 'AccountTransaction's.
+testTransactionBaseCostAccountTransaction :: Property
+testTransactionBaseCostAccountTransaction = forAll genAccountTransaction $ \atr@AccountTransaction{..} ->
+    fromIntegral (transactionBaseCost atr)
+        === getTransactionHeaderPayloadSize atrHeader
+            + 100 * getSum (foldMap (foldMap (const 1)) $ tsSignatures atrSignature)
+
+-- | Test 'transactionBaseCost' for 'AccountTransactionV1's.
+testTransactionBaseCostAccountTransactionV1 :: Property
+testTransactionBaseCostAccountTransactionV1 = forAll genAccountTransactionV1 $ \atr@AccountTransactionV1{..} ->
+    fromIntegral (transactionBaseCost atr)
+        === getTransactionV1HeaderPayloadSize atrv1Header
+            + 100
+                * getSum
+                    ( (foldMap (foldMap (const 1)) $ tsSignatures (tsv1Sender atrv1Signature))
+                        + (foldMap (foldMap (foldMap (const 1)) . tsSignatures) $ tsv1Sponsor atrv1Signature)
+                    )
+
 tests :: Spec
 tests = parallel $ do
     specify "Transaction serialization." $ withMaxSuccess 1000 testAccountTransaction
@@ -122,3 +140,6 @@ tests = parallel $ do
     specify "TransactionHeader + payload serialization matches getTransactionHeaderPayloadSize" $ testGetTransactionHeaderPayloadSize
     specify "TransactionHeaderV1 serialization matches transactionHeaderV1Size." $ testAccountTransactionHeaderV1Size
     specify "TransactionHeaderV1 + payload serialization matches getTransactionV1HeaderPayloadSize" $ testGetTransactionV1HeaderPayloadSize
+
+    focus $ specify "transactionBaseCost for AccountTransaction. " $ testTransactionBaseCostAccountTransaction
+    focus $ specify "transactionBaseCost for AccountTransactionV1. " $ testTransactionBaseCostAccountTransactionV1

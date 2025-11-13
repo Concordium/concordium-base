@@ -13,30 +13,29 @@
 
 module Concordium.Types.Transactions where
 
-import Concordium.Common.Version
-import Concordium.Utils.Serialization
 import Control.Monad
 import Data.Aeson (FromJSON (..), ToJSON (..))
 import qualified Data.Aeson as AE
 import Data.Aeson.TH
+import Data.Bits
 import qualified Data.ByteString as BS
 import Data.Char (isLower)
 import qualified Data.Map.Strict as Map
 import qualified Data.Serialize as S
+import qualified Data.Vector as Vec
 import Data.Word
 
+import Concordium.Common.Version
+import Concordium.Cost
 import qualified Concordium.Crypto.SHA256 as H
 import Concordium.Crypto.SignatureScheme as SigScheme
-
-import qualified Data.Vector as Vec
-
 import Concordium.ID.Types
 import Concordium.Types
 import Concordium.Types.HashableTo
 import Concordium.Types.Updates
 import Concordium.Utils
+import Concordium.Utils.Serialization
 import Control.Applicative
-import Data.Bits
 
 -- * Account transactions
 
@@ -777,6 +776,19 @@ class TransactionData t where
     -- | The size of the transaction header and payload together.
     transactionHeaderPayloadSize :: t -> Word64
 
+    -- | The total number of signatures on the transaction (including sender and sponsor).
+    transactionNumSigs :: t -> Int
+    transactionNumSigs td =
+        foldr
+            ((+) . getTransactionNumSigs)
+            (getTransactionNumSigs (transactionSignature td))
+            (transactionSponsorSignature td)
+
+-- | Compute the base cost of a transaction. This is based on the size of the transaction body
+--  (header + payload) and the number of signatures.
+transactionBaseCost :: (TransactionData t) => t -> Energy
+transactionBaseCost tr = baseCost (transactionHeaderPayloadSize tr) (transactionNumSigs tr)
+
 transactionSize :: Transaction -> Int
 transactionSize = wmdSize
 
@@ -792,6 +804,7 @@ instance TransactionData AccountTransaction where
     transactionSponsor _ = Nothing
     transactionSponsorSignature _ = Nothing
     transactionHeaderPayloadSize = getTransactionHeaderPayloadSize . atrHeader
+    transactionNumSigs = getTransactionNumSigs . atrSignature
 
 instance TransactionData Transaction where
     transactionHeader = atrHeader . wmdData
@@ -805,6 +818,7 @@ instance TransactionData Transaction where
     transactionSponsor _ = Nothing
     transactionSponsorSignature _ = Nothing
     transactionHeaderPayloadSize = getTransactionHeaderPayloadSize . atrHeader . wmdData
+    transactionNumSigs = getTransactionNumSigs . atrSignature . wmdData
 
 instance TransactionData AccountTransactionV1 where
     transactionHeader = thv1HeaderV0 . atrv1Header
