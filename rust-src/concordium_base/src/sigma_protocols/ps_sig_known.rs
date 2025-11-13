@@ -24,13 +24,7 @@ use crate::common::{Buffer, Deserial, Get, ParseResult, Put, Serial};
 use crate::curve_arithmetic::{Curve, Field, Pairing, Secret};
 use crate::random_oracle::StructuredDigest;
 use crate::sigma_protocols::common::SigmaProtocol;
-use crate::{
-    curve_arithmetic,
-    pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
-    ps_sig,
-    ps_sig::BlindedSignature,
-    random_oracle::RandomOracle,
-};
+use crate::{common, curve_arithmetic, pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value}, ps_sig, ps_sig::BlindedSignature, random_oracle::RandomOracle};
 use byteorder::ReadBytesExt;
 use concordium_base_derive::Serialize;
 use rand::Rng;
@@ -92,7 +86,7 @@ pub struct PsSigCommitSecret<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 type CommitSecretMsg<C> = PsSigWitnessMsg<C>;
 
 /// How to handle a signed message
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, common::Serial)]
 pub enum PsSigWitnessMsg<C: Curve> {
     /// The value/message part $m_i$ is proven known and equal to a commitment to the value under the randomness $r_i$
     EqualToCommitment(Value<C>, Randomness<C>),
