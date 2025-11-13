@@ -7,7 +7,8 @@ use ciborium_ll::simple;
 
 /// Generic CBOR data item that can represent
 /// any data item type.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(into = "String", try_from = "String")]
 pub enum Value {
     /// Positive integer (major type 0)
     Positive(u64),
@@ -125,6 +126,25 @@ impl CborDeserialize for Value {
         Self: Sized,
     {
         Some(Value::Null)
+    }
+}
+
+impl From<Value> for String {
+    fn from(value: Value) -> Self {
+        let cbor_bytes = crate::common::cbor::cbor_encode(&value)
+            .expect("Value should always serialize to CBOR");
+        hex::encode(cbor_bytes)
+    }
+}
+
+impl TryFrom<String> for Value {
+    type Error = anyhow::Error;
+
+    fn try_from(hex_string: String) -> Result<Self, Self::Error> {
+        let cbor_bytes = hex::decode(&hex_string)
+            .context("Failed to decode hex string")?;
+        crate::common::cbor::cbor_decode(&cbor_bytes)
+            .context("Failed to decode CBOR bytes")
     }
 }
 
@@ -258,5 +278,32 @@ mod test {
         assert_eq!(hex::encode(&cbor), "a201030204");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_serde_serialize() {
+        let value = Value::Text("test".to_string());
+        let json = serde_json::to_string(&value).unwrap();
+        assert_eq!(json, "\"6474657374\"");
+    }
+
+    #[test]
+    fn test_serde_deserialize() {
+        let json = "\"6474657374\"";
+        let value: Value = serde_json::from_str(json).unwrap();
+        assert_eq!(value, Value::Text("test".to_string()));
+    }
+
+    #[test]
+    fn test_serde_roundtrip() {
+        let original = Value::Map(vec![
+            (Value::Text("key1".to_string()), Value::Positive(42)),
+            (Value::Text("key2".to_string()), Value::Bool(true)),
+        ]);
+        
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: Value = serde_json::from_str(&json).unwrap();
+        
+        assert_eq!(original, deserialized);
     }
 }

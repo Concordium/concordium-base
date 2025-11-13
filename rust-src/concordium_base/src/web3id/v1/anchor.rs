@@ -96,7 +96,7 @@ impl VerificationAuditRecord {
 /// Data structure for CBOR-encoded verifiable audit
 ///
 /// This format is used when anchoring a verification audit on the Concordium blockchain.
-#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
+#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize, serde::Serialize)]
 pub struct VerificationAuditAnchor {
     /// Type identifier for Concordium Verifiable Request Audit Anchor/Record. Always set to "CCDVAA".
     pub r#type: String,
@@ -222,7 +222,7 @@ impl UnfilledContextInformation {
 /// Data structure for CBOR-encoded verifiable presentation request anchors.
 ///
 /// This format is used when anchoring presentation requests on the Concordium blockchain.
-#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
+#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize, serde::Serialize)]
 pub struct VerificationRequestAnchor {
     /// Type identifier for Concordium Verification Request Anchor. Always set to "CCDVRA".
     pub r#type: String,
