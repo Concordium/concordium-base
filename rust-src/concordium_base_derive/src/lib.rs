@@ -5,10 +5,10 @@
 mod cbor;
 
 use proc_macro::TokenStream;
-use proc_macro2::{Ident, Span};
+use proc_macro2::{Ident, Literal, Span};
 use proc_macro_crate::FoundCrate;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, spanned::Spanned};
+use syn::{parse_macro_input, spanned::Spanned, LitInt};
 
 fn get_crate_root() -> syn::Result<proc_macro2::TokenStream> {
     let found_crate = proc_macro_crate::crate_name("concordium_base").map_err(|err| {
@@ -384,8 +384,40 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
             _ => panic!("#[derive(Serial)] not implemented for empty structs."),
         };
         gen.into()
+    } else if let syn::Data::Enum(ref data) = ast.data {
+        let mut arms = proc_macro2::TokenStream::new();
+        for (variant_index, variant) in data.variants.iter().enumerate() {
+            let variant_index_tk =
+                Literal::u8_suffixed(variant_index.try_into().expect("variant index to u8"));
+            let variant_ident = &variant.ident;
+            arms.extend(quote! {
+                Self::#variant_ident => {
+                    #variant_index_tk.serial(#out);
+                }
+            });
+
+            // for f in data.fields.iter() {
+            //     let ident = f.ident.clone().unwrap(); // safe since named fields.
+            //
+            //     body.extend(quote! {
+            //         self.#ident.serial(#out);
+            //     });
+            // }
+        }
+
+        quote! {
+            #[automatically_derived]
+            impl #impl_generics #root::common::Serial for #name #ty_generics #where_clauses {
+                fn serial<#ident: #root::common::Buffer>(&self, #out: &mut #ident) {
+                    match self {
+                        #arms
+                    }
+                }
+            }
+        }
+        .into()
     } else {
-        panic!("#[derive(Serial)] only implemented for structs.")
+        panic!("#[derive(Serial)] only implemented for structs and enums.")
     }
 }
 
