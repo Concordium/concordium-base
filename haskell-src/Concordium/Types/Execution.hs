@@ -3033,7 +3033,7 @@ data FailureKind
       InvalidTokenModuleRef !TokenModuleRef
     deriving (Eq, Show)
 
-data TxResult tov = TxValid !(TransactionSummary tov) | TxInvalid !FailureKind
+data TxResult (tov :: TransactionOutcomesVersion) = TxValid !(TransactionSummary tov) | TxInvalid !FailureKind
 
 -- | Generate the challenge for adding a baker.
 addBakerChallenge :: AccountAddress -> BakerElectionVerifyKey -> BakerSignVerifyKey -> BakerAggregationVerifyKey -> BS.ByteString
