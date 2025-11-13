@@ -99,6 +99,7 @@ impl VerificationAuditRecord {
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 pub struct VerificationAuditAnchor {
     /// Type identifier for Concordium Verifiable Request Audit Anchor/Record. Always set to "CCDVAA".
+    #[cbor(key = "type")]
     pub r#type: String,
     /// Data format version integer, for now it is always 1.
     pub version: u16,
@@ -225,6 +226,7 @@ impl UnfilledContextInformation {
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 pub struct VerificationRequestAnchor {
     /// Type identifier for Concordium Verification Request Anchor. Always set to "CCDVRA".
+    #[cbor(key = "type")]
     pub r#type: String,
     /// Data format version integer, for now it is always 1.
     pub version: u16,
@@ -1293,7 +1295,7 @@ mod tests {
 
         let cbor = cbor::cbor_encode(&verification_request_anchor).unwrap();
 
-        assert_eq!(hex::encode(&cbor), "a4646861736858205e7d3a608cb004f22633c958b2a203c516d0d4b3ad47f310d5fc29e606138a21667075626c6963a1636b65790466722374797065664343445652416776657273696f6e01");
+        assert_eq!(hex::encode(&cbor), "a4646861736858205e7d3a608cb004f22633c958b2a203c516d0d4b3ad47f310d5fc29e606138a21647479706566434344565241667075626c6963a1636b6579046776657273696f6e01");
 
         let decoded: VerificationRequestAnchor = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(decoded, verification_request_anchor);
@@ -1304,7 +1306,7 @@ mod tests {
         let verification_audit_anchor_on_chain = verification_audit_anchor_fixture();
 
         let cbor = cbor::cbor_encode(&verification_audit_anchor_on_chain).unwrap();
-        assert_eq!(hex::encode(&cbor), "a46468617368582037fc286317b8c68dfbeee7d2150cb4958694a979070ec36832c4f5032ffbab2b667075626c6963a1636b65790466722374797065664343445641416776657273696f6e01");
+        assert_eq!(hex::encode(&cbor), "a46468617368582037fc286317b8c68dfbeee7d2150cb4958694a979070ec36832c4f5032ffbab2b647479706566434344564141667075626c6963a1636b6579046776657273696f6e01");
         let decoded: VerificationAuditAnchor = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(decoded, verification_audit_anchor_on_chain);
     }

@@ -7,12 +7,33 @@ use syn::{Data, DataEnum, DataStruct, Expr, Fields, LitStr, Member, Type, Varian
 use darling::{FromDeriveInput, FromField, FromVariant};
 use syn::{punctuated::Punctuated, spanned::Spanned, token::Comma};
 
+#[derive(Debug, Clone)]
+pub enum CborKey {
+    Positive(Expr),
+    Text(String),
+}
+
+impl darling::FromMeta for CborKey {
+    fn from_expr(expr: &Expr) -> darling::Result<Self> {
+        match expr {
+            Expr::Lit(expr_lit) => match &expr_lit.lit {
+                syn::Lit::Str(lit_str) => Ok(CborKey::Text(lit_str.value())),
+                syn::Lit::Int(_) => Ok(CborKey::Positive(expr.clone())),
+                _ => Err(darling::Error::unexpected_lit_type(&expr_lit.lit)),
+            },
+            _ => Ok(CborKey::Positive(expr.clone())),
+        }
+    }
+}
+
 #[derive(Debug, Default, FromField)]
 #[darling(attributes(cbor))]
 pub struct CborFieldOpts {
     /// Set key to be used for key in map. If not specified the field
     /// name in camel case is used as key as a text data item.
-    key: Option<Expr>,
+    /// Can be either an integer (e.g., key = 1) for Positive key,
+    /// or a string literal (e.g., key = "type") for Text key.
+    key: Option<CborKey>,
     /// Deserialize fields in CBOR map that is not present in the struct
     /// to the field with this attribute.
     #[darling(default)]
@@ -94,7 +115,15 @@ impl CborFields {
             .filter(|field| !field.opts.other)
             .map(|field| {
                 if let Some(key) = field.opts.key.as_ref() {
-                    quote!(#cbor_module::MapKeyRef::Positive(#key))
+                    match key {
+                        CborKey::Text(text) => {
+                            let lit = LitStr::new(text, field.member.span());
+                            quote!(#cbor_module::MapKeyRef::Text(#lit))
+                        }
+                        CborKey::Positive(expr) => {
+                            quote!(#cbor_module::MapKeyRef::Positive(#expr))
+                        }
+                    }
                 } else {
                     match &field.member {
                         Member::Named(ident) => {
