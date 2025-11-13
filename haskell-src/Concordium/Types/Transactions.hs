@@ -256,6 +256,20 @@ instance S.Serialize TransactionHeaderV1 where
             | testBit bitmap bitNum = Just <$> S.label label S.get
             | otherwise = return Nothing
 
+-- | Get the serialized size of the 'TransactionHeaderV1' in bytes.
+transactionHeaderV1Size :: TransactionHeaderV1 -> Word64
+transactionHeaderV1Size th =
+    2 -- bitmap
+        + transactionHeaderSize -- header
+        + case thv1Sponsor th of -- sponsor account
+            Just _ -> fromIntegral accountAddressSize
+            Nothing -> 0
+
+getTransactionV1HeaderPayloadSize :: TransactionHeaderV1 -> Word64
+getTransactionV1HeaderPayloadSize th =
+    transactionHeaderV1Size th
+        + fromIntegral (thPayloadSize (thv1HeaderV0 th))
+
 -- | An 'AccountTransactionV1' is a transaction that originates from
 --  a specific account (the sender), and is paid for by either the sender
 --  or a sponsor account.
@@ -759,6 +773,9 @@ class TransactionData t where
     transactionSponsor :: t -> Maybe AccountAddress
     transactionSponsorSignature :: t -> Maybe TransactionSignature
 
+    -- | The size of the transaction header and payload together.
+    transactionHeaderPayloadSize :: t -> Word64
+
 transactionSize :: Transaction -> Int
 transactionSize = wmdSize
 
@@ -773,6 +790,7 @@ instance TransactionData AccountTransaction where
     transactionHash = getHash
     transactionSponsor _ = Nothing
     transactionSponsorSignature _ = Nothing
+    transactionHeaderPayloadSize = getTransactionHeaderPayloadSize . atrHeader
 
 instance TransactionData Transaction where
     transactionHeader = atrHeader . wmdData
@@ -785,6 +803,7 @@ instance TransactionData Transaction where
     transactionHash = wmdHash
     transactionSponsor _ = Nothing
     transactionSponsorSignature _ = Nothing
+    transactionHeaderPayloadSize = getTransactionHeaderPayloadSize . atrHeader . wmdData
 
 instance TransactionData AccountTransactionV1 where
     transactionHeader = thv1HeaderV0 . atrv1Header
@@ -797,6 +816,7 @@ instance TransactionData AccountTransactionV1 where
     transactionHash = getHash
     transactionSponsor = thv1Sponsor . atrv1Header
     transactionSponsorSignature = tsv1Sponsor . atrv1Signature
+    transactionHeaderPayloadSize = getTransactionV1HeaderPayloadSize . atrv1Header
 
 instance TransactionData TransactionV1 where
     transactionHeader = transactionHeader . wmdData
@@ -809,6 +829,7 @@ instance TransactionData TransactionV1 where
     transactionHash = wmdHash
     transactionSponsor = transactionSponsor . wmdData
     transactionSponsorSignature = transactionSponsorSignature . wmdData
+    transactionHeaderPayloadSize = getTransactionV1HeaderPayloadSize . atrv1Header . wmdData
 
 --------------------------
 

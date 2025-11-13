@@ -69,6 +69,25 @@ checkBlockItemExtendedTransaction spv bi =
 testBlockItemExtendedTransaction :: SProtocolVersion pv -> Property
 testBlockItemExtendedTransaction spv = forAll genBlockItemTransactionExt $ checkBlockItemExtendedTransaction spv
 
+testAccountTransactionHeaderSize :: Property
+testAccountTransactionHeaderSize = forAll genTransactionHeader $ \th ->
+    fromIntegral (BS.length (encode th)) === transactionHeaderSize
+
+testGetTransactionHeaderPayloadSize :: Property
+testGetTransactionHeaderPayloadSize = forAll genAccountTransaction $ \AccountTransaction{..} ->
+    fromIntegral (BS.length (runPut $ put atrHeader >> putEncodedPayload atrPayload))
+        === getTransactionHeaderPayloadSize atrHeader
+
+testAccountTransactionHeaderV1Size :: Property
+testAccountTransactionHeaderV1Size = forAll genTransactionHeaderV1 $ \th ->
+    QC.label ("size: " ++ show (transactionHeaderV1Size th)) $
+        fromIntegral (BS.length (encode th)) === transactionHeaderV1Size th
+
+testGetTransactionV1HeaderPayloadSize :: Property
+testGetTransactionV1HeaderPayloadSize = forAll genAccountTransactionV1 $ \AccountTransactionV1{..} ->
+    fromIntegral (BS.length (runPut $ put atrv1Header <> putEncodedPayload atrv1Payload))
+        === getTransactionV1HeaderPayloadSize atrv1Header
+
 tests :: Spec
 tests = parallel $ do
     specify "Transaction serialization." $ withMaxSuccess 1000 testAccountTransaction
@@ -93,3 +112,8 @@ tests = parallel $ do
     specify "BlockItem ExtendedTransaction serialization in P7." $ withMaxSuccess 100 $ testBlockItemExtendedTransaction SP7
     specify "BlockItem ExtendedTransaction serialization in P8." $ withMaxSuccess 100 $ testBlockItemExtendedTransaction SP8
     specify "BlockItem ExtendedTransaction serialization in P9." $ withMaxSuccess 100 $ testBlockItemExtendedTransaction SP9
+
+    specify "TransactionHeader serialization matches transactionHeaderSize." $ testAccountTransactionHeaderSize
+    specify "TransactionHeader + payload serialization matches getTransactionHeaderPayloadSize" $ testGetTransactionHeaderPayloadSize
+    specify "TransactionHeaderV1 serialization matches transactionHeaderV1Size." $ testAccountTransactionHeaderV1Size
+    specify "TransactionHeaderV1 + payload serialization matches getTransactionV1HeaderPayloadSize" $ testGetTransactionV1HeaderPayloadSize
