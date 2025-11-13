@@ -27,7 +27,8 @@ import Concordium.Types
 import Concordium.Types.Accounts
 import qualified Concordium.Types.AnonymityRevokers as ARS
 import Concordium.Types.Block
-import Concordium.Types.Execution (SupplementedTransactionSummary)
+import Concordium.Types.Conditionally
+import Concordium.Types.Execution (SponsorDetails, SupplementedValidResult, TransactionIndex, TransactionSummary' (..), TransactionSummaryType)
 import qualified Concordium.Types.IdentityProviders as IPS
 import Concordium.Types.Parameters (
     ChainParameters',
@@ -354,15 +355,46 @@ data BlockBirkParameters = BlockBirkParameters
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BlockBirkParameters)
 
+-- | A transaction summary with supplemented result field and unconditionally
+--  present sponsor details..
+data SupplementedTransactionSummary = SupplementedTransactionSummary
+    { stsSender :: !(Maybe AccountAddress),
+      stsHash :: !TransactionHash,
+      -- | The transaction cost paid for by the sender
+      stsCost :: !Amount,
+      stsEnergyCost :: !Energy,
+      stsType :: !TransactionSummaryType,
+      stsResult :: !SupplementedValidResult,
+      stsIndex :: !TransactionIndex,
+      stsSponsorDetails :: !(Maybe SponsorDetails)
+    }
+    deriving (Show)
+
+-- | Convert a `TransactionSummary'` to a `SupplementedTransactionSummary` by forgetting
+--  the `TransactionOutcomeVersion` parameter. The conditionally present
+--  `SponsorDetails` are set to `Nothing` if not present.
+toSupplementedTransactionSummary :: forall tov. TransactionSummary' tov SupplementedValidResult -> SupplementedTransactionSummary
+toSupplementedTransactionSummary TransactionSummary{..} =
+    SupplementedTransactionSummary
+        { stsSender = tsSender,
+          stsHash = tsHash,
+          stsCost = tsCost,
+          stsEnergyCost = tsEnergyCost,
+          stsType = tsType,
+          stsResult = tsResult,
+          stsIndex = tsIndex,
+          stsSponsorDetails = fromCondDef tsSponsorDetails Nothing
+        }
+
 -- | The status of a transaction that is present in the transaction table or a finalized block,
 --  as returned by the @getTransactionStatus@ gRPC query.
-data SupplementedTransactionStatus (pv :: ProtocolVersion)
+data SupplementedTransactionStatus
     = -- | Transaction was received but is not in any blocks
       Received
     | -- | Transaction was received and is present in some (non-finalized) block(s)
-      Committed (Map.Map BlockHash (Maybe (SupplementedTransactionSummary pv)))
+      Committed (Map.Map BlockHash (Maybe SupplementedTransactionSummary))
     | -- | Transaction has been finalized in a block
-      Finalized BlockHash (Maybe (SupplementedTransactionSummary pv))
+      Finalized BlockHash (Maybe SupplementedTransactionSummary)
     deriving (Show)
 
 -- | A pending change (if any) to a baker pool.
