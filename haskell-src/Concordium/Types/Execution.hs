@@ -2537,7 +2537,7 @@ instance S.Serialize SponsorDetails where
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''SponsorDetails)
 
 -- | Result of a valid transaction is a transaction summary.
-data TransactionSummary' tov a = TransactionSummary
+data TransactionSummary' (tov :: TransactionOutcomesVersion) a = TransactionSummary
     { tsSender :: !(Maybe AccountAddress),
       tsHash :: !TransactionHash,
       -- | The transaction cost paid for by the sender
