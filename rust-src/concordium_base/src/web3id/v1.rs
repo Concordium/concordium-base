@@ -16,6 +16,7 @@ pub mod anchor;
 mod proofs;
 
 use crate::base::CredentialRegistrationID;
+use crate::common::{Buffer, Get, ParseResult, Put};
 use crate::curve_arithmetic::{Curve, Pairing};
 use crate::id::id_proof_types::{AtomicProof, AtomicStatement};
 use crate::id::secret_sharing::Threshold;
@@ -29,6 +30,7 @@ use crate::web3id::did;
 use crate::web3id::did::Network;
 use crate::{common, pedersen_commitment};
 use anyhow::{bail, ensure, Context};
+use byteorder::ReadBytesExt;
 use itertools::Itertools;
 use nom::AsBytes;
 use serde::de::{DeserializeOwned, Error as _};
@@ -322,7 +324,7 @@ pub struct CredentialMetadataV1 {
 
 /// Account based credentials. This contains almost
 /// all the information needed to verify it, except the public commitments.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, common::Serialize)]
 pub struct AccountBasedCredentialV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Issuer of this credential, the identity provider index on the
     /// relevant network.
@@ -334,7 +336,7 @@ pub struct AccountBasedCredentialV1<C: Curve, AttributeType: Attribute<C::Scalar
 }
 
 /// Subject of account based credential
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, common::Serialize)]
 pub struct AccountCredentialSubject<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Network on which the account credentials exist
     pub network: Network,
@@ -431,7 +433,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
 /// Encrypted ephemeral id for an identity credential. It will have a new value for each time a credential is proven
 /// derived from the identity credential (the encryption is a randomized function).
 /// The id can be decrypted to IdCredPub by first converting the value to [`IdentityCredentialEphemeralIdData`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
 pub struct IdentityCredentialEphemeralId(pub Vec<u8>);
 
 /// Encrypted ephemeral id for an identity credential. The id can be decrypted to IdCredPub by the privacy guardians (anonymity revokers).
@@ -486,7 +488,7 @@ impl IdentityCredentialEphemeralId {
 /// Identity based credential. This type of credential is derived from identity credentials issued
 /// by an identity provider. The type contains almost
 /// all the information needed to verify it, except the identity provider and privacy guardian (anonymity revoker) public keys.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, common::Serialize)]
 pub struct IdentityBasedCredentialV1<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -504,7 +506,7 @@ pub struct IdentityBasedCredentialV1<
 }
 
 /// Subject of identity based credential
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, common::Serialize)]
 pub struct IdentityCredentialSubject<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Network to which the credentials are issued
     pub network: Network,
@@ -620,10 +622,30 @@ pub enum ConcordiumZKProofVersion {
     ConcordiumZKProofV4,
 }
 
+impl common::Serial for ConcordiumZKProofVersion {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            Self::ConcordiumZKProofV4 => {
+                out.put(&0u8);
+            }
+        }
+    }
+}
+
+impl common::Deserial for ConcordiumZKProofVersion {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let tag: u8 = source.get()?;
+        Ok(match tag {
+            0 => Self::ConcordiumZKProofV4,
+            _ => bail!("unsupported ConcordiumZKProofVersion: {}", tag),
+        })
+    }
+}
+
 /// Credential proof. Wraps the actual credential specific proof.
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, common::Serialize)]
 #[serde(bound(serialize = "T: common::Serial", deserialize = "T: common::Deserial"))]
-pub struct ConcordiumZKProof<T> {
+pub struct ConcordiumZKProof<T: common::Serialize> {
     #[serde(rename = "created")]
     pub created_at: chrono::DateTime<chrono::Utc>,
     #[serde(
@@ -652,6 +674,42 @@ pub enum CredentialV1<
     Account(AccountBasedCredentialV1<C, AttributeType>),
     /// Identity based credential
     Identity(IdentityBasedCredentialV1<P, C, AttributeType>),
+}
+
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
+    common::Serial for CredentialV1<P, C, AttributeType>
+{
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            Self::Account(cred) => {
+                out.put(&0u8);
+                out.put(cred)
+            }
+            Self::Identity(cred) => {
+                out.put(&1u8);
+                out.put(cred)
+            }
+        }
+    }
+}
+
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
+    common::Deserial for CredentialV1<P, C, AttributeType>
+{
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let tag: u8 = source.get()?;
+        Ok(match tag {
+            0 => {
+                let cred = source.get()?;
+                Self::Account(cred)
+            }
+            1 => {
+                let cred = source.get()?;
+                Self::Identity(cred)
+            }
+            _ => bail!("unsupported CredentialV1: {}", tag),
+        })
+    }
 }
 
 impl<
@@ -854,9 +912,29 @@ pub enum ConcordiumLinkingProofVersion {
     ConcordiumWeakLinkingProofV1,
 }
 
+impl common::Serial for ConcordiumLinkingProofVersion {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            Self::ConcordiumWeakLinkingProofV1 => {
+                out.put(&0u8);
+            }
+        }
+    }
+}
+
+impl common::Deserial for ConcordiumLinkingProofVersion {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let tag: u8 = source.get()?;
+        Ok(match tag {
+            0 => Self::ConcordiumWeakLinkingProofV1,
+            _ => bail!("unsupported ConcordiumLinkingProofVersion: {}", tag),
+        })
+    }
+}
+
 /// Proof that the credential holder has created the presentation. Currently
 /// not used.
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, common::Serialize, serde::Serialize, serde::Deserialize)]
 pub struct LinkingProofV1 {
     #[serde(rename = "created")]
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -872,7 +950,7 @@ pub struct LinkingProofV1 {
 
 /// Verifiable presentation. Is the response to proving a [`RequestV1`] with [`RequestV1::prove`]. It contains proofs for
 /// the claims in the request. To verify the presentation, use [`PresentationV1::verify`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
 pub struct PresentationV1<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,

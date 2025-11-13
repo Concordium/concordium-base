@@ -12,8 +12,6 @@ use concordium_contracts_common::hashes::HashBytes;
 use sha2::Digest;
 use std::collections::HashMap;
 
-// todo are unfilled context type
-
 const PROTOCOL_VERSION: u16 = 1u16;
 
 /// A verifiable presentation request that specifies what credentials and proofs
