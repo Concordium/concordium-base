@@ -50,7 +50,7 @@ pub struct VerificationAuditRecord {
 }
 
 impl VerificationAuditRecord {
-    /// Create a new verifiable audit anchor using the hardcoded version [`PROTOCOL_VERSION`].
+    /// Create a new verifiable audit anchor
     pub fn new(
         request: VerificationRequest,
         id: String,
