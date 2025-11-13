@@ -265,6 +265,7 @@ transactionHeaderV1Size th =
             Just _ -> fromIntegral accountAddressSize
             Nothing -> 0
 
+-- | Get the serialized size of the transaction V1 header and payload.
 getTransactionV1HeaderPayloadSize :: TransactionHeaderV1 -> Word64
 getTransactionV1HeaderPayloadSize th =
     transactionHeaderV1Size th

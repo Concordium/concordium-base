@@ -69,20 +69,25 @@ checkBlockItemExtendedTransaction spv bi =
 testBlockItemExtendedTransaction :: SProtocolVersion pv -> Property
 testBlockItemExtendedTransaction spv = forAll genBlockItemTransactionExt $ checkBlockItemExtendedTransaction spv
 
+-- | Test that 'transactionHeaderSize' reflects the size of serialized 'TransactionHeader's.
 testAccountTransactionHeaderSize :: Property
 testAccountTransactionHeaderSize = forAll genTransactionHeader $ \th ->
     fromIntegral (BS.length (encode th)) === transactionHeaderSize
 
+-- | Test that 'getTransactionHeaderPayloadSize' reflects the size of serialized header + payloads.
 testGetTransactionHeaderPayloadSize :: Property
 testGetTransactionHeaderPayloadSize = forAll genAccountTransaction $ \AccountTransaction{..} ->
     fromIntegral (BS.length (runPut $ put atrHeader >> putEncodedPayload atrPayload))
         === getTransactionHeaderPayloadSize atrHeader
 
+-- | Test that 'transactionHeaderV1Size' reflects the size of serialized 'TransactionHeaderV1's.
 testAccountTransactionHeaderV1Size :: Property
 testAccountTransactionHeaderV1Size = forAll genTransactionHeaderV1 $ \th ->
     QC.label ("size: " ++ show (transactionHeaderV1Size th)) $
         fromIntegral (BS.length (encode th)) === transactionHeaderV1Size th
 
+-- | Test that 'getTransactionV1HeaderPayloadSize' reflects the size of serialized
+--  V1 header + payloads.
 testGetTransactionV1HeaderPayloadSize :: Property
 testGetTransactionV1HeaderPayloadSize = forAll genAccountTransactionV1 $ \AccountTransactionV1{..} ->
     fromIntegral (BS.length (runPut $ put atrv1Header <> putEncodedPayload atrv1Payload))
