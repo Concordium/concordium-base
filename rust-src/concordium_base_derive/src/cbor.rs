@@ -10,18 +10,24 @@ use syn::{punctuated::Punctuated, spanned::Spanned, token::Comma};
 #[derive(Debug, Clone)]
 enum CborKey {
     Positive(Expr),
-    Text(LitStr),
+    Text(Expr),
 }
 
 impl darling::FromMeta for CborKey {
     fn from_expr(expr: &Expr) -> darling::Result<Self> {
-        Ok(match expr {
+        let key = if matches!(
+            expr,
             Expr::Lit(ExprLit {
-                lit: Lit::Str(lit_str),
+                lit: Lit::Str(_),
                 ..
-            }) => CborKey::Text(lit_str.clone()),
-            _ => CborKey::Positive(expr.clone()),
-        })
+            })
+        ) {
+            CborKey::Text(expr.clone())
+        } else {
+            CborKey::Positive(expr.clone())
+        };
+
+        Ok(key)
     }
 }
 
@@ -115,8 +121,8 @@ impl CborFields {
             .map(|field| {
                 if let Some(key) = field.opts.key.as_ref() {
                     match key {
-                        CborKey::Text(lit_str) => {
-                            quote!(#cbor_module::MapKeyRef::Text(#lit_str))
+                        CborKey::Text(expr) => {
+                            quote!(#cbor_module::MapKeyRef::Text(#expr))
                         }
                         CborKey::Positive(expr) => {
                             quote!(#cbor_module::MapKeyRef::Positive(#expr))
