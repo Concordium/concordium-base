@@ -355,8 +355,8 @@ data BlockBirkParameters = BlockBirkParameters
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BlockBirkParameters)
 
--- | A transaction summary parameterized with an outcome of a
---  `SupplementedValidResult` and unconditionally present `SponsorDetails` field.
+-- | A transaction summary with supplemented result field and unconditionally
+--  present sponsor details..
 data SupplementedTransactionSummary = SupplementedTransactionSummary
     { stsSender :: !(Maybe AccountAddress),
       stsHash :: !TransactionHash,

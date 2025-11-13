@@ -426,8 +426,7 @@ $( singletons
         hasSponsorDetails TOV0 = False
         hasSponsorDetails TOV1 = False
         hasSponsorDetails TOV2 = False
-
-        -- hasSponsorDetails TOV3 = True
+        hasSponsorDetails TOV3 = True
 
         supportsDelegation :: AccountVersion -> Bool
         supportsDelegation AccountV0 = False

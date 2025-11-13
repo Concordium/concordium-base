@@ -2693,7 +2693,7 @@ instance S.Serialize TransactionSummaryType where
             2 -> TSTUpdateTransaction <$> S.get
             _ -> fail "Unsupported transaction summary type."
 
-putTransactionSummary :: S.Putter (TransactionSummary pv)
+putTransactionSummary :: S.Putter (TransactionSummary tov)
 putTransactionSummary TransactionSummary{..} =
     putMaybe S.put tsSender
         <> mapM_ (putMaybe S.put) tsSponsorDetails
