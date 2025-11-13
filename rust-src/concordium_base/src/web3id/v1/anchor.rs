@@ -81,7 +81,7 @@ impl VerificationAuditRecord {
     /// in their backend database.
     pub fn to_anchor(
         &self,
-        public_info: HashMap<String, cbor::value::Value>,
+        public_info: Option<HashMap<String, cbor::value::Value>>,
     ) -> VerificationAuditAnchor {
         VerificationAuditAnchor {
             // Concordium Verification Audit Anchor
@@ -106,7 +106,7 @@ pub struct VerificationAuditAnchor {
     /// Hash computed from the [`VerificationAuditRecord`].
     pub hash: hashes::Hash,
     /// Optional public information.
-    pub public: HashMap<String, cbor::value::Value>,
+    pub public: Option<HashMap<String, cbor::value::Value>>,
 }
 
 /// Description of the presentation being requested from a credential holder.
@@ -156,7 +156,7 @@ impl VerificationRequestData {
     /// from the the [`VerificationRequestData`] type.
     pub fn to_anchor(
         &self,
-        public_info: HashMap<String, cbor::value::Value>,
+        public_info: Option<HashMap<String, cbor::value::Value>>,
     ) -> VerificationRequestAnchor {
         VerificationRequestAnchor {
             // Concordium Verification Request Anchor
@@ -233,7 +233,7 @@ pub struct VerificationRequestAnchor {
     /// Hash computed from the [`VerificationRequestData`].
     pub hash: hashes::Hash,
     /// Optional public information.
-    pub public: HashMap<String, cbor::value::Value>,
+    pub public: Option<HashMap<String, cbor::value::Value>>,
 }
 
 /// The credential statements being requested.
@@ -725,7 +725,7 @@ mod tests {
         let mut public_info = HashMap::new();
         public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
 
-        request_data.to_anchor(public_info)
+        request_data.to_anchor(Some(public_info))
     }
 
     fn verification_audit_record_fixture() -> VerificationAuditRecord {
@@ -898,7 +898,7 @@ mod tests {
         "#;
 
         let presentation_deserialized: PresentationV1<IpPairing, ArCurve, Web3IdAttribute> =
-            serde_json::from_str(&presentation_json).unwrap();
+            serde_json::from_str(presentation_json).unwrap();
         let id = "MyUUID".to_string();
 
         VerificationAuditRecord::new(presentation_request, id, presentation_deserialized)
@@ -911,7 +911,7 @@ mod tests {
         let mut public_info = HashMap::new();
         public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
 
-        verification_audit_anchor.to_anchor(public_info)
+        verification_audit_anchor.to_anchor(Some(public_info))
     }
 
     // Tests about JSON serialization and deserialization roundtrips
