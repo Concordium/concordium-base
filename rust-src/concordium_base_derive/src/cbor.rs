@@ -2,27 +2,26 @@ use crate::get_crate_root;
 use convert_case::{Case, Casing};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
-use syn::{Data, DataEnum, DataStruct, Expr, Fields, LitStr, Member, Type, Variant};
+use syn::{Data, DataEnum, DataStruct, Expr, ExprLit, Fields, Lit, LitStr, Member, Type, Variant};
 
 use darling::{FromDeriveInput, FromField, FromVariant};
 use syn::{punctuated::Punctuated, spanned::Spanned, token::Comma};
 
 #[derive(Debug, Clone)]
-pub enum CborKey {
+enum CborKey {
     Positive(Expr),
-    Text(String),
+    Text(LitStr),
 }
 
 impl darling::FromMeta for CborKey {
     fn from_expr(expr: &Expr) -> darling::Result<Self> {
-        match expr {
-            Expr::Lit(expr_lit) => match &expr_lit.lit {
-                syn::Lit::Str(lit_str) => Ok(CborKey::Text(lit_str.value())),
-                syn::Lit::Int(_) => Ok(CborKey::Positive(expr.clone())),
-                _ => Err(darling::Error::unexpected_lit_type(&expr_lit.lit)),
-            },
-            _ => Ok(CborKey::Positive(expr.clone())),
-        }
+        Ok(match expr {
+            Expr::Lit(ExprLit {
+                lit: Lit::Str(lit_str),
+                ..
+            }) => CborKey::Text(lit_str.clone()),
+            _ => CborKey::Positive(expr.clone()),
+        })
     }
 }
 
@@ -116,9 +115,8 @@ impl CborFields {
             .map(|field| {
                 if let Some(key) = field.opts.key.as_ref() {
                     match key {
-                        CborKey::Text(text) => {
-                            let lit = LitStr::new(text, field.member.span());
-                            quote!(#cbor_module::MapKeyRef::Text(#lit))
+                        CborKey::Text(lit_str) => {
+                            quote!(#cbor_module::MapKeyRef::Text(#lit_str))
                         }
                         CborKey::Positive(expr) => {
                             quote!(#cbor_module::MapKeyRef::Positive(#expr))
