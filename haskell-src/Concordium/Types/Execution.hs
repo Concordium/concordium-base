@@ -2559,7 +2559,7 @@ summaryResult =
 
 -- | A transaction summary parameterized with an outcome of a valid transaction
 --  containing either a 'TxSuccess' or 'TxReject'.
-type TransactionSummary tov = TransactionSummary' tov ValidResult
+type TransactionSummary (tov :: TransactionOutcomesVersion) = TransactionSummary' tov ValidResult
 
 instance (SupplementEvents a) => SupplementEvents (TransactionSummary' tov a) where
     type Supplemented (TransactionSummary' tov a) = TransactionSummary' tov (Supplemented a)
