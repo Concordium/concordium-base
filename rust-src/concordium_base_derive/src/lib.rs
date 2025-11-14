@@ -373,7 +373,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                 }
                 quote! {
                     #[automatically_derived]
-                    impl #impl_generics Serial for #name #ty_generics #where_clauses {
+                    impl #impl_generics #root::common::Serial for #name #ty_generics #where_clauses {
                         fn serial<#ident: #root::common::Buffer>(&self, #out: &mut #ident) {
                             let #name( #names ) = self;
                             #body

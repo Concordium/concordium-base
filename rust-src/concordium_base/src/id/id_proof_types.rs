@@ -214,7 +214,7 @@ impl<C: Curve, TagType: Serialize, AttributeType: Attribute<C::Scalar>> Deserial
 }
 
 /// The different types of proofs, corresponding to the statements above.
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> +
 SerdeSerialize",

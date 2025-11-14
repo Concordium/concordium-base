@@ -5,6 +5,7 @@
 //! The r's are randomness in commitments to s_i's and s'.
 
 use super::common::*;
+use crate::random_oracle::StructuredDigest;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
@@ -56,7 +57,9 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
     type SecretData = ComLinSecret<C>;
 
     fn public(&self, ro: &mut RandomOracle) {
+        #[allow(deprecated)]
         ro.extend_from(b"us", self.us.iter());
+        #[allow(deprecated)]
         ro.extend_from(b"cmms", self.cmms.iter());
         ro.append_message(b"cmm", &self.cmm);
         ro.append_message(b"cmm_key", &self.cmm_key)

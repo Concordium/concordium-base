@@ -180,6 +180,14 @@ impl Deserial for num::rational::Ratio<u64> {
     }
 }
 
+impl Deserial for chrono::DateTime<chrono::Utc> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let millis: i64 = crate::common::Deserial::deserial(source)?;
+        chrono::DateTime::from_timestamp_millis(millis)
+            .context("convert timestamp to UTC date time")
+    }
+}
+
 /// Read a vector where the first 8 bytes are taken as length in big endian.
 impl<T: Deserial> Deserial for Vec<T> {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
@@ -479,6 +487,12 @@ impl Serial for num::rational::Ratio<u64> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         self.numer().serial(out);
         self.denom().serial(out);
+    }
+}
+
+impl Serial for chrono::DateTime<chrono::Utc> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        self.timestamp_millis().serial(out);
     }
 }
 

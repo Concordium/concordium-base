@@ -1,5 +1,11 @@
 ## Unreleased
 
+- Implemented new version of verifiable presentations in `web3id::v1` that includes account based and identity based credentials.
+  The primary types in the module are `PresentationV1` and `RequestV1`.
+- Implemented anchor model for the new version of verifiable presentations in `web3id::v1::anchor`.
+  The primary types in the module are `VerificationRequest`, `VerificationRequestData`, `VerificationRequestAnchor`,
+  `VerificationAuditRecord`, and `VerificationAuditRecord`.
+
 ## 9.0.0 (2025-10-29)
 
 - Changed `Debug` implementation of secret keys and cleartext values to not print the key or value.
@@ -8,6 +14,8 @@
 - Made `find_authorized_keys` public for easier re-use.
 - Changed value inside `AttributeKind` to be non-public since it has a length constraint. Implemented `AttributeKind::try_new`, `AsRef<str> for AttributeKind` and `From<AttributeKind> for String`
   to allow constructing and accessing values.
+- Introduced the trait `StructuredDigest` to add data to `RandomOracle` and other hashes
+- Removed the method `RandomOracle::add` and deprecated `RandomOracle::extend_from`
 - Added `Eq` and `PartialEq` instances for
   - `UpdateKeysThreshold`
   - `InclusiveRange<T>`

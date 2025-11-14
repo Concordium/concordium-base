@@ -4,6 +4,7 @@
 //! \prod_{i=1}^n g_i^{x_i}$ and $C_i = \bar{g}^{x_i} \bar{h}^{r_i}$ for $i\in
 //! I$.
 use super::common::*;
+use crate::random_oracle::StructuredDigest;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
@@ -59,6 +60,7 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
     fn public(&self, ro: &mut RandomOracle) {
         ro.append_message(b"C", &self.comm);
         ro.append_message(b"Cis", &self.comms);
+        #[allow(deprecated)]
         ro.extend_from(b"gis", &self.gis);
         ro.append_message(b"h", &self.h);
         ro.append_message("h_bar", &self.h_bar);

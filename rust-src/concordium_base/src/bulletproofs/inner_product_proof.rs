@@ -1,5 +1,6 @@
 //! Logarithmic sized inner product proof used as base for the other proofs in
 //! this crate
+use crate::random_oracle::StructuredDigest;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
@@ -7,7 +8,7 @@ use crate::{
 };
 
 /// Inner product proof
-#[derive(Clone, Serialize, Debug)]
+#[derive(Clone, Eq, PartialEq, Serialize, Debug)]
 pub struct InnerProductProof<C: Curve> {
     #[size_length = 4]
     pub lr_vec: Vec<(C, C)>,
