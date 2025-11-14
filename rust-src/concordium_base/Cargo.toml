@@ -146,3 +146,7 @@ harness = false
 [package.metadata.docs.rs]
 # Expose the `encryption` feature in documentation.
 features = ["encryption"]
+rustdoc-args = [
+    "--html-in-header",
+    "docs/assets/katex-header.html",
+]
