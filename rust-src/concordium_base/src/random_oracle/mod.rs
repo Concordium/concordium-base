@@ -201,9 +201,12 @@
 //!
 //! Notice that if you serialize an enum that implements [`Serial`],
 //! the variant discriminator will be serialized (check the [`Serial`] of the enum)
+
 use crate::{common::*, curve_arithmetic::Curve};
 use sha3::{Digest, Sha3_256};
-use std::io::Write;
+use std::convert::Infallible;
+use std::fmt::Arguments;
+use std::io::{IoSlice, Write};
 
 /// Transcript implementation V0. Implements [`TranscriptProtocol`]. See [`random_oracle`](self)
 /// and [`TranscriptProtocol`] for how to use it.
@@ -301,10 +304,6 @@ impl PartialEq for RandomOracle {
 /// implementation guarantees the message bytes are unique for the data. Notice that using [`Serial`]
 /// does not label types or fields in the nested data.
 pub trait TranscriptProtocol {
-    // /// Add raw message bytes directly to the transcript, without any length prepended.
-    // /// Should generally not be used directly, prefer using one of the other methods on the trait.
-    // fn add_raw_bytes(&mut self, data: impl AsRef<[u8]>);
-
     /// Add domain separating label to the digest. The label bytes will be prepended with the bytes length.
     fn append_label(&mut self, label: impl AsRef<[u8]>);
 
@@ -335,13 +334,11 @@ pub trait TranscriptProtocol {
 
     fn extract_challenge_scalar<C: Curve>(&mut self, label: impl AsRef<[u8]>) -> C::Scalar;
 
-    fn extract_raw_challenge(&mut self) -> Challenge;
+    fn extract_raw_challenge(&self) -> Challenge;
 }
 
 impl TranscriptProtocol for RandomOracle {
     fn append_label(&mut self, label: impl AsRef<[u8]>) {
-        let label = label.as_ref();
-        // self.put(&(label.len() as u64));
         self.0.update(label)
     }
 
@@ -376,7 +373,6 @@ impl TranscriptProtocol for RandomOracle {
         B::IntoIter: ExactSizeIterator,
     {
         self.append_label(label);
-        // self.put(&(items.len() as u64));
         for message in messages {
             append_item(self, message);
         }
@@ -386,7 +382,7 @@ impl TranscriptProtocol for RandomOracle {
         self.challenge_scalar::<C, _>(label)
     }
 
-    fn extract_raw_challenge(&mut self) -> Challenge {
+    fn extract_raw_challenge(&self) -> Challenge {
         self.split().get_challenge()
     }
 }
@@ -445,6 +441,116 @@ impl RandomOracle {
     pub fn challenge_scalar<C: Curve, B: AsRef<[u8]>>(&mut self, label: B) -> C::Scalar {
         self.add_bytes(label);
         self.split().result_to_scalar::<C>()
+    }
+}
+
+struct BufferAdapter<T>(T);
+
+impl<T: Write> Write for BufferAdapter<T> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.write(buf)
+    }
+
+    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> std::io::Result<usize> {
+        self.0.write_vectored(bufs)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.0.flush()
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        self.0.write_all(buf)
+    }
+
+    fn write_fmt(&mut self, args: Arguments<'_>) -> std::io::Result<()> {
+        self.0.write_fmt(args)
+    }
+}
+
+impl<T: Write> Buffer for BufferAdapter<T> {
+    type Result = Infallible;
+
+    fn start() -> Self {
+        unimplemented!()
+    }
+
+    fn result(self) -> Self::Result {
+        unimplemented!()
+    }
+}
+
+impl TranscriptProtocol for TranscriptV1 {
+    fn append_label(&mut self, label: impl AsRef<[u8]>) {
+        let label = label.as_ref();
+        BufferAdapter(&mut self.0).put(&(label.len() as u64));
+        self.0.update(label)
+    }
+
+    fn append_message(&mut self, label: impl AsRef<[u8]>, message: &impl Serial) {
+        self.append_label(label);
+        BufferAdapter(&mut self.0).put(message)
+    }
+
+    fn append_messages<'a, T: Serial + 'a, B: IntoIterator<Item = &'a T>>(
+        &mut self,
+        label: impl AsRef<[u8]>,
+        messages: B,
+    ) where
+        B::IntoIter: ExactSizeIterator,
+    {
+        let messages = messages.into_iter();
+        self.append_label(label);
+        BufferAdapter(&mut self.0).put(&(messages.len() as u64));
+        for message in messages {
+            BufferAdapter(&mut self.0).put(message);
+        }
+    }
+
+    fn append_final_prover_message(&mut self, label: impl AsRef<[u8]>, message: &impl Serial) {
+        self.append_message(label, message);
+    }
+
+    fn append_each_message<T, B: IntoIterator<Item = T>>(
+        &mut self,
+        label: impl AsRef<[u8]>,
+        messages: B,
+        mut append_item: impl FnMut(&mut Self, T),
+    ) where
+        B::IntoIter: ExactSizeIterator,
+    {
+        let messages = messages.into_iter();
+        self.append_label(label);
+        BufferAdapter(&mut self.0).put(&(messages.len() as u64));
+        for message in messages {
+            append_item(self, message);
+        }
+    }
+
+    fn extract_challenge_scalar<C: Curve>(&mut self, label: impl AsRef<[u8]>) -> C::Scalar {
+        self.append_label(label);
+        C::scalar_from_bytes(&self.extract_raw_challenge().challenge)
+    }
+
+    fn extract_raw_challenge(&self) -> Challenge {
+        Challenge {
+            challenge: self.0.clone().finalize().into(),
+        }
+    }
+}
+
+impl TranscriptV1 {
+    /// Start with the initial domain string.
+    pub fn with_domain(domain: impl AsRef<[u8]>) -> Self {
+        let mut transcript = TranscriptV1(Sha3_256::new());
+        transcript.append_label(domain);
+        transcript
+    }
+
+    /// Duplicate the transcript, creating a fresh copy of it.
+    /// Further updates are independent.
+    pub fn split(&self) -> Self {
+        TranscriptV1(self.0.clone())
     }
 }
 
@@ -514,7 +620,7 @@ mod tests {
     }
 
     /// Test that we don't accidentally change the digest produced
-    /// by [`TranscriptProtocol::add_bytes`]
+    /// by [`RandomOracle::add_bytes`]
     #[test]
     pub fn test_v0_add_bytes_stable() {
         let mut ro = RandomOracle::empty();
@@ -559,7 +665,7 @@ mod tests {
     /// by [`TranscriptProtocol::append_messages`] and [`RandomOracle::extend_from`]
     #[test]
     pub fn test_v0_append_messages_stable() {
-        // todo are copy to main
+        // todo ar copy to main
         let mut ro = RandomOracle::empty();
         ro.append_messages("Label1", &vec![1u8, 2, 3]);
 
@@ -594,7 +700,7 @@ mod tests {
     }
 
     /// Test that we don't accidentally change the scalar produced
-    /// by [`RandomOracle::challenge_scalar`]
+    /// by [`TranscriptProtocol::extract_challenge_scalar`]
     #[test]
     pub fn test_v0_extract_challenge_scalar_stable() {
         let mut ro = RandomOracle::empty();
@@ -628,7 +734,107 @@ mod tests {
         let challenge_hex = hex::encode(ro.get_challenge());
         assert_eq!(
             challenge_hex,
-            "891fd1754242e364a9eca7a15133403f3293ad330ce295cca0dd8347b94df7a8"
+            "90da7b2dc7bc9091be9201598ef0d8b43f8b00c53454822a2f8ce41c6a3f3d85"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`TranscriptV1::with_domain`]
+    #[test]
+    pub fn test_v1_with_domain_stable() {
+        let ro = TranscriptV1::with_domain("Domain1");
+
+        let challenge_hex = hex::encode(ro.extract_raw_challenge());
+        assert_eq!(
+            challenge_hex,
+            "5691f0658460c461ffe14baa70071545df78725892d0decfe6f6642233a0d8e2"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`TranscriptProtocol::append_label`]
+    #[test]
+    pub fn test_v1_append_label_stable() {
+        let mut ro = TranscriptV1::with_domain("Domain1");
+        ro.append_label([1u8, 2, 3]);
+
+        let challenge_hex = hex::encode(ro.extract_raw_challenge());
+        assert_eq!(
+            challenge_hex,
+            "683a300a44b3f9165f78dd9fd90efc9a632c11131ef5e805ff3505b5bf0cc7d2"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`TranscriptProtocol::append_message`]
+    #[test]
+    pub fn test_v1_append_message_stable() {
+        let mut ro = TranscriptV1::with_domain("Domain1");
+        ro.append_message("Label1", &vec![1u8, 2, 3]);
+
+        let challenge_hex = hex::encode(ro.extract_raw_challenge());
+        assert_eq!(
+            challenge_hex,
+            "5fb23e3d1cfb33d1b2e2da1c070c7a79056b00d13d642ee47fba542d4863a911"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`TranscriptProtocol::append_messages`]
+    #[test]
+    pub fn test_v1_append_messages_stable() {
+        let mut ro = TranscriptV1::with_domain("Domain1");
+        ro.append_messages("Label1", &vec![1u8, 2, 3]);
+
+        let challenge_hex = hex::encode(ro.extract_raw_challenge());
+        assert_eq!(
+            challenge_hex,
+            "5fb23e3d1cfb33d1b2e2da1c070c7a79056b00d13d642ee47fba542d4863a911"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`TranscriptProtocol::append_final_prover_message`]
+    #[test]
+    pub fn test_v1_append_final_prover_message_stable() {
+        let mut ro = TranscriptV1::with_domain("Domain1");
+        ro.append_final_prover_message("Label1", &vec![1u8, 2, 3]);
+
+        let challenge_hex = hex::encode(ro.extract_raw_challenge());
+        assert_eq!(
+            challenge_hex,
+            "5fb23e3d1cfb33d1b2e2da1c070c7a79056b00d13d642ee47fba542d4863a911"
+        );
+    }
+
+    /// Test that we don't accidentally change the scalar produced
+    /// by [`TranscriptProtocol::extract_challenge_scalar`]
+    #[test]
+    pub fn test_v1_extract_challenge_scalar_stable() {
+        let mut ro = TranscriptV1::with_domain("Domain1");
+
+        let scalar_hex = hex::encode(common::to_bytes(
+            &ro.split().extract_challenge_scalar::<ArCurve>("Scalar1"),
+        ));
+        assert_eq!(
+            scalar_hex,
+            "3efcc0fdddcc90a71a022212338ae1c6c7b102fdb9af6befd460d68561856ad9"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`TranscriptProtocol::append_message`]
+    #[test]
+    pub fn test_v1_append_each_message_stable() {
+        let mut ro = TranscriptV1::with_domain("Domain1");
+        ro.append_each_message("Label1", &vec![1u8, 2, 3], |ro, item| {
+            ro.append_message("Item", item)
+        });
+
+        let challenge_hex = hex::encode(ro.extract_raw_challenge());
+        assert_eq!(
+            challenge_hex,
+            "ffd0694d68003afd3751f33bbadd38ae26db78aa4e62ce4d53814b9676d6c7dd"
         );
     }
 }
