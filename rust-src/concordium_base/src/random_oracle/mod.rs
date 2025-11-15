@@ -25,9 +25,11 @@
 //! See <https://merlin.cool/use/duality.html>
 //!
 //! Part of a transcript protocol (see <https://merlin.cool/use/protocol.html>) is defining
-//! how protocol defined messages (often mathematical objects) are encoded to bytes and decodes from bytes.
+//! how messages of types defined by the protocol (often mathematical objects) are encoded to message bytes and how
+//! challenge bytes are decoded to challenges of types defined in the protocol (again mathematical objects). The latter must
+//! preserve uniform distribution in the challenge space.
 //! This is handled via [`TranscriptProtocol`] and largely uses the [`Serialize`](crate::common::Serialize)
-//! and [`Deserialize`](crate::common::Deserialize) implementations on the message types.
+//! and [`Deserialize`](crate::common::Deserialize) implementations on the message and challenge types.
 //!
 //! # Example: Ensuring proper domain separation
 //!
@@ -73,7 +75,7 @@
 //!
 //! Appending the transcript with either of above types by just adding each type's field values naively
 //! (meaning `hash([1u8, 2u8]`) would produce the same hashing result for both examples. To avoid this, the
-//! recommendation is to add the type name and its field names as labels for domain separation.
+//! recommendation is to add the type name as labels for domain separation.
 //!
 //! # Example: Adding struct data
 //!
@@ -172,7 +174,7 @@
 //! let vec = vec![Type1, Type1];
 //!
 //! let mut transcript = RandomOracle::empty();
-//! transcript.append_each("Collection", &vec, |transcript, item| {
+//! transcript.append_each_message("Collection", &vec, |transcript, item| {
 //!     append_type1(transcript, item);
 //! });
 //! ```
@@ -203,10 +205,23 @@ use crate::{common::*, curve_arithmetic::Curve};
 use sha3::{Digest, Sha3_256};
 use std::io::Write;
 
-/// State of the random oracle, used to incrementally build up the output. See [`random_oracle`](self).
+/// Transcript implementation V0. Implements [`TranscriptProtocol`]. See [`random_oracle`](self)
+/// and [`TranscriptProtocol`] for how to use it.
 #[repr(transparent)]
 #[derive(Debug)]
+#[cfg_attr(
+    not(test),
+    deprecated(
+        note = "Use TranscriptV1 which does proper length prefixing of labels and includes last prover message in transcript for proper sequential composition. Do not change existing protocols without changing their proof version since it will break compatability with existing proofs."
+    )
+)]
 pub struct RandomOracle(Sha3_256);
+
+/// Transcript implementation V1. Implements [`TranscriptProtocol`]. See [`random_oracle`](self)
+/// and [`TranscriptProtocol`] for how to use it.
+#[repr(transparent)]
+#[derive(Debug)]
+pub struct TranscriptV1(Sha3_256);
 
 /// Type of challenges computed from the random oracle.
 /// We use 32 byte output of SHA3-256
@@ -266,8 +281,17 @@ impl PartialEq for RandomOracle {
     }
 }
 
-/// Trait for digesting messages that encourages encoding the structure of the data into
-/// the message bytes. This is done e.g. by applying length prefixes for variable-length data and
+/// Transcript protocol that defines how messages and challenges are encoded to and
+/// decoded from bytes.
+/// The transcript protocol also encourages doing domain separation and labelling data,
+/// and helps handling structured data in the right way
+///
+/// This is largely done using the [`Serialize`](crate::common::Serialize)
+// //! and [`Deserialize`](crate::common::Deserialize) implementations on the message and challenge types.
+///
+/// See <https://merlin.cool/use/protocol.html> for a description of the concept of a transcript protocol.
+///
+/// This is done e.g. by applying length prefixes for variable-length data and
 /// prefixing variants with a discriminator.
 /// And by labelling types and fields for domain separation. Both are done to prevent malleability
 /// in the proofs where the oracle is used.
@@ -276,23 +300,52 @@ impl PartialEq for RandomOracle {
 /// bytes for variable-length types (including enums), since the corresponding [`Deserial`]
 /// implementation guarantees the message bytes are unique for the data. Notice that using [`Serial`]
 /// does not label types or fields in the nested data.
-pub trait TranscriptProtocol: Buffer {
-    /// Add raw message bytes to the state of the oracle. Should primarily be used to
-    /// append labels.
-    fn add_bytes(&mut self, data: impl AsRef<[u8]>);
+pub trait TranscriptProtocol {
+    // /// Add raw message bytes directly to the transcript, without any length prepended.
+    // /// Should generally not be used directly, prefer using one of the other methods on the trait.
+    // fn add_raw_bytes(&mut self, data: impl AsRef<[u8]>);
 
-    /// Append the given data as the message bytes produced by its [`Serial`] implementation to the state of the oracle.
+    /// Add domain separating label to the digest. The label bytes will be prepended with the bytes length.
+    fn append_label(&mut self, label: impl AsRef<[u8]>);
+
+    /// Append the given data as the message bytes produced by its [`Serial`] implementation to the transcript.
     /// The given label is appended first as domain separation. Notice that a slice, `Vec` and several other collections of
     /// items implementing [`Serial`] itself implements [`Serial`]. When serializing variable-length
     /// types or collection types, the length or size will be prepended in the serialization.
-    fn append_message(&mut self, label: impl AsRef<[u8]>, data: &impl Serial) {
-        self.add_bytes(label);
-        self.put(data)
-    }
+    fn append_message(&mut self, label: impl AsRef<[u8]>, data: &impl Serial);
+
+    fn append_final_prover_message(&mut self, label: impl AsRef<[u8]>, data: &impl Serial);
 
     /// Append the items in the given iterator using the `append_item` closure to the state of the oracle.
     /// The given label is appended first as domain separation followed by the length of the iterator.
-    fn append_each<T, B: IntoIterator<Item = T>>(
+    fn append_each_message<T, B: IntoIterator<Item = T>>(
+        &mut self,
+        label: &str,
+        items: B,
+        append_item: impl FnMut(&mut Self, T),
+    ) where
+        B::IntoIter: ExactSizeIterator;
+
+    fn extract_challenge_scalar<C: Curve>(&mut self, label: impl AsRef<[u8]>) -> C::Scalar;
+}
+
+impl TranscriptProtocol for RandomOracle {
+    fn append_label(&mut self, label: impl AsRef<[u8]>) {
+        let label = label.as_ref();
+        self.put(&(label.len() as u64));
+        self.0.update(label)
+    }
+
+    fn append_message(&mut self, label: impl AsRef<[u8]>, data: &impl Serial) {
+        self.append_label(label);
+        self.put(data)
+    }
+
+    fn append_final_prover_message(&mut self, _label: impl AsRef<[u8]>, _data: &impl Serial) {
+        // not added in V0
+    }
+
+    fn append_each_message<T, B: IntoIterator<Item = T>>(
         &mut self,
         label: &str,
         items: B,
@@ -301,29 +354,15 @@ pub trait TranscriptProtocol: Buffer {
         B::IntoIter: ExactSizeIterator,
     {
         let items = items.into_iter();
-        self.add_bytes(label);
+        self.append_label(label);
         self.put(&(items.len() as u64));
         for item in items {
             append_item(self, item);
         }
     }
-}
 
-impl TranscriptProtocol for RandomOracle {
-    fn add_bytes(&mut self, data: impl AsRef<[u8]>) {
-        self.0.update(data)
-    }
-}
-
-impl TranscriptProtocol for sha2::Sha256 {
-    fn add_bytes(&mut self, data: impl AsRef<[u8]>) {
-        self.update(data)
-    }
-}
-
-impl TranscriptProtocol for sha2::Sha512 {
-    fn add_bytes(&mut self, data: impl AsRef<[u8]>) {
-        self.update(data)
+    fn extract_challenge_scalar<C: Curve>(&mut self, label: impl AsRef<[u8]>) -> C::Scalar {
+        self.challenge_scalar::<C, _>(label)
     }
 }
 
@@ -344,12 +383,13 @@ impl RandomOracle {
         RandomOracle(self.0.clone())
     }
 
+    pub fn add_bytes<B: AsRef<[u8]>>(&mut self, data: B) {
+        self.0.update(data)
+    }
+
     /// Append all items from an iterator to the random oracle. Equivalent to
     /// repeatedly calling append in sequence.
     /// Returns the new state of the random oracle, consuming the initial state.
-    #[deprecated(
-        note = "Use RandomOracle::append_message (with a collection type) instead such that the number of elements is prepended. Do not change existing provers/verifiers since it will break compatability with existing proofs."
-    )]
     pub fn extend_from<'a, I, S, B: AsRef<[u8]>>(&mut self, label: B, iter: I)
     where
         S: Serial + 'a,
@@ -438,7 +478,7 @@ mod tests {
     /// Test that we don't accidentally change the digest produced
     /// by [`RandomOracle::domain`]
     #[test]
-    pub fn test_domain_stable() {
+    pub fn test_v0_domain_stable() {
         let ro = RandomOracle::domain("Domain1");
 
         let challenge_hex = hex::encode(ro.get_challenge());
@@ -451,7 +491,7 @@ mod tests {
     /// Test that we don't accidentally change the digest produced
     /// by [`TranscriptProtocol::add_bytes`]
     #[test]
-    pub fn test_add_bytes_stable() {
+    pub fn test_v0_add_bytes_stable() {
         let mut ro = RandomOracle::empty();
         ro.add_bytes([1u8, 2, 3]);
 
@@ -463,11 +503,39 @@ mod tests {
     }
 
     /// Test that we don't accidentally change the digest produced
+    /// by [`TranscriptProtocol::append_label`]
+    #[test]
+    pub fn test_v0_append_label_stable() {
+        let mut ro = RandomOracle::empty();
+        ro.append_label([1u8, 2, 3]);
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "fd1780a6fc9ee0dab26ceb4b3941ab03e66ccd970d1db91612c66df4515b0a0a"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
     /// by [`TranscriptProtocol::append_message`]
     #[test]
-    pub fn test_append_message_stable() {
+    pub fn test_v0_append_message_stable() {
         let mut ro = RandomOracle::empty();
         ro.append_message("Label1", &vec![1u8, 2, 3]);
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "3756eec6f9241f9a1cd8b401f54679cf9be2e057365728336221b1871ff666fb"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`TranscriptProtocol::append_final_prover_message`]
+    #[test]
+    pub fn test_v0_append_final_prover_message_stable() {
+        let mut ro = RandomOracle::empty();
+        ro.append_final_prover_message("Label1", &vec![1u8, 2, 3]);
 
         let challenge_hex = hex::encode(ro.get_challenge());
         assert_eq!(
@@ -479,11 +547,19 @@ mod tests {
     /// Test that we don't accidentally change the scalar produced
     /// by [`RandomOracle::challenge_scalar`]
     #[test]
-    pub fn test_challenge_scalar_stable() {
+    pub fn test_v0_extract_challenge_scalar_stable() {
         let mut ro = RandomOracle::empty();
 
         let scalar_hex = hex::encode(common::to_bytes(
-            &ro.challenge_scalar::<ArCurve, _>("Scalar1"),
+            &ro.split().extract_challenge_scalar::<ArCurve>("Scalar1"),
+        ));
+        assert_eq!(
+            scalar_hex,
+            "08646777f9c47efc863115861aa18d95653212c3bdf36899c7db46fbdae095cd"
+        );
+
+        let scalar_hex = hex::encode(common::to_bytes(
+            &ro.split().challenge_scalar::<ArCurve, _>("Scalar1"),
         ));
         assert_eq!(
             scalar_hex,
@@ -494,9 +570,9 @@ mod tests {
     /// Test that we don't accidentally change the digest produced
     /// by [`TranscriptProtocol::append_message`]
     #[test]
-    pub fn test_append_each_stable() {
+    pub fn test_v0_append_each_message_stable() {
         let mut ro = RandomOracle::empty();
-        ro.append_each("Label1", &vec![1u8, 2, 3], |ro, item| {
+        ro.append_each_message("Label1", &vec![1u8, 2, 3], |ro, item| {
             ro.append_message("Item", item)
         });
 

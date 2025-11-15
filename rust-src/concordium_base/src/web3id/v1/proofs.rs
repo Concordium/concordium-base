@@ -480,7 +480,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
 }
 
 fn append_context(digest: &mut impl TranscriptProtocol, context: &ContextInformation) {
-    digest.add_bytes("ConcordiumContextInformationV1");
+    digest.append_label("ConcordiumContextInformationV1");
     digest.append_message("given", &context.given);
     digest.append_message("requested", &context.requested);
 }
