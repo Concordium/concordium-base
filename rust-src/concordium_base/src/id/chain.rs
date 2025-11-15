@@ -1,6 +1,6 @@
 //! Functionality needed by the chain to verify credential deployments.
 use super::{secret_sharing::Threshold, types::*, utils};
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     bulletproofs::range_proof::verify_less_than_or_equal,
     common::{to_bytes, types::TransactionTime},

@@ -1,7 +1,7 @@
 //! Implementation of range proofs along the lines of bulletproofs
 pub use super::utils::Generators;
 use super::{inner_product_proof::*, utils::*};
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field, MultiExp, PrimeField, Value},

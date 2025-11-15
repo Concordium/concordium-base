@@ -9,7 +9,7 @@
 
 use super::{account_holder, types::*, utils};
 use crate::pedersen_commitment::{CommitmentKey, Randomness};
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::sigma_protocols::common::{
     AndAdapter, AndResponse, ReplicateAdapter, ReplicateResponse, SigmaProof,
 };

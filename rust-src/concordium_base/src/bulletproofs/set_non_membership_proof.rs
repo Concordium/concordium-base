@@ -1,6 +1,6 @@
 //! Implementation of set-non-membership proof along the lines of bulletproofs
 use super::{inner_product_proof::*, utils::*};
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field, MultiExp},

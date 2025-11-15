@@ -1,4 +1,4 @@
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     curve_arithmetic::Curve,
     id::types::{Attribute, GlobalContext},
@@ -479,7 +479,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
     }
 }
 
-fn append_context(digest: &mut impl StructuredDigest, context: &ContextInformation) {
+fn append_context(digest: &mut impl TranscriptProtocol, context: &ContextInformation) {
     digest.add_bytes("ConcordiumContextInformationV1");
     digest.append_message("given", &context.given);
     digest.append_message("requested", &context.requested);

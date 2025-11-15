@@ -4,7 +4,7 @@
 //! the value committed to in two commitments $C_1$ and $C_2$ in (potentially)
 //! two different groups (of the same order) is the same.
 use super::common::*;
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},

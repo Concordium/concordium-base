@@ -5,7 +5,7 @@
 //! The r's are randomness in commitments to s_i's and s'.
 
 use super::common::*;
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},

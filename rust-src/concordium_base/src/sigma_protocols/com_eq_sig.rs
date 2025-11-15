@@ -8,7 +8,7 @@
 //! "Proof of Knowledge of a Signature" Section 5.3.5, Bluepaper v1.2.5")
 
 use super::common::*;
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::*,

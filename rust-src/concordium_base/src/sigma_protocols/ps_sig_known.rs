@@ -22,7 +22,7 @@
 
 use crate::common::{Buffer, Deserial, Get, ParseResult, Put, Serial};
 use crate::curve_arithmetic::{Curve, Field, Pairing, Secret};
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::sigma_protocols::common::SigmaProtocol;
 use crate::{
     curve_arithmetic,

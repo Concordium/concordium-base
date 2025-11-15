@@ -5,7 +5,7 @@
 //! Pedersen commitment.
 
 use super::common::*;
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},

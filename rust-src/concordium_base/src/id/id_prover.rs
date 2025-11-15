@@ -2,7 +2,7 @@
 //! accounts.
 
 use super::{id_proof_types::*, types::*};
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     bulletproofs::{
         range_proof::{prove_in_range, RangeProof},

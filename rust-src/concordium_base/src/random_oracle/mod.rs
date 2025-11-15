@@ -1,24 +1,48 @@
-//! This module provides the random oracle replacement function needed in the
-//! sigma protocols, bulletproofs, and any other constructions. It is based on
-//! SHA3. It is used in non-interactive proofs and plays the same role as a random
-//! oracle would play in the corresponding interactive protocol (via
-//! Fiat–Shamir transformation).
+//! This module implements the transcript used in sigma protocols, bulletproofs, and other
+//! public-coin multi-round proof systems, that has undergone the Fiat-Shamir transformation.
+//! It plays the same role as a random oracle would play in the corresponding interactive protocol,
+//! hence the name of the present module and some of the types in the module.
 //!
-//! # Using the random oracle replacement
-//! [`RandomOracle`] instances should be initialized with at domain-separation
-//! string and passed to protocols by mutable borrow. Protocols should update
-//! the state of the [`RandomOracle`], allowing them to be sequentially
-//! composed.
+//! For background, see "9.3 Non-interactive Proofs using the Fiat-Shamir Transformation" in tbe blue paper.
+//! For understanding the general concepts and the considerations put into a transcript implementation,
+//! the Merlin transcript can be studied here: <https://merlin.cool/index.html> (implemented at <https://github.com/dalek-cryptography/merlin>).
 //!
-//! The [`RandomOracle`] instance used to verify a proof needs to be initialised
-//! with the context used to produce the proof. Any verification of sub-proofs
+//! # Using the transcript
+//! Transcript instances should be initialized with at domain-separation
+//! string that defines the particular protocol. See <https://merlin.cool/use/passing.html#domain-separation>.
+//!
+//! For each proof, protocols should update the state of the transcript with public input
+//! and implicit public values, and each message send by prover, including the final message
+//! send by the prover. Proofs can be be sequentially composed, see <https://merlin.cool/use/passing.html#sequential-composition>.
+//! It is specifically because of sequential composition, that it is important that also the final message send by the prover is added to the transcript.
+//!
+//! Verifier messages (the challenges) in the proof should be extracted from the transcript instance.
+//! It is in this extraction, that the transcript plays the role of a random oracle. todo ar replace with trait
+//!
+//! The transcript instance used to verify a proof needs to be initialised and updated
+//! with the same input used to produce the proof. Any verification of sub-proofs
 //! needs to be performed in the same order as when producing the proof.
+//! See <https://merlin.cool/use/duality.html>
 //!
-//! The [`RandomOracle`] instance should be used to append bytes to its internal state.
-//! After adding data, call [`RandomOracle::get_challenge`] to consume/hash the bytes
-//! and produce a random challenge.
+//! Part of a transcript protocol (see <https://merlin.cool/use/protocol.html>) is defining
+//! how protocol defined messages (often mathematical objects) are encoded to bytes and decodes from bytes.
+//! This is handled via [`TranscriptProtocol`] and largely uses the [`Serialize`](crate::common::Serialize)
+//! and [`Deserialize`](crate::common::Deserialize) implementations on the message types.
 //!
-//! For background, the Merlin transcript can also be studied here: <https://merlin.cool/index.html> (implemented at <https://github.com/dalek-cryptography/merlin>).
+//! # Example: Ensuring proper domain separation
+//!
+//! The transcript should be initialized with a domain separating string. Further branches in the code
+//! or nested proofs should also be labelled for domain separation.
+//!
+//! ```
+//! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
+//! let mut transcript = RandomOracle::with_domain("Proof of something");
+//! // ...
+//! transcript.append_label("Subproof1");
+//! // ...
+//! transcript.append_label("Branch1");
+//! // ...
+//!```
 //!
 //! # Caution: Type ambiguity without domain separation
 //! Special care is required when adding bytes to domain separate them with labels.
@@ -47,7 +71,7 @@
 //! };
 //! ```
 //!
-//! Appending the [`RandomOracle`] with either of above types by just adding each type's field values naively
+//! Appending the transcript with either of above types by just adding each type's field values naively
 //! (meaning `hash([1u8, 2u8]`) would produce the same hashing result for both examples. To avoid this, the
 //! recommendation is to add the type name and its field names as labels for domain separation.
 //!
@@ -98,7 +122,7 @@
 //! };
 //! ```
 //!
-//! Appending the [`RandomOracle`] with each field label and value naively
+//! Appending the transcript with each field label and value naively
 //! (meaning `hash("field_1" + "field_2" + "field_2")`) would produce
 //! the same hashing result for both examples. To avoid this,
 //! prepend the length of the variable-length data.
@@ -111,8 +135,8 @@
 //!
 //! Serialization of variable-length primitives like `String` will prepend the length.
 //!
-//! ```
-//! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
+//!```
+//! # use concordium_base::random_oracle::{TranscriptProtocol, RandomOracle};
 //!
 //! let mut transcript = RandomOracle::empty();
 //! let string = "abc".to_string();
@@ -124,8 +148,8 @@
 //!
 //! Serialization of collections like `Vec` will prepend the size of the collection.
 //!
-//! ```
-//! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
+//!```
+//! # use concordium_base::random_oracle::{TranscriptProtocol, RandomOracle};
 //!
 //! let mut transcript = RandomOracle::empty();
 //! let collection = vec![2,3,4];
@@ -136,12 +160,12 @@
 //!
 //! Digesting a variable number of items without relying on `Serial` implementation on the items:
 //!
-//! ```
-//! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
+//!```
+//! # use concordium_base::random_oracle::{TranscriptProtocol, RandomOracle};
 //!
 //! struct Type1;
 //!
-//! fn append_type1(transcript: &mut impl StructuredDigest, val: &Type1) {
+//! fn append_type1(transcript: &mut impl TranscriptProtocol, val: &Type1) {
 //!     // digest Type1
 //! }
 //!
@@ -158,8 +182,8 @@
 //! If you add an enum manually to the transcript add the variant name
 //! to the transcript followed by the variant data.
 //!
-//! ```
-//! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
+//!```
+//! # use concordium_base::random_oracle::{TranscriptProtocol, RandomOracle};
 //!
 //! enum Enum1 {
 //!     Variant_0,
@@ -252,7 +276,7 @@ impl PartialEq for RandomOracle {
 /// bytes for variable-length types (including enums), since the corresponding [`Deserial`]
 /// implementation guarantees the message bytes are unique for the data. Notice that using [`Serial`]
 /// does not label types or fields in the nested data.
-pub trait StructuredDigest: Buffer {
+pub trait TranscriptProtocol: Buffer {
     /// Add raw message bytes to the state of the oracle. Should primarily be used to
     /// append labels.
     fn add_bytes(&mut self, data: impl AsRef<[u8]>);
@@ -285,19 +309,19 @@ pub trait StructuredDigest: Buffer {
     }
 }
 
-impl StructuredDigest for RandomOracle {
+impl TranscriptProtocol for RandomOracle {
     fn add_bytes(&mut self, data: impl AsRef<[u8]>) {
         self.0.update(data)
     }
 }
 
-impl StructuredDigest for sha2::Sha256 {
+impl TranscriptProtocol for sha2::Sha256 {
     fn add_bytes(&mut self, data: impl AsRef<[u8]>) {
         self.update(data)
     }
 }
 
-impl StructuredDigest for sha2::Sha512 {
+impl TranscriptProtocol for sha2::Sha512 {
     fn add_bytes(&mut self, data: impl AsRef<[u8]>) {
         self.update(data)
     }
@@ -425,7 +449,7 @@ mod tests {
     }
 
     /// Test that we don't accidentally change the digest produced
-    /// by [`StructuredDigest::add_bytes`]
+    /// by [`TranscriptProtocol::add_bytes`]
     #[test]
     pub fn test_add_bytes_stable() {
         let mut ro = RandomOracle::empty();
@@ -439,7 +463,7 @@ mod tests {
     }
 
     /// Test that we don't accidentally change the digest produced
-    /// by [`StructuredDigest::append_message`]
+    /// by [`TranscriptProtocol::append_message`]
     #[test]
     pub fn test_append_message_stable() {
         let mut ro = RandomOracle::empty();
@@ -468,7 +492,7 @@ mod tests {
     }
 
     /// Test that we don't accidentally change the digest produced
-    /// by [`StructuredDigest::append_message`]
+    /// by [`TranscriptProtocol::append_message`]
     #[test]
     pub fn test_append_each_stable() {
         let mut ro = RandomOracle::empty();

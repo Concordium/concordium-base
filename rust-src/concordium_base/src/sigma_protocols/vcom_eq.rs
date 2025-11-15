@@ -4,7 +4,7 @@
 //! \prod_{i=1}^n g_i^{x_i}$ and $C_i = \bar{g}^{x_i} \bar{h}^{r_i}$ for $i\in
 //! I$.
 use super::common::*;
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},

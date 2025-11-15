@@ -3,7 +3,7 @@
 //! v1.2.5) which enables one to prove knowledge of the discrete logarithm
 //! without revealing it.
 use super::common::*;
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{Curve, Field, Value},
