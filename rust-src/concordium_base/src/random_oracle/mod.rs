@@ -285,6 +285,7 @@ impl PartialEq for RandomOracle {
     }
 }
 
+// todo ar finish doc
 /// Transcript protocol that defines how messages and challenges are encoded to and
 /// decoded from bytes.
 /// The transcript protocol also encourages doing domain separation and labelling data,
@@ -314,6 +315,7 @@ pub trait TranscriptProtocol {
     /// types or collection types, the length or size will be prepended in the serialization.
     fn append_message(&mut self, label: impl AsRef<[u8]>, message: &impl Serial);
 
+    // todo ar finish doc
     fn append_messages<'a, T: Serial + 'a, B: IntoIterator<Item = &'a T>>(
         &mut self,
         label: impl AsRef<[u8]>,
@@ -321,6 +323,7 @@ pub trait TranscriptProtocol {
     ) where
         B::IntoIter: ExactSizeIterator;
 
+    // todo ar finish doc
     fn append_final_prover_message(&mut self, label: impl AsRef<[u8]>, message: &impl Serial);
 
     /// Append the items in the given iterator using the `append_item` closure to the state of the oracle.
@@ -333,8 +336,10 @@ pub trait TranscriptProtocol {
     ) where
         B::IntoIter: ExactSizeIterator;
 
+    // todo ar finish doc
     fn extract_challenge_scalar<C: Curve>(&mut self, label: impl AsRef<[u8]>) -> C::Scalar;
 
+    // todo ar finish doc
     fn extract_raw_challenge(&self) -> Challenge;
 }
 
