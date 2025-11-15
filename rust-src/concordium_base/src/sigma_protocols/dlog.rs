@@ -7,7 +7,7 @@ use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{Curve, Field, Value},
-    random_oracle::{Challenge, RandomOracle},
+    random_oracle::{Challenge},
 };
 
 pub struct Dlog<C: Curve> {
@@ -105,6 +105,7 @@ mod tests {
 
     use super::*;
     use ark_bls12_381::G1Projective;
+    use crate::random_oracle::RandomOracle;
 
     type G1 = ArkGroup<G1Projective>;
 

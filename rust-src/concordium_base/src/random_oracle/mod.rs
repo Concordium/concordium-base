@@ -314,7 +314,7 @@ pub trait TranscriptProtocol {
     /// types or collection types, the length or size will be prepended in the serialization.
     fn append_message(&mut self, label: impl AsRef<[u8]>, message: &impl Serial);
 
-    fn append_messages<'a, T: Serial + 'a,B: IntoIterator<Item = &'a T>>(
+    fn append_messages<'a, T: Serial + 'a, B: IntoIterator<Item = &'a T>>(
         &mut self,
         label: impl AsRef<[u8]>,
         messages: B,
@@ -552,6 +552,30 @@ mod tests {
         assert_eq!(
             challenge_hex,
             "3756eec6f9241f9a1cd8b401f54679cf9be2e057365728336221b1871ff666fb"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`TranscriptProtocol::append_messages`] and [`RandomOracle::extend_from`]
+    #[test]
+    pub fn test_v0_append_messages_stable() {
+        // todo are copy to main
+        let mut ro = RandomOracle::empty();
+        ro.append_messages("Label1", &vec![1u8, 2, 3]);
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "6b1addb1c08e887242f5e78127c31c17851f29349c45aa415adce255f95fd292"
+        );
+
+        let mut ro = RandomOracle::empty();
+        ro.extend_from("Label1", &vec![1u8, 2, 3]);
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "6b1addb1c08e887242f5e78127c31c17851f29349c45aa415adce255f95fd292"
         );
     }
 

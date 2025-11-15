@@ -14,7 +14,7 @@ use crate::{
     curve_arithmetic::*,
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
     ps_sig::{BlindedSignature, BlindingRandomness, PublicKey as PsSigPublicKey},
-    random_oracle::RandomOracle,
+
 };
 use itertools::izip;
 use rand::*;
@@ -304,6 +304,7 @@ mod tests {
         curve_arithmetic::arkworks_instances::ArkGroup,
         ps_sig::{SecretKey as PsSigSecretKey, Signature},
     };
+    use crate::random_oracle::RandomOracle;
 
     type G1 = ArkGroup<G1Projective>;
     type Bls12 = ark_ec::models::bls12::Bls12<ark_bls12_381::Config>;

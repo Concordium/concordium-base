@@ -10,7 +10,7 @@ use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
-    random_oracle::{Challenge, RandomOracle},
+    random_oracle::{Challenge},
 };
 use itertools::izip;
 
@@ -224,6 +224,7 @@ mod tests {
     use crate::curve_arithmetic::PrimeField;
     use rand::thread_rng;
     use std::str::FromStr;
+    use crate::random_oracle::RandomOracle;
 
     type G1 = ArCurve;
     type Fr = BaseField;

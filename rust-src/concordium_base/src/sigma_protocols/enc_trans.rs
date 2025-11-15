@@ -59,7 +59,7 @@ use crate::{
     elgamal::ChunkSize,
     encrypted_transfers::types::CHUNK_SIZE,
     pedersen_commitment::{Randomness as PedersenRandomness, Value},
-    random_oracle::{Challenge, RandomOracle},
+    random_oracle::{Challenge},
 };
 use itertools::izip;
 use std::rc::Rc;
@@ -183,8 +183,8 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
 
     fn public(&self, ro: &mut impl TranscriptProtocol) {
         self.elg_dec.public(ro);
-        self.encexp1.iter().for_each(|p| p.public(ro));
-        self.encexp2.iter().for_each(|p| p.public(ro));
+        ro.append_each_message(&[], &self.encexp1, |ro, p| p.public(ro));
+        ro.append_each_message(&[], &self.encexp2, |ro, p| p.public(ro));
         self.dlog.public(ro)
     }
 
@@ -371,6 +371,7 @@ mod tests {
     };
     use ark_bls12_381::G1Projective;
     use rand::Rng;
+    use crate::random_oracle::RandomOracle;
 
     type G1 = ArkGroup<G1Projective>;
 

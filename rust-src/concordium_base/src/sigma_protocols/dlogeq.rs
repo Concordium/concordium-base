@@ -4,15 +4,15 @@
 //! NB: This module is not used by the rest of the project and is only here for
 //! demonstration purposes.
 //! If it becomes necessary to use it, the code needs to be thoroughly reviewed.
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     curve_arithmetic::Curve,
-    random_oracle::{Challenge, RandomOracle},
+    random_oracle::{Challenge},
     sigma_protocols::{
         common::*,
         dlog::{Response as DlogResponse, *},
     },
 };
-use crate::random_oracle::TranscriptProtocol;
 
 struct DlogEqual<C: Curve> {
     dlog1: Dlog<C>,
@@ -86,6 +86,7 @@ mod test {
     use rand::*;
 
     use std::str::FromStr;
+    use crate::random_oracle::RandomOracle;
 
     type G1 = ArCurve;
     type Fr = BaseField;

@@ -12,7 +12,7 @@ use crate::{
         types::{GlobalContext, VerifyKey},
     },
     pedersen_commitment::{Randomness, Value},
-    random_oracle::RandomOracle,
+
 };
 use concordium_contracts_common::AccountAddress;
 pub use concordium_contracts_common::{
@@ -29,6 +29,7 @@ use std::{
     str::FromStr,
 };
 use thiserror::Error;
+use crate::random_oracle::RandomOracle;
 
 /// An equivalence class of account addresses. Two account addresses are
 /// equivalent if they are aliases of each other.

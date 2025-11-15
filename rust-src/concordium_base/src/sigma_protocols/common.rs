@@ -216,7 +216,7 @@ impl<P: SigmaProtocol> SigmaProtocol for ReplicateAdapter<P> {
 
     fn public(&self, ro: &mut impl TranscriptProtocol) {
         // add all public data in sequence from left to right
-        self.protocols.iter().for_each(|p| p.public(ro))
+        ro.append_each_message(&[], &self.protocols, |ro, p| p.public(ro));
     }
 
     fn compute_commit_message<R: rand::Rng>(

@@ -13,7 +13,7 @@ use crate::{
         Cipher as ElGamalCipher, PublicKey as ElGamalPublicKey, Randomness as ElgamalRandomness,
     },
     pedersen_commitment::{Commitment, CommitmentKey, Randomness as PedersenRandomness, Value},
-    random_oracle::RandomOracle,
+
 };
 use rand::*;
 
@@ -207,6 +207,7 @@ mod tests {
     use super::*;
     use crate::elgamal::{Message, SecretKey as ElgamalSecretKey};
     use ark_bls12_381::G1Projective;
+    use crate::random_oracle::RandomOracle;
 
     type G1 = ArkGroup<G1Projective>;
 

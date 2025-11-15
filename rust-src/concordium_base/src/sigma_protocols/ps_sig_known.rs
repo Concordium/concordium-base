@@ -29,7 +29,7 @@ use crate::{
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
     ps_sig,
     ps_sig::BlindedSignature,
-    random_oracle::RandomOracle,
+
 };
 use byteorder::ReadBytesExt;
 use concordium_base_derive::Serialize;
@@ -441,6 +441,7 @@ mod tests {
     type G1 = ArkGroup<G1Projective>;
     type Bls12 = ark_ec::models::bls12::Bls12<ark_bls12_381::Config>;
     use crate::ps_sig::{SigRetrievalRandomness, UnknownMessage};
+    use crate::random_oracle::RandomOracle;
     use crate::sigma_protocols::common::SigmaProof;
 
     #[derive(Debug, Clone, Copy)]

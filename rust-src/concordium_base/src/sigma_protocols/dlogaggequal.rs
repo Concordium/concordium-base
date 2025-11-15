@@ -6,15 +6,15 @@
 //! This module is currently not used, and is only here as a reference.
 //! When using the code needs to be thoroughly reviewed.
 
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
-    random_oracle::{Challenge, RandomOracle},
+    random_oracle::{Challenge},
     sigma_protocols::{aggregate_dlog::*, common::*, dlog::*},
 };
 use itertools::izip;
 use std::rc::Rc;
-use crate::random_oracle::TranscriptProtocol;
 
 pub struct DlogAndAggregateDlogsEqual<C: Curve> {
     pub dlog: Dlog<C>,
@@ -37,7 +37,7 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
     type SecretData = (Rc<C::Scalar>, Vec<Vec<Rc<C::Scalar>>>);
 
     fn public(&self, ro: &mut impl TranscriptProtocol) {
-        self.aggregate_dlogs.iter().for_each(|p| p.public(ro));
+        ro.append_each_message(&[], &self.aggregate_dlogs, |ro, p| p.public(ro));
         self.dlog.public(ro)
     }
 
@@ -154,6 +154,7 @@ mod test {
     };
     use rand::*;
     use std::str::FromStr;
+    use crate::random_oracle::RandomOracle;
 
     type G1 = ArCurve;
     type Fr = BaseField;

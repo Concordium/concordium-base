@@ -9,7 +9,7 @@ use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
-    random_oracle::{Challenge, RandomOracle},
+    random_oracle::{Challenge},
 };
 use itertools::izip;
 use std::rc::Rc;
@@ -125,6 +125,7 @@ mod tests {
     use super::*;
     use ark_bls12_381::G1Projective;
     use rand::{thread_rng, Rng};
+    use crate::random_oracle::RandomOracle;
 
     type G1 = ArkGroup<G1Projective>;
 

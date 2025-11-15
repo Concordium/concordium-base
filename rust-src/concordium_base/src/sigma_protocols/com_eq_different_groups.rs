@@ -9,7 +9,7 @@ use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
-    random_oracle::RandomOracle,
+
 };
 use rand::*;
 
@@ -168,6 +168,7 @@ mod tests {
 
     use super::*;
     use ark_bls12_381::{G1Projective, G2Projective};
+    use crate::random_oracle::RandomOracle;
 
     type G1 = ArkGroup<G1Projective>;
     type G2 = ArkGroup<G2Projective>;
