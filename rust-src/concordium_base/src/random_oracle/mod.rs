@@ -332,7 +332,7 @@ pub trait TranscriptProtocol {
 impl TranscriptProtocol for RandomOracle {
     fn append_label(&mut self, label: impl AsRef<[u8]>) {
         let label = label.as_ref();
-        self.put(&(label.len() as u64));
+        // self.put(&(label.len() as u64));
         self.0.update(label)
     }
 
@@ -540,7 +540,7 @@ mod tests {
         let challenge_hex = hex::encode(ro.get_challenge());
         assert_eq!(
             challenge_hex,
-            "3756eec6f9241f9a1cd8b401f54679cf9be2e057365728336221b1871ff666fb"
+            "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a"
         );
     }
 
