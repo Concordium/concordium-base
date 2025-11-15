@@ -6,7 +6,6 @@ use crate::{
     curve_arithmetic::{multiexp, Curve, Field, MultiExp},
     id::id_proof_types::ProofVersion,
     pedersen_commitment::*,
-    random_oracle::RandomOracle,
 };
 use rand::*;
 use std::{convert::TryInto, iter::once};
@@ -90,7 +89,7 @@ fn a_L_a_R<F: Field>(v: &F, set_slice: &[F]) -> Option<(Vec<F>, Vec<F>)> {
 #[allow(non_snake_case, clippy::too_many_arguments)]
 pub fn prove<C: Curve, R: Rng>(
     version: ProofVersion,
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     csprng: &mut R,
     the_set: &[C::Scalar],
     v: C::Scalar,
@@ -100,7 +99,7 @@ pub fn prove<C: Curve, R: Rng>(
 ) -> Result<SetMembershipProof<C>, ProverError> {
     // Part 0: Add public inputs to transcript
     // Domain separation
-    transcript.add_bytes(b"SetMembershipProof");
+    transcript.append_label(b"SetMembershipProof");
 
     // Pad set if not power of two
     let mut set_vec = the_set.to_vec();
@@ -178,8 +177,8 @@ pub fn prove<C: Curve, R: Rng>(
 
     // Part 2: Computation of vector polynomials l(x),r(x)
     // get challenges y,z from transcript
-    let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
-    let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
+    let y: C::Scalar = transcript.extract_challenge_scalar::<C>(b"y");
+    let z: C::Scalar = transcript.extract_challenge_scalar::<C>(b"z");
 
     // y_n = (1,y,..,y^(n-1))
     let y_n = z_vec(y, 0, n);
@@ -262,7 +261,7 @@ pub fn prove<C: Curve, R: Rng>(
 
     // Part 4: Evaluate l(.), r(.), and t(.) at challenge point x
     // get challenge x from transcript
-    let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
+    let x: C::Scalar = transcript.extract_challenge_scalar::<C>(b"x");
     let mut x_sq = x;
     x_sq.mul_assign(&x);
     // Compute l(x) and r(x)
@@ -311,7 +310,7 @@ pub fn prove<C: Curve, R: Rng>(
 
     // Part 5: Inner product proof for tx = <lx,rx>
     // get challenge w from transcript
-    let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
+    let w: C::Scalar = transcript.extract_challenge_scalar::<C>(b"w");
     // get generator q
     let Q = B.mul_by_scalar(&w);
     // compute scalars c such that c*H = H', that is H_prime_scalars = (1, y^-1,..,
@@ -372,7 +371,7 @@ pub enum VerificationError {
 #[allow(non_snake_case)]
 pub fn verify<C: Curve>(
     version: ProofVersion,
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     the_set: &[C::Scalar],
     V: &Commitment<C>,
     proof: &SetMembershipProof<C>,
@@ -391,7 +390,7 @@ pub fn verify<C: Curve>(
     let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().take(n).cloned().unzip();
 
     // Domain separation
-    transcript.add_bytes(b"SetMembershipProof");
+    transcript.append_label(b"SetMembershipProof");
     if version >= ProofVersion::Version2 {
         // Explicitly add generators and commitment keys to the transcript
         transcript.append_message(b"G", &G);
@@ -410,8 +409,8 @@ pub fn verify<C: Curve>(
     transcript.append_message(b"S", &S);
 
     // get challenges y,z from transcript
-    let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
-    let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
+    let y: C::Scalar = transcript.extract_challenge_scalar::<C>(b"y");
+    let z: C::Scalar = transcript.extract_challenge_scalar::<C>(b"z");
 
     // define the commitments T1, T2
     let T_1 = proof.T_1;
@@ -421,7 +420,7 @@ pub fn verify<C: Curve>(
     transcript.append_message(b"T2", &T_2);
 
     // get challenge x (evaluation point) from transcript
-    let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
+    let x: C::Scalar = transcript.extract_challenge_scalar::<C>(b"x");
 
     // define polynomial evaluation value
     let tx = proof.tx;
@@ -434,7 +433,7 @@ pub fn verify<C: Curve>(
     transcript.append_message(b"e_tilde", &e_tilde);
 
     // get challenge w from transcript
-    let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
+    let w: C::Scalar = transcript.extract_challenge_scalar::<C>(b"w");
 
     // compute delta(y,z) = z^3 (1 - zn - <1,s>) + (z - z^2) (<1,y^n>)
     // first compute helper values
@@ -567,6 +566,7 @@ mod tests {
     use crate::curve_arithmetic::arkworks_instances::ArkGroup;
 
     use super::*;
+    use crate::random_oracle::RandomOracle;
     use ark_bls12_381::G1Projective;
 
     type SomeCurve = ArkGroup<G1Projective>;

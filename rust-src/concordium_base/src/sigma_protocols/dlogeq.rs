@@ -7,7 +7,7 @@
 use crate::random_oracle::TranscriptProtocol;
 use crate::{
     curve_arithmetic::Curve,
-    random_oracle::{Challenge},
+    random_oracle::Challenge,
     sigma_protocols::{
         common::*,
         dlog::{Response as DlogResponse, *},
@@ -85,8 +85,8 @@ mod test {
     };
     use rand::*;
 
-    use std::str::FromStr;
     use crate::random_oracle::RandomOracle;
+    use std::str::FromStr;
 
     type G1 = ArCurve;
     type Fr = BaseField;

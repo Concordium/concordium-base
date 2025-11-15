@@ -9,7 +9,7 @@ use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
     pedersen_commitment::{Commitment, Value},
-    random_oracle::{Challenge},
+    random_oracle::Challenge,
 };
 use itertools::izip;
 use std::collections::BTreeMap;
@@ -224,9 +224,9 @@ mod tests {
     use crate::curve_arithmetic::arkworks_instances::ArkGroup;
 
     use super::*;
+    use crate::random_oracle::RandomOracle;
     use ark_bls12_381::G1Projective;
     use rand::{thread_rng, Rng};
-    use crate::random_oracle::RandomOracle;
 
     type G1 = ArkGroup<G1Projective>;
 

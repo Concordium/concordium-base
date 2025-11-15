@@ -29,7 +29,6 @@ use crate::{
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
     ps_sig,
     ps_sig::BlindedSignature,
-
 };
 use byteorder::ReadBytesExt;
 use concordium_base_derive::Serialize;

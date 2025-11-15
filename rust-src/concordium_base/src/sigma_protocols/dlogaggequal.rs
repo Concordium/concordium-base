@@ -10,7 +10,7 @@ use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
-    random_oracle::{Challenge},
+    random_oracle::Challenge,
     sigma_protocols::{aggregate_dlog::*, common::*, dlog::*},
 };
 use itertools::izip;
@@ -148,13 +148,13 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::random_oracle::RandomOracle;
     use crate::{
         curve_arithmetic::multiexp,
         id::constants::{ArCurve, BaseField},
     };
     use rand::*;
     use std::str::FromStr;
-    use crate::random_oracle::RandomOracle;
 
     type G1 = ArCurve;
     type Fr = BaseField;

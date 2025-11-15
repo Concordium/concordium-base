@@ -212,12 +212,13 @@ use std::io::{IoSlice, Write};
 /// and [`TranscriptProtocol`] for how to use it.
 #[repr(transparent)]
 #[derive(Debug)]
-#[cfg_attr(
-    not(test),
-    deprecated(
-        note = "Use TranscriptV1 which does proper length prefixing of labels and includes last prover message in transcript for proper sequential composition. Do not change existing protocols without changing their proof version since it will break compatability with existing proofs."
-    )
-)]
+// todo ar deprecate
+// #[cfg_attr(
+//     not(test),
+//     deprecated(
+//         note = "Use TranscriptV1 which does proper length prefixing of labels and includes last prover message in transcript for proper sequential composition. Do not change existing protocols without changing their proof version since it will break compatability with existing proofs."
+//     )
+// )]
 pub struct RandomOracle(Sha3_256);
 
 /// Transcript implementation V1. Implements [`TranscriptProtocol`]. See [`random_oracle`](self)
@@ -529,7 +530,7 @@ impl TranscriptProtocol for TranscriptV1 {
 
     fn extract_challenge_scalar<C: Curve>(&mut self, label: impl AsRef<[u8]>) -> C::Scalar {
         self.append_label(label);
-        C::scalar_from_bytes(&self.extract_raw_challenge().challenge)
+        C::scalar_from_bytes(self.extract_raw_challenge().challenge)
     }
 
     fn extract_raw_challenge(&self) -> Challenge {
@@ -703,7 +704,7 @@ mod tests {
     /// by [`TranscriptProtocol::extract_challenge_scalar`]
     #[test]
     pub fn test_v0_extract_challenge_scalar_stable() {
-        let mut ro = RandomOracle::empty();
+        let ro = RandomOracle::empty();
 
         let scalar_hex = hex::encode(common::to_bytes(
             &ro.split().extract_challenge_scalar::<ArCurve>("Scalar1"),
@@ -811,7 +812,7 @@ mod tests {
     /// by [`TranscriptProtocol::extract_challenge_scalar`]
     #[test]
     pub fn test_v1_extract_challenge_scalar_stable() {
-        let mut ro = TranscriptV1::with_domain("Domain1");
+        let ro = TranscriptV1::with_domain("Domain1");
 
         let scalar_hex = hex::encode(common::to_bytes(
             &ro.split().extract_challenge_scalar::<ArCurve>("Scalar1"),
