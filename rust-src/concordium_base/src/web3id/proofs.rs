@@ -1,4 +1,4 @@
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     curve_arithmetic::Curve,
     id::types::{Attribute, GlobalContext},

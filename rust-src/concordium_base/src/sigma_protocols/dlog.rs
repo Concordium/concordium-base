@@ -3,11 +3,11 @@
 //! v1.2.5) which enables one to prove knowledge of the discrete logarithm
 //! without revealing it.
 use super::common::*;
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{Curve, Field, Value},
-    random_oracle::{Challenge, RandomOracle},
+    random_oracle::Challenge,
 };
 
 pub struct Dlog<C: Curve> {
@@ -38,7 +38,7 @@ impl<C: Curve> SigmaProtocol for Dlog<C> {
     type Response = Response<C>;
     type SecretData = DlogSecret<C>;
 
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         ro.append_message("public", &self.public);
         ro.append_message("coeff", &self.coeff)
     }
@@ -104,6 +104,7 @@ mod tests {
     use crate::curve_arithmetic::arkworks_instances::ArkGroup;
 
     use super::*;
+    use crate::random_oracle::RandomOracle;
     use ark_bls12_381::G1Projective;
 
     type G1 = ArkGroup<G1Projective>;

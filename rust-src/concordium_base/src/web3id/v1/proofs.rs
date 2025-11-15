@@ -1,8 +1,7 @@
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::{TranscriptProtocol, TranscriptV1};
 use crate::{
     curve_arithmetic::Curve,
     id::types::{Attribute, GlobalContext},
-    random_oracle::RandomOracle,
 };
 use itertools::Itertools;
 use std::collections::BTreeMap;
@@ -56,9 +55,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         global_context: &GlobalContext<C>,
         verification_material: impl ExactSizeIterator<Item = &'a CredentialVerificationMaterial<P, C>>,
     ) -> Result<RequestV1<C, AttributeType>, VerifyError> {
-        let mut transcript = RandomOracle::domain("ConcordiumVerifiablePresentationV1");
+        let mut transcript = TranscriptV1::with_domain("ConcordiumVerifiablePresentationV1");
         append_context(&mut transcript, &self.presentation_context);
-        transcript.append_message(b"ctx", &global_context);
+        transcript.append_message("GlobalContext", &global_context);
 
         let mut request = RequestV1 {
             challenge: self.presentation_context.clone(),
@@ -73,7 +72,14 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             .zip(&self.verifiable_credentials)
             .enumerate()
         {
-            request.subject_claims.push(credential.claims());
+            let mut transcript = transcript.split();
+
+            let claims = credential.claims();
+
+            // Append claims to prove to transcript.
+            transcript.append_message("SubjectClaims", &claims);
+
+            request.subject_claims.push(claims);
 
             if !credential.verify(global_context, &mut transcript, verification_material) {
                 return Err(VerifyError::InvalidCredential(i));
@@ -92,7 +98,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     fn verify(
         &self,
         global: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         verification_material: &CredentialVerificationMaterial<P, C>,
     ) -> bool {
         match self {
@@ -111,7 +117,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
     fn verify<P: Pairing<ScalarField = C::Scalar>>(
         &self,
         global_context: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         verification_material: &CredentialVerificationMaterial<P, C>,
     ) -> bool {
         let CredentialVerificationMaterial::Account(AccountCredentialVerificationMaterial {
@@ -139,7 +145,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     fn verify(
         &self,
         global_context: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         verification_material: &CredentialVerificationMaterial<P, C>,
     ) -> bool {
         let CredentialVerificationMaterial::Identity(IdentityCredentialVerificationMaterial {
@@ -207,12 +213,17 @@ fn verify_statements<
     AttributeType: Attribute<C::Scalar> + 'a,
     TagType: Ord + crate::common::Serialize + 'a,
 >(
-    statements: impl IntoIterator<Item = &'a AtomicStatement<C, TagType, AttributeType>>,
-    proofs: impl IntoIterator<Item = &'a AtomicProof<C, AttributeType>>,
+    statements: &[AtomicStatement<C, TagType, AttributeType>],
+    proofs: &[AtomicProof<C, AttributeType>],
     cmm_attributes: &BTreeMap<TagType, Commitment<C>>,
     global_context: &GlobalContext<C>,
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
 ) -> bool {
+    // Appends statements to transcript. Notice this implicitly
+    // appends the number of statements also, preparing the variable
+    // number of proofs in the following loop.
+    transcript.append_messages("SubjectStatements", statements);
+
     statements.into_iter().zip_longest(proofs).all(|elm| {
         elm.both().map_or(false, |(statement, proof)| {
             statement.verify(
@@ -231,7 +242,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
     fn prove<P: Pairing<ScalarField = C::Scalar>>(
         self,
         global_context: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
         private_input: CredentialProofPrivateInputs<P, C, AttributeType>,
@@ -244,6 +255,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
         else {
             return Err(ProveError::PrivateInputsMismatch);
         };
+
+        // todo ar add issue to transcript?
 
         let statement_proofs = prove_statements(
             &self.statements,
@@ -275,7 +288,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
     fn prove<P: Pairing<ScalarField = C::Scalar>>(
         self,
         global_context: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
         private_input: CredentialProofPrivateInputs<P, C, AttributeType>,
@@ -364,13 +377,18 @@ fn prove_statements<
     AttributeType: Attribute<C::Scalar> + 'a,
     TagType: Ord + crate::common::Serialize + 'a,
 >(
-    statements: impl IntoIterator<Item = &'a AtomicStatement<C, TagType, AttributeType>>,
+    statements: &[AtomicStatement<C, TagType, AttributeType>],
     attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
     attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
     global_context: &GlobalContext<C>,
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     csprng: &mut (impl Rng + CryptoRng),
 ) -> Result<Vec<AtomicProof<C, AttributeType>>, ProveError> {
+    // Appends statements to transcript. Notice this implicitly
+    // appends the number of statements also, preparing the variable
+    // number of proofs in the following loop.
+    transcript.append_messages("SubjectStatements", statements);
+
     statements
         .into_iter()
         .map(|statement| {
@@ -392,7 +410,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> SubjectClaims<C, AttributeTy
     fn prove<P: Pairing<ScalarField = C::Scalar>>(
         self,
         global_context: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         csprng: &mut (impl Rng + CryptoRng),
         now: chrono::DateTime<chrono::Utc>,
         private_input: CredentialProofPrivateInputs<P, C, AttributeType>,
@@ -446,15 +464,23 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
         AttributeType: 'a,
     {
         let mut verifiable_credentials = Vec::with_capacity(private_inputs.len());
-        let mut transcript = RandomOracle::domain("ConcordiumVerifiablePresentationV1");
+        let mut transcript = TranscriptV1::with_domain("ConcordiumVerifiablePresentationV1");
         append_context(&mut transcript, &self.challenge);
-        transcript.append_message(b"ctx", &global_context);
+        transcript.append_message("GlobalContext", &global_context);
 
         if self.subject_claims.len() != private_inputs.len() {
             return Err(ProveError::PrivateInputsMismatch);
         }
         for (subject_claims, private_inputs) in self.subject_claims.into_iter().zip(private_inputs)
         {
+            // todo ar are we sure we want proofs to be 100% independent?
+            let mut transcript = transcript.split();
+
+            // Append claims to prove to transcript.
+            transcript.append_message("SubjectClaims", &subject_claims);
+
+            // todo ar what about rest of credential (e.g. identity provider) and "now"
+
             let credential = subject_claims.prove(
                 global_context,
                 &mut transcript,
@@ -479,8 +505,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
     }
 }
 
-fn append_context(digest: &mut impl StructuredDigest, context: &ContextInformation) {
-    digest.add_bytes("ConcordiumContextInformationV1");
+fn append_context(digest: &mut impl TranscriptProtocol, context: &ContextInformation) {
+    digest.append_label("ConcordiumContextInformationV1");
     digest.append_message("given", &context.given);
     digest.append_message("requested", &context.requested);
 }
