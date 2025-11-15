@@ -12,13 +12,12 @@ use crate::bulletproofs::{
 };
 
 use super::id_proof_types::*;
-use crate::random_oracle::TranscriptProtocol;
+use crate::random_oracle::{RandomOracle, TranscriptProtocol};
 use crate::{
     curve_arithmetic::{Curve, Field},
     pedersen_commitment::{
         Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
     },
-    random_oracle::RandomOracle,
     sigma_protocols::{common::verify as sigma_verify, dlog::Dlog},
 };
 use sha2::{Digest, Sha256};
@@ -55,7 +54,7 @@ pub fn verify_attribute<C: Curve, AttributeType: Attribute<C::Scalar>>(
 #[allow(clippy::too_many_arguments)]
 pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     version: ProofVersion,
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     keys: &PedersenKey<C>,
     gens: &Generators<C>,
     lower: &AttributeType,
@@ -80,7 +79,7 @@ pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
             )
         }
         ProofVersion::Version2 => {
-            transcript.add_bytes(b"AttributeRangeProof");
+            transcript.append_label(b"AttributeRangeProof");
             transcript.append_message(b"a", &a);
             transcript.append_message(b"b", &b);
             verify_in_range(
@@ -162,7 +161,7 @@ impl<
         &self,
         version: ProofVersion,
         global: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         cmm_attributes: &BTreeMap<Q, Commitment<C>>,
         proof: &AtomicProof<C, AttributeType>,
     ) -> bool {
@@ -178,7 +177,7 @@ impl<
                     // There is a commitment to the relevant attribute. We can then check the
                     // proof.
                     let x = attribute.to_field_element();
-                    transcript.add_bytes(b"RevealAttributeDlogProof");
+                    transcript.append_label(b"RevealAttributeDlogProof");
                     // x is known to the verifier and should go into the transcript
                     transcript.append_message(b"x", &x);
                     if version >= ProofVersion::Version2 {

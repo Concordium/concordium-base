@@ -20,7 +20,6 @@ use crate::{
         Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
     },
     ps_sig,
-    random_oracle::RandomOracle,
     sigma_protocols,
     sigma_protocols::com_enc_eq,
 };
@@ -53,7 +52,7 @@ pub fn prove_identity_attributes<
     id_object_use_data: &IdObjectUseData<P, C>,
     attributes_handling: &BTreeMap<AttributeTag, IdentityAttributeHandling>,
     csprng: &mut (impl Rng + CryptoRng),
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
 ) -> anyhow::Result<(
     IdentityAttributesCredentialsInfo<P, C, AttributeType>,
     IdentityAttributesCredentialsRandomness<C>,
@@ -183,9 +182,9 @@ pub fn prove_identity_attributes<
     // IdentityAttributesCommitmentValues struct.
     // This should make the proof non-reusable.
     // We should add the genesis hash also at some point
-    transcript.add_bytes(b"IdentityAttributesCredentials");
-    transcript.append_message(b"identity_attribute_values", &id_attribute_values);
-    transcript.append_message(b"global_context", &global_context);
+    transcript.append_label("IdentityAttributesCredentials");
+    transcript.append_message("IdentityAttributeValues", &id_attribute_values);
+    transcript.append_message("GlobalContext", &global_context);
 
     let proof = sigma_protocols::common::prove(transcript, &prover, witness, csprng)
         .context("cannot produce zero knowledge proof")?;
@@ -401,7 +400,7 @@ pub fn verify_identity_attributes<
     global_context: &GlobalContext<C>,
     ip_context: IpContextOnly<'_, P, C>,
     id_attr_info: &IdentityAttributesCredentialsInfo<P, C, AttributeType>,
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
 ) -> Result<(), AttributeCommitmentVerificationError> {
     if ip_context.ip_info.ip_identity != id_attr_info.values.ip_identity {
         return Err(AttributeCommitmentVerificationError::Signature);
@@ -415,9 +414,9 @@ pub fn verify_identity_attributes<
     }
 
     // Compute the challenge prefix by hashing the values.
-    transcript.add_bytes(b"IdentityAttributesCredentials");
-    transcript.append_message(b"identity_attribute_values", &id_attr_info.values);
-    transcript.append_message(b"global_context", &global_context);
+    transcript.append_label("IdentityAttributesCredentials");
+    transcript.append_message("IdentityAttributeValues", &id_attr_info.values);
+    transcript.append_message("GlobalContext", &global_context);
 
     let verifier_sig = signature_knowledge_verifier(
         &global_context.on_chain_commitment_key,
