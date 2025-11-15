@@ -215,12 +215,17 @@ fn verify_statements<
     AttributeType: Attribute<C::Scalar> + 'a,
     TagType: Ord + crate::common::Serialize + 'a,
 >(
-    statements: impl IntoIterator<Item = &'a AtomicStatement<C, TagType, AttributeType>>,
-    proofs: impl IntoIterator<Item = &'a AtomicProof<C, AttributeType>>,
+    statements: &[AtomicStatement<C, TagType, AttributeType>],
+    proofs: &[AtomicProof<C, AttributeType>],
     cmm_attributes: &BTreeMap<TagType, Commitment<C>>,
     global_context: &GlobalContext<C>,
     transcript: &mut impl TranscriptProtocol,
 ) -> bool {
+    // Appends statements to transcript. Notice this implicitly
+    // appends the number of statements also, preparing the variable
+    // number of proofs in the following loop.
+    transcript.append_messages("SubjectStatements", statements);
+
     statements.into_iter().zip_longest(proofs).all(|elm| {
         elm.both().map_or(false, |(statement, proof)| {
             statement.verify(
@@ -372,13 +377,18 @@ fn prove_statements<
     AttributeType: Attribute<C::Scalar> + 'a,
     TagType: Ord + crate::common::Serialize + 'a,
 >(
-    statements: impl IntoIterator<Item = &'a AtomicStatement<C, TagType, AttributeType>>,
+    statements: &[AtomicStatement<C, TagType, AttributeType>],
     attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
     attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
     global_context: &GlobalContext<C>,
     transcript: &mut impl TranscriptProtocol,
     csprng: &mut (impl Rng + CryptoRng),
 ) -> Result<Vec<AtomicProof<C, AttributeType>>, ProveError> {
+    // Appends statements to transcript. Notice this implicitly
+    // appends the number of statements also, preparing the variable
+    // number of proofs in the following loop.
+    transcript.append_messages("SubjectStatements", statements);
+
     statements
         .into_iter()
         .map(|statement| {

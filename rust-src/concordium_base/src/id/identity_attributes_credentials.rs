@@ -19,8 +19,7 @@ use crate::{
     pedersen_commitment::{
         Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
     },
-    ps_sig,
-    sigma_protocols,
+    ps_sig, sigma_protocols,
     sigma_protocols::com_enc_eq,
 };
 use anyhow::Context;

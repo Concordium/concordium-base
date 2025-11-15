@@ -122,7 +122,10 @@ pub struct ContextProperty {
 /// Claims about a single account based subject. Accounts are on-chain credentials
 /// deployed from identity credentials.
 #[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
-pub struct AccountBasedSubjectClaims<C: Curve, AttributeType: Attribute<C::Scalar> + common::Serialize> {
+pub struct AccountBasedSubjectClaims<
+    C: Curve,
+    AttributeType: Attribute<C::Scalar> + common::Serialize,
+> {
     /// Network on which the account exists
     pub network: Network,
     /// Account registration id
@@ -137,7 +140,10 @@ pub struct AccountBasedSubjectClaims<C: Curve, AttributeType: Attribute<C::Scala
 /// credentials will contain and ephemeral id [`IdentityCredentialEphemeralId`] that can be decrypted
 /// by the privacy guardians to IdCredPub, which is an identifier for the identity credentials.
 #[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
-pub struct IdentityBasedSubjectClaims<C: Curve, AttributeType: Attribute<C::Scalar> + common::Serialize> {
+pub struct IdentityBasedSubjectClaims<
+    C: Curve,
+    AttributeType: Attribute<C::Scalar> + common::Serialize,
+> {
     /// Network to which the identity credentials are issued
     pub network: Network,
     /// Identity provider which issued the credentials
@@ -157,7 +163,9 @@ pub enum SubjectClaims<C: Curve, AttributeType: Attribute<C::Scalar>> {
     Identity(IdentityBasedSubjectClaims<C, AttributeType>),
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar> + common::Serial> common::Serial for SubjectClaims<C, AttributeType> {
+impl<C: Curve, AttributeType: Attribute<C::Scalar> + common::Serial> common::Serial
+    for SubjectClaims<C, AttributeType>
+{
     fn serial<B: Buffer>(&self, out: &mut B) {
         match self {
             Self::Account(claims) => {
@@ -172,23 +180,24 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + common::Serial> common::Ser
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar> + common::Deserial> common::Deserial for SubjectClaims<C, AttributeType> {
+impl<C: Curve, AttributeType: Attribute<C::Scalar> + common::Deserial> common::Deserial
+    for SubjectClaims<C, AttributeType>
+{
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let tag: u8 = source.get()?;
         Ok(match tag {
             0 => {
                 let claims = source.get()?;
                 Self::Account(claims)
-            },
+            }
             1 => {
                 let claims = source.get()?;
                 Self::Identity(claims)
-            },
+            }
             _ => bail!("unsupported SubjectClaims: {}", tag),
         })
     }
 }
-
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
     for SubjectClaims<C, AttributeType>
