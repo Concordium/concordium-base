@@ -28,8 +28,8 @@
 //! how messages of types defined by the protocol (often mathematical objects) are encoded to message bytes and how
 //! challenge bytes are decoded to challenges of types defined in the protocol (again mathematical objects). The latter must
 //! preserve uniform distribution in the challenge space.
-//! This is handled via [`TranscriptProtocol`] and largely uses the [`Serialize`](crate::common::Serialize)
-//! and [`Deserialize`](crate::common::Deserialize) implementations on the message and challenge types.
+//! This is handled via [`TranscriptProtocol`] and largely uses the [`Serial`]
+//! and [`Deserial`] implementations on the message and challenge types.
 //!
 //! # Example: Ensuring proper domain separation
 //!
@@ -37,8 +37,8 @@
 //! or nested proofs should also be labelled for domain separation.
 //!
 //! ```
-//! # use concordium_base::random_oracle::{StructuredDigest, RandomOracle};
-//! let mut transcript = RandomOracle::with_domain("Proof of something");
+//! # use concordium_base::random_oracle::{TranscriptProtocol, TranscriptV1};
+//! let mut transcript = TranscriptV1::with_domain("Proof of something");
 //! // ...
 //! transcript.append_label("Subproof1");
 //! // ...
@@ -138,12 +138,11 @@
 //! Serialization of variable-length primitives like `String` will prepend the length.
 //!
 //!```
-//! # use concordium_base::random_oracle::{TranscriptProtocol, RandomOracle};
-//!
-//! let mut transcript = RandomOracle::empty();
+//! # use concordium_base::random_oracle::{TranscriptProtocol, TranscriptV1};
+//! let mut transcript = TranscriptV1::with_domain("Proof of something");
 //! let string = "abc".to_string();
 //! // The serialization implementation of the `String` type prepends the length of the field values.
-//! transcript.append_message(b"String1", &string);
+//! transcript.append_message("String1", &string);
 //! ```
 //!
 //! # Example: Adding collections of data using `Serial`
@@ -151,11 +150,10 @@
 //! Serialization of collections like `Vec` will prepend the size of the collection.
 //!
 //!```
-//! # use concordium_base::random_oracle::{TranscriptProtocol, RandomOracle};
-//!
-//! let mut transcript = RandomOracle::empty();
+//! # use concordium_base::random_oracle::{TranscriptProtocol, TranscriptV1};
+//! let mut transcript = TranscriptV1::with_domain("Proof of something");
 //! let collection = vec![2,3,4];
-//! transcript.append_message(b"Collection1", &collection);
+//! transcript.append_message("Collection1", &collection);
 //! ```
 //!
 //! # Example: Adding variable number of items
@@ -163,7 +161,7 @@
 //! Digesting a variable number of items without relying on `Serial` implementation on the items:
 //!
 //!```
-//! # use concordium_base::random_oracle::{TranscriptProtocol, RandomOracle};
+//! # use concordium_base::random_oracle::{TranscriptProtocol, TranscriptV1};
 //!
 //! struct Type1;
 //!
@@ -173,7 +171,7 @@
 //!
 //! let vec = vec![Type1, Type1];
 //!
-//! let mut transcript = RandomOracle::empty();
+//! let mut transcript = TranscriptV1::with_domain("Proof of something");
 //! transcript.append_each_message("Collection", &vec, |transcript, item| {
 //!     append_type1(transcript, item);
 //! });
@@ -185,17 +183,17 @@
 //! to the transcript followed by the variant data.
 //!
 //!```
-//! # use concordium_base::random_oracle::{TranscriptProtocol, RandomOracle};
+//! # use concordium_base::random_oracle::{TranscriptProtocol, TranscriptV1};
 //!
 //! enum Enum1 {
 //!     Variant_0,
 //!     Variant_1
 //! }
 //!
-//! let mut transcript = RandomOracle::empty();
+//! let mut transcript = TranscriptV1::with_domain("Proof of something");
 //!
-//! transcript.add_bytes(b"Enum1");
-//! transcript.add_bytes(b"Variant_0");
+//! transcript.append_label("Enum1");
+//! transcript.append_label("Variant_0");
 //! // add data from Variant_0
 //! ```
 //!
@@ -212,7 +210,7 @@ use std::io::{IoSlice, Write};
 /// and [`TranscriptProtocol`] for how to use it.
 #[repr(transparent)]
 #[derive(Debug)]
-// todo ar deprecate
+// todo ar deprecate?
 // #[cfg_attr(
 //     not(test),
 //     deprecated(
@@ -291,8 +289,8 @@ impl PartialEq for RandomOracle {
 /// The transcript protocol also encourages doing domain separation and labelling data,
 /// and helps handling structured data in the right way
 ///
-/// This is largely done using the [`Serialize`](crate::common::Serialize)
-// //! and [`Deserialize`](crate::common::Deserialize) implementations on the message and challenge types.
+/// This is largely done using the [`Serial`]
+/// and [`Deserial`] implementations on the message and challenge types.
 ///
 /// See <https://merlin.cool/use/protocol.html> for a description of the concept of a transcript protocol.
 ///
