@@ -68,8 +68,6 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             return Err(VerifyError::VeficationMaterialMismatch);
         }
 
-        // todo ar are we sure we want proofs to be 100% independent?
-
         for (i, (verification_material, credential)) in verification_material
             .zip(&self.verifiable_credentials)
             .enumerate()
@@ -257,6 +255,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
         else {
             return Err(ProveError::PrivateInputsMismatch);
         };
+
+        // todo ar add issue to transcript?
 
         let statement_proofs = prove_statements(
             &self.statements,
@@ -473,10 +473,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
         }
         for (subject_claims, private_inputs) in self.subject_claims.into_iter().zip(private_inputs)
         {
+            // todo ar are we sure we want proofs to be 100% independent?
             let mut transcript = transcript.split();
 
             // Append claims to prove to transcript.
             transcript.append_message("SubjectClaims", &subject_claims);
+
+            // todo ar what about rest of credential (e.g. identity provider) and "now"
 
             let credential = subject_claims.prove(
                 global_context,
