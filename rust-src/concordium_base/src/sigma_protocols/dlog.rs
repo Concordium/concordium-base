@@ -38,7 +38,7 @@ impl<C: Curve> SigmaProtocol for Dlog<C> {
     type Response = Response<C>;
     type SecretData = DlogSecret<C>;
 
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         ro.append_message("public", &self.public);
         ro.append_message("coeff", &self.coeff)
     }

@@ -76,10 +76,9 @@ pub struct ElgDec<C: Curve> {
 }
 
 impl<C: Curve> ElgDec<C> {
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         ro.append_message(b"public", &self.public);
-        #[allow(deprecated)]
-        ro.extend_from(b"coeff", &self.coeff)
+        ro.append_messages(b"coeff", &self.coeff)
     }
 }
 
@@ -182,7 +181,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
     type Response = EncTransResponse<C>;
     type SecretData = EncTransSecret<C>;
 
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         self.elg_dec.public(ro);
         self.encexp1.iter().for_each(|p| p.public(ro));
         self.encexp2.iter().for_each(|p| p.public(ro));

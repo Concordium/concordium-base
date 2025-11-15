@@ -62,7 +62,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     type SecretData = ComEncEqSecret<C>;
 
     #[inline]
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         ro.append_message("cipher", &self.cipher);
         ro.append_message("commitment", &self.commitment);
         ro.append_message("pub_key", &self.pub_key);

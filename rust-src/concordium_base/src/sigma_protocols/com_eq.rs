@@ -60,7 +60,7 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
     type Response = Response<C>;
     type SecretData = ComEqSecret<D>;
 
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         ro.append_message("commitment", &self.commitment);
         ro.append_message("y", &self.y);
         ro.append_message("cmm_key", &self.cmm_key);

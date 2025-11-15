@@ -38,10 +38,9 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
     type Response = Response<C>;
     type SecretData = Vec<Rc<C::Scalar>>;
 
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         ro.append_message(b"public", &self.public);
-        #[allow(deprecated)]
-        ro.extend_from(b"coeff", &self.coeff)
+        ro.append_messages(b"coeff", &self.coeff)
     }
 
     fn compute_commit_message<R: rand::Rng>(

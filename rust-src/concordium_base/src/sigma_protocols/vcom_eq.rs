@@ -57,11 +57,10 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
     type Response = Response<C>;
     type SecretData = (Vec<C::Scalar>, Value<C>, BTreeMap<IndexType, Value<C>>);
 
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         ro.append_message(b"C", &self.comm);
         ro.append_message(b"Cis", &self.comms);
-        #[allow(deprecated)]
-        ro.extend_from(b"gis", &self.gis);
+        ro.append_messages(b"gis", &self.gis);
         ro.append_message(b"h", &self.h);
         ro.append_message("h_bar", &self.h_bar);
         ro.append_message("g_bar", &self.g_bar)

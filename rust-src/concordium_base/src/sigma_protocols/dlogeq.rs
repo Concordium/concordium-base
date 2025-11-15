@@ -12,6 +12,7 @@ use crate::{
         dlog::{Response as DlogResponse, *},
     },
 };
+use crate::random_oracle::TranscriptProtocol;
 
 struct DlogEqual<C: Curve> {
     dlog1: Dlog<C>,
@@ -25,7 +26,7 @@ impl<C: Curve> SigmaProtocol for DlogEqual<C> {
     type Response = DlogResponse<C>;
     type SecretData = DlogSecret<C>;
 
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         self.dlog1.public(ro);
         self.dlog2.public(ro)
     }

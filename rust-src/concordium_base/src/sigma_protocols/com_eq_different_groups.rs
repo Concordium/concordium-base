@@ -46,7 +46,7 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
     type SecretData = ComEqDiffGroupsSecret<C1, C2>;
 
     #[inline]
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         ro.append_message("commitment_1", &self.commitment_1);
         ro.append_message("commitment_2", &self.commitment_2);
         ro.append_message("cmm_key_1", &self.cmm_key_1);

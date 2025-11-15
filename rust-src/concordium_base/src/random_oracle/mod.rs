@@ -312,21 +312,30 @@ pub trait TranscriptProtocol {
     /// The given label is appended first as domain separation. Notice that a slice, `Vec` and several other collections of
     /// items implementing [`Serial`] itself implements [`Serial`]. When serializing variable-length
     /// types or collection types, the length or size will be prepended in the serialization.
-    fn append_message(&mut self, label: impl AsRef<[u8]>, data: &impl Serial);
+    fn append_message(&mut self, label: impl AsRef<[u8]>, message: &impl Serial);
 
-    fn append_final_prover_message(&mut self, label: impl AsRef<[u8]>, data: &impl Serial);
+    fn append_messages<'a, T: Serial + 'a,B: IntoIterator<Item = &'a T>>(
+        &mut self,
+        label: impl AsRef<[u8]>,
+        messages: B,
+    ) where
+        B::IntoIter: ExactSizeIterator;
+
+    fn append_final_prover_message(&mut self, label: impl AsRef<[u8]>, message: &impl Serial);
 
     /// Append the items in the given iterator using the `append_item` closure to the state of the oracle.
     /// The given label is appended first as domain separation followed by the length of the iterator.
     fn append_each_message<T, B: IntoIterator<Item = T>>(
         &mut self,
-        label: &str,
-        items: B,
+        label: impl AsRef<[u8]>,
+        messages: B,
         append_item: impl FnMut(&mut Self, T),
     ) where
         B::IntoIter: ExactSizeIterator;
 
     fn extract_challenge_scalar<C: Curve>(&mut self, label: impl AsRef<[u8]>) -> C::Scalar;
+
+    fn extract_raw_challenge(&mut self) -> Challenge;
 }
 
 impl TranscriptProtocol for RandomOracle {
@@ -336,33 +345,49 @@ impl TranscriptProtocol for RandomOracle {
         self.0.update(label)
     }
 
-    fn append_message(&mut self, label: impl AsRef<[u8]>, data: &impl Serial) {
+    fn append_message(&mut self, label: impl AsRef<[u8]>, message: &impl Serial) {
         self.append_label(label);
-        self.put(data)
+        self.put(message)
     }
 
-    fn append_final_prover_message(&mut self, _label: impl AsRef<[u8]>, _data: &impl Serial) {
+    fn append_messages<'a, T: Serial + 'a, B: IntoIterator<Item = &'a T>>(
+        &mut self,
+        label: impl AsRef<[u8]>,
+        messages: B,
+    ) where
+        B::IntoIter: ExactSizeIterator,
+    {
+        self.append_label(label);
+        for message in messages {
+            self.put(message);
+        }
+    }
+
+    fn append_final_prover_message(&mut self, _label: impl AsRef<[u8]>, _message: &impl Serial) {
         // not added in V0
     }
 
     fn append_each_message<T, B: IntoIterator<Item = T>>(
         &mut self,
-        label: &str,
-        items: B,
+        label: impl AsRef<[u8]>,
+        messages: B,
         mut append_item: impl FnMut(&mut Self, T),
     ) where
         B::IntoIter: ExactSizeIterator,
     {
-        let items = items.into_iter();
         self.append_label(label);
-        self.put(&(items.len() as u64));
-        for item in items {
-            append_item(self, item);
+        // self.put(&(items.len() as u64));
+        for message in messages {
+            append_item(self, message);
         }
     }
 
     fn extract_challenge_scalar<C: Curve>(&mut self, label: impl AsRef<[u8]>) -> C::Scalar {
         self.challenge_scalar::<C, _>(label)
+    }
+
+    fn extract_raw_challenge(&mut self) -> Challenge {
+        self.split().get_challenge()
     }
 }
 

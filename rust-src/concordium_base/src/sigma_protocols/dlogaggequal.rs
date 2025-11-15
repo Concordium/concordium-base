@@ -14,6 +14,7 @@ use crate::{
 };
 use itertools::izip;
 use std::rc::Rc;
+use crate::random_oracle::TranscriptProtocol;
 
 pub struct DlogAndAggregateDlogsEqual<C: Curve> {
     pub dlog: Dlog<C>,
@@ -35,7 +36,7 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
     type Response = Response<C>;
     type SecretData = (Rc<C::Scalar>, Vec<Vec<Rc<C::Scalar>>>);
 
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         self.aggregate_dlogs.iter().for_each(|p| p.public(ro));
         self.dlog.public(ro)
     }

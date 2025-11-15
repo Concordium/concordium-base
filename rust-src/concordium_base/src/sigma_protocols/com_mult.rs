@@ -46,9 +46,8 @@ impl<C: Curve> SigmaProtocol for ComMult<C> {
     type SecretData = ComMultSecret<C>;
 
     #[inline]
-    fn public(&self, ro: &mut RandomOracle) {
-        #[allow(deprecated)]
-        ro.extend_from(b"cmms", self.cmms.iter());
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
+        ro.append_messages(b"cmms", self.cmms.iter());
         ro.append_message(b"cmm_key", &self.cmm_key)
     }
 

@@ -64,10 +64,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
     type SecretData = ComEqSigSecret<P, C>;
 
     #[inline]
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         ro.append_message(b"blinded_sig", &self.blinded_sig);
-        #[allow(deprecated)]
-        ro.extend_from(b"commitments", self.commitments.iter());
+        ro.append_messages(b"commitments", self.commitments.iter());
         ro.append_message(b"ps_pub_key", &self.ps_pub_key);
         ro.append_message(b"comm_key", &self.comm_key)
     }
