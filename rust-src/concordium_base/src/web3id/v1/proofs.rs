@@ -55,7 +55,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         global_context: &GlobalContext<C>,
         verification_material: impl ExactSizeIterator<Item = &'a CredentialVerificationMaterial<P, C>>,
     ) -> Result<RequestV1<C, AttributeType>, VerifyError> {
-        let mut transcript = TranscriptV1::with_domain("ConcordiumVerifiablePresentationV1");
+        let mut transcript = TranscriptV1::with_domain("ConcordiumVerifiableCredentialV1");
         append_context(&mut transcript, &self.presentation_context);
         transcript.append_message("GlobalContext", &global_context);
 
@@ -74,9 +74,15 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         {
             let mut transcript = transcript.split();
 
+            transcript.append_message("ProofVersion", &credential.proof_version());
+            transcript.append_message("CreationTime", &credential.created());
+
             let claims = credential.claims();
 
-            // Append claims to prove to transcript.
+            // Append claims to prove to transcript. Notice that this adds,
+            // among other things, the following to the transcript:
+            // * domain separator for the type of credential (account, identity)
+            // * all statements to prove, including a variable length prefix for the number of statements
             transcript.append_message("SubjectClaims", &claims);
 
             request.subject_claims.push(claims);
@@ -127,6 +133,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
             // mismatch in types
             return false;
         };
+
+        // Append values that are not part of claims
+        transcript.append_message("IdentityProvider", &self.issuer);
 
         verify_statements(
             &self.subject.statements,
@@ -186,6 +195,11 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             return false;
         }
 
+        // Append values that are not part of claims
+        transcript.append_message("ValidFrom", &id_attr_cred_info.values.validity.created_at);
+        transcript.append_message("ValidTo", &id_attr_cred_info.values.validity.valid_to);
+        transcript.append_message("EncryptedIdentityCredentialId", &self.subject.cred_id);
+
         let cmm_attributes: BTreeMap<_, _> = self
             .proof
             .proof_value
@@ -219,10 +233,9 @@ fn verify_statements<
     global_context: &GlobalContext<C>,
     transcript: &mut impl TranscriptProtocol,
 ) -> bool {
-    // Appends statements to transcript. Notice this implicitly
-    // appends the number of statements also, preparing the variable
-    // number of proofs in the following loop.
-    transcript.append_messages("SubjectStatements", statements);
+    // Notice that we already added the number of statements to the transcript
+    // by adding SubjectClaims to the transcript. This acts as a variable length
+    // prefix of the loop over statements.
 
     statements.into_iter().zip_longest(proofs).all(|elm| {
         elm.both().map_or(false, |(statement, proof)| {
@@ -256,7 +269,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
             return Err(ProveError::PrivateInputsMismatch);
         };
 
-        // todo ar add issue to transcript?
+        // Append values that are not part of claims
+        transcript.append_message("IdentityProvider", &issuer);
 
         let statement_proofs = prove_statements(
             &self.statements,
@@ -333,6 +347,17 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
             )
             .map_err(|err| ProveError::IdentityAttributeCredentials(err.to_string()))?;
 
+        let cred_id =
+            IdentityCredentialEphemeralId::from_data(IdentityCredentialEphemeralIdDataRef {
+                ar_data: &id_attr_cred_info.values.ar_data,
+                threshold: id_attr_cred_info.values.threshold,
+            });
+
+        // Append values that are not part of claims
+        transcript.append_message("ValidFrom", &id_attr_cred_info.values.validity.created_at);
+        transcript.append_message("ValidTo", &id_attr_cred_info.values.validity.valid_to);
+        transcript.append_message("EncryptedIdentityCredentialId", &cred_id);
+
         let statement_proofs = prove_statements(
             &self.statements,
             &id_object.get_attribute_list().alist,
@@ -347,12 +372,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
             identity_attributes: id_attr_cred_info.values.attributes,
             statement_proofs,
         };
-
-        let cred_id =
-            IdentityCredentialEphemeralId::from_data(IdentityCredentialEphemeralIdDataRef {
-                ar_data: &id_attr_cred_info.values.ar_data,
-                threshold: id_attr_cred_info.values.threshold,
-            });
 
         Ok(IdentityBasedCredentialV1 {
             proof: ConcordiumZKProof {
@@ -384,10 +403,9 @@ fn prove_statements<
     transcript: &mut impl TranscriptProtocol,
     csprng: &mut (impl Rng + CryptoRng),
 ) -> Result<Vec<AtomicProof<C, AttributeType>>, ProveError> {
-    // Appends statements to transcript. Notice this implicitly
-    // appends the number of statements also, preparing the variable
-    // number of proofs in the following loop.
-    transcript.append_messages("SubjectStatements", statements);
+    // Notice that we already added the number of statements to the transcript
+    // by adding SubjectClaims to the transcript. This acts as a variable length
+    // prefix of the loop over statements.
 
     statements
         .into_iter()
@@ -464,7 +482,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
         AttributeType: 'a,
     {
         let mut verifiable_credentials = Vec::with_capacity(private_inputs.len());
-        let mut transcript = TranscriptV1::with_domain("ConcordiumVerifiablePresentationV1");
+        let mut transcript = TranscriptV1::with_domain("ConcordiumVerifiableCredentialV1");
         append_context(&mut transcript, &self.challenge);
         transcript.append_message("GlobalContext", &global_context);
 
@@ -476,10 +494,18 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
             // todo ar are we sure we want proofs to be 100% independent?
             let mut transcript = transcript.split();
 
-            // Append claims to prove to transcript.
-            transcript.append_message("SubjectClaims", &subject_claims);
+            transcript.append_message(
+                "ProofVersion",
+                &ConcordiumZKProofVersion::ConcordiumZKProofV4,
+            );
+            transcript.append_message("CreationTime", &now);
 
-            // todo ar what about rest of credential (e.g. identity provider) and "now"
+            // Append claims to prove to transcript. Notice that this adds,
+            // among other things, the following to the transcript:
+            // * domain separator for the type of credential (account, identity)
+            // * all statements to prove, including a variable length prefix for the number of statements
+            // todo are just move down into credential specific function?
+            transcript.append_message("SubjectClaims", &subject_claims);
 
             let credential = subject_claims.prove(
                 global_context,

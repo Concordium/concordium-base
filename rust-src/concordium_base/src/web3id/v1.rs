@@ -658,7 +658,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 }
 
 /// Version of proof
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ConcordiumZKProofVersion {
     #[serde(rename = "ConcordiumZKProofV4")]
     ConcordiumZKProofV4,
@@ -919,6 +919,14 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         }
     }
 
+    /// When credentials were created
+    pub fn proof_version(&self) -> ConcordiumZKProofVersion {
+        match self {
+            CredentialV1::Account(acc) => acc.proof.proof_type,
+            CredentialV1::Identity(id) => id.proof.proof_type,
+        }
+    }
+
     /// Metadata about the credential. This contains data that must be externally verified
     /// and also data needed to look up [`CredentialVerificationMaterial`].
     pub fn metadata(&self) -> CredentialMetadataV1 {
@@ -948,7 +956,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 }
 
 /// Version of proof
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ConcordiumLinkingProofVersion {
     #[serde(rename = "ConcordiumWeakLinkingProofV1")]
     ConcordiumWeakLinkingProofV1,
