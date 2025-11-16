@@ -79,12 +79,6 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 
             let claims = credential.claims();
 
-            // Append claims to prove to transcript. Notice that this adds,
-            // among other things, the following to the transcript:
-            // * domain separator for the type of credential (account, identity)
-            // * all statements to prove, including a variable length prefix for the number of statements
-            transcript.append_message("SubjectClaims", &claims);
-
             request.subject_claims.push(claims);
 
             if !credential.verify(global_context, &mut transcript, verification_material) {
@@ -242,7 +236,7 @@ fn verify_statements<
     transcript: &mut impl TranscriptProtocol,
 ) -> bool {
     // Notice that we already added the number of statements to the transcript
-    // by adding SubjectClaims to the transcript. This acts as a variable length
+    // by adding statements to the transcript. This acts as a variable length
     // prefix of the loop over statements.
 
     statements.into_iter().zip_longest(proofs).all(|elm| {
@@ -420,7 +414,7 @@ fn prove_statements<
     csprng: &mut (impl Rng + CryptoRng),
 ) -> Result<Vec<AtomicProof<C, AttributeType>>, ProveError> {
     // Notice that we already added the number of statements to the transcript
-    // by adding SubjectClaims to the transcript. This acts as a variable length
+    // by adding statements to the transcript. This acts as a variable length
     // prefix of the loop over statements.
 
     statements
@@ -515,13 +509,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
                 &ConcordiumZKProofVersion::ConcordiumZKProofV4,
             );
             transcript.append_message("CreationTime", &now);
-
-            // Append claims to prove to transcript. Notice that this adds,
-            // among other things, the following to the transcript:
-            // * domain separator for the type of credential (account, identity)
-            // * all statements to prove, including a variable length prefix for the number of statements
-            // todo are just move down into credential specific function?
-            transcript.append_message("SubjectClaims", &subject_claims);
 
             let credential = subject_claims.prove(
                 global_context,
