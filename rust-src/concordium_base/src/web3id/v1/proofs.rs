@@ -134,8 +134,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
             return false;
         };
 
-        // Append values that are not part of claims
-        transcript.append_message("IdentityProvider", &self.issuer);
+        transcript.append_label("AccountBasedCredential");
+        transcript.append_message("Issuer", &self.issuer);
+        transcript.append_message("Statements", &self.subject.statements);
+        transcript.append_message("Network", &self.subject.network);
+        transcript.append_message("AccountCredId", &self.subject.cred_id);
 
         verify_statements(
             &self.subject.statements,
@@ -166,6 +169,11 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             return false;
         };
 
+        transcript.append_label("IdentityBasedCredential");
+        transcript.append_message("Issuer", &self.issuer);
+        transcript.append_message("Statements", &self.subject.statements);
+        transcript.append_message("Network", &self.subject.network);
+
         let Ok(cred_id_data) = self.subject.cred_id.try_to_data() else {
             return false;
         };
@@ -195,7 +203,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             return false;
         }
 
-        // Append values that are not part of claims
+        // Append values that are not part of subject claims
         transcript.append_message("ValidFrom", &id_attr_cred_info.values.validity.created_at);
         transcript.append_message("ValidTo", &id_attr_cred_info.values.validity.valid_to);
         transcript.append_message("EncryptedIdentityCredentialId", &self.subject.cred_id);
@@ -269,8 +277,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
             return Err(ProveError::PrivateInputsMismatch);
         };
 
-        // Append values that are not part of claims
-        transcript.append_message("IdentityProvider", &issuer);
+        transcript.append_label("AccountBasedCredential");
+        transcript.append_message("Issuer", &issuer);
+        transcript.append_message("Statements", &self.statements);
+        transcript.append_message("Network", &self.network);
+        transcript.append_message("AccountCredId", &self.cred_id);
 
         let statement_proofs = prove_statements(
             &self.statements,
@@ -316,6 +327,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
             return Err(ProveError::PrivateInputsMismatch);
         };
 
+        transcript.append_label("IdentityBasedCredential");
+        transcript.append_message("Issuer", &self.issuer);
+        transcript.append_message("Statements", &self.statements);
+        transcript.append_message("Network", &self.network);
+
         let attributes_handling: BTreeMap<_, _> = self
             .statements
             .iter()
@@ -353,7 +369,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
                 threshold: id_attr_cred_info.values.threshold,
             });
 
-        // Append values that are not part of claims
+        // Append values that are not part of subject claims
         transcript.append_message("ValidFrom", &id_attr_cred_info.values.validity.created_at);
         transcript.append_message("ValidTo", &id_attr_cred_info.values.validity.valid_to);
         transcript.append_message("EncryptedIdentityCredentialId", &cred_id);
