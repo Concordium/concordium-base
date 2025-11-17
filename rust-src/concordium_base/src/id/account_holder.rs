@@ -5,11 +5,18 @@ use crate::{
     bulletproofs::{
         inner_product_proof::inner_product,
         range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal, RangeProof},
-    }, common::types::TransactionTime, curve_arithmetic::{Curve, Field, Pairing}, dodis_yampolskiy_prf as prf, elgamal::{multicombine, Cipher}, pedersen_commitment::{
+    },
+    common::types::TransactionTime,
+    curve_arithmetic::{Curve, Field, Pairing},
+    dodis_yampolskiy_prf as prf,
+    elgamal::{multicombine, Cipher},
+    pedersen_commitment::{
         Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
-    }, random_oracle::RandomOracle, sigma_protocols::{
+    },
+    random_oracle::RandomOracle,
+    sigma_protocols::{
         com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult, common::*, dlog,
-    }
+    },
 };
 use anyhow::{bail, ensure};
 use itertools::izip;
@@ -84,20 +91,6 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     crate::ps_sig::SigRetrievalRandomness<P>,
 )> {
     let mut csprng = thread_rng();
-    generate_pio_with_given_rng(&mut csprng, context,threshold,id_use_data,initial_account)
-}
-
-//TODO: Check the RNG Trait
-pub(crate) fn generate_pio_with_given_rng<P: Pairing, C: Curve<Scalar = P::ScalarField>,T: Rng + rand::CryptoRng>(
-    csprng: &mut T,
-    context: &IpContext<P, C>,
-    threshold: Threshold,
-    id_use_data: &IdObjectUseData<P, C>,
-    initial_account: &impl InitialAccountDataWithSigning,
-) -> Option<(
-    PreIdentityObject<P, C>,
-    crate::ps_sig::SigRetrievalRandomness<P>,
-)> {
     let mut transcript = RandomOracle::domain("PreIdentityProof");
     // Prove ownership of the initial account
     let pub_info_for_ip = build_pub_info_for_ip(
@@ -119,7 +112,7 @@ pub(crate) fn generate_pio_with_given_rng<P: Pairing, C: Curve<Scalar = P::Scala
         .. // id_cred_pub already in pub_info_for_ip
      } = generate_pio_common(
         &mut transcript,
-        csprng,
+        &mut csprng,
         context,
         threshold,
         id_use_data,
@@ -146,7 +139,7 @@ pub(crate) fn generate_pio_with_given_rng<P: Pairing, C: Curve<Scalar = P::Scala
     let mut sig_retrieval_rand = P::ScalarField::zero();
     sig_retrieval_rand.add_assign(&secret.0 .0 .0 .1.r);
     sig_retrieval_rand.add_assign(&secret.0 .0 .1.rand_cmm_1);
-    let proof = prove(&mut transcript, &prover, secret, csprng)?;
+    let proof = prove(&mut transcript, &prover, secret, &mut csprng)?;
 
     let ip_ar_data = ip_ar_data
         .iter()
@@ -197,19 +190,6 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     crate::ps_sig::SigRetrievalRandomness<P>,
 )> {
     let mut csprng = thread_rng();
-    generate_pio_v1_with_given_rng(&mut csprng, context, threshold, id_use_data)
-}
-
-//TODO: Check the RNG Trait
-pub(crate) fn generate_pio_v1_with_given_rng<P: Pairing, C: Curve<Scalar = P::ScalarField>,T: Rng + rand::CryptoRng>(
-    csprng: &mut T,
-    context: &IpContext<P, C>,
-    threshold: Threshold,
-    id_use_data: &IdObjectUseData<P, C>,
-) -> Option<(
-    PreIdentityObjectV1<P, C>,
-    crate::ps_sig::SigRetrievalRandomness<P>,
-)> {
     let mut transcript = RandomOracle::domain("PreIdentityProof");
     let CommonPioGenerationOutput {
         prover,
@@ -221,7 +201,7 @@ pub(crate) fn generate_pio_v1_with_given_rng<P: Pairing, C: Curve<Scalar = P::Sc
         id_cred_pub,
     } = generate_pio_common(
         &mut transcript,
-        csprng,
+        &mut csprng,
         context,
         threshold,
         id_use_data,
@@ -233,7 +213,7 @@ pub(crate) fn generate_pio_v1_with_given_rng<P: Pairing, C: Curve<Scalar = P::Sc
     let mut sig_retrieval_rand = P::ScalarField::zero();
     sig_retrieval_rand.add_assign(&secret.0 .0 .1.r);
     sig_retrieval_rand.add_assign(&secret.0 .1.rand_cmm_1);
-    let proof = prove(&mut transcript, &prover, secret, csprng)?;
+    let proof = prove(&mut transcript, &prover, secret, &mut csprng)?;
 
     let ip_ar_data = ip_ar_data
         .iter()
