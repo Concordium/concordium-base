@@ -15,6 +15,8 @@ use super::id_proof_types::*;
 use crate::bulletproofs::set_membership_proof::SetMembershipProof;
 use crate::bulletproofs::set_non_membership_proof::SetNonMembershipProof;
 use crate::random_oracle::StructuredDigest;
+use crate::sigma_protocols::common::SigmaProof;
+use crate::sigma_protocols::dlog;
 use crate::{
     curve_arithmetic::{Curve, Field},
     pedersen_commitment::{
@@ -177,25 +179,9 @@ impl<
             ) => {
                 let maybe_com = cmm_attributes.get(attribute_tag);
                 if let Some(com) = maybe_com {
-                    // There is a commitment to the relevant attribute. We can then check the
-                    // proof.
-                    let x = attribute.to_field_element();
-                    transcript.add_bytes(b"RevealAttributeDlogProof");
-                    // x is known to the verifier and should go into the transcript
-                    transcript.append_message(b"x", &x);
-                    if version >= ProofVersion::Version2 {
-                        transcript.append_message(b"keys", &global.on_chain_commitment_key);
-                        transcript.append_message(b"C", &com);
-                    }
-                    let mut minus_x = x;
-                    minus_x.negate();
-                    let g_minus_x = global.on_chain_commitment_key.g.mul_by_scalar(&minus_x);
-                    let public = com.plus_point(&g_minus_x);
-                    let verifier = Dlog {
-                        public,                                  // C g^-x = h^r
-                        coeff: global.on_chain_commitment_key.h, // h
-                    };
-                    sigma_verify(transcript, &verifier, proof)
+                    verify_value_equal_to_commitment(
+                        attribute, com, version, global, transcript, proof,
+                    )
                 } else {
                     false
                 }
@@ -318,6 +304,35 @@ impl<
     }
 }
 
+fn verify_value_equal_to_commitment<C: Curve, AttributeType: Attribute<C::Scalar>>(
+    attribute_value: &AttributeType,
+    attribute_cmm: &Commitment<C>,
+    version: ProofVersion,
+    global: &GlobalContext<C>,
+    transcript: &mut RandomOracle,
+    proof: &SigmaProof<dlog::Response<C>>,
+) -> bool {
+    // There is a commitment to the relevant attribute. We can then check the
+    // proof.
+    let x = attribute_value.to_field_element();
+    transcript.add_bytes(b"RevealAttributeDlogProof");
+    // x is known to the verifier and should go into the transcript
+    transcript.append_message(b"x", &x);
+    if version >= ProofVersion::Version2 {
+        transcript.append_message(b"keys", &global.on_chain_commitment_key);
+        transcript.append_message(b"C", &attribute_cmm);
+    }
+    let mut minus_x = x;
+    minus_x.negate();
+    let g_minus_x = global.on_chain_commitment_key.g.mul_by_scalar(&minus_x);
+    let public = attribute_cmm.plus_point(&g_minus_x);
+    let verifier = Dlog {
+        public,                                  // C g^-x = h^r
+        coeff: global.on_chain_commitment_key.h, // h
+    };
+    sigma_verify(transcript, &verifier, proof)
+}
+
 impl<
         C: Curve,
         TagType: std::cmp::Ord + crate::common::Serialize,
@@ -332,7 +347,18 @@ impl<
         cmm_attributes: &BTreeMap<Q, Commitment<C>>,
         proof: &AttributeValueProof<C>,
     ) -> bool {
-        todo!()
+        let Some(attribute_cmm) = cmm_attributes.get(&self.attribute_tag) else {
+            return false;
+        };
+
+        verify_value_equal_to_commitment(
+            &self.attribute_value,
+            attribute_cmm,
+            version,
+            global,
+            transcript,
+            &proof.proof,
+        )
     }
 }
 

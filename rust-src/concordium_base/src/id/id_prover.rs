@@ -4,7 +4,10 @@
 use super::{id_proof_types::*, types::*};
 use crate::bulletproofs::set_membership_proof::SetMembershipProof;
 use crate::bulletproofs::set_non_membership_proof::SetNonMembershipProof;
+use crate::pedersen_commitment::Randomness;
 use crate::random_oracle::StructuredDigest;
+use crate::sigma_protocols::common::SigmaProof;
+use crate::sigma_protocols::dlog;
 use crate::{
     bulletproofs::{
         range_proof::{prove_in_range, RangeProof},
@@ -81,26 +84,10 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
                 let randomness = attribute_randomness
                     .get_attribute_commitment_randomness(&statement.attribute_tag)
                     .ok()?;
-                let x = attribute.to_field_element(); // This is public in the sense that the verifier should learn it
-                transcript.add_bytes(b"RevealAttributeDlogProof");
-                transcript.append_message(b"x", &x);
-                if version >= ProofVersion::Version2 {
-                    transcript.append_message(b"keys", &global.on_chain_commitment_key);
-                    let x_value: Value<C> = Value::new(x);
-                    let comm = global.on_chain_commitment_key.hide(&x_value, &randomness);
-                    transcript.append_message(b"C", &comm);
-                }
-                // This is the Dlog proof section 9.2.4 from the Bluepaper.
-                let h = global.on_chain_commitment_key.h;
-                let h_r = h.mul_by_scalar(&randomness);
-                let prover = Dlog {
-                    public: h_r, // C g^-x = h^r
-                    coeff: h,    // h
-                };
-                let secret = DlogSecret {
-                    secret: Value::new(*randomness),
-                };
-                let proof = sigma_prove(transcript, &prover, secret, csprng)?;
+                let proof = prove_value_equal_to_commitment(
+                    &attribute, randomness, version, global, transcript, csprng,
+                )?;
+
                 Some(AtomicProof::RevealAttribute { attribute, proof })
             }
             AtomicStatement::AttributeInSet { statement } => {
@@ -240,6 +227,39 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
     }
 }
 
+fn prove_value_equal_to_commitment<C: Curve, AttributeType: Attribute<C::Scalar>>(
+    attribute_value: &AttributeType,
+    attribute_cmm_randomness: Randomness<C>,
+    version: ProofVersion,
+    global: &GlobalContext<C>,
+    transcript: &mut RandomOracle,
+    csprng: &mut impl rand::Rng,
+) -> Option<SigmaProof<dlog::Response<C>>> {
+    let x = attribute_value.to_field_element(); // This is public in the sense that the verifier should learn it
+    transcript.add_bytes(b"RevealAttributeDlogProof");
+    transcript.append_message(b"x", &x);
+    if version >= ProofVersion::Version2 {
+        transcript.append_message(b"keys", &global.on_chain_commitment_key);
+        let x_value: Value<C> = Value::new(x);
+        let comm = global
+            .on_chain_commitment_key
+            .hide(&x_value, &attribute_cmm_randomness);
+        transcript.append_message(b"C", &comm);
+    }
+    // This is the Dlog proof section 9.2.4 from the Bluepaper.
+    let h = global.on_chain_commitment_key.h;
+    let h_r = h.mul_by_scalar(&attribute_cmm_randomness);
+    let prover = Dlog {
+        public: h_r, // C g^-x = h^r
+        coeff: h,    // h
+    };
+    let secret = DlogSecret {
+        secret: Value::new(*attribute_cmm_randomness),
+    };
+    let proof = sigma_prove(transcript, &prover, secret, csprng)?;
+    Some(proof)
+}
+
 impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Scalar>>
     AttributeValueStatement<C, TagType, AttributeType>
 {
@@ -252,7 +272,14 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
         attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
         attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
     ) -> Option<AttributeValueProof<C>> {
-        todo!() // todo ar
+        let attribute = attribute_values.get_attribute_value(&self.attribute_tag)?;
+        let randomness = attribute_randomness
+            .get_attribute_commitment_randomness(&self.attribute_tag)
+            .ok()?;
+        let proof = prove_value_equal_to_commitment(
+            attribute, randomness, version, global, transcript, csprng,
+        )?;
+        Some(AttributeValueProof { proof })
     }
 }
 

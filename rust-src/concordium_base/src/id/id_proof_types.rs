@@ -243,7 +243,7 @@ impl<C: Curve, TagType: Serialize, AttributeType: Attribute<C::Scalar>> Deserial
 pub struct AttributeValueProof<C: Curve> {
     /// Revealing an attribute and a proof that it equals the attribute value
     /// inside the attribute commitment.
-    proof: crate::sigma_protocols::common::SigmaProof<DlogResponse<C>>,
+    pub proof: crate::sigma_protocols::common::SigmaProof<DlogResponse<C>>,
 }
 
 /// The different types of proofs, corresponding to the statements above.
