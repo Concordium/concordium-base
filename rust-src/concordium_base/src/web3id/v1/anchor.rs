@@ -11,6 +11,7 @@ use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::hashes::HashBytes;
 use sha2::Digest;
 use std::collections::HashMap;
+use crate::id::id_proof_types::RevealAttributeStatement;
 
 const PROTOCOL_VERSION: u16 = 1u16;
 
@@ -666,6 +667,23 @@ impl TryFrom<GivenContextJson> for GivenContext {
         }
     }
 }
+
+// todo ar use String key, andre ting?
+
+/// Statement that is requested to be proven.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Eq)]
+#[serde(tag = "type")]
+pub enum RequestedStatement {
+    /// The atomic statement stating that an attribute should be revealed.
+    RevealAttribute(RevealAttributeStatement<C, TagType, AttributeType>),
+    /// The atomic statement stating that an attribute is in a range.
+    AttributeInRange(AttributeInRangeStatement<C, TagType, AttributeType>),
+    /// The atomic statement stating that an attribute is in a set.
+    AttributeInSet(AttributeInSetStatement<C, TagType, AttributeType>),
+    /// The atomic statement stating that an attribute is not in a set.
+    AttributeNotInSet(AttributeNotInSetStatement<C, TagType, AttributeType>),
+}
+
 
 #[cfg(test)]
 mod tests {
