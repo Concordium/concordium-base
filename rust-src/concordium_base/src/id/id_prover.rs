@@ -2,6 +2,8 @@
 //! accounts.
 
 use super::{id_proof_types::*, types::*};
+use crate::bulletproofs::set_membership_proof::SetMembershipProof;
+use crate::bulletproofs::set_non_membership_proof::SetNonMembershipProof;
 use crate::random_oracle::StructuredDigest;
 use crate::{
     bulletproofs::{
@@ -102,64 +104,37 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
                 Some(AtomicProof::RevealAttribute { attribute, proof })
             }
             AtomicStatement::AttributeInSet { statement } => {
-                let attribute = attribute_values.get_attribute_value(&statement.attribute_tag)?;
-                let randomness = attribute_randomness
-                    .get_attribute_commitment_randomness(&statement.attribute_tag)
-                    .ok()?;
-                let attribute_scalar = attribute.to_field_element();
-                let attribute_vec: Vec<_> =
-                    statement.set.iter().map(|x| x.to_field_element()).collect();
-                let proof = prove_set_membership(
+                let proof = statement.prove(
                     version,
+                    global,
                     transcript,
                     csprng,
-                    &attribute_vec,
-                    attribute_scalar,
-                    global.bulletproof_generators(),
-                    &global.on_chain_commitment_key,
-                    &randomness,
-                )
-                .ok()?;
+                    attribute_values,
+                    attribute_randomness,
+                )?;
                 let proof = AtomicProof::AttributeInSet { proof };
                 Some(proof)
             }
             AtomicStatement::AttributeNotInSet { statement } => {
-                let attribute = attribute_values.get_attribute_value(&statement.attribute_tag)?;
-                let randomness = attribute_randomness
-                    .get_attribute_commitment_randomness(&statement.attribute_tag)
-                    .ok()?;
-                let attribute_scalar = attribute.to_field_element();
-                let attribute_vec: Vec<_> =
-                    statement.set.iter().map(|x| x.to_field_element()).collect();
-                let proof = prove_set_non_membership(
+                let proof = statement.prove(
                     version,
+                    global,
                     transcript,
                     csprng,
-                    &attribute_vec,
-                    attribute_scalar,
-                    global.bulletproof_generators(),
-                    &global.on_chain_commitment_key,
-                    &randomness,
-                )
-                .ok()?;
+                    attribute_values,
+                    attribute_randomness,
+                )?;
                 let proof = AtomicProof::AttributeNotInSet { proof };
                 Some(proof)
             }
             AtomicStatement::AttributeInRange { statement } => {
-                let attribute = attribute_values.get_attribute_value(&statement.attribute_tag)?;
-                let randomness = attribute_randomness
-                    .get_attribute_commitment_randomness(&statement.attribute_tag)
-                    .ok()?;
-                let proof = prove_attribute_in_range(
+                let proof = statement.prove(
                     version,
+                    global,
                     transcript,
                     csprng,
-                    global.bulletproof_generators(),
-                    &global.on_chain_commitment_key,
-                    attribute,
-                    &statement.lower,
-                    &statement.upper,
-                    &randomness,
+                    attribute_values,
+                    attribute_randomness,
                 )?;
                 let proof = AtomicProof::AttributeInRange { proof };
                 Some(proof)
@@ -167,6 +142,120 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
         }
     }
 }
+
+impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Scalar>>
+    AttributeInSetStatement<C, TagType, AttributeType>
+{
+    pub(crate) fn prove(
+        &self,
+        version: ProofVersion,
+        global: &GlobalContext<C>,
+        transcript: &mut RandomOracle,
+        csprng: &mut impl rand::Rng,
+        attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
+        attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
+    ) -> Option<SetMembershipProof<C>> {
+        let attribute = attribute_values.get_attribute_value(&self.attribute_tag)?;
+        let randomness = attribute_randomness
+            .get_attribute_commitment_randomness(&self.attribute_tag)
+            .ok()?;
+        let attribute_scalar = attribute.to_field_element();
+        let attribute_vec: Vec<_> = self.set.iter().map(|x| x.to_field_element()).collect();
+        let proof = prove_set_membership(
+            version,
+            transcript,
+            csprng,
+            &attribute_vec,
+            attribute_scalar,
+            global.bulletproof_generators(),
+            &global.on_chain_commitment_key,
+            &randomness,
+        )
+        .ok()?;
+        Some(proof)
+    }
+}
+
+impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Scalar>>
+    AttributeNotInSetStatement<C, TagType, AttributeType>
+{
+    pub(crate) fn prove(
+        &self,
+        version: ProofVersion,
+        global: &GlobalContext<C>,
+        transcript: &mut RandomOracle,
+        csprng: &mut impl rand::Rng,
+        attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
+        attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
+    ) -> Option<SetNonMembershipProof<C>> {
+        let attribute = attribute_values.get_attribute_value(&self.attribute_tag)?;
+        let randomness = attribute_randomness
+            .get_attribute_commitment_randomness(&self.attribute_tag)
+            .ok()?;
+        let attribute_scalar = attribute.to_field_element();
+        let attribute_vec: Vec<_> = self.set.iter().map(|x| x.to_field_element()).collect();
+        let proof = prove_set_non_membership(
+            version,
+            transcript,
+            csprng,
+            &attribute_vec,
+            attribute_scalar,
+            global.bulletproof_generators(),
+            &global.on_chain_commitment_key,
+            &randomness,
+        )
+        .ok()?;
+        Some(proof)
+    }
+}
+
+impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Scalar>>
+    AttributeInRangeStatement<C, TagType, AttributeType>
+{
+    pub(crate) fn prove(
+        &self,
+        version: ProofVersion,
+        global: &GlobalContext<C>,
+        transcript: &mut RandomOracle,
+        csprng: &mut impl rand::Rng,
+        attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
+        attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
+    ) -> Option<RangeProof<C>> {
+        let attribute = attribute_values.get_attribute_value(&self.attribute_tag)?;
+        let randomness = attribute_randomness
+            .get_attribute_commitment_randomness(&self.attribute_tag)
+            .ok()?;
+        let proof = prove_attribute_in_range(
+            version,
+            transcript,
+            csprng,
+            global.bulletproof_generators(),
+            &global.on_chain_commitment_key,
+            attribute,
+            &self.lower,
+            &self.upper,
+            &randomness,
+        )?;
+        Some(proof)
+    }
+}
+
+impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Scalar>>
+    AttributeValueStatement<C, TagType, AttributeType>
+{
+    pub(crate) fn prove(
+        &self,
+        version: ProofVersion,
+        global: &GlobalContext<C>,
+        transcript: &mut RandomOracle,
+        csprng: &mut impl rand::Rng,
+        attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
+        attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
+    ) -> Option<AttributeValueProof<C>> {
+        todo!() // todo ar
+    }
+}
+
 /// Function for proving ownership of an account. The parameters are
 /// - data - the CredentialData containing the private keys of the prover
 /// - account - the account address of the account that the prover claims to own

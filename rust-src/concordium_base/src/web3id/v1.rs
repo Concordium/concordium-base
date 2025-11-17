@@ -13,8 +13,15 @@
 mod proofs;
 
 use crate::base::CredentialRegistrationID;
+use crate::bulletproofs::set_membership_proof::SetMembershipProof;
+use crate::bulletproofs::set_non_membership_proof::SetNonMembershipProof;
+use crate::common::{Buffer, ParseResult};
 use crate::curve_arithmetic::{Curve, Pairing};
-use crate::id::id_proof_types::{AtomicProof, AtomicStatement};
+use crate::id::id_proof_types::{
+    AtomicProof, AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement,
+    AttributeNotInSetStatement, AttributeValueProof, AttributeValueStatement,
+};
+use crate::id::range_proof::RangeProof;
 use crate::id::secret_sharing::Threshold;
 use crate::id::types::{
     ArIdentity, ArInfos, Attribute, AttributeTag, ChainArData, CredentialValidity,
@@ -26,6 +33,7 @@ use crate::web3id::did::Network;
 use crate::web3id::{did, LinkingProof};
 use crate::{common, pedersen_commitment};
 use anyhow::{bail, ensure, Context};
+use byteorder::ReadBytesExt;
 use itertools::Itertools;
 use nom::AsBytes;
 use serde::de::{DeserializeOwned, Error as _};
@@ -1154,9 +1162,159 @@ pub enum ProveError {
 #[non_exhaustive]
 pub enum VerifyError {
     #[error("the number of verification material inputs does not match the credentials to verify")]
-    VeficationMaterialMismatch,
+    VerificationMaterialMismatch,
     #[error("the credential was not valid (index {0})")]
     InvalidCredential(usize),
+}
+
+/// Statements are composed of one or more atomic statements.
+/// This type defines the different types of atomic statements.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Eq)]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize, TagType: \
+                 serde::Serialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + serde::Deserialize<'de>, \
+                   TagType: serde::Deserialize<'de>"
+))]
+#[serde(tag = "type")]
+pub enum AtomicStatementV1<
+    C: Curve,
+    TagType: common::Serialize,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    /// The atomic statement stating that an attribute should be revealed.
+    AttributeValue(AttributeValueStatement<C, TagType, AttributeType>),
+    /// The atomic statement stating that an attribute is in a range.
+    AttributeInRange(AttributeInRangeStatement<C, TagType, AttributeType>),
+    /// The atomic statement stating that an attribute is in a set.
+    AttributeInSet(AttributeInSetStatement<C, TagType, AttributeType>),
+    /// The atomic statement stating that an attribute is not in a set.
+    AttributeNotInSet(AttributeNotInSetStatement<C, TagType, AttributeType>),
+}
+
+impl<C: Curve, TagType: common::Serialize + Copy, AttributeType: Attribute<C::Scalar>>
+    AtomicStatementV1<C, TagType, AttributeType>
+{
+    /// Attribute to which this statement applies.
+    pub fn attribute(&self) -> TagType {
+        match self {
+            Self::AttributeValue(statement) => statement.attribute_tag,
+            Self::AttributeInRange(statement) => statement.attribute_tag,
+            Self::AttributeInSet(statement) => statement.attribute_tag,
+            Self::AttributeNotInSet(statement) => statement.attribute_tag,
+        }
+    }
+}
+
+impl<C: Curve, TagType: common::Serialize, AttributeType: Attribute<C::Scalar>> common::Serial
+    for AtomicStatementV1<C, TagType, AttributeType>
+{
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            Self::AttributeValue(statement) => {
+                0u8.serial(out);
+                statement.serial(out);
+            }
+            Self::AttributeInRange(statement) => {
+                1u8.serial(out);
+                statement.serial(out);
+            }
+            Self::AttributeInSet(statement) => {
+                2u8.serial(out);
+                statement.serial(out);
+            }
+            Self::AttributeNotInSet(statement) => {
+                3u8.serial(out);
+                statement.serial(out);
+            }
+        }
+    }
+}
+
+impl<C: Curve, TagType: common::Serialize, AttributeType: Attribute<C::Scalar>> common::Deserial
+    for AtomicStatementV1<C, TagType, AttributeType>
+{
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        match u8::deserial(source)? {
+            0u8 => {
+                let statement = source.get()?;
+                Ok(Self::AttributeValue(statement))
+            }
+            1u8 => {
+                let statement = source.get()?;
+                Ok(Self::AttributeInRange(statement))
+            }
+            2u8 => {
+                let statement = source.get()?;
+                Ok(Self::AttributeInSet(statement))
+            }
+            3u8 => {
+                let statement = source.get()?;
+                Ok(Self::AttributeNotInSet(statement))
+            }
+            n => anyhow::bail!("Unknown statement tag: {}.", n),
+        }
+    }
+}
+
+/// The different types of proofs, corresponding to the statements above.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum AtomicProofV1<C: Curve> {
+    /// A proof that an attribute is equal to a public value
+    AttributeValue(AttributeValueProof<C>),
+    /// A proof that an attribute is in a range
+    AttributeInRange(RangeProof<C>),
+    /// A proof that an attribute is in a set
+    AttributeInSet(SetMembershipProof<C>),
+    /// A proof that an attribute is not in a set
+    AttributeNotInSet(SetNonMembershipProof<C>),
+}
+
+impl<C: Curve> common::Serial for AtomicProofV1<C> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            Self::AttributeValue(proof) => {
+                0u8.serial(out);
+                proof.serial(out);
+            }
+            Self::AttributeInRange(proof) => {
+                1u8.serial(out);
+                proof.serial(out);
+            }
+            Self::AttributeInSet(proof) => {
+                2u8.serial(out);
+                proof.serial(out);
+            }
+            Self::AttributeNotInSet(proof) => {
+                3u8.serial(out);
+                proof.serial(out);
+            }
+        }
+    }
+}
+
+impl<C: Curve> common::Deserial for AtomicProofV1<C> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        match u8::deserial(source)? {
+            0u8 => {
+                let proof = source.get()?;
+                Ok(Self::AttributeValue(proof))
+            }
+            1u8 => {
+                let proof = source.get()?;
+                Ok(Self::AttributeInRange(proof))
+            }
+            2u8 => {
+                let proof = source.get()?;
+                Ok(Self::AttributeInSet(proof))
+            }
+            3u8 => {
+                let proof = source.get()?;
+                Ok(Self::AttributeNotInSet(proof))
+            }
+            n => anyhow::bail!("Unknown proof type tag: {}", n),
+        }
+    }
 }
 
 #[cfg(test)]

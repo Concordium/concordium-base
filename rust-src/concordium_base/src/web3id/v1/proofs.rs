@@ -6,6 +6,7 @@ use crate::{
     random_oracle::RandomOracle,
 };
 use itertools::Itertools;
+use std::borrow::Borrow;
 use std::collections::BTreeMap;
 
 use crate::curve_arithmetic::Pairing;
@@ -23,12 +24,13 @@ use crate::pedersen_commitment::Commitment;
 use crate::web3id::v1::{
     AccountBasedCredentialV1, AccountBasedSubjectClaims, AccountCredentialProofPrivateInputs,
     AccountCredentialProofs, AccountCredentialSubject, AccountCredentialVerificationMaterial,
-    ConcordiumProofType, ConcordiumZKProof, ContextInformation, CredentialMetadataV1,
-    CredentialProofPrivateInputs, CredentialV1, CredentialVerificationMaterial,
-    IdentityBasedCredentialV1, IdentityBasedSubjectClaims, IdentityCredentialEphemeralId,
-    IdentityCredentialEphemeralIdDataRef, IdentityCredentialProofPrivateInputs,
-    IdentityCredentialProofs, IdentityCredentialSubject, IdentityCredentialVerificationMaterial,
-    PresentationV1, ProveError, RequestV1, SubjectClaims, VerifyError,
+    AtomicProofV1, AtomicStatementV1, ConcordiumProofType, ConcordiumZKProof, ContextInformation,
+    CredentialMetadataV1, CredentialProofPrivateInputs, CredentialV1,
+    CredentialVerificationMaterial, IdentityBasedCredentialV1, IdentityBasedSubjectClaims,
+    IdentityCredentialEphemeralId, IdentityCredentialEphemeralIdDataRef,
+    IdentityCredentialProofPrivateInputs, IdentityCredentialProofs, IdentityCredentialSubject,
+    IdentityCredentialVerificationMaterial, PresentationV1, ProveError, RequestV1, SubjectClaims,
+    VerifyError,
 };
 use rand::{CryptoRng, Rng};
 
@@ -66,7 +68,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         };
 
         if verification_material.len() != self.verifiable_credentials.len() {
-            return Err(VerifyError::VeficationMaterialMismatch);
+            return Err(VerifyError::VerificationMaterialMismatch);
         }
 
         for (i, (verification_material, credential)) in verification_material
@@ -483,6 +485,107 @@ fn append_context(digest: &mut impl StructuredDigest, context: &ContextInformati
     digest.append_message("requested", &context.requested);
 }
 
+impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Scalar>>
+    AtomicStatementV1<C, TagType, AttributeType>
+{
+    pub(crate) fn prove(
+        &self,
+        version: ProofVersion,
+        global: &GlobalContext<C>,
+        transcript: &mut RandomOracle,
+        csprng: &mut impl rand::Rng,
+        attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
+        attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
+    ) -> Option<AtomicProofV1<C>> {
+        match self {
+            AtomicStatementV1::AttributeValue(statement) => {
+                let proof = statement.prove(
+                    version,
+                    global,
+                    transcript,
+                    csprng,
+                    attribute_values,
+                    attribute_randomness,
+                )?;
+                let proof = AtomicProofV1::AttributeValue(proof);
+                Some(proof)
+            }
+            AtomicStatementV1::AttributeInSet(statement) => {
+                let proof = statement.prove(
+                    version,
+                    global,
+                    transcript,
+                    csprng,
+                    attribute_values,
+                    attribute_randomness,
+                )?;
+                let proof = AtomicProofV1::AttributeInSet(proof);
+                Some(proof)
+            }
+            AtomicStatementV1::AttributeNotInSet(statement) => {
+                let proof = statement.prove(
+                    version,
+                    global,
+                    transcript,
+                    csprng,
+                    attribute_values,
+                    attribute_randomness,
+                )?;
+                let proof = AtomicProofV1::AttributeNotInSet(proof);
+                Some(proof)
+            }
+            AtomicStatementV1::AttributeInRange(statement) => {
+                let proof = statement.prove(
+                    version,
+                    global,
+                    transcript,
+                    csprng,
+                    attribute_values,
+                    attribute_randomness,
+                )?;
+                let proof = AtomicProofV1::AttributeInRange(proof);
+                Some(proof)
+            }
+        }
+    }
+}
+
+impl<
+        C: Curve,
+        TagType: std::cmp::Ord + crate::common::Serialize,
+        AttributeType: Attribute<C::Scalar>,
+    > AtomicStatementV1<C, TagType, AttributeType>
+{
+    pub(crate) fn verify<Q: std::cmp::Ord + Borrow<TagType>>(
+        &self,
+        version: ProofVersion,
+        global: &GlobalContext<C>,
+        transcript: &mut RandomOracle,
+        cmm_attributes: &BTreeMap<Q, Commitment<C>>,
+        proof: &AtomicProofV1<C>,
+    ) -> bool {
+        match (self, proof) {
+            (
+                AtomicStatementV1::AttributeValue(statement),
+                AtomicProofV1::AttributeValue(proof),
+            ) => statement.verify(version, global, transcript, cmm_attributes, proof),
+            (
+                AtomicStatementV1::AttributeInRange(statement),
+                AtomicProofV1::AttributeInRange(proof),
+            ) => statement.verify(version, global, transcript, cmm_attributes, proof),
+            (
+                AtomicStatementV1::AttributeInSet(statement),
+                AtomicProofV1::AttributeInSet(proof),
+            ) => statement.verify(version, global, transcript, cmm_attributes, proof),
+            (
+                AtomicStatementV1::AttributeNotInSet(statement),
+                AtomicProofV1::AttributeNotInSet(proof),
+            ) => statement.verify(version, global, transcript, cmm_attributes, proof),
+            _ => false,
+        }
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
@@ -846,7 +949,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, VerifyError::VeficationMaterialMismatch);
+        assert_eq!(err, VerifyError::VerificationMaterialMismatch);
     }
 
     /// Test prove and verify presentation for identity credentials.
