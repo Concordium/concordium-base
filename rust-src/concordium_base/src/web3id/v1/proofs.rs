@@ -258,7 +258,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
             proof: ConcordiumZKProof {
                 created_at: now,
                 proof_value: AccountCredentialProofs { statement_proofs },
-                proof_versdion: ConcordiumZKProofVersion::ConcordiumZKProofV4,
+                proof_version: ConcordiumZKProofVersion::ConcordiumZKProofV4,
             },
             subject: AccountCredentialSubject {
                 cred_id: self.cred_id,
@@ -348,7 +348,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
             proof: ConcordiumZKProof {
                 created_at: now,
                 proof_value: proof,
-                proof_versdion: ConcordiumZKProofVersion::ConcordiumZKProofV4,
+                proof_version: ConcordiumZKProofVersion::ConcordiumZKProofV4,
             },
             subject: IdentityCredentialSubject {
                 cred_id,

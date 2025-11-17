@@ -665,7 +665,7 @@ pub struct ConcordiumZKProof<T: common::Serialize> {
     pub proof_value: T,
     /// Version/type of proof
     #[serde(rename = "type")]
-    pub proof_versdion: ConcordiumZKProofVersion,
+    pub proof_version: ConcordiumZKProofVersion,
 }
 
 /// Verifiable credential. Embeds and proofs the claims from a [`SubjectClaims`].
