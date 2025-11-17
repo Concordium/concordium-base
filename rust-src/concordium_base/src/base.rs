@@ -1,5 +1,6 @@
 //! Basis type definitions that are used throughout the crate.
 
+use crate::random_oracle::RandomOracle;
 use crate::{
     common::{
         base16_decode_string, deserial_string, types::Signature, Buffer, Deserial, Get,
@@ -12,7 +13,6 @@ use crate::{
         types::{GlobalContext, VerifyKey},
     },
     pedersen_commitment::{Randomness, Value},
-    random_oracle::RandomOracle,
 };
 use concordium_contracts_common::AccountAddress;
 pub use concordium_contracts_common::{

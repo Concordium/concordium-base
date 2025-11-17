@@ -4,9 +4,10 @@
 //! NB: This module is not used by the rest of the project and is only here for
 //! demonstration purposes.
 //! If it becomes necessary to use it, the code needs to be thoroughly reviewed.
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     curve_arithmetic::Curve,
-    random_oracle::{Challenge, RandomOracle},
+    random_oracle::Challenge,
     sigma_protocols::{
         common::*,
         dlog::{Response as DlogResponse, *},
@@ -25,7 +26,7 @@ impl<C: Curve> SigmaProtocol for DlogEqual<C> {
     type Response = DlogResponse<C>;
     type SecretData = DlogSecret<C>;
 
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         self.dlog1.public(ro);
         self.dlog2.public(ro)
     }
@@ -84,6 +85,7 @@ mod test {
     };
     use rand::*;
 
+    use crate::random_oracle::RandomOracle;
     use std::str::FromStr;
 
     type G1 = ArCurve;

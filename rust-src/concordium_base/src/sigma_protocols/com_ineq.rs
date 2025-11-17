@@ -14,7 +14,7 @@ use super::{
     com_mult::{ComMult, ComMultSecret, Response as ComMultResponse},
     common::{prove as sigma_prove, verify as sigma_verify, SigmaProof},
 };
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{Curve, Field},
