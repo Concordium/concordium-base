@@ -6,7 +6,6 @@ use crate::{
     random_oracle::RandomOracle,
 };
 use itertools::Itertools;
-use std::borrow::Borrow;
 use std::collections::BTreeMap;
 
 use crate::curve_arithmetic::Pairing;
@@ -24,7 +23,7 @@ use crate::pedersen_commitment::Commitment;
 use crate::web3id::v1::{
     AccountBasedCredentialV1, AccountBasedSubjectClaims, AccountCredentialProofPrivateInputs,
     AccountCredentialProofs, AccountCredentialSubject, AccountCredentialVerificationMaterial,
-    AtomicProofV1, AtomicStatementV1, ConcordiumProofType, ConcordiumZKProof, ContextInformation,
+    ConcordiumLinkingProofVersion, ConcordiumZKProof, ConcordiumZKProofVersion, ContextInformation,
     CredentialMetadataV1, CredentialProofPrivateInputs, CredentialV1,
     CredentialVerificationMaterial, IdentityBasedCredentialV1, IdentityBasedSubjectClaims,
     IdentityCredentialEphemeralId, IdentityCredentialEphemeralIdDataRef,
@@ -126,7 +125,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
 
         verify_statements(
             &self.subject.statements,
-            &self.proof.proof.statement_proofs,
+            &self.proof.proof_value.statement_proofs,
             commitments,
             global_context,
             transcript,
@@ -162,10 +161,10 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
                 ip_identity: self.issuer,
                 threshold: cred_id_data.threshold,
                 ar_data: cred_id_data.ar_data,
-                attributes: self.proof.proof.identity_attributes.clone(),
+                attributes: self.proof.proof_value.identity_attributes.clone(),
                 validity: self.validity.clone(),
             },
-            proofs: self.proof.proof.identity_attributes_proofs.clone(),
+            proofs: self.proof.proof_value.identity_attributes_proofs.clone(),
         };
 
         if identity_attributes_credentials::verify_identity_attributes(
@@ -184,7 +183,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 
         let cmm_attributes: BTreeMap<_, _> = self
             .proof
-            .proof
+            .proof_value
             .identity_attributes
             .iter()
             .filter_map(|(tag, attr)| match attr {
@@ -195,7 +194,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 
         verify_statements(
             &self.subject.statements,
-            &self.proof.proof.statement_proofs,
+            &self.proof.proof_value.statement_proofs,
             &cmm_attributes,
             global_context,
             transcript,
@@ -259,8 +258,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
         Ok(AccountBasedCredentialV1 {
             proof: ConcordiumZKProof {
                 created_at: now,
-                proof: AccountCredentialProofs { statement_proofs },
-                proof_type: ConcordiumProofType::ConcordiumZKProofV4,
+                proof_value: AccountCredentialProofs { statement_proofs },
+                proof_type: ConcordiumZKProofVersion::ConcordiumZKProofV4,
             },
             subject: AccountCredentialSubject {
                 cred_id: self.cred_id,
@@ -349,8 +348,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
         Ok(IdentityBasedCredentialV1 {
             proof: ConcordiumZKProof {
                 created_at: now,
-                proof,
-                proof_type: ConcordiumProofType::ConcordiumZKProofV4,
+                proof_value: proof,
+                proof_type: ConcordiumZKProofVersion::ConcordiumZKProofV4,
             },
             subject: IdentityCredentialSubject {
                 cred_id,
@@ -454,6 +453,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
         let mut transcript = RandomOracle::domain("ConcordiumVerifiablePresentationV1");
         append_context(&mut transcript, &self.challenge);
         transcript.append_message(b"ctx", &global_context);
+
         if self.subject_claims.len() != private_inputs.len() {
             return Err(ProveError::PrivateInputsMismatch);
         }
@@ -468,12 +468,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
             )?;
             verifiable_credentials.push(credential);
         }
-        // Linking proof
-        let proof_value = Vec::new();
-        let linking_proof = LinkingProof {
-            created: now,
-            proof_value,
+
+        let linking_proof = LinkingProofV1 {
+            created_at: now,
+            proof_value: [],
+            proof_type: ConcordiumLinkingProofVersion::ConcordiumWeakLinkingProofV1,
         };
+
         Ok(PresentationV1 {
             presentation_context: self.challenge,
             linking_proof,
@@ -1188,21 +1189,29 @@ pub mod tests {
             panic!("should be account proof");
         };
         let mut ar_keys = proofs
-            .proof
+            .proof_value
             .identity_attributes_proofs
             .proof_id_cred_pub
             .keys();
         let ar1 = *ar_keys.next().unwrap();
         let ar2 = *ar_keys.next().unwrap();
-        let tmp = proofs.proof.identity_attributes_proofs.proof_id_cred_pub[&ar1].clone();
+        let tmp = proofs
+            .proof_value
+            .identity_attributes_proofs
+            .proof_id_cred_pub[&ar1]
+            .clone();
         *proofs
-            .proof
+            .proof_value
             .identity_attributes_proofs
             .proof_id_cred_pub
             .get_mut(&ar1)
-            .unwrap() = proofs.proof.identity_attributes_proofs.proof_id_cred_pub[&ar2].clone();
+            .unwrap() = proofs
+            .proof_value
+            .identity_attributes_proofs
+            .proof_id_cred_pub[&ar2]
+            .clone();
         *proofs
-            .proof
+            .proof_value
             .identity_attributes_proofs
             .proof_id_cred_pub
             .get_mut(&ar2)
