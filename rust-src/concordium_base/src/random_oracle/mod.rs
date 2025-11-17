@@ -17,7 +17,7 @@
 //! It is specifically because of sequential composition, that it is important that also the final message send by the prover is added to the transcript.
 //!
 //! Verifier messages (the challenges) in the proof should be extracted from the transcript instance.
-//! It is in this extraction, that the transcript plays the role of a random oracle. todo ar replace with trait
+//! It is in this extraction, that the transcript plays the role of a random oracle.
 //!
 //! The transcript instance used to verify a proof needs to be initialised and updated
 //! with the same input used to produce the proof. Any verification of sub-proofs
