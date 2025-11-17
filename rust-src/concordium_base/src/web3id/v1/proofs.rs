@@ -6,6 +6,7 @@ use crate::{
     random_oracle::RandomOracle,
 };
 use itertools::Itertools;
+use std::borrow::Borrow;
 use std::collections::BTreeMap;
 
 use crate::curve_arithmetic::Pairing;
@@ -23,13 +24,13 @@ use crate::pedersen_commitment::Commitment;
 use crate::web3id::v1::{
     AccountBasedCredentialV1, AccountBasedSubjectClaims, AccountCredentialProofPrivateInputs,
     AccountCredentialProofs, AccountCredentialSubject, AccountCredentialVerificationMaterial,
-    ConcordiumLinkingProofVersion, ConcordiumZKProof, ConcordiumZKProofVersion, ContextInformation,
-    CredentialMetadataV1, CredentialProofPrivateInputs, CredentialV1,
-    CredentialVerificationMaterial, IdentityBasedCredentialV1, IdentityBasedSubjectClaims,
-    IdentityCredentialEphemeralId, IdentityCredentialEphemeralIdDataRef,
-    IdentityCredentialProofPrivateInputs, IdentityCredentialProofs, IdentityCredentialSubject,
-    IdentityCredentialVerificationMaterial, PresentationV1, ProveError, RequestV1, SubjectClaims,
-    VerifyError,
+    AtomicProofV1, AtomicStatementV1, ConcordiumLinkingProofVersion, ConcordiumZKProof,
+    ConcordiumZKProofVersion, ContextInformation, CredentialMetadataV1,
+    CredentialProofPrivateInputs, CredentialV1, CredentialVerificationMaterial,
+    IdentityBasedCredentialV1, IdentityBasedSubjectClaims, IdentityCredentialEphemeralId,
+    IdentityCredentialEphemeralIdDataRef, IdentityCredentialProofPrivateInputs,
+    IdentityCredentialProofs, IdentityCredentialSubject, IdentityCredentialVerificationMaterial,
+    LinkingProofV1, PresentationV1, ProveError, RequestV1, SubjectClaims, VerifyError,
 };
 use rand::{CryptoRng, Rng};
 

@@ -18,7 +18,7 @@ mod proofs;
 use crate::base::CredentialRegistrationID;
 use crate::bulletproofs::set_membership_proof::SetMembershipProof;
 use crate::bulletproofs::set_non_membership_proof::SetNonMembershipProof;
-use crate::common::{Buffer, Get, ParseResult};
+use crate::common::{Buffer, Get, ParseResult, Put};
 use crate::curve_arithmetic::{Curve, Pairing};
 use crate::id::id_proof_types::{
     AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
@@ -582,7 +582,7 @@ pub struct IdentityCredentialProofs<
     pub identity_attributes_proofs: IdentityAttributesCredentialsProofs<P, C>,
     /// Proofs for the atomic statements based on the attribute commitments
     /// and values in `identity_attributes`
-    pub statement_proofs: Vec<AtomicProof<C, AttributeType>>,
+    pub statement_proofs: Vec<AtomicProofV1<C>>,
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
