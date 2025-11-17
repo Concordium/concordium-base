@@ -209,8 +209,8 @@ fn verify_statements<
     AttributeType: Attribute<C::Scalar> + 'a,
     TagType: Ord + crate::common::Serialize + 'a,
 >(
-    statements: impl IntoIterator<Item = &'a AtomicStatement<C, TagType, AttributeType>>,
-    proofs: impl IntoIterator<Item = &'a AtomicProof<C, AttributeType>>,
+    statements: impl IntoIterator<Item = &'a AtomicStatementV1<C, TagType, AttributeType>>,
+    proofs: impl IntoIterator<Item = &'a AtomicProofV1<C>>,
     cmm_attributes: &BTreeMap<TagType, Commitment<C>>,
     global_context: &GlobalContext<C>,
     transcript: &mut RandomOracle,
@@ -295,18 +295,21 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
             .statements
             .iter()
             .map(|stmt| match stmt {
-                AtomicStatement::RevealAttribute { statement } => {
+                AtomicStatementV1::AttributeValue(statement) => {
                     (statement.attribute_tag, IdentityAttributeHandling::Commit)
                 }
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement { attribute_tag, .. },
-                }
-                | AtomicStatement::AttributeInSet {
-                    statement: AttributeInSetStatement { attribute_tag, .. },
-                }
-                | AtomicStatement::AttributeNotInSet {
-                    statement: AttributeNotInSetStatement { attribute_tag, .. },
-                } => (*attribute_tag, IdentityAttributeHandling::Commit),
+                AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+                    attribute_tag,
+                    ..
+                })
+                | AtomicStatementV1::AttributeInSet(AttributeInSetStatement {
+                    attribute_tag,
+                    ..
+                })
+                | AtomicStatementV1::AttributeNotInSet(AttributeNotInSetStatement {
+                    attribute_tag,
+                    ..
+                }) => (*attribute_tag, IdentityAttributeHandling::Commit),
             })
             .collect();
 
@@ -366,13 +369,13 @@ fn prove_statements<
     AttributeType: Attribute<C::Scalar> + 'a,
     TagType: Ord + crate::common::Serialize + 'a,
 >(
-    statements: impl IntoIterator<Item = &'a AtomicStatement<C, TagType, AttributeType>>,
+    statements: impl IntoIterator<Item = &'a AtomicStatementV1<C, TagType, AttributeType>>,
     attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
     attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
     global_context: &GlobalContext<C>,
     transcript: &mut RandomOracle,
     csprng: &mut (impl Rng + CryptoRng),
-) -> Result<Vec<AtomicProof<C, AttributeType>>, ProveError> {
+) -> Result<Vec<AtomicProofV1<C>>, ProveError> {
     statements
         .into_iter()
         .map(|statement| {

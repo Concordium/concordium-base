@@ -18,8 +18,8 @@ use crate::bulletproofs::set_non_membership_proof::SetNonMembershipProof;
 use crate::common::{Buffer, Get, ParseResult};
 use crate::curve_arithmetic::{Curve, Pairing};
 use crate::id::id_proof_types::{
-    AtomicProof, AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement,
-    AttributeNotInSetStatement, AttributeValueProof, AttributeValueStatement,
+    AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
+    AttributeValueProof, AttributeValueStatement,
 };
 use crate::id::range_proof::RangeProof;
 use crate::id::secret_sharing::Threshold;
@@ -131,7 +131,7 @@ pub struct AccountBasedSubjectClaims<C: Curve, AttributeType: Attribute<C::Scala
     /// Account registration id
     pub cred_id: CredentialRegistrationID,
     /// Attribute statements
-    pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
+    pub statements: Vec<AtomicStatementV1<C, AttributeTag, AttributeType>>,
 }
 
 /// Claims about a single identity based subject. Identity credentials
@@ -146,7 +146,7 @@ pub struct IdentityBasedSubjectClaims<C: Curve, AttributeType: Attribute<C::Scal
     /// Identity provider which issued the credentials
     pub issuer: IpIdentity,
     /// Attribute statements
-    pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
+    pub statements: Vec<AtomicStatementV1<C, AttributeTag, AttributeType>>,
 }
 
 /// Claims about a subject.
@@ -335,7 +335,7 @@ pub struct AccountBasedCredentialV1<C: Curve, AttributeType: Attribute<C::Scalar
     /// Credential subject
     pub subject: AccountCredentialSubject<C, AttributeType>,
     /// Proofs of the credential
-    pub proof: ConcordiumZKProof<AccountCredentialProofs<C, AttributeType>>,
+    pub proof: ConcordiumZKProof<AccountCredentialProofs<C>>,
 }
 
 /// Subject of account based credential
@@ -346,7 +346,7 @@ pub struct AccountCredentialSubject<C: Curve, AttributeType: Attribute<C::Scalar
     /// Account credentials registration id. Identifies the subject.
     pub cred_id: CredentialRegistrationID,
     /// Proven statements
-    pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
+    pub statements: Vec<AtomicStatementV1<C, AttributeTag, AttributeType>>,
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
@@ -393,9 +393,9 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
 
 /// Proof of account based credential
 #[derive(Clone, Debug, Eq, PartialEq, common::Serialize)]
-pub struct AccountCredentialProofs<C: Curve, AttributeType: Attribute<C::Scalar>> {
+pub struct AccountCredentialProofs<C: Curve> {
     /// Proofs of the atomic statements on attributes
-    pub statement_proofs: Vec<AtomicProof<C, AttributeType>>,
+    pub statement_proofs: Vec<AtomicProofV1<C>>,
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, AttributeType> {
@@ -516,7 +516,7 @@ pub struct IdentityCredentialSubject<C: Curve, AttributeType: Attribute<C::Scala
     /// Ephemeral encrypted id for the credential. This is the subject of the credential.
     pub cred_id: IdentityCredentialEphemeralId,
     /// Proven statements
-    pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
+    pub statements: Vec<AtomicStatementV1<C, AttributeTag, AttributeType>>,
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
@@ -573,7 +573,7 @@ pub struct IdentityCredentialProofs<
     /// Proof that the attributes and the other values in [`IdentityBasedCredentialV1`] are correct
     pub identity_attributes_proofs: IdentityAttributesCredentialsProofs<P, C>,
     /// Proofs of the atomic statements on attributes
-    pub statement_proofs: Vec<AtomicProof<C, AttributeType>>,
+    pub statement_proofs: Vec<AtomicProofV1<C>>,
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
@@ -751,7 +751,7 @@ impl<
                         bail!("expected idp did, was {}", issuer);
                     };
                     ensure!(issuer.network == subject.network, "network not identical");
-                    let proof: ConcordiumZKProof<AccountCredentialProofs<C, AttributeType>> =
+                    let proof: ConcordiumZKProof<AccountCredentialProofs<C>> =
                         take_field_de(&mut value, "proof")?;
 
                     Self::Account(AccountBasedCredentialV1 {
@@ -1425,59 +1425,51 @@ mod tests {
             network: Network::Testnet,
             cred_id: acc_cred_fixture.cred_id,
             statements: vec![
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: 3.into(),
-                        lower: Web3IdAttribute::Numeric(80),
-                        upper: Web3IdAttribute::Numeric(1237),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeInSet {
-                    statement: AttributeInSetStatement {
-                        attribute_tag: 2.into(),
-                        set: [
-                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeNotInSet {
-                    statement: AttributeNotInSetStatement {
-                        attribute_tag: 1.into(),
-                        set: [
-                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
-                        lower: Web3IdAttribute::try_from(
-                            chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
-                                .unwrap()
-                                .to_utc(),
-                        )
-                        .unwrap(),
-                        upper: Web3IdAttribute::try_from(
-                            chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
-                                .unwrap()
-                                .to_utc(),
-                        )
-                        .unwrap(),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::RevealAttribute {
+                AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+                    attribute_tag: 3.into(),
+                    lower: Web3IdAttribute::Numeric(80),
+                    upper: Web3IdAttribute::Numeric(1237),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeInSet(AttributeInSetStatement {
+                    attribute_tag: 2.into(),
+                    set: [
+                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeNotInSet(AttributeNotInSetStatement {
+                    attribute_tag: 1.into(),
+                    set: [
+                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+                    attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
+                    lower: Web3IdAttribute::try_from(
+                        chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                            .unwrap()
+                            .to_utc(),
+                    )
+                    .unwrap(),
+                    upper: Web3IdAttribute::try_from(
+                        chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                            .unwrap()
+                            .to_utc(),
+                    )
+                    .unwrap(),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::RevealAttribute {
                     statement: RevealAttributeStatement {
                         attribute_tag: 5.into(),
                     },
