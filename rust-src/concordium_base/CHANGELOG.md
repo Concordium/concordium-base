@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Introduced `AccountTransactionV1` and related types to support sponsored transactions.
+
 ## 9.0.0 (2025-10-29)
 
 - Changed `Debug` implementation of secret keys and cleartext values to not print the key or value.

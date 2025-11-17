@@ -338,6 +338,10 @@ pub trait Serial {
     fn serial<B: Buffer>(&self, out: &mut B);
 }
 
+impl Serial for () {
+    fn serial<B: Buffer>(&self, _out: &mut B) {}
+}
+
 impl Serial for u64 {
     fn serial<B: Buffer>(&self, out: &mut B) {
         out.write_u64::<BigEndian>(*self)
