@@ -1,5 +1,4 @@
 use crate::random_oracle::StructuredDigest;
-use crate::web3id::LinkingProof;
 use crate::{
     curve_arithmetic::Curve,
     id::types::{Attribute, GlobalContext},
@@ -11,8 +10,7 @@ use std::collections::BTreeMap;
 
 use crate::curve_arithmetic::Pairing;
 use crate::id::id_proof_types::{
-    AtomicProof, AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement,
-    AttributeNotInSetStatement, ProofVersion,
+    AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement, ProofVersion,
 };
 use crate::id::identity_attributes_credentials;
 use crate::id::identity_attributes_credentials::IdentityAttributeHandling;
@@ -260,7 +258,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
             proof: ConcordiumZKProof {
                 created_at: now,
                 proof_value: AccountCredentialProofs { statement_proofs },
-                proof_type: ConcordiumZKProofVersion::ConcordiumZKProofV4,
+                proof_versdion: ConcordiumZKProofVersion::ConcordiumZKProofV4,
             },
             subject: AccountCredentialSubject {
                 cred_id: self.cred_id,
@@ -350,7 +348,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
             proof: ConcordiumZKProof {
                 created_at: now,
                 proof_value: proof,
-                proof_type: ConcordiumZKProofVersion::ConcordiumZKProofV4,
+                proof_versdion: ConcordiumZKProofVersion::ConcordiumZKProofV4,
             },
             subject: IdentityCredentialSubject {
                 cred_id,
@@ -597,7 +595,7 @@ pub mod tests {
     use std::collections::BTreeMap;
 
     use crate::id::constants::ArCurve;
-    use crate::id::id_proof_types::{AtomicStatement, AttributeInRangeStatement};
+    use crate::id::id_proof_types::AttributeInRangeStatement;
     use crate::id::types::AttributeTag;
     use crate::web3id::did::Network;
     use crate::web3id::v1::{fixtures, ContextProperty};
@@ -791,14 +789,12 @@ pub mod tests {
         else {
             panic!("should be account proof");
         };
-        subject.statements[2] = AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
-                attribute_tag: 3.into(),
-                lower: Web3IdAttribute::Numeric(200),
-                upper: Web3IdAttribute::Numeric(1237),
-                _phantom: PhantomData,
-            },
-        };
+        subject.statements[2] = AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+            attribute_tag: 3.into(),
+            lower: Web3IdAttribute::Numeric(200),
+            upper: Web3IdAttribute::Numeric(1237),
+            _phantom: PhantomData,
+        });
 
         let public = vec![acc_cred_fixture.verification_material];
 
@@ -845,8 +841,8 @@ pub mod tests {
         else {
             panic!("should be account proof");
         };
-        subject.statements.push(AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
+        subject.statements.push(AtomicStatementV1::AttributeInRange(
+            AttributeInRangeStatement {
                 attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
                 lower: Web3IdAttribute::try_from(
                     chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
@@ -862,7 +858,7 @@ pub mod tests {
                 .unwrap(),
                 _phantom: PhantomData,
             },
-        });
+        ));
 
         let public = vec![acc_cred_fixture.verification_material];
         let err = proof
@@ -1073,14 +1069,12 @@ pub mod tests {
         else {
             panic!("should be account proof");
         };
-        subject.statements[2] = AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
-                attribute_tag: 3.into(),
-                lower: Web3IdAttribute::Numeric(200),
-                upper: Web3IdAttribute::Numeric(1237),
-                _phantom: PhantomData,
-            },
-        };
+        subject.statements[2] = AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+            attribute_tag: 3.into(),
+            lower: Web3IdAttribute::Numeric(200),
+            upper: Web3IdAttribute::Numeric(1237),
+            _phantom: PhantomData,
+        });
 
         let public = vec![id_cred_fixture.verification_material];
         let err = proof
@@ -1126,8 +1120,8 @@ pub mod tests {
         else {
             panic!("should be account proof");
         };
-        subject.statements.push(AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
+        subject.statements.push(AtomicStatementV1::AttributeInRange(
+            AttributeInRangeStatement {
                 attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
                 lower: Web3IdAttribute::try_from(
                     chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
@@ -1143,7 +1137,7 @@ pub mod tests {
                 .unwrap(),
                 _phantom: PhantomData,
             },
-        });
+        ));
 
         let public = vec![id_cred_fixture.verification_material];
         let err = proof

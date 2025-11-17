@@ -32,8 +32,8 @@ use crate::id::types::{
     IdentityAttributesCredentialsProofs, IdentityObjectV1, IpContextOnly, IpIdentity, IpInfo,
     YearMonth,
 };
+use crate::web3id::did;
 use crate::web3id::did::Network;
-use crate::web3id::{did, LinkingProof};
 use crate::{common, pedersen_commitment};
 use anyhow::{bail, ensure, Context};
 use byteorder::ReadBytesExt;
@@ -576,6 +576,7 @@ pub struct IdentityCredentialProofs<
     /// The attributes that are part of the underlying identity credential from which this credential is derived
     pub identity_attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
     /// Proof of:
+    ///
     /// * knowledge of a signature from the identity provider on the attributes
     ///   in `identity_attributes` and on [`IdentityBasedCredentialV1::validity`]
     /// * correctness of the encryption of IdCredPub in [`IdentityCredentialSubject::cred_id`]
@@ -652,16 +653,19 @@ impl common::Deserial for ConcordiumZKProofVersion {
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, common::Serialize)]
 #[serde(bound(serialize = "T: common::Serial", deserialize = "T: common::Deserial"))]
 pub struct ConcordiumZKProof<T: common::Serialize> {
+    /// When proof was created
     #[serde(rename = "created")]
     pub created_at: chrono::DateTime<chrono::Utc>,
+    /// The actual proof
     #[serde(
         rename = "proofValue",
         serialize_with = "common::base16_encode",
         deserialize_with = "common::base16_decode"
     )]
     pub proof_value: T,
+    /// Version/type of proof
     #[serde(rename = "type")]
-    pub proof_type: ConcordiumZKProofVersion,
+    pub proof_versdion: ConcordiumZKProofVersion,
 }
 
 /// Verifiable credential. Embeds and proofs the claims from a [`SubjectClaims`].
@@ -1276,7 +1280,7 @@ pub enum VerifyError {
 }
 
 /// Statements are composed of one or more atomic statements.
-/// This type defines the different types of atomic statements.
+/// This type defines the different types of atomic statements used in credentials.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Eq)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize, TagType: \
@@ -1365,7 +1369,7 @@ impl<C: Curve, TagType: common::Serialize, AttributeType: Attribute<C::Scalar>> 
     }
 }
 
-/// The different types of proofs, corresponding to the statements above.
+/// The different types of proofs, corresponding to [`AtomicStatementV1`].
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum AtomicProofV1<C: Curve> {
     /// A proof that an attribute is equal to a public value
@@ -1431,8 +1435,7 @@ mod tests {
     use crate::elgamal::Cipher;
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
     use crate::id::id_proof_types::{
-        AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement,
-        AttributeNotInSetStatement, RevealAttributeStatement,
+        AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
     };
     use crate::id::types::{AttributeTag, GlobalContext};
     use crate::web3id::did::Network;
@@ -1533,63 +1536,57 @@ mod tests {
             network: Network::Testnet,
             cred_id: acc_cred_fixture.cred_id,
             statements: vec![
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: 3.into(),
-                        lower: Web3IdAttribute::Numeric(80),
-                        upper: Web3IdAttribute::Numeric(1237),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeInSet {
-                    statement: AttributeInSetStatement {
-                        attribute_tag: 2.into(),
-                        set: [
-                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeNotInSet {
-                    statement: AttributeNotInSetStatement {
-                        attribute_tag: 1.into(),
-                        set: [
-                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
-                        lower: Web3IdAttribute::try_from(
-                            chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
-                                .unwrap()
-                                .to_utc(),
-                        )
-                        .unwrap(),
-                        upper: Web3IdAttribute::try_from(
-                            chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
-                                .unwrap()
-                                .to_utc(),
-                        )
-                        .unwrap(),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::RevealAttribute {
-                    statement: RevealAttributeStatement {
-                        attribute_tag: 5.into(),
-                    },
-                },
+                AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+                    attribute_tag: 3.into(),
+                    lower: Web3IdAttribute::Numeric(80),
+                    upper: Web3IdAttribute::Numeric(1237),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeInSet(AttributeInSetStatement {
+                    attribute_tag: 2.into(),
+                    set: [
+                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeNotInSet(AttributeNotInSetStatement {
+                    attribute_tag: 1.into(),
+                    set: [
+                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+                    attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
+                    lower: Web3IdAttribute::try_from(
+                        chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                            .unwrap()
+                            .to_utc(),
+                    )
+                    .unwrap(),
+                    upper: Web3IdAttribute::try_from(
+                        chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                            .unwrap()
+                            .to_utc(),
+                    )
+                    .unwrap(),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeValue(AttributeValueStatement {
+                    attribute_tag: AttributeTag(5).to_string().parse().unwrap(),
+                    attribute_value: Web3IdAttribute::String(
+                        AttributeKind::try_new("testvalue".into()).unwrap(),
+                    ),
+                    _phantom: Default::default(),
+                }),
             ],
         })];
 
@@ -1920,63 +1917,57 @@ mod tests {
             network: Network::Testnet,
             issuer: id_cred_fixture.issuer,
             statements: vec![
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: 3.into(),
-                        lower: Web3IdAttribute::Numeric(80),
-                        upper: Web3IdAttribute::Numeric(1237),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeInSet {
-                    statement: AttributeInSetStatement {
-                        attribute_tag: 2.into(),
-                        set: [
-                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeNotInSet {
-                    statement: AttributeNotInSetStatement {
-                        attribute_tag: 1.into(),
-                        set: [
-                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
-                        lower: Web3IdAttribute::try_from(
-                            chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
-                                .unwrap()
-                                .to_utc(),
-                        )
-                        .unwrap(),
-                        upper: Web3IdAttribute::try_from(
-                            chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
-                                .unwrap()
-                                .to_utc(),
-                        )
-                        .unwrap(),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::RevealAttribute {
-                    statement: RevealAttributeStatement {
-                        attribute_tag: 5.into(),
-                    },
-                },
+                AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+                    attribute_tag: 3.into(),
+                    lower: Web3IdAttribute::Numeric(80),
+                    upper: Web3IdAttribute::Numeric(1237),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeInSet(AttributeInSetStatement {
+                    attribute_tag: 2.into(),
+                    set: [
+                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeNotInSet(AttributeNotInSetStatement {
+                    attribute_tag: 1.into(),
+                    set: [
+                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+                    attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
+                    lower: Web3IdAttribute::try_from(
+                        chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                            .unwrap()
+                            .to_utc(),
+                    )
+                    .unwrap(),
+                    upper: Web3IdAttribute::try_from(
+                        chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                            .unwrap()
+                            .to_utc(),
+                    )
+                    .unwrap(),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeValue(AttributeValueStatement {
+                    attribute_tag: AttributeTag(5).to_string().parse().unwrap(),
+                    attribute_value: Web3IdAttribute::String(
+                        AttributeKind::try_new("testvalue".into()).unwrap(),
+                    ),
+                    _phantom: Default::default(),
+                }),
             ],
         })];
 
@@ -2423,7 +2414,6 @@ mod fixtures {
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
     use crate::id::id_proof_types::{
         AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
-        RevealAttributeStatement,
     };
     use crate::id::types::{
         ArInfos, AttributeList, AttributeTag, GlobalContext, IdentityObjectV1, IpData, IpIdentity,
@@ -2454,70 +2444,64 @@ mod fixtures {
 
     /// Statements and attributes that make the statements true
     pub fn statements_and_attributes<TagType: FromStr + common::Serialize + Ord>() -> (
-        Vec<AtomicStatement<ArCurve, TagType, Web3IdAttribute>>,
+        Vec<AtomicStatementV1<ArCurve, TagType, Web3IdAttribute>>,
         BTreeMap<TagType, Web3IdAttribute>,
     )
     where
         <TagType as FromStr>::Err: Debug,
     {
         let statements = vec![
-            AtomicStatement::AttributeInSet {
-                statement: AttributeInSetStatement {
-                    attribute_tag: AttributeTag(1).to_string().parse().unwrap(),
-                    set: [
-                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                    ]
-                    .into_iter()
-                    .collect(),
-                    _phantom: PhantomData,
-                },
-            },
-            AtomicStatement::AttributeNotInSet {
-                statement: AttributeNotInSetStatement {
-                    attribute_tag: AttributeTag(2).to_string().parse().unwrap(),
-                    set: [
-                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                    ]
-                    .into_iter()
-                    .collect(),
-                    _phantom: PhantomData,
-                },
-            },
-            AtomicStatement::AttributeInRange {
-                statement: AttributeInRangeStatement {
-                    attribute_tag: AttributeTag(3).to_string().parse().unwrap(),
-                    lower: Web3IdAttribute::Numeric(80),
-                    upper: Web3IdAttribute::Numeric(1237),
-                    _phantom: PhantomData,
-                },
-            },
-            AtomicStatement::AttributeInRange {
-                statement: AttributeInRangeStatement {
-                    attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
-                    lower: Web3IdAttribute::try_from(
-                        chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
-                            .unwrap()
-                            .to_utc(),
-                    )
-                    .unwrap(),
-                    upper: Web3IdAttribute::try_from(
-                        chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
-                            .unwrap()
-                            .to_utc(),
-                    )
-                    .unwrap(),
-                    _phantom: PhantomData,
-                },
-            },
-            AtomicStatement::RevealAttribute {
-                statement: RevealAttributeStatement {
-                    attribute_tag: AttributeTag(5).to_string().parse().unwrap(),
-                },
-            },
+            AtomicStatementV1::AttributeInSet(AttributeInSetStatement {
+                attribute_tag: AttributeTag(1).to_string().parse().unwrap(),
+                set: [
+                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                ]
+                .into_iter()
+                .collect(),
+                _phantom: PhantomData,
+            }),
+            AtomicStatementV1::AttributeNotInSet(AttributeNotInSetStatement {
+                attribute_tag: AttributeTag(2).to_string().parse().unwrap(),
+                set: [
+                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                ]
+                .into_iter()
+                .collect(),
+                _phantom: PhantomData,
+            }),
+            AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+                attribute_tag: AttributeTag(3).to_string().parse().unwrap(),
+                lower: Web3IdAttribute::Numeric(80),
+                upper: Web3IdAttribute::Numeric(1237),
+                _phantom: PhantomData,
+            }),
+            AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+                attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
+                lower: Web3IdAttribute::try_from(
+                    chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                        .unwrap()
+                        .to_utc(),
+                )
+                .unwrap(),
+                upper: Web3IdAttribute::try_from(
+                    chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                        .unwrap()
+                        .to_utc(),
+                )
+                .unwrap(),
+                _phantom: PhantomData,
+            }),
+            AtomicStatementV1::AttributeValue(AttributeValueStatement {
+                attribute_tag: AttributeTag(5).to_string().parse().unwrap(),
+                attribute_value: Web3IdAttribute::String(
+                    AttributeKind::try_new("testvalue".into()).unwrap(),
+                ),
+                _phantom: Default::default(),
+            }),
         ];
 
         let attributes = [
