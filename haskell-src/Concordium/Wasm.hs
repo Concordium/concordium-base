@@ -195,6 +195,7 @@ pvCostSemanticsVersion = \case
     SP7 -> CSV1
     SP8 -> CSV1
     SP9 -> CSV1
+    SP10 -> CSV1
 
 -- | Convert the version to a Word8. This is used when transferring information
 --  via FFI.
