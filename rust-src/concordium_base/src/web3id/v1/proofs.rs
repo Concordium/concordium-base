@@ -5,7 +5,6 @@ use crate::{
     random_oracle::RandomOracle,
 };
 use itertools::Itertools;
-use std::borrow::Borrow;
 use std::collections::BTreeMap;
 
 use crate::curve_arithmetic::Pairing;
@@ -126,6 +125,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
             &self.subject.statements,
             &self.proof.proof_value.statement_proofs,
             commitments,
+            &BTreeMap::default(),
             global_context,
             transcript,
         )
@@ -191,10 +191,23 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             })
             .collect();
 
+        let public_attributes: BTreeMap<_, _> = self
+            .proof
+            .proof_value
+            .identity_attributes
+            .iter()
+            .filter_map(|(tag, attr)| match attr {
+                IdentityAttribute::Revealed(attr) => Some((*tag, attr)),
+                _ => None,
+            })
+            .collect();
+        // todo ar test public attr
+
         verify_statements(
             &self.subject.statements,
             &self.proof.proof_value.statement_proofs,
             &cmm_attributes,
+            &public_attributes,
             global_context,
             transcript,
         )
@@ -210,6 +223,7 @@ fn verify_statements<
     statements: impl IntoIterator<Item = &'a AtomicStatementV1<C, TagType, AttributeType>>,
     proofs: impl IntoIterator<Item = &'a AtomicProofV1<C>>,
     cmm_attributes: &BTreeMap<TagType, Commitment<C>>,
+    public_attributes: &BTreeMap<TagType, &AttributeType>,
     global_context: &GlobalContext<C>,
     transcript: &mut RandomOracle,
 ) -> bool {
@@ -220,6 +234,7 @@ fn verify_statements<
                 global_context,
                 transcript,
                 cmm_attributes,
+                public_attributes,
                 proof,
             )
         })
@@ -249,6 +264,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
             &self.statements,
             values,
             randomness,
+            &BTreeMap::default(),
             global_context,
             transcript,
             csprng,
@@ -323,10 +339,21 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
             )
             .map_err(|err| ProveError::IdentityAttributeCredentials(err.to_string()))?;
 
+        let public_attributes: BTreeMap<_, _> = id_attr_cred_info
+            .values
+            .attributes
+            .iter()
+            .filter_map(|(tag, attr)| match attr {
+                IdentityAttribute::Revealed(attr) => Some((*tag, attr)),
+                _ => None,
+            })
+            .collect();
+
         let statement_proofs = prove_statements(
             &self.statements,
             &id_object.get_attribute_list().alist,
             &id_attr_cmm_rand.attributes_rand,
+            &public_attributes,
             global_context,
             transcript,
             csprng,
@@ -370,6 +397,7 @@ fn prove_statements<
     statements: impl IntoIterator<Item = &'a AtomicStatementV1<C, TagType, AttributeType>>,
     attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
     attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
+    public_attributes: &BTreeMap<TagType, &AttributeType>,
     global_context: &GlobalContext<C>,
     transcript: &mut RandomOracle,
     csprng: &mut (impl Rng + CryptoRng),
@@ -385,6 +413,7 @@ fn prove_statements<
                     csprng,
                     attribute_values,
                     attribute_randomness,
+                    public_attributes,
                 )
                 .ok_or(ProveError::AtomicStatementProof)
         })
@@ -488,8 +517,11 @@ fn append_context(digest: &mut impl StructuredDigest, context: &ContextInformati
     digest.append_message("requested", &context.requested);
 }
 
-impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Scalar>>
-    AtomicStatementV1<C, TagType, AttributeType>
+impl<
+        C: Curve,
+        TagType: crate::common::Serialize + Ord,
+        AttributeType: Attribute<C::Scalar> + Ord,
+    > AtomicStatementV1<C, TagType, AttributeType>
 {
     pub(crate) fn prove(
         &self,
@@ -499,19 +531,25 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
         csprng: &mut impl rand::Rng,
         attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
         attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
+        public_attributes: &BTreeMap<TagType, &AttributeType>,
     ) -> Option<AtomicProofV1<C>> {
         match self {
             AtomicStatementV1::AttributeValue(statement) => {
-                let proof = statement.prove(
-                    version,
-                    global,
-                    transcript,
-                    csprng,
-                    attribute_values,
-                    attribute_randomness,
-                )?;
-                let proof = AtomicProofV1::AttributeValue(proof);
-                Some(proof)
+                if let Some(public_attribute) = public_attributes.get(&statement.attribute_tag) {
+                    statement.prove_no_proof(transcript, public_attribute);
+                    Some(AtomicProofV1::AttributeValueNoProof)
+                } else {
+                    let proof = statement.prove(
+                        version,
+                        global,
+                        transcript,
+                        csprng,
+                        attribute_values,
+                        attribute_randomness,
+                    )?;
+                    let proof = AtomicProofV1::AttributeValue(proof);
+                    Some(proof)
+                }
             }
             AtomicStatementV1::AttributeInSet(statement) => {
                 let proof = statement.prove(
@@ -559,12 +597,13 @@ impl<
         AttributeType: Attribute<C::Scalar>,
     > AtomicStatementV1<C, TagType, AttributeType>
 {
-    pub(crate) fn verify<Q: std::cmp::Ord + Borrow<TagType>>(
+    pub(crate) fn verify(
         &self,
         version: ProofVersion,
         global: &GlobalContext<C>,
         transcript: &mut RandomOracle,
-        cmm_attributes: &BTreeMap<Q, Commitment<C>>,
+        cmm_attributes: &BTreeMap<TagType, Commitment<C>>,
+        public_attributes: &BTreeMap<TagType, &AttributeType>,
         proof: &AtomicProofV1<C>,
     ) -> bool {
         match (self, proof) {
@@ -572,6 +611,10 @@ impl<
                 AtomicStatementV1::AttributeValue(statement),
                 AtomicProofV1::AttributeValue(proof),
             ) => statement.verify(version, global, transcript, cmm_attributes, proof),
+            (
+                AtomicStatementV1::AttributeValue(statement),
+                AtomicProofV1::AttributeValueNoProof,
+            ) => statement.verify_no_proof(transcript, public_attributes),
             (
                 AtomicStatementV1::AttributeInRange(statement),
                 AtomicProofV1::AttributeInRange(proof),

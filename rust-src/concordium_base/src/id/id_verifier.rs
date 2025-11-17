@@ -360,6 +360,20 @@ impl<
             &proof.proof,
         )
     }
+
+    pub(crate) fn verify_no_proof(
+        &self,
+        transcript: &mut RandomOracle,
+        public_attributes: &BTreeMap<TagType, &AttributeType>,
+    ) -> bool {
+        let Some(public_attribute) = public_attributes.get(&self.attribute_tag) else {
+            return false;
+        };
+
+        transcript.append_message("RevealedAttribute", &self.attribute_value);
+
+        self.attribute_value == **public_attribute
+    }
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> {

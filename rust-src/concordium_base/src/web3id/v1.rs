@@ -1374,6 +1374,8 @@ impl<C: Curve, TagType: common::Serialize, AttributeType: Attribute<C::Scalar>> 
 pub enum AtomicProofV1<C: Curve> {
     /// A proof that an attribute is equal to a public value
     AttributeValue(AttributeValueProof<C>),
+    /// A proof that an attribute is equal to a public value
+    AttributeValueNoProof,
     /// A proof that an attribute is in a range
     AttributeInRange(RangeProof<C>),
     /// A proof that an attribute is in a set
@@ -1389,16 +1391,19 @@ impl<C: Curve> common::Serial for AtomicProofV1<C> {
                 0u8.serial(out);
                 proof.serial(out);
             }
-            Self::AttributeInRange(proof) => {
+            Self::AttributeValueNoProof => {
                 1u8.serial(out);
-                proof.serial(out);
             }
-            Self::AttributeInSet(proof) => {
+            Self::AttributeInRange(proof) => {
                 2u8.serial(out);
                 proof.serial(out);
             }
-            Self::AttributeNotInSet(proof) => {
+            Self::AttributeInSet(proof) => {
                 3u8.serial(out);
+                proof.serial(out);
+            }
+            Self::AttributeNotInSet(proof) => {
+                4u8.serial(out);
                 proof.serial(out);
             }
         }
@@ -1412,15 +1417,16 @@ impl<C: Curve> common::Deserial for AtomicProofV1<C> {
                 let proof = source.get()?;
                 Ok(Self::AttributeValue(proof))
             }
-            1u8 => {
+            1u8 => Ok(Self::AttributeValueNoProof),
+            2u8 => {
                 let proof = source.get()?;
                 Ok(Self::AttributeInRange(proof))
             }
-            2u8 => {
+            3u8 => {
                 let proof = source.get()?;
                 Ok(Self::AttributeInSet(proof))
             }
-            3u8 => {
+            4u8 => {
                 let proof = source.get()?;
                 Ok(Self::AttributeNotInSet(proof))
             }

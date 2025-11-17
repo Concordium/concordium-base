@@ -281,6 +281,14 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
         )?;
         Some(AttributeValueProof { proof })
     }
+
+    pub(crate) fn prove_no_proof(
+        &self,
+        transcript: &mut RandomOracle,
+        attribute_value: &AttributeType,
+    ) {
+        transcript.append_message("RevealedAttribute", attribute_value);
+    }
 }
 
 /// Function for proving ownership of an account. The parameters are
