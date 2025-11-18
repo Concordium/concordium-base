@@ -357,8 +357,9 @@ impl Statement<G1, AttributeKind> {
         let year = u64::try_from(now.year()).ok()?;
         let years_ago = year.checked_sub(age)?;
         let date_years_ago = format!("{:04}{:02}{:02}", years_ago, now.month(), now.day());
-        let upper = AttributeKind(date_years_ago);
-        let lower = AttributeKind(String::from("18000101"));
+        let upper = AttributeKind::try_new(date_years_ago)
+            .expect("date format can always be represented in attribute");
+        let lower = AttributeKind::try_new(String::from("18000101")).expect("fixed length");
 
         let statement = AttributeInRangeStatement::<G1, _, _> {
             attribute_tag: AttributeTag::from_str("dob").ok()?, // date of birth tag
@@ -386,8 +387,10 @@ impl Statement<G1, AttributeKind> {
         let years_ago = year.checked_sub(age)?;
         let date_years_ago = format!("{:04}{:02}{:02}", years_ago, now.month(), now.day());
         let today = format!("{:04}{:02}{:02}", year, now.month(), now.day());
-        let lower = AttributeKind(date_years_ago);
-        let upper = AttributeKind(today);
+        let lower = AttributeKind::try_new(date_years_ago)
+            .expect("date format can always be represented in attribute");
+        let upper = AttributeKind::try_new(today)
+            .expect("date format can always be represented in attribute");
 
         let statement = AttributeInRangeStatement::<G1, _, _> {
             attribute_tag: AttributeTag::from_str("dob").ok()?, // date of birth tag
@@ -416,8 +419,10 @@ impl Statement<G1, AttributeKind> {
         let upper_year = year.checked_sub(lower)?;
         let lower_date = format!("{:04}{:02}{:02}", lower_year, now.month(), now.day());
         let upper_date = format!("{:04}{:02}{:02}", upper_year, now.month(), now.day());
-        let lower = AttributeKind(lower_date);
-        let upper = AttributeKind(upper_date);
+        let lower = AttributeKind::try_new(lower_date)
+            .expect("date format can always be represented in attribute");
+        let upper = AttributeKind::try_new(upper_date)
+            .expect("date format can always be represented in attribute");
 
         let statement = AttributeInRangeStatement::<G1, _, _> {
             attribute_tag: AttributeTag::from_str("dob").ok()?, // date of birth tag
@@ -435,7 +440,7 @@ impl Statement<G1, AttributeKind> {
     /// `statement` is composed by the statements in `self` and
     /// the "document expiry no earlier than" statement.
     pub fn doc_expiry_no_earlier_than(mut self, lower: AttributeKind) -> Option<Self> {
-        let upper = AttributeKind(String::from("99990101"));
+        let upper = AttributeKind::try_new(String::from("99990101")).expect("fixed length");
 
         let statement = AttributeInRangeStatement::<G1, _, _> {
             attribute_tag: AttributeTag::from_str("idDocExpiresAt").ok()?, // doc expiry

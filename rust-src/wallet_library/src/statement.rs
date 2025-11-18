@@ -279,14 +279,14 @@ mod tests {
         let good_statement = AtomicStatement::AttributeInSet {
             statement: AttributeInSetStatement {
                 attribute_tag: AttributeTag(5),
-                set: BTreeSet::from([constants::AttributeKind("GB".into())]),
+                set: BTreeSet::from([constants::AttributeKind::try_new("GB".into()).unwrap()]),
                 _phantom: PhantomData::<constants::ArCurve>,
             },
         };
         let bad_statement = AtomicStatement::AttributeInSet {
             statement: AttributeInSetStatement {
                 attribute_tag: AttributeTag(5),
-                set: BTreeSet::from([constants::AttributeKind("HI".into())]),
+                set: BTreeSet::from([constants::AttributeKind::try_new("HI".into()).unwrap()]),
                 _phantom: PhantomData::<constants::ArCurve>,
             },
         };
@@ -310,8 +310,8 @@ mod tests {
             statement: AttributeInSetStatement {
                 attribute_tag: AttributeTag(8),
                 set: BTreeSet::from([
-                    constants::AttributeKind("DK-81".into()),
-                    constants::AttributeKind("GB-UKM".into()),
+                    constants::AttributeKind::try_new("DK-81".into()).unwrap(),
+                    constants::AttributeKind::try_new("GB-UKM".into()).unwrap(),
                 ]),
                 _phantom: PhantomData::<constants::ArCurve>,
             },

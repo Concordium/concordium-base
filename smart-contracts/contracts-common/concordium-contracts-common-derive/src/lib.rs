@@ -792,23 +792,18 @@ pub fn concordium_test(attr: TokenStream, item: TokenStream) -> TokenStream {
     unwrap_or_report(attribute::concordium_test_worker(attr, item))
 }
 
-/// Sets the cfg for testing targeting either Wasm and native.
+/// Sets the cfg for testing targeting Wasm.
 #[cfg(feature = "wasm-test")]
 #[proc_macro_attribute]
 pub fn concordium_cfg_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
     item
 }
 
-/// Sets the cfg for testing targeting either Wasm and native.
+/// Sets the cfg for testing targeting Wasm.
 #[cfg(not(feature = "wasm-test"))]
 #[proc_macro_attribute]
-pub fn concordium_cfg_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let item = proc_macro2::TokenStream::from(item);
-    let out = quote! {
-        #[cfg(test)]
-        #item
-    };
-    out.into()
+pub fn concordium_cfg_test(_attr: TokenStream, _item: TokenStream) -> TokenStream {
+    TokenStream::new()
 }
 
 /// If `wasm-test` feature of `concordium-std` is enabled ignore the item,
@@ -828,12 +823,7 @@ pub fn concordium_cfg_not_test(_attr: TokenStream, _item: TokenStream) -> TokenS
 #[cfg(not(feature = "wasm-test"))]
 #[proc_macro_attribute]
 pub fn concordium_cfg_not_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let item = proc_macro2::TokenStream::from(item);
-    let out = quote! {
-        #[cfg(not(test))]
-        #item
-    };
-    out.into()
+    item
 }
 
 // Supported attributes for `concordium-quickcheck`
