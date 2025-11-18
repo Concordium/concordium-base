@@ -115,12 +115,17 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
         verification_material: &CredentialVerificationMaterial<P, C>,
     ) -> bool {
         let CredentialVerificationMaterial::Account(AccountCredentialVerificationMaterial {
+            issuer,
             attribute_commitments: commitments,
         }) = verification_material
         else {
             // mismatch in types
             return false;
         };
+
+        if self.issuer != *issuer {
+            return false;// todo ar test
+        }
 
         verify_statements(
             &self.subject.statements,
@@ -492,7 +497,7 @@ pub mod tests {
 
     use crate::id::constants::ArCurve;
     use crate::id::id_proof_types::{AtomicStatement, AttributeInRangeStatement};
-    use crate::id::types::AttributeTag;
+    use crate::id::types::{AttributeTag, IpIdentity};
     use crate::web3id::did::Network;
     use crate::web3id::v1::{fixtures, ContextProperty};
     use crate::web3id::Web3IdAttribute;
@@ -693,6 +698,53 @@ pub mod tests {
                 _phantom: PhantomData,
             },
         };
+
+        let public = vec![acc_cred_fixture.verification_material];
+
+        let err = proof
+            .verify(&global_context, public.iter())
+            .expect_err("verify");
+        assert_eq!(err, VerifyError::InvalidCredential(0));
+    }
+
+    /// Test prove and verify presentation for account credentials where
+    /// verification fails because issuer is not correct
+    #[test]
+    fn test_soundness_account_issuer() {
+        let challenge = challenge_fixture();
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let (statements, attributes) = fixtures::statements_and_attributes();
+
+        let acc_cred_fixture = fixtures::account_credentials_fixture(attributes, &global_context);
+
+        let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
+            network: Network::Testnet,
+            cred_id: acc_cred_fixture.cred_id,
+            statements,
+        })];
+
+        let request = RequestV1::<ArCurve, Web3IdAttribute> {
+            challenge,
+            subject_claims,
+        };
+
+        let mut proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [acc_cred_fixture.private_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        // change statement to be invalid
+        let CredentialV1::Account(cred) =
+            &mut proof.verifiable_credentials[0]
+        else {
+            panic!("should be account proof");
+        };
+        cred.issuer = IpIdentity(10);
 
         let public = vec![acc_cred_fixture.verification_material];
 

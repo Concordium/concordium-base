@@ -38,6 +38,7 @@ use serde::ser::{Error as _, SerializeMap};
 use serde::Deserializer;
 use std::collections::{BTreeMap, BTreeSet};
 
+
 const CONCORDIUM_CONTEXT_INFORMATION_TYPE: &str = "ConcordiumContextInformationV1";
 
 const VERIFIABLE_PRESENTATION_TYPE: &str = "VerifiablePresentation";
@@ -281,13 +282,16 @@ fn take_field_de<T: DeserializeOwned>(
 /// identity provider.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct AccountCredentialMetadataV1 {
-    pub issuer: IpIdentity,
+    /// Account credential registration id for the credential.
+    /// Must be used to look up the account credential on chain.
     pub cred_id: CredentialRegistrationID,
 }
 
 /// Metadata of an identity based credential.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct IdentityCredentialMetadataV1 {
+    /// Issuer of the identity credentials. Must be used to look
+    /// up the identity provider keys on chain.
     pub issuer: IpIdentity,
     pub validity: CredentialValidity,
 }
@@ -400,12 +404,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
     pub fn metadata(&self) -> AccountCredentialMetadataV1 {
         let AccountBasedCredentialV1 {
             subject: AccountCredentialSubject { cred_id, .. },
-            issuer,
             ..
         } = self;
 
         AccountCredentialMetadataV1 {
-            issuer: *issuer,
             cred_id: *cred_id,
         }
     }
@@ -585,12 +587,13 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     /// Metadata for the credential
     pub fn metadata(&self) -> IdentityCredentialMetadataV1 {
         let IdentityBasedCredentialV1 {
-            issuer, validity, ..
+            issuer,validity,  ..
         } = self;
 
         IdentityCredentialMetadataV1 {
             issuer: *issuer,
             validity: validity.clone(),
+
         }
     }
 
@@ -1215,7 +1218,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 #[serde(bound(serialize = "", deserialize = ""))]
 #[serde(rename_all = "camelCase")]
 pub struct AccountCredentialVerificationMaterial<C: Curve> {
-    // Commitments to attribute values. Are part of the on-chain account credentials.
+    /// Issuer of the credential
+    pub issuer: IpIdentity,
+    /// Commitments to attribute values. Are part of the on-chain account credentials.
     #[serde(rename = "commitments")]
     pub attribute_commitments: BTreeMap<AttributeTag, pedersen_commitment::Commitment<C>>,
 }
@@ -2525,7 +2530,8 @@ mod fixtures {
             });
 
         let credential_inputs =
-            CredentialVerificationMaterial::Account(AccountCredentialVerificationMaterial {
+            CredentialVerificationMaterial::Account(
+                AccountCredentialVerificationMaterial {
                 attribute_commitments: attr_cmm,
             });
 
