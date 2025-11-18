@@ -535,8 +535,11 @@ impl<
     ) -> Option<AtomicProofV1<C>> {
         match self {
             AtomicStatementV1::AttributeValue(statement) => {
-                if let Some(public_attribute) = revealed_attributes.get(&statement.attribute_tag) {
-                    statement.prove_for_already_revealed(transcript, public_attribute);
+                // If the attribute value has been revealed as part of the identity attributes
+                // proof, we essentially need no proof for the statement.
+                if let Some(revealed_attribute) = revealed_attributes.get(&statement.attribute_tag)
+                {
+                    statement.prove_for_already_revealed(transcript, revealed_attribute);
                     Some(AtomicProofV1::AttributeValueAlreadyRevealed)
                 } else {
                     let proof = statement.prove(
