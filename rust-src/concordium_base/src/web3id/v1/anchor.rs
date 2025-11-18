@@ -1,7 +1,12 @@
-use crate::common::{cbor, Buffer, Deserial, Get, ParseResult, ReadBytesExt, Serial, Serialize};
+use crate::common::{
+    cbor, Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, Serial, Serialize,
+};
+use crate::id::id_proof_types::{
+    AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
+    RevealAttributeStatement,
+};
 use crate::id::{
     constants::{ArCurve, IpPairing},
-    id_proof_types::AtomicStatement,
     types::AttributeTag,
 };
 use crate::web3id::v1::PresentationV1;
@@ -11,7 +16,6 @@ use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::hashes::HashBytes;
 use sha2::Digest;
 use std::collections::HashMap;
-use crate::id::id_proof_types::RevealAttributeStatement;
 
 const PROTOCOL_VERSION: u16 = 1u16;
 
@@ -132,7 +136,7 @@ impl VerificationRequestData {
         }
     }
 
-    /// Add a new statement request to the verification request data.
+    /// Add a subject claims request to the verification request data.
     pub fn add_statement_request(
         mut self,
         statement_request: impl Into<RequestedSubjectClaims>,
@@ -277,7 +281,7 @@ impl Deserial for RequestedSubjectClaims {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Default, Serialize)]
 pub struct RequestedIdentitySubjectClaims {
     /// The statements requested.
-    pub statements: id::id_proof_types::Statement<ArCurve, Web3IdAttribute>,
+    pub statements: Vec<RequestedStatement<AttributeTag>>,
     /// The credential issuers allowed.
     pub issuers: Vec<IdentityProviderMethod>,
     /// Set of allowed credential types. Should never be empty or contain the same value twice.
@@ -336,12 +340,9 @@ impl RequestedIdentitySubjectClaims {
     }
 
     /// Add a statement to the given identity statement request.
-    pub fn add_statement(
-        mut self,
-        statement: AtomicStatement<id::constants::ArCurve, AttributeTag, Web3IdAttribute>,
-    ) -> Self {
-        if !self.statements.statements.contains(&statement) {
-            self.statements.statements.push(statement);
+    pub fn add_statement(mut self, statement: RequestedStatement<AttributeTag>) -> Self {
+        if !self.statements.contains(&statement) {
+            self.statements.push(statement);
         }
         self
     }
@@ -349,11 +350,11 @@ impl RequestedIdentitySubjectClaims {
     /// Add statements to the given identity statement request.
     pub fn add_statements(
         mut self,
-        statements: Vec<AtomicStatement<id::constants::ArCurve, AttributeTag, Web3IdAttribute>>,
+        statements: impl IntoIterator<Item = RequestedStatement<AttributeTag>>,
     ) -> Self {
         for statement in statements {
-            if !self.statements.statements.contains(&statement) {
-                self.statements.statements.push(statement);
+            if !self.statements.contains(&statement) {
+                self.statements.push(statement);
             }
         }
         self
@@ -668,22 +669,66 @@ impl TryFrom<GivenContextJson> for GivenContext {
     }
 }
 
-// todo ar use String key, andre ting?
-
 /// Statement that is requested to be proven.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Eq)]
 #[serde(tag = "type")]
-pub enum RequestedStatement {
+pub enum RequestedStatement<TagType: Serialize> {
     /// The atomic statement stating that an attribute should be revealed.
-    RevealAttribute(RevealAttributeStatement<C, TagType, AttributeType>),
+    RevealAttribute(RevealAttributeStatement<TagType>),
     /// The atomic statement stating that an attribute is in a range.
-    AttributeInRange(AttributeInRangeStatement<C, TagType, AttributeType>),
+    AttributeInRange(AttributeInRangeStatement<ArCurve, TagType, Web3IdAttribute>),
     /// The atomic statement stating that an attribute is in a set.
-    AttributeInSet(AttributeInSetStatement<C, TagType, AttributeType>),
+    AttributeInSet(AttributeInSetStatement<ArCurve, TagType, Web3IdAttribute>),
     /// The atomic statement stating that an attribute is not in a set.
-    AttributeNotInSet(AttributeNotInSetStatement<C, TagType, AttributeType>),
+    AttributeNotInSet(AttributeNotInSetStatement<ArCurve, TagType, Web3IdAttribute>),
 }
 
+impl<TagType: Serialize> Serial for RequestedStatement<TagType> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            Self::RevealAttribute(stmt) => {
+                0u8.serial(out);
+                out.put(stmt);
+            }
+            Self::AttributeInRange(stmt) => {
+                1u8.serial(out);
+                out.put(stmt);
+            }
+            Self::AttributeInSet(stmt) => {
+                2u8.serial(out);
+                out.put(stmt);
+            }
+            Self::AttributeNotInSet(stmt) => {
+                3u8.serial(out);
+                out.put(stmt);
+            }
+        }
+    }
+}
+
+impl<TagType: Serialize> Deserial for RequestedStatement<TagType> {
+    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        Ok(match u8::deserial(source)? {
+            0u8 => {
+                let stmt = source.get()?;
+                Self::RevealAttribute(stmt)
+            }
+            1u8 => {
+                let stmt = source.get()?;
+                Self::AttributeInRange(stmt)
+            }
+            2u8 => {
+                let stmt = source.get()?;
+                Self::AttributeInSet(stmt)
+            }
+            3u8 => {
+                let stmt = source.get()?;
+                Self::AttributeNotInSet(stmt)
+            }
+            n => anyhow::bail!("Unrecognized CredentialType tag {n}"),
+        })
+    }
+}
 
 #[cfg(test)]
 mod tests {
