@@ -829,7 +829,9 @@ fn test_validate_id_recovery_request_stable() {
     // Deserialization of the stable request
     let req_bytes_hex_stable = "856793e4ba5d058cea0b5c3a1c8affb272efcf53bbab77ee28d3e2270d5041d220c1e1a9c6c8619c84e40ebd70fb583e00000000000003e8195ee98f613d9c804f37de1af16fa6c5961542eebd55f90abbef2b6f540e14d01bc2c96f80e35f2e2491e871d296c76caded01d62603a9e73980d9268f045547";
     let req_bytes_stable = hex::decode(&req_bytes_hex_stable).unwrap();
-    let req_stable:IdRecoveryRequest<ArCurve> = common::from_bytes(&mut req_bytes_stable.as_slice()).expect("Could not deserialize stable request");
+    let req_stable: IdRecoveryRequest<ArCurve> =
+        common::from_bytes(&mut req_bytes_stable.as_slice())
+            .expect("Could not deserialize stable request");
 
     let result = validate_id_recovery_request(&ip_info, &global_ctx, &req_stable);
     assert!(result);
