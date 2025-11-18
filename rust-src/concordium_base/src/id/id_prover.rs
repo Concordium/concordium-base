@@ -282,7 +282,8 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
         Some(AttributeValueProof { proof })
     }
 
-    pub(crate) fn prove_no_proof(
+    /// Prove attribute value based on that attribute is already revealed
+    pub(crate) fn prove_already_revealed(
         &self,
         transcript: &mut RandomOracle,
         attribute_value: &AttributeType,

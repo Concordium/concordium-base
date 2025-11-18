@@ -1374,8 +1374,8 @@ impl<C: Curve, TagType: common::Serialize, AttributeType: Attribute<C::Scalar>> 
 pub enum AtomicProofV1<C: Curve> {
     /// A proof that an attribute is equal to a public value
     AttributeValue(AttributeValueProof<C>),
-    /// A proof that an attribute is equal to a public value
-    AttributeValueNoProof,
+    /// Proof used when the attribute value is already revealed as part of composed proofs
+    AttributeValueAlreadyRevealed,
     /// A proof that an attribute is in a range
     AttributeInRange(RangeProof<C>),
     /// A proof that an attribute is in a set
@@ -1391,7 +1391,7 @@ impl<C: Curve> common::Serial for AtomicProofV1<C> {
                 0u8.serial(out);
                 proof.serial(out);
             }
-            Self::AttributeValueNoProof => {
+            Self::AttributeValueAlreadyRevealed => {
                 1u8.serial(out);
             }
             Self::AttributeInRange(proof) => {
@@ -1417,7 +1417,7 @@ impl<C: Curve> common::Deserial for AtomicProofV1<C> {
                 let proof = source.get()?;
                 Ok(Self::AttributeValue(proof))
             }
-            1u8 => Ok(Self::AttributeValueNoProof),
+            1u8 => Ok(Self::AttributeValueAlreadyRevealed),
             2u8 => {
                 let proof = source.get()?;
                 Ok(Self::AttributeInRange(proof))

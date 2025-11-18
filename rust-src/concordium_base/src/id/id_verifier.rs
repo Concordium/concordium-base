@@ -361,18 +361,20 @@ impl<
         )
     }
 
-    pub(crate) fn verify_no_proof(
+    /// Verify attribute value based on that attribute is already revealed
+    pub(crate) fn verify_already_revealed(
         &self,
         transcript: &mut RandomOracle,
-        public_attributes: &BTreeMap<TagType, &AttributeType>,
+        revealed_attributes: &BTreeMap<TagType, &AttributeType>,
     ) -> bool {
-        let Some(public_attribute) = public_attributes.get(&self.attribute_tag) else {
+
+        let Some(revealed_attribute) = revealed_attributes.get(&self.attribute_tag) else {
             return false;
         };
 
         transcript.append_message("RevealedAttribute", &self.attribute_value);
 
-        self.attribute_value == **public_attribute
+        self.attribute_value == **revealed_attribute
     }
 }
 
