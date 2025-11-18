@@ -23,10 +23,10 @@ pub use verify::*;
 
 const PROTOCOL_VERSION: u16 = 1u16;
 
-type PresentationV1 = v1::PresentationV1<IpPairing, ArCurve, Web3IdAttribute>;
-type CredentialV1 = v1::CredentialV1<IpPairing, ArCurve, Web3IdAttribute>;
-type RequestV1 = v1::RequestV1<ArCurve, Web3IdAttribute>;
-type CredentialVerificationMaterial = v1::CredentialVerificationMaterial<IpPairing, ArCurve>;
+pub type PresentationV1 = v1::PresentationV1<IpPairing, ArCurve, Web3IdAttribute>;
+pub type CredentialV1 = v1::CredentialV1<IpPairing, ArCurve, Web3IdAttribute>;
+pub type RequestV1 = v1::RequestV1<ArCurve, Web3IdAttribute>;
+pub type CredentialVerificationMaterial = v1::CredentialVerificationMaterial<IpPairing, ArCurve>;
 
 /// A verifiable presentation request that specifies what credentials and proofs
 /// are being requested from a credential holder.
