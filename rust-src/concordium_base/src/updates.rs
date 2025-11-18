@@ -1,6 +1,7 @@
 //! Definitions and functionality related to chain updates.
 use std::{
     collections::{BTreeMap, BTreeSet},
+    io::Read,
     marker::PhantomData,
 };
 
@@ -16,7 +17,7 @@ use crate::{
 };
 use derive_more::*;
 
-#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
+#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 /// A generic protocol update. This is essentially an announcement of the
 /// update. The details of the update will be communicated in some off-chain
@@ -319,7 +320,7 @@ pub enum RootKeysKind {}
 /// type-level marker.
 pub enum Level1KeysKind {}
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serial, Clone)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serial, Clone, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 #[serde(bound = "Kind: Sized")]
 /// Either root, level1, or level 2 access structure. They all have the same
@@ -351,7 +352,7 @@ impl<Kind> Deserial for HigherLevelAccessStructure<Kind> {
     }
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serial, Clone)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serial, Clone, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 /// And access structure for performing chain updates. The access structure is
 /// only meaningful in the context of a list of update keys to which the indices
@@ -429,12 +430,32 @@ impl AuthorizationsV0 {
     where
         UpdatePublicKey: for<'a> From<&'a K>,
     {
-        construct_update_signer_worker(&self.keys, update_key_indices, actual_keys)
+        find_authorized_keys(&self.keys, update_key_indices, actual_keys)
     }
 }
 
-// See [AuthorizationsV0::construct_update_signer] for documentation.
-fn construct_update_signer_worker<K>(
+/// Constructs a mapping from authorized update key indices to the provided
+/// signing keys.
+///
+/// # Arguments
+///
+/// * `keys` - The list of update public keys. `update_key_indices` refers to
+///   indices in this list.
+/// * `update_key_indices` - The access structure specifying which key indices
+///   are authorized for the particular update.
+/// * `actual_keys` - An iterator of keys that will be used for signing an
+///   update.
+///
+/// # Returns
+///
+/// Returns `Some(BTreeMap<UpdateKeysIndex, K>)` if all provided `actual_keys`
+/// are present in `keys`, are authorized according to `update_key_indices`,
+/// and there are no duplicates. Returns `None` if any key is not authorized,
+/// not present in `keys`, or if there are duplicate keys.
+///
+/// If `K` is [`UpdateKeyPair`], the resulting `BTreeMap` implements
+/// [`UpdateSigner`] and can be used to sign update instructions.
+pub fn find_authorized_keys<K>(
     keys: &[UpdatePublicKey],
     update_key_indices: &AccessStructure,
     actual_keys: impl IntoIterator<Item = K>,
@@ -490,7 +511,7 @@ impl AuthorizationsV1 {
     where
         UpdatePublicKey: for<'a> From<&'a K>,
     {
-        construct_update_signer_worker(&self.v0.keys, update_key_indices, actual_keys)
+        find_authorized_keys(&self.v0.keys, update_key_indices, actual_keys)
     }
 }
 
@@ -536,32 +557,6 @@ impl AuthorizationsV1 {
         })
     }
 }
-
-/// Together with [`Authorizations`] this defines a type family allowing us to
-/// map [`ChainParameterVersion0`] and [`ChainParameterVersion1`] to the
-/// corresponding `Authorizations` version.
-pub trait AuthorizationsFamily {
-    type Output: std::fmt::Debug;
-}
-
-impl AuthorizationsFamily for ChainParameterVersion0 {
-    type Output = AuthorizationsV0;
-}
-
-impl AuthorizationsFamily for ChainParameterVersion1 {
-    type Output = AuthorizationsV1;
-}
-
-impl AuthorizationsFamily for ChainParameterVersion2 {
-    type Output = AuthorizationsV1;
-}
-
-impl AuthorizationsFamily for ChainParameterVersion3 {
-    type Output = AuthorizationsV1;
-}
-
-/// A mapping of chain parameter versions to authorization versions.
-pub type Authorizations<CPV> = <CPV as AuthorizationsFamily>::Output;
 
 #[derive(SerdeSerialize, SerdeDeserialize, common::Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -753,7 +748,7 @@ pub enum UpdatePayload {
     #[serde(rename = "foundationAccount")]
     FoundationAccount(AccountAddress),
     #[serde(rename = "mintDistribution")]
-    MintDistribution(MintDistribution<ChainParameterVersion0>),
+    MintDistribution(MintDistributionV0),
     #[serde(rename = "transactionFeeDistribution")]
     TransactionFeeDistribution(TransactionFeeDistribution),
     #[serde(rename = "gASRewards")]
@@ -775,7 +770,7 @@ pub enum UpdatePayload {
     #[serde(rename = "timeParametersCPV1")]
     TimeParametersCPV1(TimeParameters),
     #[serde(rename = "mintDistributionCPV1")]
-    MintDistributionCPV1(MintDistribution<ChainParameterVersion1>),
+    MintDistributionCPV1(MintDistributionV1),
     #[serde(rename = "gASRewardsCPV2")]
     GASRewardsCPV2(GASRewardsV1),
     #[serde(rename = "TimeoutParametersCPV2")]
@@ -907,11 +902,68 @@ impl UpdatePayload {
     }
 }
 
-#[derive(Debug, Clone, common::Serialize)]
+/// The Concordium specific byte encoding of the [`UpdatePayload`].
+///
+/// Note this type cannot implement [`common::Deserial`] directly, but is
+/// implemented as part of [`UpdateInstruction`] since the payload byte length
+/// information is stored in [`UpdateHeader`].
+pub type EncodedUpdatePayload = common::Encoded<UpdatePayload>;
+
+impl EncodedUpdatePayload {
+    /// Get the size of the payload.
+    pub fn size(&self) -> PayloadSize {
+        PayloadSize {
+            size: self.bytes.len() as u32,
+        }
+    }
+}
+
+impl common::Serial for EncodedUpdatePayload {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_all(self.as_ref())
+            .expect("Writing to buffer should succeed.");
+    }
+}
+
+/// The chain update block item
+#[derive(Debug, Clone, common::Serial)]
 pub struct UpdateInstruction {
+    /// Information header about this chain update block item.
     pub header: UpdateHeader,
-    pub payload: UpdatePayload,
+    /// Encoding of the payload for this specific update.
+    /// Needs to be further decoded for more details.
+    ///
+    /// Note that new Concordium Protocol Versions might introduce new
+    /// `UpdatePayload` variants causing the decoding to fail, meaning
+    /// this error would have to be handled in order to stay forward-compatible.
+    pub payload: EncodedUpdatePayload,
+    /// Map of chain governance key index to signature.
     pub signatures: UpdateInstructionSignature,
+}
+
+impl common::Deserial for UpdateInstruction {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        use common::Get;
+        let header: UpdateHeader = source.get()?;
+        let payload = {
+            let len = u32::from(header.payload_size);
+            let usize_len = len.try_into()?;
+            let mut bytes = Vec::with_capacity(usize_len);
+            let read_len = source.take(len.into()).read_to_end(&mut bytes)?;
+            anyhow::ensure!(
+                read_len == usize_len,
+                "Unable to read the expected number of bytes from the update payload, expected \
+                 {usize_len}B but only got {read_len}"
+            );
+            EncodedUpdatePayload::from(bytes)
+        };
+        let signatures = source.get()?;
+        Ok(Self {
+            header,
+            payload,
+            signatures,
+        })
+    }
 }
 
 /// Implementors of this trait can sign update instructions.
@@ -922,7 +974,7 @@ pub trait UpdateSigner {
         -> UpdateInstructionSignature;
 }
 
-impl UpdateSigner for &BTreeMap<UpdateKeysIndex, UpdateKeyPair> {
+impl UpdateSigner for BTreeMap<UpdateKeysIndex, UpdateKeyPair> {
     fn sign_update_hash(
         &self,
         hash_to_sign: &hashes::UpdateSignHash,
@@ -935,7 +987,7 @@ impl UpdateSigner for &BTreeMap<UpdateKeysIndex, UpdateKeyPair> {
     }
 }
 
-impl UpdateSigner for &[(UpdateKeysIndex, UpdateKeyPair)] {
+impl UpdateSigner for [(UpdateKeysIndex, UpdateKeyPair)] {
     fn sign_update_hash(
         &self,
         hash_to_sign: &hashes::UpdateSignHash,
@@ -945,6 +997,15 @@ impl UpdateSigner for &[(UpdateKeysIndex, UpdateKeyPair)] {
             .map(|(ki, kp)| (*ki, kp.sign(hash_to_sign.as_ref())))
             .collect::<BTreeMap<_, _>>();
         UpdateInstructionSignature { signatures }
+    }
+}
+
+impl<T: UpdateSigner + ?Sized> UpdateSigner for &T {
+    fn sign_update_hash(
+        &self,
+        hash_to_sign: &hashes::UpdateSignHash,
+    ) -> UpdateInstructionSignature {
+        (*self).sign_update_hash(hash_to_sign)
     }
 }
 
@@ -987,12 +1048,12 @@ pub mod update {
     use super::*;
     fn compute_sign_hash(
         header: &UpdateHeader,
-        payload: &[u8], // serialized payload
+        payload: &EncodedUpdatePayload, // serialized payload
     ) -> hashes::UpdateSignHash {
         let mut hasher = sha2::Sha256::new();
         header.serial(&mut hasher);
         hasher
-            .write_all(payload)
+            .write_all(payload.as_ref())
             .expect("Writing to hasher does not fail.");
         <[u8; 32]>::from(hasher.finalize()).into()
     }
@@ -1005,19 +1066,17 @@ pub mod update {
         timeout: TransactionTime,
         payload: UpdatePayload,
     ) -> UpdateInstruction {
-        let serialized_payload = common::to_bytes(&payload);
+        let serialized_payload = EncodedUpdatePayload::encode(&payload);
         let header = UpdateHeader {
             seq_number,
             effective_time,
             timeout,
-            payload_size: PayloadSize {
-                size: serialized_payload.len() as u32,
-            },
+            payload_size: serialized_payload.size(),
         };
         let signatures = signer.sign_update_hash(&compute_sign_hash(&header, &serialized_payload));
         UpdateInstruction {
             header,
-            payload,
+            payload: serialized_payload,
             signatures,
         }
     }
@@ -1185,5 +1244,28 @@ impl Deserial for UpdatePayload {
             24u8 => Ok(UpdatePayload::CreatePlt(source.get()?)),
             tag => anyhow::bail!("Unknown update payload tag {}", tag),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_payload_encode_decode() {
+        let update = ProtocolUpdate {
+            message: "Protocol update 5".to_string(),
+            specification_url: "https://some-url.com".to_string(),
+            specification_hash: [12u8; 32].into(),
+            specification_auxiliary_data: Vec::new(),
+        };
+        let payload = UpdatePayload::Protocol(update.clone());
+        let decoded = EncodedUpdatePayload::encode(&payload)
+            .decode()
+            .expect("Failed decoding UpdatePayload");
+        let UpdatePayload::Protocol(decoded) = decoded else {
+            panic!("Unexpected update payload type");
+        };
+        assert_eq!(update, decoded);
     }
 }

@@ -213,12 +213,14 @@ impl Deserial for OwnedParameter {
 /// A ratio between two `u64` integers.
 ///
 /// It should be safe to assume the denominator is not zero and that numerator
-/// and denominator are coprime.
+/// and denominator are coprime. Note that `Eq` is defined representationally,
+/// so ratios that are not in reduced form will not be treated as equal to
+/// those that are. (i.e., 2/4 and 1/2 are not "equal".)
 ///
 /// This type is introduced (over using `num::rational::Ratio<u64>`) to add the
 /// above requirements and to provide implementations for `serde::Serialize` and
 /// `serde::Deserialize`.
-#[derive(Debug, SerdeDeserialize, SerdeSerialize, Serial, Clone, Copy)]
+#[derive(Debug, SerdeDeserialize, SerdeSerialize, Serial, Clone, Copy, Eq, PartialEq)]
 #[serde(try_from = "rust_decimal::Decimal", into = "rust_decimal::Decimal")]
 pub struct Ratio {
     numerator: u64,
