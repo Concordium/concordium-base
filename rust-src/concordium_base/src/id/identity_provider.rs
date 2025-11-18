@@ -797,7 +797,7 @@ mod tests {
 
         let id_use_data = test_create_id_use_data(&mut csprng);
         let (context, pio, _) =
-            test_create_pio_v1(&id_use_data, &ip_info, &ars_infos, &global_ctx, num_ars, &mut csprng);
+            test_create_pio_v1(&id_use_data, &ip_info, &ars_infos, &global_ctx, num_ars);
         let attrs = test_create_attributes();
 
         // Act
