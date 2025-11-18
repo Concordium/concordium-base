@@ -38,7 +38,6 @@ use serde::ser::{Error as _, SerializeMap};
 use serde::Deserializer;
 use std::collections::{BTreeMap, BTreeSet};
 
-
 const CONCORDIUM_CONTEXT_INFORMATION_TYPE: &str = "ConcordiumContextInformationV1";
 
 const VERIFIABLE_PRESENTATION_TYPE: &str = "VerifiablePresentation";
@@ -407,9 +406,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
             ..
         } = self;
 
-        AccountCredentialMetadataV1 {
-            cred_id: *cred_id,
-        }
+        AccountCredentialMetadataV1 { cred_id: *cred_id }
     }
 
     /// Extract the subject claims from the credential.
@@ -587,13 +584,12 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     /// Metadata for the credential
     pub fn metadata(&self) -> IdentityCredentialMetadataV1 {
         let IdentityBasedCredentialV1 {
-            issuer,validity,  ..
+            issuer, validity, ..
         } = self;
 
         IdentityCredentialMetadataV1 {
             issuer: *issuer,
             validity: validity.clone(),
-
         }
     }
 
@@ -2522,16 +2518,18 @@ mod fixtures {
             attr_cmm.insert(*tag, cmm);
         }
 
+        let issuer = IpIdentity::from(17u32);
+
         let commitment_inputs =
             OwnedCredentialProofPrivateInputs::Account(OwnedAccountCredentialProofPrivateInputs {
                 attribute_values: attrs,
                 attribute_randomness: attr_rand,
-                issuer: IpIdentity::from(17u32),
+                issuer,
             });
 
         let credential_inputs =
-            CredentialVerificationMaterial::Account(
-                AccountCredentialVerificationMaterial {
+            CredentialVerificationMaterial::Account(AccountCredentialVerificationMaterial {
+                issuer,
                 attribute_commitments: attr_cmm,
             });
 

@@ -124,7 +124,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
         };
 
         if self.issuer != *issuer {
-            return false;// todo ar test
+            return false;
         }
 
         verify_statements(
@@ -738,10 +738,8 @@ pub mod tests {
             )
             .expect("prove");
 
-        // change statement to be invalid
-        let CredentialV1::Account(cred) =
-            &mut proof.verifiable_credentials[0]
-        else {
+        // change claimed issuer
+        let CredentialV1::Account(cred) = &mut proof.verifiable_credentials[0] else {
             panic!("should be account proof");
         };
         cred.issuer = IpIdentity(10);
