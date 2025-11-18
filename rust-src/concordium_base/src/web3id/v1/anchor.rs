@@ -1,3 +1,5 @@
+mod verify;
+
 use crate::common::{
     cbor, Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, Serial, Serialize,
 };
@@ -9,19 +11,26 @@ use crate::id::{
     constants::{ArCurve, IpPairing},
     types::AttributeTag,
 };
-use crate::web3id::v1::PresentationV1;
-use crate::web3id::{did, Web3IdAttribute};
+
+use crate::web3id::{did, v1, Web3IdAttribute};
 use crate::{hashes, id};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::hashes::HashBytes;
 use sha2::Digest;
 use std::collections::HashMap;
 
+pub use verify::*;
+
 const PROTOCOL_VERSION: u16 = 1u16;
+
+type PresentationV1 = v1::PresentationV1<IpPairing, ArCurve, Web3IdAttribute>;
+type CredentialV1 = v1::CredentialV1<IpPairing, ArCurve, Web3IdAttribute>;
+type RequestV1 = v1::RequestV1<ArCurve, Web3IdAttribute>;
+type CredentialVerificationMaterial = v1::CredentialVerificationMaterial<IpPairing, ArCurve>;
 
 /// A verifiable presentation request that specifies what credentials and proofs
 /// are being requested from a credential holder.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type", rename = "ConcordiumVerificationRequestV1")]
 pub struct VerificationRequest {
@@ -41,7 +50,7 @@ pub struct VerificationRequest {
 /// Audit records are used internally by verifiers to maintain complete records
 /// of verification interactions, while only publishing hash-based public records/anchors on-chain
 /// to preserve privacy, see [`VerificationAuditAnchor`].
-#[derive(Debug, Clone, PartialEq, Serialize, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize, serde::Serialize)]
 #[serde(tag = "type", rename = "ConcordiumVerificationAuditRecord")]
 pub struct VerificationAuditRecord {
     /// Version integer, for now it is always 1.
@@ -51,16 +60,12 @@ pub struct VerificationAuditRecord {
     /// Unique identifier chosen by the requester/merchant.
     pub id: String,
     /// The verifiable presentation including the proof.
-    pub presentation: PresentationV1<IpPairing, ArCurve, Web3IdAttribute>,
+    pub presentation: PresentationV1,
 }
 
 impl VerificationAuditRecord {
     /// Create a new verifiable audit anchor
-    pub fn new(
-        request: VerificationRequest,
-        id: String,
-        presentation: PresentationV1<IpPairing, ArCurve, Web3IdAttribute>,
-    ) -> Self {
+    pub fn new(request: VerificationRequest, id: String, presentation: PresentationV1) -> Self {
         Self {
             version: PROTOCOL_VERSION,
             request,
@@ -177,7 +182,7 @@ impl VerificationRequestData {
 ///
 /// Contains both the context data that is already known (given) and
 /// the context data that needs to be provided by the presenter (requested).
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Serialize, Default)]
 #[serde(tag = "type", rename = "ConcordiumUnfilledContextInformationV1")]
 pub struct UnfilledContextInformation {
     /// Context information that is already provided.
@@ -242,7 +247,7 @@ pub struct VerificationRequestAnchor {
 }
 
 /// The credential statements being requested.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
 pub enum RequestedSubjectClaims {
     /// Statements based on the Concordium ID object.
@@ -278,7 +283,7 @@ impl Deserial for RequestedSubjectClaims {
 
 /// A statement request concerning the Concordium ID object (held in the wallet).
 /// The Concordium ID object has been signed by identity providers (IDPs).
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Default, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default, Serialize)]
 pub struct RequestedIdentitySubjectClaims {
     /// The statements requested.
     pub statements: Vec<RequestedStatement<AttributeTag>>,
@@ -363,7 +368,7 @@ impl RequestedIdentitySubjectClaims {
 
 /// Labels for different types of context information that can be provided in verifiable
 /// presentation requests and proofs.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ContextLabel {
     /// A nonce which should be at least of lenth bytes32.
     Nonce,
@@ -421,7 +426,7 @@ impl Deserial for ContextLabel {
 }
 
 /// Identity based credential types.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum CredentialType {
     /// The type of the credential is linked directly to the Concordium ID object
     /// hold in a wallet while no account is deployed on-chain.
@@ -455,7 +460,7 @@ impl Deserial for CredentialType {
 }
 
 /// DID method for a Concordium Identity Provider.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Serialize)]
 #[serde(into = "did::Method", try_from = "did::Method")]
 pub struct IdentityProviderMethod {
     /// The network part of the method.
@@ -505,7 +510,7 @@ impl TryFrom<did::Method> for IdentityProviderMethod {
 }
 
 /// A single piece of context information that can be provided in verifiable presentation interactions.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(into = "GivenContextJson", try_from = "GivenContextJson")]
 pub enum GivenContext {
     /// Cryptographic nonce context which should be at least of length bytes32.
