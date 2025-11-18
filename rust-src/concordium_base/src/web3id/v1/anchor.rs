@@ -81,7 +81,7 @@ impl VerificationAuditRecord {
     /// in their backend database.
     pub fn to_anchor(
         &self,
-        public_info: HashMap<String, cbor::value::Value>,
+        public_info: Option<HashMap<String, cbor::value::Value>>,
     ) -> VerificationAuditAnchor {
         VerificationAuditAnchor {
             // Concordium Verification Audit Anchor
@@ -99,13 +99,14 @@ impl VerificationAuditRecord {
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 pub struct VerificationAuditAnchor {
     /// Type identifier for Concordium Verifiable Request Audit Anchor/Record. Always set to "CCDVAA".
+    #[cbor(key = "type")]
     pub r#type: String,
     /// Data format version integer, for now it is always 1.
     pub version: u16,
     /// Hash computed from the [`VerificationAuditRecord`].
     pub hash: hashes::Hash,
     /// Optional public information.
-    pub public: HashMap<String, cbor::value::Value>,
+    pub public: Option<HashMap<String, cbor::value::Value>>,
 }
 
 /// Description of the presentation being requested from a credential holder.
@@ -155,7 +156,7 @@ impl VerificationRequestData {
     /// from the the [`VerificationRequestData`] type.
     pub fn to_anchor(
         &self,
-        public_info: HashMap<String, cbor::value::Value>,
+        public_info: Option<HashMap<String, cbor::value::Value>>,
     ) -> VerificationRequestAnchor {
         VerificationRequestAnchor {
             // Concordium Verification Request Anchor
@@ -225,13 +226,14 @@ impl UnfilledContextInformation {
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 pub struct VerificationRequestAnchor {
     /// Type identifier for Concordium Verification Request Anchor. Always set to "CCDVRA".
+    #[cbor(key = "type")]
     pub r#type: String,
     /// Data format version integer, for now it is always 1.
     pub version: u16,
     /// Hash computed from the [`VerificationRequestData`].
     pub hash: hashes::Hash,
     /// Optional public information.
-    pub public: HashMap<String, cbor::value::Value>,
+    pub public: Option<HashMap<String, cbor::value::Value>>,
 }
 
 /// The credential statements being requested.
@@ -723,7 +725,7 @@ mod tests {
         let mut public_info = HashMap::new();
         public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
 
-        request_data.to_anchor(public_info)
+        request_data.to_anchor(Some(public_info))
     }
 
     fn verification_audit_record_fixture() -> VerificationAuditRecord {
@@ -896,7 +898,7 @@ mod tests {
         "#;
 
         let presentation_deserialized: PresentationV1<IpPairing, ArCurve, Web3IdAttribute> =
-            serde_json::from_str(&presentation_json).unwrap();
+            serde_json::from_str(presentation_json).unwrap();
         let id = "MyUUID".to_string();
 
         VerificationAuditRecord::new(presentation_request, id, presentation_deserialized)
@@ -909,7 +911,7 @@ mod tests {
         let mut public_info = HashMap::new();
         public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
 
-        verification_audit_anchor.to_anchor(public_info)
+        verification_audit_anchor.to_anchor(Some(public_info))
     }
 
     // Tests about JSON serialization and deserialization roundtrips
@@ -1293,7 +1295,7 @@ mod tests {
 
         let cbor = cbor::cbor_encode(&verification_request_anchor).unwrap();
 
-        assert_eq!(hex::encode(&cbor), "a4646861736858205e7d3a608cb004f22633c958b2a203c516d0d4b3ad47f310d5fc29e606138a21667075626c6963a1636b65790466722374797065664343445652416776657273696f6e01");
+        assert_eq!(hex::encode(&cbor), "a4646861736858205e7d3a608cb004f22633c958b2a203c516d0d4b3ad47f310d5fc29e606138a21647479706566434344565241667075626c6963a1636b6579046776657273696f6e01");
 
         let decoded: VerificationRequestAnchor = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(decoded, verification_request_anchor);
@@ -1304,7 +1306,7 @@ mod tests {
         let verification_audit_anchor_on_chain = verification_audit_anchor_fixture();
 
         let cbor = cbor::cbor_encode(&verification_audit_anchor_on_chain).unwrap();
-        assert_eq!(hex::encode(&cbor), "a46468617368582037fc286317b8c68dfbeee7d2150cb4958694a979070ec36832c4f5032ffbab2b667075626c6963a1636b65790466722374797065664343445641416776657273696f6e01");
+        assert_eq!(hex::encode(&cbor), "a46468617368582037fc286317b8c68dfbeee7d2150cb4958694a979070ec36832c4f5032ffbab2b647479706566434344564141667075626c6963a1636b6579046776657273696f6e01");
         let decoded: VerificationAuditAnchor = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(decoded, verification_audit_anchor_on_chain);
     }
