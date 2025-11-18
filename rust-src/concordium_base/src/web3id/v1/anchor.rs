@@ -765,14 +765,13 @@ mod tests {
         .add_request(ContextLabel::ConnectionId)
         .add_request(ContextLabel::ContextString);
 
-        let attribute_in_range_statement = AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
+        let attribute_in_range_statement =
+            RequestedStatement::AttributeInRange(AttributeInRangeStatement {
                 attribute_tag: 17.into(),
                 lower: Web3IdAttribute::Numeric(80),
                 upper: Web3IdAttribute::Numeric(1237),
                 _phantom: PhantomData,
-            },
-        };
+            });
 
         VerificationRequestData::new(context).add_statement_request(
             RequestedIdentitySubjectClaims::default()
@@ -807,14 +806,13 @@ mod tests {
         .add_request(ContextLabel::ConnectionId)
         .add_request(ContextLabel::ContextString);
 
-        let attribute_in_range_statement = AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
+        let attribute_in_range_statement =
+            RequestedStatement::AttributeInRange(AttributeInRangeStatement {
                 attribute_tag: 17.into(),
                 lower: Web3IdAttribute::Numeric(80),
                 upper: Web3IdAttribute::Numeric(1237),
                 _phantom: PhantomData,
-            },
-        };
+            });
 
         let request_data = VerificationRequestData::new(context).add_statement_request(
             RequestedIdentitySubjectClaims::default()
