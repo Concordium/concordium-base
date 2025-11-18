@@ -316,7 +316,7 @@ pub enum CredentialMetadataTypeV1 {
 /// Metadata of a credential [`CredentialV1`].
 /// The metadata consists of
 ///
-/// * data that is part of the verification presentation and credentials but needs to be verified externally (network is an example of that)
+/// * data that is part of the verification presentation and credentials but needs to be verified externally: network, credential validity period
 /// * information about data that must be resolved externally to [`CredentialVerificationMaterial`] in order to verify
 ///   the presentation
 ///
