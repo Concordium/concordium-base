@@ -12,7 +12,11 @@ use crate::bulletproofs::{
 };
 
 use super::id_proof_types::*;
+use crate::bulletproofs::set_membership_proof::SetMembershipProof;
+use crate::bulletproofs::set_non_membership_proof::SetNonMembershipProof;
 use crate::random_oracle::StructuredDigest;
+use crate::sigma_protocols::common::SigmaProof;
+use crate::sigma_protocols::dlog;
 use crate::{
     curve_arithmetic::{Curve, Field},
     pedersen_commitment::{
@@ -175,112 +179,201 @@ impl<
             ) => {
                 let maybe_com = cmm_attributes.get(attribute_tag);
                 if let Some(com) = maybe_com {
-                    // There is a commitment to the relevant attribute. We can then check the
-                    // proof.
-                    let x = attribute.to_field_element();
-                    transcript.add_bytes(b"RevealAttributeDlogProof");
-                    // x is known to the verifier and should go into the transcript
-                    transcript.append_message(b"x", &x);
-                    if version >= ProofVersion::Version2 {
-                        transcript.append_message(b"keys", &global.on_chain_commitment_key);
-                        transcript.append_message(b"C", &com);
-                    }
-                    let mut minus_x = x;
-                    minus_x.negate();
-                    let g_minus_x = global.on_chain_commitment_key.g.mul_by_scalar(&minus_x);
-                    let public = com.plus_point(&g_minus_x);
-                    let verifier = Dlog {
-                        public,                                  // C g^-x = h^r
-                        coeff: global.on_chain_commitment_key.h, // h
-                    };
-                    if !sigma_verify(transcript, &verifier, proof) {
-                        return false;
-                    }
+                    verify_value_equal_to_commitment(
+                        attribute, com, version, global, transcript, proof,
+                    )
                 } else {
-                    return false;
+                    false
                 }
             }
             (
                 AtomicStatement::AttributeInRange { statement },
                 AtomicProof::AttributeInRange { proof },
-            ) => {
-                let maybe_com = cmm_attributes.get(&statement.attribute_tag);
-                if let Some(com) = maybe_com {
-                    // There is a commitment to the relevant attribute. We can then check the
-                    // proof.
-                    if super::id_verifier::verify_attribute_range(
-                        version,
-                        transcript,
-                        &global.on_chain_commitment_key,
-                        global.bulletproof_generators(),
-                        &statement.lower,
-                        &statement.upper,
-                        com,
-                        proof,
-                    )
-                    .is_err()
-                    {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            }
+            ) => statement.verify(version, global, transcript, cmm_attributes, proof),
             (
                 AtomicStatement::AttributeInSet { statement },
                 AtomicProof::AttributeInSet { proof },
-            ) => {
-                let maybe_com = cmm_attributes.get(&statement.attribute_tag);
-                if let Some(com) = maybe_com {
-                    let attribute_vec: Vec<_> =
-                        statement.set.iter().map(|x| x.to_field_element()).collect();
-                    if verify_set_membership(
-                        version,
-                        transcript,
-                        &attribute_vec,
-                        com,
-                        proof,
-                        global.bulletproof_generators(),
-                        &global.on_chain_commitment_key,
-                    )
-                    .is_err()
-                    {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            }
+            ) => statement.verify(version, global, transcript, cmm_attributes, proof),
             (
                 AtomicStatement::AttributeNotInSet { statement },
                 AtomicProof::AttributeNotInSet { proof },
-            ) => {
-                let maybe_com = cmm_attributes.get(&statement.attribute_tag);
-                if let Some(com) = maybe_com {
-                    let attribute_vec: Vec<_> =
-                        statement.set.iter().map(|x| x.to_field_element()).collect();
-                    if verify_set_non_membership(
-                        version,
-                        transcript,
-                        &attribute_vec,
-                        com,
-                        proof,
-                        global.bulletproof_generators(),
-                        &global.on_chain_commitment_key,
-                    )
-                    .is_err()
-                    {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            }
-            _ => {
-                return false;
-            }
+            ) => statement.verify(version, global, transcript, cmm_attributes, proof),
+            _ => false,
         }
-        true
+    }
+}
+
+impl<
+        C: Curve,
+        TagType: std::cmp::Ord + crate::common::Serialize,
+        AttributeType: Attribute<C::Scalar>,
+    > AttributeInRangeStatement<C, TagType, AttributeType>
+{
+    pub(crate) fn verify<Q: std::cmp::Ord + Borrow<TagType>>(
+        &self,
+        version: ProofVersion,
+        global: &GlobalContext<C>,
+        transcript: &mut RandomOracle,
+        cmm_attributes: &BTreeMap<Q, Commitment<C>>,
+        proof: &RangeProof<C>,
+    ) -> bool {
+        let maybe_com = cmm_attributes.get(&self.attribute_tag);
+        if let Some(com) = maybe_com {
+            // There is a commitment to the relevant attribute. We can then check the
+            // proof.
+            super::id_verifier::verify_attribute_range(
+                version,
+                transcript,
+                &global.on_chain_commitment_key,
+                global.bulletproof_generators(),
+                &self.lower,
+                &self.upper,
+                com,
+                proof,
+            )
+            .is_ok()
+        } else {
+            false
+        }
+    }
+}
+
+impl<
+        C: Curve,
+        TagType: std::cmp::Ord + crate::common::Serialize,
+        AttributeType: Attribute<C::Scalar>,
+    > AttributeInSetStatement<C, TagType, AttributeType>
+{
+    pub(crate) fn verify<Q: std::cmp::Ord + Borrow<TagType>>(
+        &self,
+        version: ProofVersion,
+        global: &GlobalContext<C>,
+        transcript: &mut RandomOracle,
+        cmm_attributes: &BTreeMap<Q, Commitment<C>>,
+        proof: &SetMembershipProof<C>,
+    ) -> bool {
+        let maybe_com = cmm_attributes.get(&self.attribute_tag);
+        if let Some(com) = maybe_com {
+            let attribute_vec: Vec<_> = self.set.iter().map(|x| x.to_field_element()).collect();
+            verify_set_membership(
+                version,
+                transcript,
+                &attribute_vec,
+                com,
+                proof,
+                global.bulletproof_generators(),
+                &global.on_chain_commitment_key,
+            )
+            .is_ok()
+        } else {
+            false
+        }
+    }
+}
+
+impl<
+        C: Curve,
+        TagType: std::cmp::Ord + crate::common::Serialize,
+        AttributeType: Attribute<C::Scalar>,
+    > AttributeNotInSetStatement<C, TagType, AttributeType>
+{
+    pub(crate) fn verify<Q: std::cmp::Ord + Borrow<TagType>>(
+        &self,
+        version: ProofVersion,
+        global: &GlobalContext<C>,
+        transcript: &mut RandomOracle,
+        cmm_attributes: &BTreeMap<Q, Commitment<C>>,
+        proof: &SetNonMembershipProof<C>,
+    ) -> bool {
+        let maybe_com = cmm_attributes.get(&self.attribute_tag);
+        if let Some(com) = maybe_com {
+            let attribute_vec: Vec<_> = self.set.iter().map(|x| x.to_field_element()).collect();
+            verify_set_non_membership(
+                version,
+                transcript,
+                &attribute_vec,
+                com,
+                proof,
+                global.bulletproof_generators(),
+                &global.on_chain_commitment_key,
+            )
+            .is_ok()
+        } else {
+            false
+        }
+    }
+}
+
+fn verify_value_equal_to_commitment<C: Curve, AttributeType: Attribute<C::Scalar>>(
+    attribute_value: &AttributeType,
+    attribute_cmm: &Commitment<C>,
+    version: ProofVersion,
+    global: &GlobalContext<C>,
+    transcript: &mut RandomOracle,
+    proof: &SigmaProof<dlog::Response<C>>,
+) -> bool {
+    // There is a commitment to the relevant attribute. We can then check the
+    // proof.
+    let x = attribute_value.to_field_element();
+    transcript.add_bytes(b"RevealAttributeDlogProof");
+    // x is known to the verifier and should go into the transcript
+    transcript.append_message(b"x", &x);
+    if version >= ProofVersion::Version2 {
+        transcript.append_message(b"keys", &global.on_chain_commitment_key);
+        transcript.append_message(b"C", &attribute_cmm);
+    }
+    let mut minus_x = x;
+    minus_x.negate();
+    let g_minus_x = global.on_chain_commitment_key.g.mul_by_scalar(&minus_x);
+    let public = attribute_cmm.plus_point(&g_minus_x);
+    let verifier = Dlog {
+        public,                                  // C g^-x = h^r
+        coeff: global.on_chain_commitment_key.h, // h
+    };
+    sigma_verify(transcript, &verifier, proof)
+}
+
+impl<
+        C: Curve,
+        TagType: std::cmp::Ord + crate::common::Serialize,
+        AttributeType: Attribute<C::Scalar>,
+    > AttributeValueStatement<C, TagType, AttributeType>
+{
+    pub(crate) fn verify<Q: std::cmp::Ord + Borrow<TagType>>(
+        &self,
+        version: ProofVersion,
+        global: &GlobalContext<C>,
+        transcript: &mut RandomOracle,
+        cmm_attributes: &BTreeMap<Q, Commitment<C>>,
+        proof: &AttributeValueProof<C>,
+    ) -> bool {
+        let Some(attribute_cmm) = cmm_attributes.get(&self.attribute_tag) else {
+            return false;
+        };
+
+        verify_value_equal_to_commitment(
+            &self.attribute_value,
+            attribute_cmm,
+            version,
+            global,
+            transcript,
+            &proof.proof,
+        )
+    }
+
+    /// Verify attribute value based on that attribute is already revealed
+    pub(crate) fn verify_for_already_revealed(
+        &self,
+        transcript: &mut RandomOracle,
+        revealed_attributes: &BTreeMap<TagType, &AttributeType>,
+    ) -> bool {
+        let Some(revealed_attribute) = revealed_attributes.get(&self.attribute_tag) else {
+            return false;
+        };
+
+        transcript.append_message("RevealedAttribute", &self.attribute_value);
+
+        self.attribute_value == **revealed_attribute
     }
 }
 

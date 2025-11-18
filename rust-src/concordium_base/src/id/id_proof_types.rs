@@ -39,6 +39,30 @@ pub struct RevealAttributeStatement<TagType: Serialize> {
 }
 
 /// For the case where the verifier wants the user to prove that an attribute is
+/// equal to a public value. The statement is that the attribute value is equal to `attribute_value`.
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize, TagType: \
+                 SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>, \
+                   TagType: SerdeDeserialize<'de>"
+))]
+pub struct AttributeValueStatement<
+    C: Curve,
+    TagType: Serialize,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    /// The attribute that the verifier wants the user to prove equal to a value.
+    #[serde(rename = "attributeTag")]
+    pub attribute_tag: TagType,
+    /// The value the attribute must be proven equal to.
+    #[serde(rename = "attributeValue")]
+    pub attribute_value: AttributeType,
+    #[serde(skip)]
+    pub _phantom: PhantomData<C>,
+}
+
+/// For the case where the verifier wants the user to prove that an attribute is
 /// in a range. The statement is that the attribute value lies in `[lower,
 /// upper)` in the scalar field.
 #[derive(Debug, Clone, Serialize, PartialEq, SerdeSerialize, SerdeDeserialize, Eq)]
@@ -211,6 +235,15 @@ impl<C: Curve, TagType: Serialize, AttributeType: Attribute<C::Scalar>> Deserial
             n => anyhow::bail!("Unknown statement tag: {}.", n),
         }
     }
+}
+
+/// Proof that the attribute value in a commitment is equal to a public value
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+pub struct AttributeValueProof<C: Curve> {
+    /// Revealing an attribute and a proof that it equals the attribute value
+    /// inside the attribute commitment.
+    pub proof: crate::sigma_protocols::common::SigmaProof<DlogResponse<C>>,
 }
 
 /// The different types of proofs, corresponding to the statements above.
@@ -460,7 +493,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
         Self::default()
     }
 
-    /// For revealing an attribute. This is resquests the user to reveal the
+    /// For revealing an attribute. This is a request that the user reveals the
     /// attribute value corresponding to `attribute_tag` and to prove that
     /// the value is the one inside the on-chain commitment.
     /// The function returns the statements in `self` composed with the "reveal
