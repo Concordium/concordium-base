@@ -137,7 +137,7 @@ impl VerificationRequestData {
     }
 
     /// Add a subject claims request to the verification request data.
-    pub fn add_statement_request(
+    pub fn add_subject_claim_request(
         mut self,
         statement_request: impl Into<RequestedSubjectClaims>,
     ) -> Self {
@@ -820,7 +820,7 @@ mod tests {
             }),
         ];
 
-        VerificationRequestData::new(context).add_statement_request(
+        VerificationRequestData::new(context).add_subject_claim_request(
             RequestedIdentitySubjectClaims::default()
                 .add_issuer(IdentityProviderMethod::new(3u32, did::Network::Testnet))
                 .add_source(CredentialType::IdentityCredential)
