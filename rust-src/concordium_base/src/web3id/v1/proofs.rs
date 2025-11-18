@@ -536,7 +536,7 @@ impl<
         match self {
             AtomicStatementV1::AttributeValue(statement) => {
                 if let Some(public_attribute) = revealed_attributes.get(&statement.attribute_tag) {
-                    statement.prove_already_revealed(transcript, public_attribute);
+                    statement.prove_for_already_revealed(transcript, public_attribute);
                     Some(AtomicProofV1::AttributeValueAlreadyRevealed)
                 } else {
                     let proof = statement.prove(
@@ -614,7 +614,7 @@ impl<
             (
                 AtomicStatementV1::AttributeValue(statement),
                 AtomicProofV1::AttributeValueAlreadyRevealed,
-            ) => statement.verify_already_revealed(transcript, revealed_attributes),
+            ) => statement.verify_for_already_revealed(transcript, revealed_attributes),
             (
                 AtomicStatementV1::AttributeInRange(statement),
                 AtomicProofV1::AttributeInRange(proof),

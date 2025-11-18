@@ -1279,8 +1279,7 @@ pub enum VerifyError {
     InvalidCredential(usize),
 }
 
-/// Statements are composed of one or more atomic statements.
-/// This type defines the different types of atomic statements used in credentials.
+/// The types of statements that can be used in subject claims
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Eq)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize, TagType: \
@@ -1294,7 +1293,7 @@ pub enum AtomicStatementV1<
     TagType: common::Serialize,
     AttributeType: Attribute<C::Scalar>,
 > {
-    /// The atomic statement stating that an attribute should be revealed.
+    /// The atomic statement stating that an attribute is equal to a public value
     AttributeValue(AttributeValueStatement<C, TagType, AttributeType>),
     /// The atomic statement stating that an attribute is in a range.
     AttributeInRange(AttributeInRangeStatement<C, TagType, AttributeType>),
@@ -1369,12 +1368,13 @@ impl<C: Curve, TagType: common::Serialize, AttributeType: Attribute<C::Scalar>> 
     }
 }
 
-/// The different types of proofs, corresponding to [`AtomicStatementV1`].
+/// Proof of a [`AtomicStatementV1`].
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum AtomicProofV1<C: Curve> {
     /// A proof that an attribute is equal to a public value
     AttributeValue(AttributeValueProof<C>),
-    /// Proof used when the attribute value is already revealed as part of composed proofs
+    /// A proof that an attribute is equal to a public value but where
+    /// the value is already revealed as part of composed proofs
     AttributeValueAlreadyRevealed,
     /// A proof that an attribute is in a range
     AttributeInRange(RangeProof<C>),

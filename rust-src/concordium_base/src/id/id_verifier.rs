@@ -362,7 +362,7 @@ impl<
     }
 
     /// Verify attribute value based on that attribute is already revealed
-    pub(crate) fn verify_already_revealed(
+    pub(crate) fn verify_for_already_revealed(
         &self,
         transcript: &mut RandomOracle,
         revealed_attributes: &BTreeMap<TagType, &AttributeType>,
