@@ -545,7 +545,6 @@ fn seed0() -> rand::rngs::StdRng {
     rand::rngs::StdRng::seed_from_u64(0)
 }
 
-
 /// Test that we can verify CDIs created by previous versions of the protocol.
 /// This test protects from changes that introduces braking changes.
 ///
@@ -604,10 +603,16 @@ pub fn test_pipline_stable() {
         common::from_bytes(&mut pio_stable_bytes.as_slice())
             .expect("Could not deserialize stable pio");
 
-    let ver_ok = verify_credentials(&pio_stable, context, &alist, EXPIRY,&ip_secret_key,&ip_cdi_secret_key,);
+    let ver_ok = verify_credentials(
+        &pio_stable,
+        context,
+        &alist,
+        EXPIRY,
+        &ip_secret_key,
+        &ip_cdi_secret_key,
+    );
     assert!(ver_ok.is_ok(), "Signature on the credential is invalid.");
 
-    
     // The following commented code can be used to generate the serialized initial cdi
     // let ver_ok = verify_credentials(
     //     &pio,
@@ -693,7 +698,6 @@ pub fn test_pipline_stable() {
     );
     assert_eq!(cdi_check, Ok(()));
 }
-
 
 /// Test that we can verify CDIs v1 created by previous versions of the protocol.
 /// This test protects from changes that introduces braking changes.
