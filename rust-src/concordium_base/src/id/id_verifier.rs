@@ -367,7 +367,6 @@ impl<
         transcript: &mut RandomOracle,
         revealed_attributes: &BTreeMap<TagType, &AttributeType>,
     ) -> bool {
-
         let Some(revealed_attribute) = revealed_attributes.get(&self.attribute_tag) else {
             return false;
         };

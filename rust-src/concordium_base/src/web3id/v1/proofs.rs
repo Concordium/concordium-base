@@ -202,7 +202,6 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             })
             .collect();
 
-
         verify_statements(
             &self.subject.statements,
             &self.proof.proof_value.statement_proofs,
@@ -847,6 +846,53 @@ pub mod tests {
         assert_eq!(err, VerifyError::InvalidCredential(0));
     }
 
+    /// Test prove and verify presentation for identity credentials where
+    /// verification fails because statements are false. Tests revealed attribute.
+    #[test]
+    fn test_soundness_account_statements_invalid_revealed() {
+        let challenge = challenge_fixture();
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let (mut statements, attributes) = fixtures::statements_and_attributes();
+
+        statements[4] = AtomicStatementV1::AttributeValue(AttributeValueStatement {
+            attribute_tag: 5.into(),
+            attribute_value: Web3IdAttribute::String(
+                AttributeKind::try_new("testvalue2".into()).unwrap(),
+            ),
+            _phantom: Default::default(),
+        });
+
+        let acc_cred_fixture = fixtures::account_credentials_fixture(attributes, &global_context);
+
+        let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
+            network: Network::Testnet,
+            cred_id: acc_cred_fixture.cred_id,
+            statements,
+        })];
+
+        let request = RequestV1::<ArCurve, Web3IdAttribute> {
+            challenge,
+            subject_claims,
+        };
+
+        let mut proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [acc_cred_fixture.private_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        let public = vec![acc_cred_fixture.verification_material];
+
+        let err = proof
+            .verify(&global_context, public.iter())
+            .expect_err("verify");
+        assert_eq!(err, VerifyError::InvalidCredential(0));
+    }
+
     /// Test prove and verify presentation for account credentials where
     /// verification fails because a statements not proven is added.
     #[test]
@@ -1134,7 +1180,15 @@ pub mod tests {
 
         let global_context = GlobalContext::generate("Test".into());
 
-        let (statements, attributes) = fixtures::statements_and_attributes();
+        let (mut statements, attributes) = fixtures::statements_and_attributes();
+
+        statements[4] = AtomicStatementV1::AttributeValue(AttributeValueStatement {
+            attribute_tag: 5.into(),
+            attribute_value: Web3IdAttribute::String(
+                AttributeKind::try_new("testvalue2".into()).unwrap(),
+            ),
+            _phantom: Default::default(),
+        });
 
         let id_cred_fixture = fixtures::identity_credentials_fixture(attributes, &global_context);
 
@@ -1157,27 +1211,12 @@ pub mod tests {
             )
             .expect("prove");
 
-        // change statement to be invalid
-        let CredentialV1::Identity(IdentityBasedCredentialV1 { subject, .. }) =
-            &mut proof.verifiable_credentials[0]
-        else {
-            panic!("should be account proof");
-        };
-        subject.statements[4] = AtomicStatementV1::AttributeValue(AttributeValueStatement {
-            attribute_tag: 5.into(),
-            attribute_value: Web3IdAttribute::String(
-                AttributeKind::try_new("testvalue2".into()).unwrap(),
-            ),
-            _phantom: Default::default(),
-        });
-
         let public = vec![id_cred_fixture.verification_material];
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
         assert_eq!(err, VerifyError::InvalidCredential(0));
     }
-
 
     /// Test prove and verify presentation for identity credentials where
     /// verification fails because there are additional statements added compared to what is proven.
