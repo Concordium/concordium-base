@@ -545,7 +545,157 @@ fn seed0() -> rand::rngs::StdRng {
     rand::rngs::StdRng::seed_from_u64(0)
 }
 
+
 /// Test that we can verify CDIs created by previous versions of the protocol.
+/// This test protects from changes that introduces braking changes.
+///
+/// The test uses a serialization of a previously created CDI.
+#[test]
+pub fn test_pipline_stable() {
+    // Generate PIO
+    let max_attrs = 10;
+    let num_ars = 5;
+    let IpData {
+        public_ip_info: ip_info,
+        ip_secret_key,
+        ip_cdi_secret_key,
+    } = test_create_ip_info(&mut seed0(), num_ars, max_attrs);
+
+    let global_ctx = GlobalContext::generate(String::from("genesis_string"));
+    let alist = test_create_attributes();
+    let (ars_infos, _) =
+        test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut seed0());
+    let context = IpContext::<'_, _, _> {
+        ip_info: &ip_info,
+        ars_infos: &ars_infos,
+        global_context: &global_ctx,
+    };
+
+    // The following commented code can be used to generate the serialized pio
+    // let id_use_data = test_create_id_use_data(&mut seed0());
+    // let acc_data = InitialAccountData {
+    //     keys: {
+    //         let mut keys = BTreeMap::new();
+    //         // We need to generate different keys
+    //         let mut det_rng = seed0();
+    //         keys.insert(KeyIndex(0), KeyPair::generate(&mut det_rng));
+    //         keys.insert(KeyIndex(1), KeyPair::generate(&mut det_rng));
+    //         keys.insert(KeyIndex(2), KeyPair::generate(&mut det_rng));
+    //         keys
+    //     },
+    //     threshold: SignatureThreshold::TWO,
+    // };
+    // let (context, pio, _) = test_create_pio(
+    //     &id_use_data,
+    //     &ip_info,
+    //     &ars_infos,
+    //     &global_ctx,
+    //     num_ars,
+    //     &acc_data,
+    // );
+    // let pio_bytes = common::to_bytes(&pio);
+    // let pio_bytes_hex = hex::encode(pio_bytes);
+    // println!("{:}", pio_bytes_hex);
+
+    // Deserialization of the stable pre-identity object
+    let pio_stable_bytes_hex = include_str!("test/pio_stable_bytes.hex");
+    let pio_stable_bytes = hex::decode(&pio_stable_bytes_hex).unwrap();
+    let pio_stable: PreIdentityObject<IpPairing, ArCurve> =
+        common::from_bytes(&mut pio_stable_bytes.as_slice())
+            .expect("Could not deserialize stable pio");
+
+    let ver_ok = verify_credentials(&pio_stable, context, &alist, EXPIRY,&ip_secret_key,&ip_cdi_secret_key,);
+    assert!(ver_ok.is_ok(), "Signature on the credential is invalid.");
+
+    
+    // The following commented code can be used to generate the serialized initial cdi
+    // let ver_ok = verify_credentials(
+    //     &pio,
+    //     context,
+    //     &alist,
+    //     EXPIRY,
+    //     &ip_secret_key,
+    //     &ip_cdi_secret_key,
+    // );
+    // let (ip_sig, initial_cdi) = ver_ok.unwrap();
+    // let init_cdi_bytes = common::to_bytes(&initial_cdi);
+    // let init_cdi_hex = hex::encode(init_cdi_bytes);
+    // println!("{:}", init_cdi_hex);
+
+    // Deserialization of the stable initial credential
+    let init_cdi_stable_bytes_hex = include_str!("test/init_cdi_stable_bytes.hex");
+    let init_cdi_stable_bytes = hex::decode(&init_cdi_stable_bytes_hex).unwrap();
+    let init_cdi_stable: InitialCredentialDeploymentInfo<ArCurve, AttributeKind> =
+        common::from_bytes(&mut init_cdi_stable_bytes.as_slice())
+            .expect("Could not deserialize stable initial cdi");
+
+    let cdi_check = verify_initial_cdi(&ip_info, &init_cdi_stable, EXPIRY);
+    assert_eq!(cdi_check, Ok(()));
+
+    // The following commented code can be used to generate the serialized cdi
+    // let id_object = IdentityObject {
+    //     pre_identity_object: pio,
+    //     alist,
+    //     signature: ip_sig,
+    // };
+    // let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+    // let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+    // let policy = Policy {
+    //     valid_to,
+    //     created_at,
+    //     policy_vec: {
+    //         let mut tree = BTreeMap::new();
+    //         tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
+    //         tree
+    //     },
+    //     _phantom: Default::default(),
+    // };
+    // let acc_data = CredentialData {
+    //     keys: {
+    //         let mut keys = BTreeMap::new();
+    //         // We need to generate different keys
+    //         let mut det_rng = seed0();
+    //         keys.insert(KeyIndex(0), KeyPair::generate(&mut det_rng));
+    //         keys.insert(KeyIndex(1), KeyPair::generate(&mut det_rng));
+    //         keys.insert(KeyIndex(2), KeyPair::generate(&mut det_rng));
+    //         keys
+    //     },
+    //     threshold: SignatureThreshold::TWO,
+    // };
+    // let (cdi, _) = create_credential(
+    //     context,
+    //     &id_object,
+    //     &id_use_data,
+    //     0,
+    //     policy.clone(),
+    //     &acc_data,
+    //     &SystemAttributeRandomness {},
+    //     &Left(EXPIRY),
+    // )
+    // .expect("Should generate the credential successfully.");
+    // let cdi_bytes = common::to_bytes(&cdi);
+    // let cdi_bytes_hex = hex::encode(cdi_bytes);
+    // println!("{:}", cdi_bytes_hex);
+
+    // Deserialization of the stable cdi
+    let cdi_stable_bytes_hex = include_str!("test/cdi_stable_bytes.hex");
+    let cdi_stable_bytes = hex::decode(&cdi_stable_bytes_hex).unwrap();
+    let cdi_stable: CredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind> =
+        common::from_bytes(&mut cdi_stable_bytes.as_slice())
+            .expect("Could not deserialize stable pio");
+
+    let cdi_check = verify_cdi(
+        &global_ctx,
+        &ip_info,
+        &ars_infos,
+        &cdi_stable,
+        &Left(EXPIRY),
+    );
+    assert_eq!(cdi_check, Ok(()));
+}
+
+
+/// Test that we can verify CDIs v1 created by previous versions of the protocol.
 /// This test protects from changes that introduces braking changes.
 ///
 /// The test uses a serialization of a previously created CDI.
@@ -635,6 +785,7 @@ pub fn test_pipline_v1_stable() {
     // let cdi_bytes_hex = hex::encode(cdi_bytes);
     // println!("{:}", cdi_bytes_hex);
 
+    // Deserialization of the stable cdi
     let cdi_stable_bytes_hex = include_str!("test/cdi_v1_stable_bytes.hex");
     let cdi_stable_bytes = hex::decode(&cdi_stable_bytes_hex).unwrap();
     let cdi_stable: CredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind> =
