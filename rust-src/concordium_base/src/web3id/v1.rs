@@ -436,13 +436,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
     }
 }
 
-/// Encrypted ephemeral id for an identity credential. It will have a new value for each time a credential is proven
+/// Encrypted, ephemeral id for an identity credential. It will have a new value for each time a credential is proven
 /// derived from the identity credential (the encryption is a randomized function).
 /// The id can be decrypted to IdCredPub by first converting the value to [`IdentityCredentialEphemeralIdData`].
 #[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
 pub struct IdentityCredentialEphemeralId(pub Vec<u8>);
 
-/// Encrypted ephemeral id for an identity credential. The id can be decrypted to IdCredPub by the privacy guardians (anonymity revokers).
+/// Encrypted, ephemeral id for an identity credential. The id can be decrypted to IdCredPub by the privacy guardians (anonymity revokers).
 /// It will have a new value for each time credential is proven (the encryption is a randomized function).
 #[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
 pub struct IdentityCredentialEphemeralIdData<C: Curve> {
@@ -464,7 +464,7 @@ impl<C: Curve> IdentityCredentialEphemeralIdData<C> {
     }
 }
 
-/// Encrypted ephemeral id for an identity credential. The id can be decrypted to IdCredPub by the privacy guardians (anonymity revokers).
+/// Encrypted, ephemeral id for an identity credential. The id can be decrypted to IdCredPub by the privacy guardians (anonymity revokers).
 /// It will have a new value for each time credential is proven (the encryption is a randomized function)
 #[derive(Debug, Clone, PartialEq, Eq, common::Serial)]
 pub struct IdentityCredentialEphemeralIdDataRef<'a, C: Curve> {

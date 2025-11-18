@@ -522,6 +522,7 @@ impl<
         AttributeType: Attribute<C::Scalar> + Ord,
     > AtomicStatementV1<C, TagType, AttributeType>
 {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn prove(
         &self,
         version: ProofVersion,
@@ -877,7 +878,7 @@ pub mod tests {
             subject_claims,
         };
 
-        let mut proof = request
+        let proof = request
             .clone()
             .prove(
                 &global_context,
@@ -1203,7 +1204,7 @@ pub mod tests {
             subject_claims,
         };
 
-        let mut proof = request
+        let proof = request
             .clone()
             .prove(
                 &global_context,
