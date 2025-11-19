@@ -48,7 +48,8 @@ pub enum CredentialValidityType {
 }
 
 /// Reason why credential is invalid
-#[derive(Debug, Eq, PartialEq, Copy, Clone, Hash)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum CredentialInvalidReason {
     Verify, // todo arg remove
     CredentialNotValidYet,
