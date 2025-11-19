@@ -1,5 +1,7 @@
 //! Implementation of range proofs along the lines of bulletproofs
+pub use super::utils::Generators;
 use super::{inner_product_proof::*, utils::*};
+use crate::random_oracle::StructuredDigest;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field, MultiExp, PrimeField, Value},
@@ -10,10 +12,8 @@ use crate::{
 use rand::*;
 use std::iter::once;
 
-pub use super::utils::Generators;
-
 /// Bulletproof style range proof
-#[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
+#[derive(Clone, Eq, PartialEq, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
 pub struct RangeProof<C: Curve> {
     /// Commitments to the bits `a_i` of the value, and `a_i - 1`

@@ -57,7 +57,6 @@ impl AcceptableRequest<constants::ArCurve, Web3IdAttribute> for Web3IdProofInput
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use crate::test_helpers::read_web3_id_request;
     use concordium_base::web3id::Presentation;

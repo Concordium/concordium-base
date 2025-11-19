@@ -8,6 +8,7 @@
 //! "Proof of Knowledge of a Signature" Section 5.3.5, Bluepaper v1.2.5")
 
 use super::common::*;
+use crate::random_oracle::StructuredDigest;
 use crate::{
     common::*,
     curve_arithmetic::*,
@@ -65,6 +66,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
     #[inline]
     fn public(&self, ro: &mut RandomOracle) {
         ro.append_message(b"blinded_sig", &self.blinded_sig);
+        #[allow(deprecated)]
         ro.extend_from(b"commitments", self.commitments.iter());
         ro.append_message(b"ps_pub_key", &self.ps_pub_key);
         ro.append_message(b"comm_key", &self.comm_key)

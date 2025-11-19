@@ -52,6 +52,7 @@ use super::{
     common::*,
     dlog::*,
 };
+use crate::random_oracle::StructuredDigest;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
@@ -77,6 +78,7 @@ pub struct ElgDec<C: Curve> {
 impl<C: Curve> ElgDec<C> {
     fn public(&self, ro: &mut RandomOracle) {
         ro.append_message(b"public", &self.public);
+        #[allow(deprecated)]
         ro.extend_from(b"coeff", &self.coeff)
     }
 }

@@ -10,7 +10,6 @@ Concordium.cabal
 *.pdf
 *.csv
 *.svg
-*.html
 
 # CMake build folder
 build/
