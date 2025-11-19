@@ -55,6 +55,23 @@ pub enum CredentialInvalidReason {
     CredentialExpired,
 }
 
+/// Result of verifying a presentation against the corresponding verification request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PresentationVerificationResult {
+    /// The verifiable presentation was successfully verified. See
+    /// [`verify_presentation_with_request_anchor`] for a list of what is
+    /// verified.
+    Verified,
+    /// Verification of the presentation failed. The reason for the failure
+    Failed(CredentialInvalidReason),
+}
+
+impl PresentationVerificationResult {
+    pub fn is_success(&self) -> bool {
+        matches!(self, PresentationVerificationResult::Verified)
+    }
+}
+
 /// Verifies a verifiable presentation and that the presentation matches an
 /// anchored verification request. The following is verified:
 ///
@@ -72,34 +89,40 @@ pub fn verify_presentation_with_request_anchor<'a, B>(
     verifiable_presentation: &VerifiablePresentationV1,
     verification_request_anchor: &VerificationRequestAnchorAndBlockHash,
     verification_material: B,
-) -> Result<(), CredentialInvalidReason>
+) -> PresentationVerificationResult
 where
     B: IntoIterator<Item = &'a VerificationMaterialWithValidity> + Copy,
     B::IntoIter: ExactSizeIterator,
 {
-    // Verify network
-    verify_network(verification_context, verifiable_presentation)?;
+    if let Err(reason) = (|| {
+        // Verify network
+        verify_network(verification_context, verifiable_presentation)?;
 
-    // Verify validity period, is credential currently valid
-    verify_credential_validity(verification_context, verification_material)?;
+        // Verify validity period, is credential currently valid
+        verify_credential_validity(verification_context, verification_material)?;
 
-    // Verify the verification request matches the request anchor
-    verify_request_anchor(verification_request, verification_request_anchor)?;
+        // Verify the verification request matches the request anchor
+        verify_request_anchor(verification_request, verification_request_anchor)?;
 
-    // Verify anchor block hash matches presentation context
-    verify_anchor_block_hash(verification_request_anchor, verifiable_presentation)?;
+        // Verify anchor block hash matches presentation context
+        verify_anchor_block_hash(verification_request_anchor, verifiable_presentation)?;
 
-    // Cryptographically verify the presentation
-    let request_from_presentation = verify_presentation(
-        global_context,
-        verifiable_presentation,
-        verification_material.into_iter(),
-    )?;
+        // Cryptographically verify the presentation
+        let request_from_presentation = verify_presentation(
+            global_context,
+            verifiable_presentation,
+            verification_material.into_iter(),
+        )?;
 
-    // Verify the verification request matches the subject claims in the presentation
-    verify_request(&request_from_presentation, verification_request)?;
+        // Verify the verification request matches the subject claims in the presentation
+        verify_request(&request_from_presentation, verification_request)?;
 
-    Ok(())
+        Ok(())
+    })() {
+        PresentationVerificationResult::Failed(reason)
+    } else {
+        PresentationVerificationResult::Verified
+    }
 }
 
 fn verify_network(
