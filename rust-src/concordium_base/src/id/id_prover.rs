@@ -227,7 +227,7 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
     }
 }
 
-fn prove_value_equal_to_commitment<C: Curve, AttributeType: Attribute<C::Scalar>>(
+pub(crate) fn prove_value_equal_to_commitment<C: Curve, AttributeType: Attribute<C::Scalar>>(
     attribute_value: &AttributeType,
     attribute_cmm_randomness: Randomness<C>,
     version: ProofVersion,

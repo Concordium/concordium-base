@@ -422,6 +422,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::id::id_prover;
     use crate::{
         common::types::{KeyIndex, KeyPair},
         curve_arithmetic::arkworks_instances::ArkGroup,
@@ -555,6 +556,66 @@ mod tests {
         } else {
             panic!("Failed to produce version 2 proof.");
         };
+    }
+
+    #[test]
+    fn test_verify_value_equal_to_commitment() {
+        let mut csprng = thread_rng();
+        let global = GlobalContext::<G1>::generate(String::from("genesis_string"));
+        let keys = global.on_chain_commitment_key;
+
+        let attribute = AttributeKind::try_new("testvalue".to_string()).expect("attribute kind");
+        let value = Value::<G1>::new(attribute.to_field_element());
+
+        let (commitment, randomness) = keys.commit(&value, &mut csprng);
+
+        // test version 1
+        let mut transcript = RandomOracle::domain("Test");
+        let proof = id_prover::prove_value_equal_to_commitment(
+            &attribute,
+            randomness.clone(),
+            ProofVersion::Version1,
+            &global,
+            &mut transcript.split(),
+            &mut csprng,
+        )
+        .expect("prove");
+
+        assert!(
+            verify_value_equal_to_commitment(
+                &attribute,
+                &commitment,
+                ProofVersion::Version1,
+                &global,
+                &mut transcript,
+                &proof
+            ),
+            "verify"
+        );
+
+        // test version 2
+        let mut transcript = RandomOracle::domain("Test");
+        let proof = id_prover::prove_value_equal_to_commitment(
+            &attribute,
+            randomness,
+            ProofVersion::Version2,
+            &global,
+            &mut transcript.split(),
+            &mut csprng,
+        )
+        .expect("prove");
+
+        assert!(
+            verify_value_equal_to_commitment(
+                &attribute,
+                &commitment,
+                ProofVersion::Version2,
+                &global,
+                &mut transcript,
+                &proof
+            ),
+            "verify"
+        );
     }
 
     #[test]
