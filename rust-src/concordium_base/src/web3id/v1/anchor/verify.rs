@@ -4,8 +4,8 @@ use crate::id::types;
 use crate::id::types::GlobalContext;
 use crate::web3id::did;
 use crate::web3id::v1::anchor::{
-    CredentialVerificationMaterial, PresentationV1, RequestV1, VerificationRequest,
-    VerificationRequestAnchor, VerificationRequestData,
+    VerifiablePresentationRequestV1, VerifiablePresentationV1, VerificationMaterial,
+    VerificationRequest, VerificationRequestAnchor, VerificationRequestData,
 };
 
 /// Contextual information needed for verifying credentials.
@@ -34,7 +34,7 @@ pub struct VerificationRequestAnchorAndBlockHash {
 #[derive(Debug, Clone, PartialEq)]
 pub struct VerificationMaterialWithValidity {
     /// Verification material needed to verify credential
-    pub verification_material: CredentialVerificationMaterial,
+    pub verification_material: VerificationMaterial,
     /// Specification of the validity of the credential
     pub validity: CredentialValidityType,
 }
@@ -53,8 +53,8 @@ pub enum CredentialInvalidReason {
     CredentialExpired,
 }
 
-/// Verifies a verifiable presentation and that the presentation matches a
-/// verification request. The following is verified:
+/// Verifies a verifiable presentation and that the presentation matches an
+/// anchored verification request. The following is verified:
 ///
 /// * the presentation is cryptographically verifiable
 /// * the credentials in the presentation are active at the given time
@@ -62,11 +62,12 @@ pub enum CredentialInvalidReason {
 ///   the requested claims and context in the verification request
 /// * the request anchor is formed correctly from the verification request data
 ///   and its registration block hash is correctly set in the verification request
+/// * the network to which the credential is v
 pub fn verify_presentation_with_request_anchor<'a, B>(
     global_context: &GlobalContext<ArCurve>,
     verification_context: &VerificationContext,
     verification_request: &VerificationRequest,
-    verifiable_presentation: &PresentationV1,
+    verifiable_presentation: &VerifiablePresentationV1,
     verification_request_anchor: &VerificationRequestAnchorAndBlockHash,
     verification_material: B,
 ) -> Result<(), CredentialInvalidReason>
@@ -101,7 +102,7 @@ where
 
 fn verify_network(
     verification_context: &VerificationContext,
-    presentation: &PresentationV1,
+    presentation: &VerifiablePresentationV1,
 ) -> Result<(), CredentialInvalidReason> {
     for metadata in presentation.metadata() {
         if metadata.network != verification_context.network {
@@ -118,13 +119,15 @@ fn verify_credential_validity<'a>(
     for credential_validity in verification_material {
         match &credential_validity.validity {
             CredentialValidityType::ValidityPeriod(cred_validity) => {
-                verify_credential_validity_period(verification_context.now, cred_validity)?;
+                verify_credential_validity_period(
+                    verification_context.validity_time,
+                    cred_validity,
+                )?;
             }
         }
     }
     Ok(())
 }
-
 
 fn verify_credential_validity_period(
     now: chrono::DateTime<chrono::Utc>,
@@ -151,9 +154,9 @@ fn verify_credential_validity_period(
 
 fn verify_presentation<'a>(
     global_context: &GlobalContext<ArCurve>,
-    presentation: &PresentationV1,
+    presentation: &VerifiablePresentationV1,
     verification_material: impl ExactSizeIterator<Item = &'a VerificationMaterialWithValidity>,
-) -> Result<RequestV1, CredentialInvalidReason> {
+) -> Result<VerifiablePresentationRequestV1, CredentialInvalidReason> {
     presentation
         .verify(
             global_context,
@@ -164,7 +167,7 @@ fn verify_presentation<'a>(
 
 fn verify_anchor_block_hash(
     request_anchor: &VerificationRequestAnchorAndBlockHash,
-    presentation: &PresentationV1,
+    presentation: &VerifiablePresentationV1,
 ) -> Result<(), CredentialInvalidReason> {
     // todo verify request anchor block hash matches presentation context
 
@@ -190,7 +193,7 @@ fn verify_request_anchor(
 
 /// Verify that verifiable presentation matches the verification request.
 fn verify_request(
-    request_from_presentation: &RequestV1,
+    request_from_presentation: &VerifiablePresentationRequestV1,
     verification_request: &VerificationRequest,
 ) -> Result<(), CredentialInvalidReason> {
     // todo verify subject claims in presentation matches request

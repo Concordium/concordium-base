@@ -23,30 +23,32 @@ pub use verify::*;
 
 const PROTOCOL_VERSION: u16 = 1u16;
 
-pub type PresentationV1 = v1::PresentationV1<IpPairing, ArCurve, Web3IdAttribute>;
-pub type CredentialV1 = v1::CredentialV1<IpPairing, ArCurve, Web3IdAttribute>;
-pub type RequestV1 = v1::RequestV1<ArCurve, Web3IdAttribute>;
-pub type CredentialVerificationMaterial = v1::CredentialVerificationMaterial<IpPairing, ArCurve>;
+pub type VerifiablePresentationV1 = v1::PresentationV1<IpPairing, ArCurve, Web3IdAttribute>;
+pub type VerifiableCredentialV1 = v1::CredentialV1<IpPairing, ArCurve, Web3IdAttribute>;
+pub type VerifiablePresentationRequestV1 = v1::RequestV1<ArCurve, Web3IdAttribute>;
+pub type VerificationMaterial = v1::CredentialVerificationMaterial<IpPairing, ArCurve>;
 
-/// A verifiable presentation request that specifies what credentials and proofs
-/// are being requested from a credential holder.
+/// A verification request that specifies which subject claims are requested from a credential holder
+/// and in which context.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type", rename = "ConcordiumVerificationRequestV1")]
 pub struct VerificationRequest {
-    /// Context information for a verifiable presentation request.
+    /// Context information for the verification request.
     pub context: UnfilledContextInformation,
-    /// The claims for a list of subjects containing requested statements about the subjects.
+    /// A list of subject claims containing requested statements about each subject.
     pub subject_claims: Vec<RequestedSubjectClaims>,
-    /// Blockchain transaction hash that anchors the request.
+    /// Blockchain transaction hash for the transaction that registers the [`VerificationRequestAnchor`] (VRA)
+    /// that matches this verification request. The [`VerificationRequestAnchor`] is created from
+    /// [`VerificationRequestData`].
     #[serde(rename = "transactionRef")]
     pub anchor_transaction_hash: hashes::TransactionHash,
 }
 
-/// A verification audit record that contains the complete verifiable presentation
-/// request and response data. The record contains the verification request
-/// and the verifiable presentations and should generally be kept private by the verifier.
+/// A verification audit record that contains the complete verification request and
+/// corresponding verifiable presentation.
 ///
+/// The record should generally be kept private by the verifier.
 /// Audit records are used internally by verifiers to maintain complete records
 /// of verification interactions, while only publishing hash-based public records/anchors on-chain
 /// to preserve privacy, see [`VerificationAuditAnchor`].
@@ -55,28 +57,32 @@ pub struct VerificationRequest {
 pub struct VerificationAuditRecord {
     /// Version integer, for now it is always 1.
     pub version: u16,
-    /// The verifiable presentation request to record.
-    pub request: VerificationRequest,
     /// Unique identifier chosen by the requester/merchant.
     pub id: String,
-    /// The verifiable presentation including the proof.
-    pub presentation: PresentationV1,
+    /// The verification request to record.
+    pub request: VerificationRequest,
+    /// The verifiable presentation containing verifiable credentials.
+    pub presentation: VerifiablePresentationV1,
 }
 
 impl VerificationAuditRecord {
-    /// Create a new verifiable audit anchor
-    pub fn new(request: VerificationRequest, id: String, presentation: PresentationV1) -> Self {
+    /// Create a new verification audit record
+    pub fn new(
+        id: String,
+        request: VerificationRequest,
+        presentation: VerifiablePresentationV1,
+    ) -> Self {
         Self {
             version: PROTOCOL_VERSION,
-            request,
             id,
+            request,
             presentation,
         }
     }
 
     /// Computes a hash of the verification audit record.
     ///
-    /// This hash is used to create a tamper-evident anchor that can be stored
+    /// This hash is used to create a tamper-evident anchor that can be registered
     /// on-chain to prove an audit record was made at a specific time and with
     /// specific parameters.
     pub fn hash(&self) -> hashes::Hash {
@@ -86,9 +92,8 @@ impl VerificationAuditRecord {
         HashBytes::new(hasher.finalize().into())
     }
 
-    /// Generates the [`VerificationAuditAnchor`], a hash-based public record/anchor that can be published on-chain,
-    /// from the internal audit anchor [`VerificationAuditRecord`] type. Verifiers maintain the private [`VerificationAuditAnchor`]
-    /// in their backend database.
+    /// Creates the [`VerificationAuditAnchor`] from the audit record.
+    /// The anchor is a hash-based public anchor that can be registered on-chain.
     pub fn to_anchor(
         &self,
         public_info: Option<HashMap<String, cbor::value::Value>>,
@@ -103,9 +108,11 @@ impl VerificationAuditRecord {
     }
 }
 
-/// Data structure for CBOR-encoded verifiable audit
+/// The verification audit anchor (VAA). The data structure is CBOR-encodable and the CBOR
+/// encoding defines the data that should be registered on chain to create the on chain anchor of the
+/// audit record.
 ///
-/// This format is used when anchoring a verification audit on the Concordium blockchain.
+/// The anchor is created from a [`VerificationAuditRecord`].
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 pub struct VerificationAuditAnchor {
     /// Type identifier for Concordium Verifiable Request Audit Anchor/Record. Always set to "CCDVAA".
@@ -119,21 +126,23 @@ pub struct VerificationAuditAnchor {
     pub public: Option<HashMap<String, cbor::value::Value>>,
 }
 
-/// Description of the presentation being requested from a credential holder.
+/// Data that constitutes a verification request to create a verifiable presentation.
+/// Described the subject claims being requested from a credential holder.
 ///
-/// This is also used to compute the hash for in the [`VerificationRequestAnchor`].
+/// The data should be registered on chain via a [`VerificationRequestAnchor`].
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type", rename = "ConcordiumVerificationRequestDataV1")]
 pub struct VerificationRequestData {
-    /// Context information for a verifiable presentation request.
+    /// Context information for the verification request. Parts of the context must be
+    /// filled in by the credential holder to form the context of the verifiable presentation.
     pub context: UnfilledContextInformation,
-    /// The claims for a list of subjects containing requested statements about the subjects.
+    /// Claims that most be proven in the verifiable presentation.
     pub subject_claims: Vec<RequestedSubjectClaims>,
 }
 
 impl VerificationRequestData {
-    /// Create a new verifiable request data type with no statements.
+    /// Create a new verification request data with no claims.
     pub fn new(context: UnfilledContextInformation) -> Self {
         Self {
             context,
@@ -144,13 +153,13 @@ impl VerificationRequestData {
     /// Add a subject claims request to the verification request data.
     pub fn add_subject_claim_request(
         mut self,
-        statement_request: impl Into<RequestedSubjectClaims>,
+        subject_claims: impl Into<RequestedSubjectClaims>,
     ) -> Self {
-        self.subject_claims.push(statement_request.into());
+        self.subject_claims.push(subject_claims.into());
         self
     }
 
-    /// Computes a hash of the Verification request context and statements.
+    /// Computes the hash of the verification request data.
     ///
     /// This hash is used to create a tamper-evident anchor that can be stored
     /// on-chain to prove the request was made at a specific time and with
@@ -162,8 +171,8 @@ impl VerificationRequestData {
         HashBytes::new(hasher.finalize().into())
     }
 
-    /// Generates the [`VerificationRequestAnchor`], a hash-based public record/anchor that can be published on-chain,
-    /// from the the [`VerificationRequestData`] type.
+    /// Creates the [`VerificationRequestAnchor`] from the verification request data.
+    /// The anchor is a hash-based public record/anchor that can be published on-chain.
     pub fn to_anchor(
         &self,
         public_info: Option<HashMap<String, cbor::value::Value>>,
@@ -178,16 +187,16 @@ impl VerificationRequestData {
     }
 }
 
-/// Context information for a verifiable presentation request.
+/// Context information for a verification request.
 ///
 /// Contains both the context data that is already known (given) and
-/// the context data that needs to be provided by the presenter (requested).
+/// the context data that needs to be provided by the credential holder (requested).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Serialize, Default)]
 #[serde(tag = "type", rename = "ConcordiumUnfilledContextInformationV1")]
 pub struct UnfilledContextInformation {
     /// Context information that is already provided.
-    pub given: Vec<GivenContext>,
-    /// Context information that must be provided by the presenter.
+    pub given: Vec<ContextProperty>,
+    /// Context information that must be provided by the credential holder.
     pub requested: Vec<ContextLabel>,
 }
 
@@ -198,7 +207,7 @@ impl UnfilledContextInformation {
     }
 
     /// Add to the given context.
-    pub fn add_context(mut self, context: impl Into<GivenContext>) -> Self {
+    pub fn add_context(mut self, context: impl Into<ContextProperty>) -> Self {
         self.given.push(context.into());
         self
     }
@@ -222,17 +231,19 @@ impl UnfilledContextInformation {
     /// - `contextString` Additional context information.
     pub fn new_simple(nonce: [u8; 32], connection_id: String, context_string: String) -> Self {
         Self::default()
-            .add_context(GivenContext::Nonce(nonce))
-            .add_context(GivenContext::ConnectionId(connection_id))
-            .add_context(GivenContext::ContextString(context_string))
+            .add_context(ContextProperty::Nonce(nonce))
+            .add_context(ContextProperty::ConnectionId(connection_id))
+            .add_context(ContextProperty::ContextString(context_string))
             .add_request(ContextLabel::BlockHash)
             .add_request(ContextLabel::ResourceId)
     }
 }
 
-/// Data structure for CBOR-encoded verifiable presentation request anchors.
+/// The verification request anchor (VRA). The data structure is CBOR-encodable and the CBOR
+/// encoding defines the data that should be registered on chain to create the on chain anchor of the
+/// verification request.
 ///
-/// This format is used when anchoring presentation requests on the Concordium blockchain.
+/// The anchor is created from a [`VerificationRequestData`].
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 pub struct VerificationRequestAnchor {
     /// Type identifier for Concordium Verification Request Anchor. Always set to "CCDVRA".
@@ -246,11 +257,11 @@ pub struct VerificationRequestAnchor {
     pub public: Option<HashMap<String, cbor::value::Value>>,
 }
 
-/// The credential statements being requested.
+/// The subject claims being requested proven.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
 pub enum RequestedSubjectClaims {
-    /// Statements based on the Concordium ID object.
+    /// Claims based on the Concordium ID object.
     #[serde(rename = "identity")]
     Identity {
         #[serde(flatten)]
@@ -276,21 +287,21 @@ impl Deserial for RequestedSubjectClaims {
                 let request = source.get()?;
                 Ok(Self::Identity { request })
             }
-            n => anyhow::bail!("Unrecognized CredentialStatementRequest tag {n}"),
+            n => anyhow::bail!("Unrecognized RequestedSubjectClaims tag {n}"),
         }
     }
 }
 
-/// A statement request concerning the Concordium ID object (held in the wallet).
-/// The Concordium ID object has been signed by identity providers (IDPs).
+/// A subject claims request concerning the Concordium ID object (held by the credential holder
+/// in the wallet). The Concordium ID object has been signed by identity providers (IDPs).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default, Serialize)]
 pub struct RequestedIdentitySubjectClaims {
-    /// The statements requested.
+    /// The statements/claims requested proven.
     pub statements: Vec<RequestedStatement<AttributeTag>>,
     /// The credential issuers allowed.
-    pub issuers: Vec<IdentityProviderMethod>,
+    pub issuers: Vec<IdentityProviderDid>,
     /// Set of allowed credential types. Should never be empty or contain the same value twice.
-    pub source: Vec<CredentialType>,
+    pub source: Vec<IdentityCredentialType>,
 }
 
 impl From<RequestedIdentitySubjectClaims> for RequestedSubjectClaims {
@@ -300,21 +311,24 @@ impl From<RequestedIdentitySubjectClaims> for RequestedSubjectClaims {
 }
 
 impl RequestedIdentitySubjectClaims {
-    /// Create an empty identity statement request.
+    /// Create an empty identity subject claims request.
     pub fn new() -> Self {
         Default::default()
     }
 
-    /// Add a source to the given identity statement request.
-    pub fn add_source(mut self, source: CredentialType) -> Self {
+    /// Add a source to the given identity subject claims request.
+    pub fn add_source(mut self, source: IdentityCredentialType) -> Self {
         if !self.source.contains(&source) {
             self.source.push(source);
         }
         self
     }
 
-    /// Add sources to the given identity statement request.
-    pub fn add_sources(mut self, sources: impl IntoIterator<Item = CredentialType>) -> Self {
+    /// Add sources to the given identity subject claims request.
+    pub fn add_sources(
+        mut self,
+        sources: impl IntoIterator<Item = IdentityCredentialType>,
+    ) -> Self {
         for src in sources {
             if !self.source.contains(&src) {
                 self.source.push(src);
@@ -323,19 +337,16 @@ impl RequestedIdentitySubjectClaims {
         self
     }
 
-    /// Add an issuer to the given identity statement request.
-    pub fn add_issuer(mut self, issuer: IdentityProviderMethod) -> Self {
+    /// Add an issuer to the given identity subject claims request.
+    pub fn add_issuer(mut self, issuer: IdentityProviderDid) -> Self {
         if !self.issuers.contains(&issuer) {
             self.issuers.push(issuer);
         }
         self
     }
 
-    /// Add issuers to the given identity statement request.
-    pub fn add_issuers(
-        mut self,
-        issuers: impl IntoIterator<Item = IdentityProviderMethod>,
-    ) -> Self {
+    /// Add issuers to the given identity subject claims request.
+    pub fn add_issuers(mut self, issuers: impl IntoIterator<Item = IdentityProviderDid>) -> Self {
         for issuer in issuers {
             if !self.issuers.contains(&issuer) {
                 self.issuers.push(issuer);
@@ -344,7 +355,7 @@ impl RequestedIdentitySubjectClaims {
         self
     }
 
-    /// Add a statement to the given identity statement request.
+    /// Add a statement/claim to the given identity subject claims.
     pub fn add_statement(mut self, statement: RequestedStatement<AttributeTag>) -> Self {
         if !self.statements.contains(&statement) {
             self.statements.push(statement);
@@ -352,7 +363,7 @@ impl RequestedIdentitySubjectClaims {
         self
     }
 
-    /// Add statements to the given identity statement request.
+    /// Add statements/claims to the given identity subject claims.
     pub fn add_statements(
         mut self,
         statements: impl IntoIterator<Item = RequestedStatement<AttributeTag>>,
@@ -427,7 +438,7 @@ impl Deserial for ContextLabel {
 
 /// Identity based credential types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum CredentialType {
+pub enum IdentityCredentialType {
     /// The type of the credential is linked directly to the Concordium ID object
     /// hold in a wallet while no account is deployed on-chain.
     /// The Concordium ID object has been signed by the identity providers (IDPs).
@@ -440,16 +451,16 @@ pub enum CredentialType {
     AccountCredential,
 }
 
-impl Serial for CredentialType {
+impl Serial for IdentityCredentialType {
     fn serial<B: Buffer>(&self, out: &mut B) {
         match self {
-            CredentialType::IdentityCredential => 0u8.serial(out),
-            CredentialType::AccountCredential => 1u8.serial(out),
+            IdentityCredentialType::IdentityCredential => 0u8.serial(out),
+            IdentityCredentialType::AccountCredential => 1u8.serial(out),
         }
     }
 }
 
-impl Deserial for CredentialType {
+impl Deserial for IdentityCredentialType {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         match u8::deserial(source)? {
             0u8 => Ok(Self::IdentityCredential),
@@ -459,17 +470,17 @@ impl Deserial for CredentialType {
     }
 }
 
-/// DID method for a Concordium Identity Provider.
+/// DID for a Concordium Identity Provider.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Serialize)]
 #[serde(into = "did::Method", try_from = "did::Method")]
-pub struct IdentityProviderMethod {
+pub struct IdentityProviderDid {
     /// The network part of the method.
     pub network: did::Network,
     /// The on-chain identifier of the Concordium Identity Provider.
     pub identity_provider: id::types::IpIdentity,
 }
 
-impl IdentityProviderMethod {
+impl IdentityProviderDid {
     /// Create a new identity provider method.
     pub fn new(ip_identity: u32, network: did::Network) -> Self {
         Self {
@@ -479,8 +490,8 @@ impl IdentityProviderMethod {
     }
 }
 
-impl From<IdentityProviderMethod> for did::Method {
-    fn from(value: IdentityProviderMethod) -> Self {
+impl From<IdentityProviderDid> for did::Method {
+    fn from(value: IdentityProviderDid) -> Self {
         Self {
             network: value.network,
             ty: did::IdentifierType::Idp {
@@ -494,7 +505,7 @@ impl From<IdentityProviderMethod> for did::Method {
 #[error("Invalid DID method for a Concordium Identity Provider")]
 pub struct TryFromDidMethodError;
 
-impl TryFrom<did::Method> for IdentityProviderMethod {
+impl TryFrom<did::Method> for IdentityProviderDid {
     type Error = TryFromDidMethodError;
 
     fn try_from(value: did::Method) -> Result<Self, Self::Error> {
@@ -509,10 +520,10 @@ impl TryFrom<did::Method> for IdentityProviderMethod {
     }
 }
 
-/// A single piece of context information that can be provided in verifiable presentation interactions.
+/// A single piece of context information that can be provided to a verification request.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(into = "GivenContextJson", try_from = "GivenContextJson")]
-pub enum GivenContext {
+#[serde(into = "ContextPropertyJson", try_from = "ContextPropertyJson")]
+pub enum ContextProperty {
     /// Cryptographic nonce context which should be at least of length bytes32.
     Nonce([u8; 32]),
     /// Payment hash context (Concordium transaction hash).
@@ -527,30 +538,30 @@ pub enum GivenContext {
     ContextString(String),
 }
 
-impl Serial for GivenContext {
+impl Serial for ContextProperty {
     fn serial<B: Buffer>(&self, out: &mut B) {
         match self {
-            GivenContext::Nonce(hash) => {
+            ContextProperty::Nonce(hash) => {
                 0u8.serial(out);
                 hash.serial(out);
             }
-            GivenContext::PaymentHash(hash) => {
+            ContextProperty::PaymentHash(hash) => {
                 1u8.serial(out);
                 hash.serial(out);
             }
-            GivenContext::BlockHash(hash) => {
+            ContextProperty::BlockHash(hash) => {
                 2u8.serial(out);
                 hash.serial(out);
             }
-            GivenContext::ConnectionId(connection_id) => {
+            ContextProperty::ConnectionId(connection_id) => {
                 3u8.serial(out);
                 connection_id.serial(out);
             }
-            GivenContext::ResourceId(rescource_id) => {
+            ContextProperty::ResourceId(rescource_id) => {
                 4u8.serial(out);
                 rescource_id.serial(out);
             }
-            GivenContext::ContextString(context_string) => {
+            ContextProperty::ContextString(context_string) => {
                 5u8.serial(out);
                 context_string.serial(out);
             }
@@ -558,7 +569,7 @@ impl Serial for GivenContext {
     }
 }
 
-impl Deserial for GivenContext {
+impl Deserial for ContextProperty {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         match u8::deserial(source)? {
             0u8 => {
@@ -592,37 +603,37 @@ impl Deserial for GivenContext {
 
 /// JSON representation of context information that is already provided in a request for a presentation.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct GivenContextJson {
+struct ContextPropertyJson {
     /// The label identifying the type of context.
     pub label: ContextLabel,
     /// The context data serialized as a string.
     pub context: String,
 }
 
-impl From<GivenContext> for GivenContextJson {
-    fn from(value: GivenContext) -> Self {
+impl From<ContextProperty> for ContextPropertyJson {
+    fn from(value: ContextProperty) -> Self {
         match value {
-            GivenContext::Nonce(nonce) => Self {
+            ContextProperty::Nonce(nonce) => Self {
                 label: ContextLabel::Nonce,
                 context: hex::encode(nonce),
             },
-            GivenContext::PaymentHash(hash_bytes) => Self {
+            ContextProperty::PaymentHash(hash_bytes) => Self {
                 label: ContextLabel::PaymentHash,
                 context: hex::encode(hash_bytes),
             },
-            GivenContext::BlockHash(hash_bytes) => Self {
+            ContextProperty::BlockHash(hash_bytes) => Self {
                 label: ContextLabel::BlockHash,
                 context: hex::encode(hash_bytes),
             },
-            GivenContext::ConnectionId(context) => Self {
+            ContextProperty::ConnectionId(context) => Self {
                 label: ContextLabel::ConnectionId,
                 context,
             },
-            GivenContext::ResourceId(context) => Self {
+            ContextProperty::ResourceId(context) => Self {
                 label: ContextLabel::ResourceId,
                 context,
             },
-            GivenContext::ContextString(context) => Self {
+            ContextProperty::ContextString(context) => Self {
                 label: ContextLabel::ContextString,
                 context,
             },
@@ -631,7 +642,7 @@ impl From<GivenContext> for GivenContextJson {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum TryFromGivenContextJsonError {
+pub enum TryFromContextPropertyJsonError {
     #[error("Failed decoding hex in nonce context: {0}")]
     Nonce(hex::FromHexError),
     #[error("Failed decoding block hash")]
@@ -640,20 +651,20 @@ pub enum TryFromGivenContextJsonError {
     PaymentHash(hashes::HashFromStrError),
 }
 
-impl TryFrom<GivenContextJson> for GivenContext {
-    type Error = TryFromGivenContextJsonError;
+impl TryFrom<ContextPropertyJson> for ContextProperty {
+    type Error = TryFromContextPropertyJsonError;
 
-    fn try_from(value: GivenContextJson) -> Result<Self, Self::Error> {
+    fn try_from(value: ContextPropertyJson) -> Result<Self, Self::Error> {
         match value.label {
             ContextLabel::ContextString => Ok(Self::ContextString(value.context)),
             ContextLabel::ResourceId => Ok(Self::ResourceId(value.context)),
             ContextLabel::ConnectionId => Ok(Self::ConnectionId(value.context)),
             ContextLabel::Nonce => {
                 let bytes =
-                    hex::decode(value.context).map_err(TryFromGivenContextJsonError::Nonce)?;
+                    hex::decode(value.context).map_err(TryFromContextPropertyJsonError::Nonce)?;
 
                 let arr: [u8; 32] = bytes.try_into().map_err(|_| {
-                    TryFromGivenContextJsonError::Nonce(hex::FromHexError::InvalidStringLength)
+                    TryFromContextPropertyJsonError::Nonce(hex::FromHexError::InvalidStringLength)
                 })?;
 
                 Ok(Self::Nonce(arr))
@@ -662,13 +673,13 @@ impl TryFrom<GivenContextJson> for GivenContext {
                 value
                     .context
                     .parse()
-                    .map_err(TryFromGivenContextJsonError::BlockHash)?,
+                    .map_err(TryFromContextPropertyJsonError::BlockHash)?,
             )),
             ContextLabel::PaymentHash => Ok(Self::PaymentHash(
                 value
                     .context
                     .parse()
-                    .map_err(TryFromGivenContextJsonError::PaymentHash)?,
+                    .map_err(TryFromContextPropertyJsonError::PaymentHash)?,
             )),
         }
     }
@@ -744,8 +755,8 @@ mod tests {
     use crate::id::types::GlobalContext;
     use crate::web3id::did::Network;
     use crate::web3id::v1::{
-        fixtures, AtomicStatementV1, ContextInformation, ContextProperty,
-        IdentityBasedSubjectClaims, RequestV1, SubjectClaims,
+        fixtures, AtomicStatementV1, ContextInformation, IdentityBasedSubjectClaims, RequestV1,
+        SubjectClaims,
     };
     use crate::{
         common::serialize_deserialize,
@@ -767,9 +778,11 @@ mod tests {
         )
         // While above simple context is used in practice,
         // we add all possible context variants and context label variants to ensure test coverage.
-        .add_context(GivenContext::PaymentHash(hashes::Hash::new([1u8; 32])))
-        .add_context(GivenContext::BlockHash(hashes::BlockHash::new([2u8; 32])))
-        .add_context(GivenContext::ResourceId("MyRescourceId".to_string()))
+        .add_context(ContextProperty::PaymentHash(hashes::Hash::new([1u8; 32])))
+        .add_context(ContextProperty::BlockHash(hashes::BlockHash::new(
+            [2u8; 32],
+        )))
+        .add_context(ContextProperty::ResourceId("MyRescourceId".to_string()))
         .add_request(ContextLabel::Nonce)
         .add_request(ContextLabel::PaymentHash)
         .add_request(ContextLabel::ConnectionId)
@@ -827,8 +840,8 @@ mod tests {
 
         VerificationRequestData::new(context).add_subject_claim_request(
             RequestedIdentitySubjectClaims::default()
-                .add_issuer(IdentityProviderMethod::new(3u32, did::Network::Testnet))
-                .add_source(CredentialType::IdentityCredential)
+                .add_issuer(IdentityProviderDid::new(3u32, did::Network::Testnet))
+                .add_source(IdentityCredentialType::IdentityCredential)
                 .add_statements(statements),
         )
     }
@@ -842,21 +855,13 @@ mod tests {
         request_data.to_anchor(Some(public_info))
     }
 
-    fn verification_audit_record_fixture() -> VerificationAuditRecord {
-        let request_data = verification_request_data_fixture();
-
-        let verification_request = VerificationRequest {
-            context: request_data.context,
-            subject_claims: request_data.subject_claims,
-            anchor_transaction_hash: hashes::TransactionHash::new([2u8; 32]),
-        };
-
-        let challenge = ContextInformation {
-            given: vec![ContextProperty {
+    fn verifiable_presentation_fixture() -> VerifiablePresentationV1 {
+        let context = ContextInformation {
+            given: vec![v1::ContextProperty {
                 label: "prop1".to_string(),
                 context: "val1".to_string(),
             }],
-            requested: vec![ContextProperty {
+            requested: vec![v1::ContextProperty {
                 label: "prop2".to_string(),
                 context: "val2".to_string(),
             }],
@@ -957,7 +962,7 @@ mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            challenge: context,
             subject_claims: credential_statements,
         };
 
@@ -975,9 +980,23 @@ mod tests {
             )
             .expect("prove");
 
+        presentation
+    }
+
+    fn verification_audit_record_fixture() -> VerificationAuditRecord {
+        let request_data = verification_request_data_fixture();
+
+        let verification_request = VerificationRequest {
+            context: request_data.context,
+            subject_claims: request_data.subject_claims,
+            anchor_transaction_hash: hashes::TransactionHash::new([2u8; 32]),
+        };
+
+        let presentation = verifiable_presentation_fixture();
+
         let id = "MyUUID".to_string();
 
-        VerificationAuditRecord::new(verification_request, id, presentation)
+        VerificationAuditRecord::new(id, verification_request, presentation)
     }
 
     fn verification_audit_anchor_fixture() -> VerificationAuditAnchor {
