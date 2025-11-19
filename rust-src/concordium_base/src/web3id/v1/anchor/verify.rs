@@ -12,7 +12,9 @@ use crate::web3id::v1::anchor::{
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct VerificationContext {
     /// The blockchain network at which the credential must be valid. This ties
-    /// the credential to the network where the credential was issued.
+    /// the credential to the network where the credential was issued. Must match
+    /// the network from which [verification material](VerificationMaterialWithValidity)
+    /// and [verification request anchor](VerificationRequestAnchorAndBlockHash) is fetched.
     pub network: did::Network,
     /// The time at which the credential must be valid.
     // todo ar move out of here?
@@ -261,6 +263,4 @@ mod tests {
             Err(CredentialInvalidReason::CredentialExpired)
         );
     }
-
-    // todo ar verify tests
 }
