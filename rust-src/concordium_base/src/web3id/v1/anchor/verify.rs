@@ -2,9 +2,11 @@ use crate::hashes::BlockHash;
 use crate::id::constants::ArCurve;
 use crate::id::types;
 use crate::id::types::GlobalContext;
-use crate::web3id::v1::anchor::{CredentialVerificationMaterial, PresentationV1, RequestV1, VerificationRequest, VerificationRequestAnchor, VerificationRequestData};
 use crate::web3id::did;
-
+use crate::web3id::v1::anchor::{
+    CredentialVerificationMaterial, PresentationV1, RequestV1, VerificationRequest,
+    VerificationRequestAnchor, VerificationRequestData,
+};
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct VerificationContext {
@@ -43,14 +45,18 @@ pub enum VerifyFailureReason {
 /// This function performs several validation steps:
 /// * 1. The verification request anchor on-chain corresponds to the given verification request.
 /// todo ar doc
-pub fn verify_presentation_with_request_anchor<'a>(
+pub fn verify_presentation_with_request_anchor<'a, B>(
     global_context: &GlobalContext<ArCurve>,
     verification_context: &VerificationContext,
     verification_request: &VerificationRequest,
     verifiable_presentation: &PresentationV1,
     verification_request_anchor: &VerificationRequestAnchorAndBlockHash,
-    verification_material: impl ExactSizeIterator<Item = &'a VerificationMaterialWithValidity> + Copy,
-) -> Result<(), VerifyFailureReason> {
+    verification_material: B,
+) -> Result<(), VerifyFailureReason>
+where
+    B: IntoIterator<Item = &'a VerificationMaterialWithValidity> + Copy,
+    B::IntoIter: ExactSizeIterator,
+{
     // Verify network
     verify_network(verification_context, verifiable_presentation)?;
 
@@ -64,8 +70,11 @@ pub fn verify_presentation_with_request_anchor<'a>(
     verify_anchor_block_hash(verification_request_anchor, verifiable_presentation)?;
 
     // Cryptographically verify the presentation
-    let request_from_presentation =
-        verify_presentation(global_context, verifiable_presentation, verification_material)?;
+    let request_from_presentation = verify_presentation(
+        global_context,
+        verifiable_presentation,
+        verification_material.into_iter(),
+    )?;
 
     // Verify the verification request matches the subject claims in the presentation
     verify_request(&request_from_presentation, verification_request)?;
@@ -87,7 +96,7 @@ fn verify_network(
 
 fn verify_credential_validity<'a>(
     verification_context: &VerificationContext,
-    verification_material: impl ExactSizeIterator<Item = &'a VerificationMaterialWithValidity> ,
+    verification_material: impl IntoIterator<Item = &'a VerificationMaterialWithValidity>,
 ) -> Result<(), VerifyFailureReason> {
     for credential_validity in verification_material {
         match &credential_validity.validity {
@@ -127,10 +136,13 @@ fn verify_credential_validity_period(
 fn verify_presentation<'a>(
     global_context: &GlobalContext<ArCurve>,
     presentation: &PresentationV1,
-    verification_material: impl ExactSizeIterator<Item = &'a VerificationMaterialWithValidity> ,
+    verification_material: impl ExactSizeIterator<Item = &'a VerificationMaterialWithValidity>,
 ) -> Result<RequestV1, VerifyFailureReason> {
     presentation
-        .verify(global_context, verification_material.map(|vm|&vm.verification_material))
+        .verify(
+            global_context,
+            verification_material.map(|vm| &vm.verification_material),
+        )
         .map_err(|_| VerifyFailureReason::Verify)
 }
 
