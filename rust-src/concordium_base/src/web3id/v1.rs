@@ -665,9 +665,10 @@ pub struct ConcordiumZKProof<T: common::Serialize> {
     pub proof_version: ConcordiumZKProofVersion,
 }
 
-/// Verifiable credential. Embeds and proofs the claims from a [`SubjectClaims`].
-/// To verify the credential, the corresponding public input [`CredentialsInputs`](super::CredentialsInputs) is needed.
-/// Also, the data in [`CredentialMetadataV1`] returned by [`CredentialV1::metadata`] must be verified externally in
+/// Verifiable credential that contains subject claims and proofs of the claims.
+/// The subject and claims can be retrieved by calling [`CredentialV1::claims`].
+/// To verify the credential, the corresponding public input [`CredentialVerificationMaterial`] is needed.
+/// Also, some of the data in [`CredentialMetadataV1`] returned by [`CredentialV1::metadata`] must be verified externally in
 /// order to verify the credential.
 // for some reason, version 1.82 clippy thinks the `Identity` variant is 0 bytes and hence gives this warning
 #[allow(clippy::large_enum_variant)]
@@ -955,8 +956,10 @@ pub struct LinkingProofV1 {
     pub proof_type: ConcordiumLinkingProofVersion,
 }
 
-/// Verifiable presentation. Is the response to proving a [`RequestV1`] with [`RequestV1::prove`]. It contains proofs for
-/// the claims in the request. To verify the presentation, use [`PresentationV1::verify`].
+/// Verifiable presentation that contains verifiable credentials each
+/// consisting of subject claims and proofs of them.
+/// It is the response to proving a [`RequestV1`] with [`RequestV1::prove`].
+/// To verify the presentation, use [`PresentationV1::verify`].
 #[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
 pub struct PresentationV1<
     P: Pairing,

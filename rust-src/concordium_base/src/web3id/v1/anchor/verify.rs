@@ -74,7 +74,9 @@ impl PresentationVerificationResult {
 }
 
 /// Verifies a verifiable presentation and that the presentation matches an
-/// anchored verification request. The following is verified:
+/// anchored verification request.
+///
+/// The following is verified:
 ///
 /// * the presentation is cryptographically verifiable
 /// * the credentials in the presentation are active at the given time
