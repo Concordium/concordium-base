@@ -542,9 +542,9 @@ impl<
             AtomicStatementV1::AttributeValue(statement) => {
                 // If the attribute value has been revealed as part of the identity attributes
                 // proof, we essentially need no proof for the statement.
-                if let Some(revealed_attribute) = revealed_attributes.get(&statement.attribute_tag)
+                if let Some(_revealed_attribute) = revealed_attributes.get(&statement.attribute_tag)
                 {
-                    statement.prove_for_already_revealed(transcript, revealed_attribute);
+                    statement.prove_for_already_revealed(transcript);
                     Some(AtomicProofV1::AttributeValueAlreadyRevealed)
                 } else {
                     let proof = statement.prove(
@@ -552,7 +552,6 @@ impl<
                         global,
                         transcript,
                         csprng,
-                        attribute_values,
                         attribute_randomness,
                     )?;
                     let proof = AtomicProofV1::AttributeValue(proof);

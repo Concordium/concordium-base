@@ -422,6 +422,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::id::constants::ArCurve;
+    use crate::id::id_prover;
     use crate::{
         common::types::{KeyIndex, KeyPair},
         curve_arithmetic::arkworks_instances::ArkGroup,
@@ -484,6 +486,7 @@ mod tests {
         );
     }
 
+    /// Tests [`verify_attribute_range`]
     #[test]
     fn test_verify_attribute_in_range() {
         let mut csprng = thread_rng();
@@ -555,6 +558,183 @@ mod tests {
         } else {
             panic!("Failed to produce version 2 proof.");
         };
+    }
+
+    /// Tests [`verify_value_equal_to_commitment`]
+    #[test]
+    fn test_verify_value_equal_to_commitment() {
+        let mut csprng = thread_rng();
+        let global = GlobalContext::<G1>::generate(String::from("genesis_string"));
+        let keys = global.on_chain_commitment_key;
+
+        let attribute = AttributeKind::try_new("testvalue".to_string()).expect("attribute kind");
+        let value = Value::<G1>::new(attribute.to_field_element());
+
+        let (commitment, randomness) = keys.commit(&value, &mut csprng);
+
+        // test completeness version 1
+        let mut transcript = RandomOracle::domain("Test");
+        let proof = id_prover::prove_value_equal_to_commitment(
+            &attribute,
+            randomness.clone(),
+            ProofVersion::Version1,
+            &global,
+            &mut transcript.split(),
+            &mut csprng,
+        )
+        .expect("prove");
+
+        assert!(
+            verify_value_equal_to_commitment(
+                &attribute,
+                &commitment,
+                ProofVersion::Version1,
+                &global,
+                &mut transcript,
+                &proof
+            ),
+            "verify"
+        );
+
+        // test completeness version 2
+        let mut transcript = RandomOracle::domain("Test");
+        let proof = id_prover::prove_value_equal_to_commitment(
+            &attribute,
+            randomness,
+            ProofVersion::Version2,
+            &global,
+            &mut transcript.split(),
+            &mut csprng,
+        )
+        .expect("prove");
+
+        assert!(
+            verify_value_equal_to_commitment(
+                &attribute,
+                &commitment,
+                ProofVersion::Version2,
+                &global,
+                &mut transcript,
+                &proof
+            ),
+            "verify"
+        );
+
+        // test soundness
+        let attribute2 = AttributeKind::try_new("testvalue2".to_string()).expect("attribute kind");
+        assert!(
+            !verify_value_equal_to_commitment(
+                &attribute2,
+                &commitment,
+                ProofVersion::Version2,
+                &global,
+                &mut transcript,
+                &proof
+            ),
+            "verify"
+        );
+    }
+
+    /// Tests prove and verify [`AttributeValueStatement`]
+    #[test]
+    fn test_attribute_value_statement() {
+        let mut csprng = thread_rng();
+        let global = GlobalContext::<G1>::generate(String::from("genesis_string"));
+        let keys = global.on_chain_commitment_key;
+
+        let attribute = AttributeKind::try_new("testvalue".to_string()).expect("attribute kind");
+        let value = Value::<G1>::new(attribute.to_field_element());
+
+        let (commitment, randomness) = keys.commit(&value, &mut csprng);
+
+        let statement = AttributeValueStatement {
+            attribute_tag: AttributeTag(1),
+            attribute_value: attribute,
+            _phantom: Default::default(),
+        };
+
+        let attribute_randomness: BTreeMap<_, _> = [(AttributeTag(1), randomness.clone())]
+            .into_iter()
+            .collect();
+
+        // test completeness
+        let mut transcript = RandomOracle::domain("Test");
+        let proof = statement
+            .prove(
+                ProofVersion::Version2,
+                &global,
+                &mut transcript.split(),
+                &mut csprng,
+                &attribute_randomness,
+            )
+            .expect("prove");
+
+        let attribute_commitments: BTreeMap<_, _> =
+            [(AttributeTag(1), commitment)].into_iter().collect();
+
+        assert!(
+            statement.verify(
+                ProofVersion::Version2,
+                &global,
+                &mut transcript,
+                &attribute_commitments,
+                &proof
+            ),
+            "verify"
+        );
+
+        // test soundness
+        let statement = AttributeValueStatement {
+            attribute_value: AttributeKind::try_new("testvalue2".to_string())
+                .expect("attribute kind"),
+            ..statement
+        };
+        assert!(
+            !statement.verify(
+                ProofVersion::Version2,
+                &global,
+                &mut transcript,
+                &attribute_commitments,
+                &proof
+            ),
+            "verify"
+        );
+    }
+
+    /// Tests prove and verify [`AttributeValueStatement`] in the case where the attribute is already
+    /// revealed by composed proofs.
+    #[test]
+    fn test_attribute_value_statement_revealed() {
+        let attribute = AttributeKind::try_new("testvalue".to_string()).expect("attribute kind");
+
+        let statement = AttributeValueStatement::<ArCurve, _, _> {
+            attribute_tag: AttributeTag(1),
+            attribute_value: attribute.clone(),
+            _phantom: Default::default(),
+        };
+
+        // test completeness
+        let mut transcript = RandomOracle::domain("Test");
+        statement.prove_for_already_revealed(&mut transcript.split());
+
+        let revealed_attributes: BTreeMap<_, _> =
+            [(AttributeTag(1), &attribute)].into_iter().collect();
+
+        assert!(
+            statement.verify_for_already_revealed(&mut transcript, &revealed_attributes,),
+            "verify"
+        );
+
+        // test soundness
+        let statement = AttributeValueStatement {
+            attribute_value: AttributeKind::try_new("testvalue2".to_string())
+                .expect("attribute kind"),
+            ..statement
+        };
+        assert!(
+            !statement.verify_for_already_revealed(&mut transcript, &revealed_attributes,),
+            "verify"
+        );
     }
 
     #[test]
@@ -629,6 +809,8 @@ mod tests {
         }
     }
 
+    /// Tests the statements [`RevealAttributeStatement`], [`AttributeInSetStatement`] and
+    /// [`AttributeInRangeStatement`]
     #[test]
     fn test_verify_id_attributes_proofs() {
         let point: G1 =

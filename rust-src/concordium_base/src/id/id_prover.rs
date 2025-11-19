@@ -227,7 +227,7 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
     }
 }
 
-fn prove_value_equal_to_commitment<C: Curve, AttributeType: Attribute<C::Scalar>>(
+pub(crate) fn prove_value_equal_to_commitment<C: Curve, AttributeType: Attribute<C::Scalar>>(
     attribute_value: &AttributeType,
     attribute_cmm_randomness: Randomness<C>,
     version: ProofVersion,
@@ -269,26 +269,25 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
         global: &GlobalContext<C>,
         transcript: &mut RandomOracle,
         csprng: &mut impl rand::Rng,
-        attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
         attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
     ) -> Option<AttributeValueProof<C>> {
-        let attribute = attribute_values.get_attribute_value(&self.attribute_tag)?;
         let randomness = attribute_randomness
             .get_attribute_commitment_randomness(&self.attribute_tag)
             .ok()?;
         let proof = prove_value_equal_to_commitment(
-            attribute, randomness, version, global, transcript, csprng,
+            &self.attribute_value,
+            randomness,
+            version,
+            global,
+            transcript,
+            csprng,
         )?;
         Some(AttributeValueProof { proof })
     }
 
     /// Prove attribute value based on that attribute is already revealed
-    pub(crate) fn prove_for_already_revealed(
-        &self,
-        transcript: &mut RandomOracle,
-        attribute_value: &AttributeType,
-    ) {
-        transcript.append_message("RevealedAttribute", attribute_value);
+    pub(crate) fn prove_for_already_revealed(&self, transcript: &mut RandomOracle) {
+        transcript.append_message("RevealedAttribute", &self.attribute_value);
     }
 }
 
