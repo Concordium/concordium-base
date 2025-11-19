@@ -91,7 +91,8 @@ pub enum IdentifierType {
     PublicKey { key: ed25519_dalek::VerifyingKey },
     /// Reference to a specific identity provider.
     Idp { idp_identity: IpIdentity },
-    /// Encrypted identifier for an identity credential. It is the encryption of IdCredPub.
+    /// Encrypted, ephemeral identifier for an identity credential. It is the encryption of IdCredPub.
+    /// The identifier is ephemeral since the encryption is randomized.
     EncryptedIdentityCredentialId {
         cred_id: IdentityCredentialEphemeralId,
     },

@@ -9,8 +9,7 @@ use std::collections::BTreeMap;
 
 use crate::curve_arithmetic::Pairing;
 use crate::id::id_proof_types::{
-    AtomicProof, AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement,
-    AttributeNotInSetStatement, ProofVersion,
+    AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement, ProofVersion,
 };
 use crate::id::identity_attributes_credentials;
 use crate::id::identity_attributes_credentials::IdentityAttributeHandling;
@@ -22,13 +21,13 @@ use crate::pedersen_commitment::Commitment;
 use crate::web3id::v1::{
     AccountBasedCredentialV1, AccountBasedSubjectClaims, AccountCredentialProofPrivateInputs,
     AccountCredentialProofs, AccountCredentialSubject, AccountCredentialVerificationMaterial,
-    ConcordiumLinkingProofVersion, ConcordiumZKProof, ConcordiumZKProofVersion, ContextInformation,
-    CredentialMetadataV1, CredentialProofPrivateInputs, CredentialV1,
-    CredentialVerificationMaterial, IdentityBasedCredentialV1, IdentityBasedSubjectClaims,
-    IdentityCredentialEphemeralId, IdentityCredentialEphemeralIdDataRef,
-    IdentityCredentialProofPrivateInputs, IdentityCredentialProofs, IdentityCredentialSubject,
-    IdentityCredentialVerificationMaterial, LinkingProofV1, PresentationV1, ProveError, RequestV1,
-    SubjectClaims, VerifyError,
+    AtomicProofV1, AtomicStatementV1, ConcordiumLinkingProofVersion, ConcordiumZKProof,
+    ConcordiumZKProofVersion, ContextInformation, CredentialMetadataV1,
+    CredentialProofPrivateInputs, CredentialV1, CredentialVerificationMaterial,
+    IdentityBasedCredentialV1, IdentityBasedSubjectClaims, IdentityCredentialEphemeralId,
+    IdentityCredentialEphemeralIdDataRef, IdentityCredentialProofPrivateInputs,
+    IdentityCredentialProofs, IdentityCredentialSubject, IdentityCredentialVerificationMaterial,
+    LinkingProofV1, PresentationV1, ProveError, RequestV1, SubjectClaims, VerifyError,
 };
 use rand::{CryptoRng, Rng};
 
@@ -66,7 +65,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         };
 
         if verification_material.len() != self.verifiable_credentials.len() {
-            return Err(VerifyError::VeficationMaterialMismatch);
+            return Err(VerifyError::VerificationMaterialMismatch);
         }
 
         for (i, (verification_material, credential)) in verification_material
@@ -126,6 +125,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
             &self.subject.statements,
             &self.proof.proof_value.statement_proofs,
             commitments,
+            &BTreeMap::default(),
             global_context,
             transcript,
         )
@@ -191,10 +191,22 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             })
             .collect();
 
+        let revealed_attributes: BTreeMap<_, _> = self
+            .proof
+            .proof_value
+            .identity_attributes
+            .iter()
+            .filter_map(|(tag, attr)| match attr {
+                IdentityAttribute::Revealed(attr) => Some((*tag, attr)),
+                _ => None,
+            })
+            .collect();
+
         verify_statements(
             &self.subject.statements,
             &self.proof.proof_value.statement_proofs,
             &cmm_attributes,
+            &revealed_attributes,
             global_context,
             transcript,
         )
@@ -207,9 +219,10 @@ fn verify_statements<
     AttributeType: Attribute<C::Scalar> + 'a,
     TagType: Ord + crate::common::Serialize + 'a,
 >(
-    statements: impl IntoIterator<Item = &'a AtomicStatement<C, TagType, AttributeType>>,
-    proofs: impl IntoIterator<Item = &'a AtomicProof<C, AttributeType>>,
+    statements: impl IntoIterator<Item = &'a AtomicStatementV1<C, TagType, AttributeType>>,
+    proofs: impl IntoIterator<Item = &'a AtomicProofV1<C>>,
     cmm_attributes: &BTreeMap<TagType, Commitment<C>>,
+    revealed_attributes: &BTreeMap<TagType, &AttributeType>,
     global_context: &GlobalContext<C>,
     transcript: &mut RandomOracle,
 ) -> bool {
@@ -220,6 +233,7 @@ fn verify_statements<
                 global_context,
                 transcript,
                 cmm_attributes,
+                revealed_attributes,
                 proof,
             )
         })
@@ -249,6 +263,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
             &self.statements,
             values,
             randomness,
+            &BTreeMap::default(),
             global_context,
             transcript,
             csprng,
@@ -258,7 +273,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
             proof: ConcordiumZKProof {
                 created_at: now,
                 proof_value: AccountCredentialProofs { statement_proofs },
-                proof_type: ConcordiumZKProofVersion::ConcordiumZKProofV4,
+                proof_version: ConcordiumZKProofVersion::ConcordiumZKProofV4,
             },
             subject: AccountCredentialSubject {
                 cred_id: self.cred_id,
@@ -293,18 +308,21 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
             .statements
             .iter()
             .map(|stmt| match stmt {
-                AtomicStatement::RevealAttribute { statement } => {
-                    (statement.attribute_tag, IdentityAttributeHandling::Commit)
+                AtomicStatementV1::AttributeValue(statement) => {
+                    (statement.attribute_tag, IdentityAttributeHandling::Reveal)
                 }
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement { attribute_tag, .. },
-                }
-                | AtomicStatement::AttributeInSet {
-                    statement: AttributeInSetStatement { attribute_tag, .. },
-                }
-                | AtomicStatement::AttributeNotInSet {
-                    statement: AttributeNotInSetStatement { attribute_tag, .. },
-                } => (*attribute_tag, IdentityAttributeHandling::Commit),
+                AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+                    attribute_tag,
+                    ..
+                })
+                | AtomicStatementV1::AttributeInSet(AttributeInSetStatement {
+                    attribute_tag,
+                    ..
+                })
+                | AtomicStatementV1::AttributeNotInSet(AttributeNotInSetStatement {
+                    attribute_tag,
+                    ..
+                }) => (*attribute_tag, IdentityAttributeHandling::Commit),
             })
             .collect();
 
@@ -320,10 +338,21 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
             )
             .map_err(|err| ProveError::IdentityAttributeCredentials(err.to_string()))?;
 
+        let revealed_attributes: BTreeMap<_, _> = id_attr_cred_info
+            .values
+            .attributes
+            .iter()
+            .filter_map(|(tag, attr)| match attr {
+                IdentityAttribute::Revealed(attr) => Some((*tag, attr)),
+                _ => None,
+            })
+            .collect();
+
         let statement_proofs = prove_statements(
             &self.statements,
             &id_object.get_attribute_list().alist,
             &id_attr_cmm_rand.attributes_rand,
+            &revealed_attributes,
             global_context,
             transcript,
             csprng,
@@ -345,7 +374,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
             proof: ConcordiumZKProof {
                 created_at: now,
                 proof_value: proof,
-                proof_type: ConcordiumZKProofVersion::ConcordiumZKProofV4,
+                proof_version: ConcordiumZKProofVersion::ConcordiumZKProofV4,
             },
             subject: IdentityCredentialSubject {
                 cred_id,
@@ -364,13 +393,14 @@ fn prove_statements<
     AttributeType: Attribute<C::Scalar> + 'a,
     TagType: Ord + crate::common::Serialize + 'a,
 >(
-    statements: impl IntoIterator<Item = &'a AtomicStatement<C, TagType, AttributeType>>,
+    statements: impl IntoIterator<Item = &'a AtomicStatementV1<C, TagType, AttributeType>>,
     attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
     attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
+    revealed_attributes: &BTreeMap<TagType, &AttributeType>,
     global_context: &GlobalContext<C>,
     transcript: &mut RandomOracle,
     csprng: &mut (impl Rng + CryptoRng),
-) -> Result<Vec<AtomicProof<C, AttributeType>>, ProveError> {
+) -> Result<Vec<AtomicProofV1<C>>, ProveError> {
     statements
         .into_iter()
         .map(|statement| {
@@ -382,6 +412,7 @@ fn prove_statements<
                     csprng,
                     attribute_values,
                     attribute_randomness,
+                    revealed_attributes,
                 )
                 .ok_or(ProveError::AtomicStatementProof)
         })
@@ -485,13 +516,131 @@ fn append_context(digest: &mut impl StructuredDigest, context: &ContextInformati
     digest.append_message("requested", &context.requested);
 }
 
+impl<
+        C: Curve,
+        TagType: crate::common::Serialize + Ord,
+        AttributeType: Attribute<C::Scalar> + Ord,
+    > AtomicStatementV1<C, TagType, AttributeType>
+{
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn prove(
+        &self,
+        version: ProofVersion,
+        global: &GlobalContext<C>,
+        transcript: &mut RandomOracle,
+        csprng: &mut impl rand::Rng,
+        attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
+        attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
+        revealed_attributes: &BTreeMap<TagType, &AttributeType>,
+    ) -> Option<AtomicProofV1<C>> {
+        match self {
+            AtomicStatementV1::AttributeValue(statement) => {
+                // If the attribute value has been revealed as part of the identity attributes
+                // proof, we essentially need no proof for the statement.
+                if let Some(_revealed_attribute) = revealed_attributes.get(&statement.attribute_tag)
+                {
+                    statement.prove_for_already_revealed(transcript);
+                    Some(AtomicProofV1::AttributeValueAlreadyRevealed)
+                } else {
+                    let proof = statement.prove(
+                        version,
+                        global,
+                        transcript,
+                        csprng,
+                        attribute_randomness,
+                    )?;
+                    let proof = AtomicProofV1::AttributeValue(proof);
+                    Some(proof)
+                }
+            }
+            AtomicStatementV1::AttributeInSet(statement) => {
+                let proof = statement.prove(
+                    version,
+                    global,
+                    transcript,
+                    csprng,
+                    attribute_values,
+                    attribute_randomness,
+                )?;
+                let proof = AtomicProofV1::AttributeInSet(proof);
+                Some(proof)
+            }
+            AtomicStatementV1::AttributeNotInSet(statement) => {
+                let proof = statement.prove(
+                    version,
+                    global,
+                    transcript,
+                    csprng,
+                    attribute_values,
+                    attribute_randomness,
+                )?;
+                let proof = AtomicProofV1::AttributeNotInSet(proof);
+                Some(proof)
+            }
+            AtomicStatementV1::AttributeInRange(statement) => {
+                let proof = statement.prove(
+                    version,
+                    global,
+                    transcript,
+                    csprng,
+                    attribute_values,
+                    attribute_randomness,
+                )?;
+                let proof = AtomicProofV1::AttributeInRange(proof);
+                Some(proof)
+            }
+        }
+    }
+}
+
+impl<
+        C: Curve,
+        TagType: std::cmp::Ord + crate::common::Serialize,
+        AttributeType: Attribute<C::Scalar>,
+    > AtomicStatementV1<C, TagType, AttributeType>
+{
+    pub(crate) fn verify(
+        &self,
+        version: ProofVersion,
+        global: &GlobalContext<C>,
+        transcript: &mut RandomOracle,
+        cmm_attributes: &BTreeMap<TagType, Commitment<C>>,
+        revealed_attributes: &BTreeMap<TagType, &AttributeType>,
+        proof: &AtomicProofV1<C>,
+    ) -> bool {
+        match (self, proof) {
+            (
+                AtomicStatementV1::AttributeValue(statement),
+                AtomicProofV1::AttributeValue(proof),
+            ) => statement.verify(version, global, transcript, cmm_attributes, proof),
+            (
+                AtomicStatementV1::AttributeValue(statement),
+                AtomicProofV1::AttributeValueAlreadyRevealed,
+            ) => statement.verify_for_already_revealed(transcript, revealed_attributes),
+            (
+                AtomicStatementV1::AttributeInRange(statement),
+                AtomicProofV1::AttributeInRange(proof),
+            ) => statement.verify(version, global, transcript, cmm_attributes, proof),
+            (
+                AtomicStatementV1::AttributeInSet(statement),
+                AtomicProofV1::AttributeInSet(proof),
+            ) => statement.verify(version, global, transcript, cmm_attributes, proof),
+            (
+                AtomicStatementV1::AttributeNotInSet(statement),
+                AtomicProofV1::AttributeNotInSet(proof),
+            ) => statement.verify(version, global, transcript, cmm_attributes, proof),
+            _ => false,
+        }
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
-    use crate::id::constants::ArCurve;
-    use crate::id::id_proof_types::{AtomicStatement, AttributeInRangeStatement};
+    use crate::id::constants::{ArCurve, AttributeKind};
+    use crate::id::id_proof_types::{AttributeInRangeStatement, AttributeValueStatement};
     use crate::id::types::AttributeTag;
     use crate::web3id::did::Network;
     use crate::web3id::v1::{fixtures, ContextProperty};
@@ -685,14 +834,59 @@ pub mod tests {
         else {
             panic!("should be account proof");
         };
-        subject.statements[2] = AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
-                attribute_tag: 3.into(),
-                lower: Web3IdAttribute::Numeric(200),
-                upper: Web3IdAttribute::Numeric(1237),
-                _phantom: PhantomData,
-            },
+        subject.statements[2] = AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+            attribute_tag: 3.into(),
+            lower: Web3IdAttribute::Numeric(200),
+            upper: Web3IdAttribute::Numeric(1237),
+            _phantom: PhantomData,
+        });
+
+        let public = vec![acc_cred_fixture.verification_material];
+
+        let err = proof
+            .verify(&global_context, public.iter())
+            .expect_err("verify");
+        assert_eq!(err, VerifyError::InvalidCredential(0));
+    }
+
+    /// Test prove and verify presentation for identity credentials where
+    /// verification fails because statements are false. Tests revealed attribute.
+    #[test]
+    fn test_soundness_account_statements_invalid_revealed() {
+        let challenge = challenge_fixture();
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let (mut statements, attributes) = fixtures::statements_and_attributes();
+
+        statements[4] = AtomicStatementV1::AttributeValue(AttributeValueStatement {
+            attribute_tag: 5.into(),
+            attribute_value: Web3IdAttribute::String(
+                AttributeKind::try_new("testvalue2".into()).unwrap(),
+            ),
+            _phantom: Default::default(),
+        });
+
+        let acc_cred_fixture = fixtures::account_credentials_fixture(attributes, &global_context);
+
+        let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
+            network: Network::Testnet,
+            cred_id: acc_cred_fixture.cred_id,
+            statements,
+        })];
+
+        let request = RequestV1::<ArCurve, Web3IdAttribute> {
+            challenge,
+            subject_claims,
         };
+
+        let proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [acc_cred_fixture.private_inputs()].into_iter(),
+            )
+            .expect("prove");
 
         let public = vec![acc_cred_fixture.verification_material];
 
@@ -739,8 +933,8 @@ pub mod tests {
         else {
             panic!("should be account proof");
         };
-        subject.statements.push(AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
+        subject.statements.push(AtomicStatementV1::AttributeInRange(
+            AttributeInRangeStatement {
                 attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
                 lower: Web3IdAttribute::try_from(
                     chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
@@ -756,7 +950,7 @@ pub mod tests {
                 .unwrap(),
                 _phantom: PhantomData,
             },
-        });
+        ));
 
         let public = vec![acc_cred_fixture.verification_material];
         let err = proof
@@ -848,7 +1042,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, VerifyError::VeficationMaterialMismatch);
+        assert_eq!(err, VerifyError::VerificationMaterialMismatch);
     }
 
     /// Test prove and verify presentation for identity credentials.
@@ -967,14 +1161,58 @@ pub mod tests {
         else {
             panic!("should be account proof");
         };
-        subject.statements[2] = AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
-                attribute_tag: 3.into(),
-                lower: Web3IdAttribute::Numeric(200),
-                upper: Web3IdAttribute::Numeric(1237),
-                _phantom: PhantomData,
-            },
+        subject.statements[2] = AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+            attribute_tag: 3.into(),
+            lower: Web3IdAttribute::Numeric(200),
+            upper: Web3IdAttribute::Numeric(1237),
+            _phantom: PhantomData,
+        });
+
+        let public = vec![id_cred_fixture.verification_material];
+        let err = proof
+            .verify(&global_context, public.iter())
+            .expect_err("verify");
+        assert_eq!(err, VerifyError::InvalidCredential(0));
+    }
+
+    /// Test prove and verify presentation for identity credentials where
+    /// verification fails because statements are false. Tests revealed attribute.
+    #[test]
+    fn test_soundness_identity_statements_invalid_revealed() {
+        let challenge = challenge_fixture();
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let (mut statements, attributes) = fixtures::statements_and_attributes();
+
+        statements[4] = AtomicStatementV1::AttributeValue(AttributeValueStatement {
+            attribute_tag: 5.into(),
+            attribute_value: Web3IdAttribute::String(
+                AttributeKind::try_new("testvalue2".into()).unwrap(),
+            ),
+            _phantom: Default::default(),
+        });
+
+        let id_cred_fixture = fixtures::identity_credentials_fixture(attributes, &global_context);
+
+        let subject_claims = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
+            network: Network::Testnet,
+            issuer: id_cred_fixture.issuer,
+            statements,
+        })];
+
+        let request = RequestV1::<ArCurve, Web3IdAttribute> {
+            challenge,
+            subject_claims,
         };
+
+        let proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [id_cred_fixture.private_inputs()].into_iter(),
+            )
+            .expect("prove");
 
         let public = vec![id_cred_fixture.verification_material];
         let err = proof
@@ -1020,8 +1258,8 @@ pub mod tests {
         else {
             panic!("should be account proof");
         };
-        subject.statements.push(AtomicStatement::AttributeInRange {
-            statement: AttributeInRangeStatement {
+        subject.statements.push(AtomicStatementV1::AttributeInRange(
+            AttributeInRangeStatement {
                 attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
                 lower: Web3IdAttribute::try_from(
                     chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
@@ -1037,7 +1275,7 @@ pub mod tests {
                 .unwrap(),
                 _phantom: PhantomData,
             },
-        });
+        ));
 
         let public = vec![id_cred_fixture.verification_material];
         let err = proof
