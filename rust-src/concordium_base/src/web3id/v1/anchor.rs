@@ -24,7 +24,8 @@ use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::hashes::HashBytes;
 use sha2::Digest;
 use std::collections::HashMap;
-
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 pub use verify::*;
 
 const PROTOCOL_VERSION: u16 = 1u16;
@@ -393,14 +394,50 @@ pub enum ContextLabel {
     PaymentHash,
     /// Concordium block hash.
     BlockHash,
-    #[serde(rename = "ConnectionID")]
     /// Identifier for some connection (e.g. wallet-connect topic).
+    #[serde(rename = "ConnectionID")]
     ConnectionId,
     /// Identifier for some resource (e.g. Website URL or fingerprint of TLS certificate).
     #[serde(rename = "ResourceID")]
     ResourceId,
     /// String value for general purposes.
     ContextString,
+}
+
+impl Display for ContextLabel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ContextLabel::Nonce => f.write_str("Nonce"),
+            ContextLabel::PaymentHash => f.write_str("PaymentHash"),
+            ContextLabel::BlockHash => f.write_str("BlockHash"),
+            ContextLabel::ConnectionId => f.write_str("ConnectionID"),
+            ContextLabel::ResourceId => f.write_str("ResourceID"),
+            ContextLabel::ContextString => f.write_str("ContextString"),
+        }
+    }
+}
+
+
+/// Errors occurring when parsing attribute values.
+#[derive(Debug, thiserror::Error)]
+#[error("unknown context label {0}")]
+pub struct UnknownContextLabelError(String);
+
+impl FromStr for ContextLabel {
+    type Err = UnknownContextLabelError;
+
+    fn from_str(str: &str) -> Result<Self, Self::Err> {
+        Ok(match str {
+            "Nonce" => ContextLabel::Nonce,
+            "PaymentHash" => ContextLabel::PaymentHash,
+            "BlockHash" => ContextLabel::BlockHash,
+            "ConnectionID" => ContextLabel::ConnectionId,
+            "ResourceID" => ContextLabel::ResourceId,
+            "ContextString" => ContextLabel::ContextString,
+            _ => return Err(UnknownContextLabelError(str.to_string()))
+        })
+        // todo ar continue this
+    }
 }
 
 impl Serial for ContextLabel {
@@ -542,6 +579,20 @@ pub enum ContextProperty {
     ResourceId(String),
     /// String value for general purposes.
     ContextString(String),
+}
+
+impl ContextProperty {
+    /// Label for the property.
+    pub fn label(&self) -> ContextLabel {
+        match self {
+            Self::Nonce(_) => ContextLabel::Nonce,
+            Self::PaymentHash(_) => ContextLabel::PaymentHash,
+            Self::BlockHash(_) => ContextLabel::BlockHash,
+            Self::ConnectionId(_) => ContextLabel::ConnectionId,
+            Self::ResourceId(_) => ContextLabel::ResourceId,
+            Self::ContextString(_) => ContextLabel::ContextString,
+        }
+    }
 }
 
 impl Serial for ContextProperty {
@@ -776,24 +827,15 @@ mod tests {
         str.chars().filter(|c| !c.is_whitespace()).collect()
     }
 
-    fn verification_request_data_fixture() -> VerificationRequestData {
-        let context = UnfilledContextInformation::new_simple(
+    pub fn unfilled_context_fixture() -> UnfilledContextInformation {
+        UnfilledContextInformation::new_simple(
             [0u8; 32],
             "MyConnection".to_string(),
             "MyDappContext".to_string(),
         )
-        // While above simple context is used in practice,
-        // we add all possible context variants and context label variants to ensure test coverage.
-        .add_context(ContextProperty::PaymentHash(hashes::Hash::new([1u8; 32])))
-        .add_context(ContextProperty::BlockHash(hashes::BlockHash::new(
-            [2u8; 32],
-        )))
-        .add_context(ContextProperty::ResourceId("MyRescourceId".to_string()))
-        .add_request(ContextLabel::Nonce)
-        .add_request(ContextLabel::PaymentHash)
-        .add_request(ContextLabel::ConnectionId)
-        .add_request(ContextLabel::ContextString);
+    }
 
+    pub fn identity_subject_claims_fixture() -> RequestedIdentitySubjectClaims {
         let statements = vec![
             RequestedStatement::AttributeInRange(AttributeInRangeStatement {
                 attribute_tag: AttributeTag(3).to_string().parse().unwrap(),
@@ -844,15 +886,21 @@ mod tests {
             }),
         ];
 
-        VerificationRequestData::new(context).add_subject_claim_request(
-            RequestedIdentitySubjectClaims::default()
-                .add_issuer(IdentityProviderDid::new(3u32, did::Network::Testnet))
-                .add_source(IdentityCredentialType::IdentityCredential)
-                .add_statements(statements),
-        )
+        RequestedIdentitySubjectClaims::default()
+            .add_issuer(IdentityProviderDid::new(3u32, did::Network::Testnet))
+            .add_source(IdentityCredentialType::IdentityCredential)
+            .add_statements(statements)
     }
 
-    fn verification_request_anchor_fixture() -> VerificationRequestAnchor {
+    pub fn verification_request_data_fixture() -> VerificationRequestData {
+        let context = unfilled_context_fixture();
+
+        let subject_claims = identity_subject_claims_fixture();
+
+        VerificationRequestData::new(context).add_subject_claim_request(subject_claims)
+    }
+
+    pub fn verification_request_anchor_fixture() -> VerificationRequestAnchor {
         let request_data = verification_request_data_fixture();
 
         let mut public_info = HashMap::new();
@@ -861,7 +909,28 @@ mod tests {
         request_data.to_anchor(Some(public_info))
     }
 
-    fn verifiable_presentation_fixture() -> VerifiablePresentationV1 {
+    pub fn unfilled_context_information_to_context_information(
+        context: UnfilledContextInformation,
+    ) -> ContextInformation {
+        ContextInformation {
+            given: context
+                .given
+                .into_iter()
+                .map(context_property_to_context_property)
+                .collect(),
+            requested: vec![], //todo ar
+        }
+    }
+
+    pub fn context_property_to_context_property(prop: ContextProperty) -> v1::ContextProperty {
+        // todo ar
+        v1::ContextProperty {
+            label: "".to_string(),
+            context: "".to_string(),
+        }
+    }
+
+    pub fn verifiable_presentation_fixture() -> VerifiablePresentationV1 {
         let context = ContextInformation {
             given: vec![v1::ContextProperty {
                 label: "prop1".to_string(),
@@ -988,7 +1057,7 @@ mod tests {
 
         presentation
     }
-
+    // todo ar changes requests to be proven
     fn verification_audit_record_fixture() -> VerificationAuditRecord {
         let request_data = verification_request_data_fixture();
 
