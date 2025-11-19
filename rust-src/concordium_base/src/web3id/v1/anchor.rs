@@ -1,3 +1,9 @@
+//! Implements verification of presentations against an anchored verification request and
+//! defines the types verification request anchor (VRA) and verification audit anchor (VAA)
+//!
+//! The module defines a higher level verification flow that adds additional verifications
+//! to the cryptographic verification.
+
 mod verify;
 
 use crate::common::{
