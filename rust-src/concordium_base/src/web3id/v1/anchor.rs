@@ -17,6 +17,7 @@ use crate::id::{
     constants::{ArCurve, IpPairing},
     types::AttributeTag,
 };
+use std::borrow::Cow;
 
 use crate::web3id::{did, v1, Web3IdAttribute};
 use crate::{hashes, id};
@@ -386,7 +387,7 @@ impl RequestedIdentitySubjectClaims {
 
 /// Labels for different types of context information that can be provided in verifiable
 /// presentation requests and proofs.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ContextLabel {
     /// A nonce which should be at least of lenth bytes32.
     Nonce,
@@ -395,28 +396,31 @@ pub enum ContextLabel {
     /// Concordium block hash.
     BlockHash,
     /// Identifier for some connection (e.g. wallet-connect topic).
-    #[serde(rename = "ConnectionID")]
     ConnectionId,
     /// Identifier for some resource (e.g. Website URL or fingerprint of TLS certificate).
-    #[serde(rename = "ResourceID")]
     ResourceId,
     /// String value for general purposes.
     ContextString,
 }
 
-impl Display for ContextLabel {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl ContextLabel {
+    pub fn as_str(self) -> &'static str {
         match self {
-            ContextLabel::Nonce => f.write_str("Nonce"),
-            ContextLabel::PaymentHash => f.write_str("PaymentHash"),
-            ContextLabel::BlockHash => f.write_str("BlockHash"),
-            ContextLabel::ConnectionId => f.write_str("ConnectionID"),
-            ContextLabel::ResourceId => f.write_str("ResourceID"),
-            ContextLabel::ContextString => f.write_str("ContextString"),
+            Self::Nonce => "Nonce",
+            Self::PaymentHash => "PaymentHash",
+            Self::BlockHash => "BlockHash",
+            Self::ConnectionId => "ConnectionID",
+            Self::ResourceId => "ResourceID",
+            Self::ContextString => "ContextString",
         }
     }
 }
 
+impl Display for ContextLabel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
 
 /// Errors occurring when parsing attribute values.
 #[derive(Debug, thiserror::Error)]
@@ -434,9 +438,21 @@ impl FromStr for ContextLabel {
             "ConnectionID" => ContextLabel::ConnectionId,
             "ResourceID" => ContextLabel::ResourceId,
             "ContextString" => ContextLabel::ContextString,
-            _ => return Err(UnknownContextLabelError(str.to_string()))
+            _ => return Err(UnknownContextLabelError(str.to_string())),
         })
-        // todo ar continue this
+    }
+}
+
+impl serde::Serialize for ContextLabel {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ContextLabel {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let str = Cow::<'de, str>::deserialize(deserializer)?;
+        str.parse().map_err(|err| serde::de::Error::custom(err))
     }
 }
 
@@ -1551,5 +1567,40 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn test_context_label_string_roundtrip() {
+        use ContextLabel::*;
+        for label in [
+            Nonce,
+            PaymentHash,
+            BlockHash,
+            ConnectionId,
+            ResourceId,
+            ContextString,
+        ] {
+            assert_eq!(
+                label.to_string().parse::<ContextLabel>().expect("parse"),
+                label
+            );
+        }
+    }
+
+    #[test]
+    fn test_context_label_json_roundtrip() {
+        use ContextLabel::*;
+        for label in [
+            Nonce,
+            PaymentHash,
+            BlockHash,
+            ConnectionId,
+            ResourceId,
+            ContextString,
+        ] {
+            let json = serde_json::to_string(&label).expect("to json");
+            let deserialized_label: ContextLabel = serde_json::from_str(&json).expect("from json");
+            assert_eq!(deserialized_label, label);
+        }
     }
 }
