@@ -234,7 +234,60 @@ fn verify_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hashes;
     use crate::id::types::YearMonth;
+    use crate::web3id::did::Network;
+    use crate::web3id::v1::anchor::fixtures;
+
+    fn verification_context() -> VerificationContext {
+        VerificationContext {
+            network: Network::Testnet,
+            validity_time: chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
+                .unwrap()
+                .with_timezone(&chrono::Utc),
+        }
+    }
+
+    /// Test [`verify_presentation_with_request_anchor`] in case where verification succeeds.
+    #[test]
+    fn test_verify_completeness() {
+        let global_context = GlobalContext::generate("Test".into());
+        let (request, vra) = fixtures::verification_request_data_to_request_and_anchor(
+            fixtures::verification_request_data_fixture(),
+        );
+        let id_cred = fixtures::identity_credentials_fixture_default_attributes(&global_context);
+        let presentation = fixtures::generate_and_prove_presentation(
+            &id_cred,
+            fixtures::verification_request_to_verifiable_presentation_request(&request),
+        );
+
+        let anchor = VerificationRequestAnchorAndBlockHash {
+            verification_request_anchor: vra,
+            block_hash: hashes::BlockHash::from([6u8; 32]),
+        };
+
+        let material = VerificationMaterialWithValidity {
+            verification_material: id_cred.verification_material.clone(),
+            validity: CredentialValidityType::ValidityPeriod(types::CredentialValidity {
+                valid_to: YearMonth::new(2030, 01).unwrap(),
+                created_at: YearMonth::new(2020, 01).unwrap(),
+            }),
+        };
+
+        assert_eq!(
+            verify_presentation_with_request_anchor(
+                &global_context,
+                &verification_context(),
+                &request,
+                &presentation,
+                &anchor,
+                &[material],
+            ),
+            PresentationVerificationResult::Verified
+        );
+    }
+
+    // todo ar tests
 
     #[test]
     fn test_verify_credential_validity_period() {

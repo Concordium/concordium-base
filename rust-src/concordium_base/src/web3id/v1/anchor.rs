@@ -456,7 +456,7 @@ impl serde::Serialize for ContextLabel {
 impl<'de> serde::Deserialize<'de> for ContextLabel {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let str = Cow::<'de, str>::deserialize(deserializer)?;
-        str.parse().map_err(|err| serde::de::Error::custom(err))
+        str.parse().map_err(D::Error::custom)
     }
 }
 
@@ -1382,6 +1382,7 @@ mod fixtures {
     use crate::id::id_proof_types::{AttributeInRangeStatement, AttributeValueStatement};
     use crate::id::types::GlobalContext;
     use crate::web3id::did::Network;
+    use crate::web3id::v1::fixtures::IdentityCredentialsFixture;
     use crate::web3id::v1::{
         fixtures, AtomicStatementV1, ContextInformation, IdentityBasedSubjectClaims, SubjectClaims,
     };
@@ -1457,6 +1458,22 @@ mod fixtures {
         let subject_claims = identity_subject_claims_fixture();
 
         VerificationRequestData::new(context).add_subject_claim_request(subject_claims)
+    }
+
+    pub fn verification_request_data_to_request_and_anchor(
+        request_data: VerificationRequestData,
+    ) -> (VerificationRequest, VerificationRequestAnchor) {
+        let mut public_info = HashMap::new();
+        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
+
+        let anchor = request_data.to_anchor(Some(public_info));
+        let request = VerificationRequest {
+            context: request_data.context,
+            subject_claims: request_data.subject_claims,
+            anchor_transaction_hash: hashes::TransactionHash::from([5u8; 32]),
+        };
+
+        (request, anchor)
     }
 
     pub fn verification_request_anchor_fixture() -> VerificationRequestAnchor {
@@ -1579,11 +1596,9 @@ mod fixtures {
         }
     }
 
-    pub fn generate_and_prove_presentation(
-        request: VerifiablePresentationRequestV1,
-    ) -> VerifiablePresentationV1 {
-        let global_context = GlobalContext::generate("Test".into());
-
+    pub fn identity_credentials_fixture_default_attributes(
+        global_context: &GlobalContext<ArCurve>,
+    ) -> IdentityCredentialsFixture<Web3IdAttribute> {
         let id_cred_fixture = fixtures::identity_credentials_fixture(
             [
                 (3.into(), Web3IdAttribute::Numeric(137)),
@@ -1618,6 +1633,15 @@ mod fixtures {
             &global_context,
         );
 
+        id_cred_fixture
+    }
+
+    pub fn generate_and_prove_presentation(
+        id_cred: &IdentityCredentialsFixture<Web3IdAttribute>,
+        request: VerifiablePresentationRequestV1,
+    ) -> VerifiablePresentationV1 {
+        let global_context = GlobalContext::generate("Test".into());
+
         // the easiest way to construct a presentation, is just to run the prover on a request
         let now = chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
             .unwrap()
@@ -1625,7 +1649,7 @@ mod fixtures {
         let presentation = request
             .prove_with_rng(
                 &global_context,
-                [id_cred_fixture.private_inputs()].into_iter(),
+                [id_cred.private_inputs()].into_iter(),
                 &mut fixtures::seed0(),
                 now,
             )
@@ -1635,11 +1659,15 @@ mod fixtures {
     }
 
     pub fn verifiable_presentation_fixture() -> VerifiablePresentationV1 {
+        let global_context = GlobalContext::generate("Test".into());
+
         let request = verification_request_to_verifiable_presentation_request(
             &verification_request_fixture(),
         );
 
-        generate_and_prove_presentation(request)
+        let id_cred = identity_credentials_fixture_default_attributes(&global_context);
+
+        generate_and_prove_presentation(&id_cred, request)
     }
 
     pub fn verification_audit_record_fixture() -> VerificationAuditRecord {
