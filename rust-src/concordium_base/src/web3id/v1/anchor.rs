@@ -24,12 +24,12 @@ use crate::web3id::{did, v1, Web3IdAttribute};
 use crate::{hashes, id};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::hashes::{HashBytes, HashFromStrError};
+use serde::de::Error;
 use serde::ser::SerializeMap;
 use sha2::Digest;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
-use serde::de::Error;
 pub use verify::*;
 
 const PROTOCOL_VERSION: u16 = 1u16;
@@ -834,291 +834,18 @@ impl<TagType: Serialize> Deserial for RequestedStatement<TagType> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::serialize_deserialize;
     use crate::hashes::Hash;
-    use crate::id::constants::AttributeKind;
-    use crate::id::id_proof_types::AttributeValueStatement;
-    use crate::id::types::GlobalContext;
-    use crate::web3id::did::Network;
-    use crate::web3id::v1::{
-        fixtures, AtomicStatementV1, ContextInformation, IdentityBasedSubjectClaims, RequestV1,
-        SubjectClaims,
-    };
-    use crate::{
-        common::serialize_deserialize,
-        id::{constants::ArCurve, id_proof_types::AttributeInRangeStatement},
-    };
     use anyhow::Context as AnyhowContext;
     use hex::FromHex;
-    use std::marker::PhantomData;
 
     fn remove_whitespace(str: &str) -> String {
         str.chars().filter(|c| !c.is_whitespace()).collect()
     }
 
-    pub fn unfilled_context_fixture() -> UnfilledContextInformation {
-        UnfilledContextInformation::new_simple(
-            hashes::Hash::from([0u8; 32]),
-            "MyConnection".to_string(),
-            "MyDappContext".to_string(),
-        )
-    }
-
-    pub fn identity_subject_claims_fixture() -> RequestedIdentitySubjectClaims {
-        let statements = vec![
-            RequestedStatement::AttributeInRange(AttributeInRangeStatement {
-                attribute_tag: AttributeTag(3).to_string().parse().unwrap(),
-                lower: Web3IdAttribute::Numeric(80),
-                upper: Web3IdAttribute::Numeric(1237),
-                _phantom: PhantomData,
-            }),
-            RequestedStatement::AttributeInSet(AttributeInSetStatement {
-                attribute_tag: AttributeTag(2).to_string().parse().unwrap(),
-                set: [
-                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                ]
-                .into_iter()
-                .collect(),
-                _phantom: PhantomData,
-            }),
-            RequestedStatement::AttributeNotInSet(AttributeNotInSetStatement {
-                attribute_tag: AttributeTag(1).to_string().parse().unwrap(),
-                set: [
-                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                ]
-                .into_iter()
-                .collect(),
-                _phantom: PhantomData,
-            }),
-            RequestedStatement::AttributeInRange(AttributeInRangeStatement {
-                attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
-                lower: Web3IdAttribute::try_from(
-                    chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
-                        .unwrap()
-                        .to_utc(),
-                )
-                .unwrap(),
-                upper: Web3IdAttribute::try_from(
-                    chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
-                        .unwrap()
-                        .to_utc(),
-                )
-                .unwrap(),
-                _phantom: PhantomData,
-            }),
-            RequestedStatement::RevealAttribute(RevealAttributeStatement {
-                attribute_tag: AttributeTag(5).to_string().parse().unwrap(),
-            }),
-        ];
-
-        RequestedIdentitySubjectClaims::default()
-            .add_issuer(IdentityProviderDid::new(3u32, did::Network::Testnet))
-            .add_source(IdentityCredentialType::IdentityCredential)
-            .add_statements(statements)
-    }
-
-    pub fn verification_request_data_fixture() -> VerificationRequestData {
-        let context = unfilled_context_fixture();
-
-        let subject_claims = identity_subject_claims_fixture();
-
-        VerificationRequestData::new(context).add_subject_claim_request(subject_claims)
-    }
-
-    pub fn verification_request_anchor_fixture() -> VerificationRequestAnchor {
-        let request_data = verification_request_data_fixture();
-
-        let mut public_info = HashMap::new();
-        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
-
-        request_data.to_anchor(Some(public_info))
-    }
-
-    pub fn unfilled_context_information_to_context_information(
-        context: UnfilledContextInformation,
-    ) -> ContextInformation {
-        ContextInformation {
-            given: context
-                .given
-                .into_iter()
-                .map(context_property_to_context_property)
-                .collect(),
-            requested: vec![], //todo ar
-        }
-    }
-
-    pub fn context_property_to_context_property(
-        prop: LabeledContextProperty,
-    ) -> v1::ContextProperty {
-        // todo ar
-        v1::ContextProperty {
-            label: "".to_string(),
-            context: "".to_string(),
-        }
-    }
-
-    pub fn verifiable_presentation_fixture() -> VerifiablePresentationV1 {
-        let context = ContextInformation {
-            given: vec![v1::ContextProperty {
-                label: "prop1".to_string(),
-                context: "val1".to_string(),
-            }],
-            requested: vec![v1::ContextProperty {
-                label: "prop2".to_string(),
-                context: "val2".to_string(),
-            }],
-        };
-
-        let global_context = GlobalContext::generate("Test".into());
-
-        let id_cred_fixture = fixtures::identity_credentials_fixture(
-            [
-                (3.into(), Web3IdAttribute::Numeric(137)),
-                (
-                    1.into(),
-                    Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
-                ),
-                (
-                    2.into(),
-                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                ),
-                (
-                    5.into(),
-                    Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
-                ),
-                (
-                    6.into(),
-                    Web3IdAttribute::String(AttributeKind::try_new("bb".into()).unwrap()),
-                ),
-                (
-                    AttributeTag(4).to_string().parse().unwrap(),
-                    Web3IdAttribute::try_from(
-                        chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
-                            .unwrap()
-                            .to_utc(),
-                    )
-                    .unwrap(),
-                ),
-            ]
-            .into_iter()
-            .collect(),
-            &global_context,
-        );
-
-        let credential_statements = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
-            network: Network::Testnet,
-            issuer: id_cred_fixture.issuer,
-            statements: vec![
-                AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
-                    attribute_tag: 3.into(),
-                    lower: Web3IdAttribute::Numeric(80),
-                    upper: Web3IdAttribute::Numeric(1237),
-                    _phantom: PhantomData,
-                }),
-                AtomicStatementV1::AttributeInSet(AttributeInSetStatement {
-                    attribute_tag: 2.into(),
-                    set: [
-                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                    ]
-                    .into_iter()
-                    .collect(),
-                    _phantom: PhantomData,
-                }),
-                AtomicStatementV1::AttributeNotInSet(AttributeNotInSetStatement {
-                    attribute_tag: 1.into(),
-                    set: [
-                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                    ]
-                    .into_iter()
-                    .collect(),
-                    _phantom: PhantomData,
-                }),
-                AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
-                    attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
-                    lower: Web3IdAttribute::try_from(
-                        chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
-                            .unwrap()
-                            .to_utc(),
-                    )
-                    .unwrap(),
-                    upper: Web3IdAttribute::try_from(
-                        chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
-                            .unwrap()
-                            .to_utc(),
-                    )
-                    .unwrap(),
-                    _phantom: PhantomData,
-                }),
-                AtomicStatementV1::AttributeValue(AttributeValueStatement {
-                    attribute_tag: AttributeTag(5).to_string().parse().unwrap(),
-                    attribute_value: Web3IdAttribute::String(
-                        AttributeKind::try_new("testvalue".into()).unwrap(),
-                    ),
-                    _phantom: Default::default(),
-                }),
-            ],
-        })];
-
-        let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge: context,
-            subject_claims: credential_statements,
-        };
-
-        // the easiest way to construct a presentation, is just to run the prover on a request
-        let now = chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
-            .unwrap()
-            .with_timezone(&chrono::Utc);
-        let presentation = request
-            .clone()
-            .prove_with_rng(
-                &global_context,
-                [id_cred_fixture.private_inputs()].into_iter(),
-                &mut fixtures::seed0(),
-                now,
-            )
-            .expect("prove");
-
-        presentation
-    }
-    // todo ar changes requests to be proven
-    fn verification_audit_record_fixture() -> VerificationAuditRecord {
-        let request_data = verification_request_data_fixture();
-
-        let verification_request = VerificationRequest {
-            context: request_data.context,
-            subject_claims: request_data.subject_claims,
-            anchor_transaction_hash: hashes::TransactionHash::new([2u8; 32]),
-        };
-
-        let presentation = verifiable_presentation_fixture();
-
-        let id = "MyUUID".to_string();
-
-        VerificationAuditRecord::new(id, verification_request, presentation)
-    }
-
-    fn verification_audit_anchor_fixture() -> VerificationAuditAnchor {
-        let verification_audit_anchor: VerificationAuditRecord =
-            verification_audit_record_fixture();
-
-        let mut public_info = HashMap::new();
-        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
-
-        verification_audit_anchor.to_anchor(Some(public_info))
-    }
-
-    // Tests about JSON serialization and deserialization roundtrips
-
     #[test]
     fn test_verification_request_json_roundtrip() -> anyhow::Result<()> {
-        let request_data = verification_request_data_fixture();
+        let request_data = fixtures::verification_request_data_fixture();
 
         let verification_request_anchor_transaction_hash = hashes::TransactionHash::new([0u8; 32]);
 
@@ -1142,7 +869,7 @@ mod tests {
 
     #[test]
     fn test_verification_request_anchor_json_roundtrip() -> anyhow::Result<()> {
-        let verification_request_anchor = verification_request_data_fixture();
+        let verification_request_anchor = fixtures::verification_request_data_fixture();
 
         let json = serde_json::to_value(&verification_request_anchor)
             .context("Failed verification request anchor to JSON value.")?;
@@ -1158,7 +885,7 @@ mod tests {
 
     #[test]
     fn test_verification_audit_anchor_json_roundtrip() -> anyhow::Result<()> {
-        let verification_audit_anchor = verification_audit_record_fixture();
+        let verification_audit_anchor = fixtures::verification_audit_record_fixture();
 
         let json = serde_json::to_value(&verification_audit_anchor)
             .context("Failed verification audit anchor to JSON value.")?;
@@ -1274,7 +1001,7 @@ mod tests {
             "#;
 
         let actual_json =
-            serde_json::to_string_pretty(&verification_request_data_fixture()).unwrap();
+            serde_json::to_string_pretty(&fixtures::verification_request_data_fixture()).unwrap();
         println!("verification request data json:\n{}", actual_json);
 
         assert_eq!(
@@ -1480,7 +1207,7 @@ mod tests {
             "#;
 
         let actual_json =
-            serde_json::to_string_pretty(&verification_audit_record_fixture()).unwrap();
+            serde_json::to_string_pretty(&fixtures::verification_audit_record_fixture()).unwrap();
         println!("audit record json:\n{}", actual_json);
 
         assert_eq!(
@@ -1496,7 +1223,7 @@ mod tests {
 
     #[test]
     fn test_verification_request_anchor_serialization_deserialization_roundtrip() {
-        let request_data = verification_request_data_fixture();
+        let request_data = fixtures::verification_request_data_fixture();
 
         let deserialized = serialize_deserialize(&request_data).expect("Deserialization succeeds.");
 
@@ -1508,7 +1235,7 @@ mod tests {
 
     #[test]
     fn test_verification_audit_anchor_serialization_deserialization_roundtrip() {
-        let verification_audit_anchor = verification_audit_record_fixture();
+        let verification_audit_anchor = fixtures::verification_audit_record_fixture();
 
         let deserialized =
             serialize_deserialize(&verification_audit_anchor).expect("Deserialization succeeds.");
@@ -1522,7 +1249,7 @@ mod tests {
 
     #[test]
     fn test_verification_request_anchor_cbor_roundtrip() {
-        let verification_request_anchor = verification_request_anchor_fixture();
+        let verification_request_anchor = fixtures::verification_request_anchor_fixture();
 
         let cbor = cbor::cbor_encode(&verification_request_anchor).unwrap();
 
@@ -1534,7 +1261,7 @@ mod tests {
 
     #[test]
     fn test_verification_audit_anchor_cbor_roundtrip() {
-        let verification_audit_anchor_on_chain = verification_audit_anchor_fixture();
+        let verification_audit_anchor_on_chain = fixtures::verification_audit_anchor_fixture();
 
         let cbor = cbor::cbor_encode(&verification_audit_anchor_on_chain).unwrap();
         assert_eq!(hex::encode(&cbor), "a464686173685820ca347e796ce11a4617dc160f0c1ec5bc479d9de624e28ecb8829087b2e7f1b71647479706566434344564141667075626c6963a1636b6579046776657273696f6e01");
@@ -1546,7 +1273,7 @@ mod tests {
 
     #[test]
     fn test_compute_the_correct_verification_request_anchor() -> anyhow::Result<()> {
-        let verification_request_anchor_hash = verification_request_anchor_fixture().hash;
+        let verification_request_anchor_hash = fixtures::verification_request_anchor_fixture().hash;
 
         let expected_verification_request_anchor_hash = Hash::new(
             <[u8; 32]>::from_hex(
@@ -1566,7 +1293,7 @@ mod tests {
 
     #[test]
     fn test_compute_the_correct_verification_audit_anchor() -> anyhow::Result<()> {
-        let verification_audit_anchor_hash = verification_audit_anchor_fixture().hash;
+        let verification_audit_anchor_hash = fixtures::verification_audit_anchor_fixture().hash;
         let expected_verification_audit_anchor_hash = Hash::new(
             <[u8; 32]>::from_hex(
                 "ca347e796ce11a4617dc160f0c1ec5bc479d9de624e28ecb8829087b2e7f1b71",
@@ -1669,9 +1396,239 @@ mod tests {
             ContextString("testvalue".to_string()),
         ] {
             let json = serde_json::to_string(&labeled_prop).expect("json");
-            let labled_prop_deserialized:
-                LabeledContextProperty = serde_json::from_str(&json).expect("property");
-            assert_eq!(labled_prop_deserialized, labeled_prop);
+            let labeled_prop_deserialized: LabeledContextProperty =
+                serde_json::from_str(&json).expect("property");
+            assert_eq!(labeled_prop_deserialized, labeled_prop);
         }
+    }
+}
+
+#[cfg(test)]
+mod fixtures {
+    use super::*;
+    use crate::id::constants::AttributeKind;
+    use crate::id::id_proof_types::AttributeInRangeStatement;
+    use crate::id::types::GlobalContext;
+    use crate::web3id::v1::{fixtures, ContextInformation};
+    use std::marker::PhantomData;
+
+    pub fn unfilled_context_fixture() -> UnfilledContextInformation {
+        UnfilledContextInformation::new_simple(
+            hashes::Hash::from([0u8; 32]),
+            "MyConnection".to_string(),
+            "MyDappContext".to_string(),
+        )
+    }
+
+    pub fn identity_subject_claims_fixture() -> RequestedIdentitySubjectClaims {
+        let statements = vec![
+            RequestedStatement::AttributeInRange(AttributeInRangeStatement {
+                attribute_tag: AttributeTag(3).to_string().parse().unwrap(),
+                lower: Web3IdAttribute::Numeric(80),
+                upper: Web3IdAttribute::Numeric(1237),
+                _phantom: PhantomData,
+            }),
+            RequestedStatement::AttributeInSet(AttributeInSetStatement {
+                attribute_tag: AttributeTag(2).to_string().parse().unwrap(),
+                set: [
+                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                ]
+                .into_iter()
+                .collect(),
+                _phantom: PhantomData,
+            }),
+            RequestedStatement::AttributeNotInSet(AttributeNotInSetStatement {
+                attribute_tag: AttributeTag(1).to_string().parse().unwrap(),
+                set: [
+                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                ]
+                .into_iter()
+                .collect(),
+                _phantom: PhantomData,
+            }),
+            RequestedStatement::AttributeInRange(AttributeInRangeStatement {
+                attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
+                lower: Web3IdAttribute::try_from(
+                    chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                        .unwrap()
+                        .to_utc(),
+                )
+                .unwrap(),
+                upper: Web3IdAttribute::try_from(
+                    chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                        .unwrap()
+                        .to_utc(),
+                )
+                .unwrap(),
+                _phantom: PhantomData,
+            }),
+            RequestedStatement::RevealAttribute(RevealAttributeStatement {
+                attribute_tag: AttributeTag(5).to_string().parse().unwrap(),
+            }),
+        ];
+
+        RequestedIdentitySubjectClaims::default()
+            .add_issuer(IdentityProviderDid::new(3u32, did::Network::Testnet))
+            .add_source(IdentityCredentialType::IdentityCredential)
+            .add_statements(statements)
+    }
+
+    pub fn verification_request_data_fixture() -> VerificationRequestData {
+        let context = unfilled_context_fixture();
+        let subject_claims = identity_subject_claims_fixture();
+
+        VerificationRequestData::new(context).add_subject_claim_request(subject_claims)
+    }
+
+    pub fn verification_request_anchor_fixture() -> VerificationRequestAnchor {
+        let request_data = verification_request_data_fixture();
+
+        let mut public_info = HashMap::new();
+        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
+
+        request_data.to_anchor(Some(public_info))
+    }
+
+    pub fn verification_request_fixture() -> VerificationRequest {
+        let context = unfilled_context_fixture();
+        let subject_claims = identity_subject_claims_fixture();
+
+        VerificationRequest {
+            context,
+            subject_claims: vec![RequestedSubjectClaims::Identity {
+                request: subject_claims,
+            }],
+            anchor_transaction_hash: hashes::TransactionHash::from([5u8; 32]),
+        }
+    }
+
+    pub fn unfilled_context_information_to_context_information(
+        context: &UnfilledContextInformation,
+    ) -> ContextInformation {
+        ContextInformation {
+            given: context
+                .given
+                .iter()
+                .map(|prop| prop.to_context_property())
+                .collect(),
+            requested: context
+                .requested
+                .iter()
+                .map(|label| match label {
+                    ContextLabel::BlockHash => {
+                        LabeledContextProperty::BlockHash(hashes::BlockHash::from([2u8; 32]))
+                    }
+                    ContextLabel::ResourceId => {
+                        LabeledContextProperty::ResourceId("testresourceid".to_string())
+                    }
+                    _ => panic!("unexpected label"),
+                })
+                .map(|prop| prop.to_context_property())
+                .collect(),
+        }
+    }
+
+    pub fn verification_request_to_verifiable_presentation_request(
+        verification_request: &VerificationRequest,
+    ) -> VerifiablePresentationRequestV1 {
+        VerifiablePresentationRequestV1 {
+            challenge: unfilled_context_information_to_context_information(
+                &verification_request.context,
+            ),
+            subject_claims: todo!(),
+        }
+    }
+
+    pub fn generate_and_prove_presentation(
+        request: VerifiablePresentationRequestV1,
+    ) -> VerifiablePresentationV1 {
+        let global_context = GlobalContext::generate("Test".into());
+
+        let id_cred_fixture = fixtures::identity_credentials_fixture(
+            [
+                (3.into(), Web3IdAttribute::Numeric(137)),
+                (
+                    1.into(),
+                    Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
+                ),
+                (
+                    2.into(),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                ),
+                (
+                    5.into(),
+                    Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
+                ),
+                (
+                    6.into(),
+                    Web3IdAttribute::String(AttributeKind::try_new("bb".into()).unwrap()),
+                ),
+                (
+                    AttributeTag(4).to_string().parse().unwrap(),
+                    Web3IdAttribute::try_from(
+                        chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
+                            .unwrap()
+                            .to_utc(),
+                    )
+                    .unwrap(),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+            &global_context,
+        );
+
+        // the easiest way to construct a presentation, is just to run the prover on a request
+        let now = chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let presentation = request
+            .prove_with_rng(
+                &global_context,
+                [id_cred_fixture.private_inputs()].into_iter(),
+                &mut fixtures::seed0(),
+                now,
+            )
+            .expect("prove");
+
+        presentation
+    }
+
+    pub fn verifiable_presentation_fixture() -> VerifiablePresentationV1 {
+        let request = verification_request_to_verifiable_presentation_request(
+            &verification_request_fixture(),
+        );
+
+        generate_and_prove_presentation(request)
+    }
+
+    pub fn verification_audit_record_fixture() -> VerificationAuditRecord {
+        let request_data = verification_request_data_fixture();
+
+        let verification_request = VerificationRequest {
+            context: request_data.context,
+            subject_claims: request_data.subject_claims,
+            anchor_transaction_hash: hashes::TransactionHash::new([2u8; 32]),
+        };
+
+        let presentation = verifiable_presentation_fixture();
+
+        let id = "MyUUID".to_string();
+
+        VerificationAuditRecord::new(id, verification_request, presentation)
+    }
+
+    pub fn verification_audit_anchor_fixture() -> VerificationAuditAnchor {
+        let verification_audit_anchor: VerificationAuditRecord =
+            verification_audit_record_fixture();
+
+        let mut public_info = HashMap::new();
+        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
+
+        verification_audit_anchor.to_anchor(Some(public_info))
     }
 }
