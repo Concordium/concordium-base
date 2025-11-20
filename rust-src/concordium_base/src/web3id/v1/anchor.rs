@@ -19,10 +19,11 @@ use crate::id::{
 };
 use std::borrow::Cow;
 
+use crate::web3id::v1::ContextProperty;
 use crate::web3id::{did, v1, Web3IdAttribute};
 use crate::{hashes, id};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
-use concordium_contracts_common::hashes::HashBytes;
+use concordium_contracts_common::hashes::{HashBytes, HashFromStrError};
 use sha2::Digest;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -203,7 +204,7 @@ impl VerificationRequestData {
 #[serde(tag = "type", rename = "ConcordiumUnfilledContextInformationV1")]
 pub struct UnfilledContextInformation {
     /// Context information that is already provided.
-    pub given: Vec<ContextProperty>,
+    pub given: Vec<LabeledContextProperty>,
     /// Context information that must be provided by the credential holder.
     pub requested: Vec<ContextLabel>,
 }
@@ -215,7 +216,7 @@ impl UnfilledContextInformation {
     }
 
     /// Add to the given context.
-    pub fn add_context(mut self, context: impl Into<ContextProperty>) -> Self {
+    pub fn add_context(mut self, context: impl Into<LabeledContextProperty>) -> Self {
         self.given.push(context.into());
         self
     }
@@ -234,14 +235,14 @@ impl UnfilledContextInformation {
     ///
     /// # Parameters
     ///
-    /// - `nonce` Cryptographic nonce for preventing replay attacks and should be at least of length bytes32.
+    /// - `nonce` Cryptographic nonce for preventing replay attacks.
     /// - `connectionId` Identifier for the verification session (e.g. wallet-connect topic).
     /// - `contextString` Additional context information.
-    pub fn new_simple(nonce: [u8; 32], connection_id: String, context_string: String) -> Self {
+    pub fn new_simple(nonce: hashes::Hash, connection_id: String, context_string: String) -> Self {
         Self::default()
-            .add_context(ContextProperty::Nonce(nonce))
-            .add_context(ContextProperty::ConnectionId(connection_id))
-            .add_context(ContextProperty::ContextString(context_string))
+            .add_context(LabeledContextProperty::Nonce(nonce))
+            .add_context(LabeledContextProperty::ConnectionId(connection_id))
+            .add_context(LabeledContextProperty::ContextString(context_string))
             .add_request(ContextLabel::BlockHash)
             .add_request(ContextLabel::ResourceId)
     }
@@ -404,6 +405,7 @@ pub enum ContextLabel {
 }
 
 impl ContextLabel {
+    /// String representation of the label
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Nonce => "Nonce",
@@ -579,14 +581,14 @@ impl TryFrom<did::Method> for IdentityProviderDid {
     }
 }
 
-/// A single piece of context information that can be provided to a verification request.
+/// A labeled value of context information that can be provided to a verification request.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(into = "ContextPropertyJson", try_from = "ContextPropertyJson")]
-pub enum ContextProperty {
-    /// Cryptographic nonce context which should be at least of length bytes32.
-    Nonce([u8; 32]),
+pub enum LabeledContextProperty {
+    /// Cryptographic nonce context which should be of length 32 bytes.
+    Nonce(hashes::Hash),
     /// Payment hash context (Concordium transaction hash).
-    PaymentHash(hashes::Hash),
+    PaymentHash(hashes::TransactionHash),
     /// Concordium block hash context.
     BlockHash(hashes::BlockHash),
     /// Identifier for some connection (e.g. wallet-connect topic).
@@ -597,8 +599,26 @@ pub enum ContextProperty {
     ContextString(String),
 }
 
-impl ContextProperty {
-    /// Label for the property.
+/// Read-only view of the value in [`LabeledContextProperty`]
+pub struct PropertyValueView<'a> {
+    property: &'a LabeledContextProperty,
+}
+
+impl Display for PropertyValueView<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self.property {
+            LabeledContextProperty::Nonce(val) => val.fmt(f),
+            LabeledContextProperty::PaymentHash(val) => val.fmt(f),
+            LabeledContextProperty::BlockHash(val) => val.fmt(f),
+            LabeledContextProperty::ConnectionId(val) => f.write_str(val),
+            LabeledContextProperty::ResourceId(val) => f.write_str(val),
+            LabeledContextProperty::ContextString(val) => f.write_str(val),
+        }
+    }
+}
+
+impl LabeledContextProperty {
+    /// The label for the property.
     pub fn label(&self) -> ContextLabel {
         match self {
             Self::Nonce(_) => ContextLabel::Nonce,
@@ -609,32 +629,59 @@ impl ContextProperty {
             Self::ContextString(_) => ContextLabel::ContextString,
         }
     }
+
+    /// Read-only view of the value in the property.
+    pub fn value(&self) -> PropertyValueView<'_> {
+        PropertyValueView { property: self }
+    }
+
+    /// Creates property from label and with value parsed from the given string.
+    pub fn try_from_label_and_str(
+        label: ContextLabel,
+        str: &str,
+    ) -> Result<Self, HashFromStrError> {
+        Ok(match label {
+            ContextLabel::Nonce => Self::Nonce(str.parse()?),
+            ContextLabel::PaymentHash => Self::PaymentHash(str.parse()?),
+            ContextLabel::BlockHash => Self::BlockHash(str.parse()?),
+            ContextLabel::ConnectionId => Self::ConnectionId(str.to_string()),
+            ContextLabel::ResourceId => Self::ResourceId(str.to_string()),
+            ContextLabel::ContextString => Self::ContextString(str.to_string()),
+        })
+    }
+
+    pub fn to_context_property(&self) -> ContextProperty {
+        ContextProperty {
+            label: self.label().to_string(),
+            context: self.value().to_string(),
+        }
+    }
 }
 
-impl Serial for ContextProperty {
+impl Serial for LabeledContextProperty {
     fn serial<B: Buffer>(&self, out: &mut B) {
         match self {
-            ContextProperty::Nonce(hash) => {
+            LabeledContextProperty::Nonce(hash) => {
                 0u8.serial(out);
                 hash.serial(out);
             }
-            ContextProperty::PaymentHash(hash) => {
+            LabeledContextProperty::PaymentHash(hash) => {
                 1u8.serial(out);
                 hash.serial(out);
             }
-            ContextProperty::BlockHash(hash) => {
+            LabeledContextProperty::BlockHash(hash) => {
                 2u8.serial(out);
                 hash.serial(out);
             }
-            ContextProperty::ConnectionId(connection_id) => {
+            LabeledContextProperty::ConnectionId(connection_id) => {
                 3u8.serial(out);
                 connection_id.serial(out);
             }
-            ContextProperty::ResourceId(rescource_id) => {
+            LabeledContextProperty::ResourceId(rescource_id) => {
                 4u8.serial(out);
                 rescource_id.serial(out);
             }
-            ContextProperty::ContextString(context_string) => {
+            LabeledContextProperty::ContextString(context_string) => {
                 5u8.serial(out);
                 context_string.serial(out);
             }
@@ -642,7 +689,7 @@ impl Serial for ContextProperty {
     }
 }
 
-impl Deserial for ContextProperty {
+impl Deserial for LabeledContextProperty {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         match u8::deserial(source)? {
             0u8 => {
@@ -683,30 +730,30 @@ struct ContextPropertyJson {
     pub context: String,
 }
 
-impl From<ContextProperty> for ContextPropertyJson {
-    fn from(value: ContextProperty) -> Self {
+impl From<LabeledContextProperty> for ContextPropertyJson {
+    fn from(value: LabeledContextProperty) -> Self {
         match value {
-            ContextProperty::Nonce(nonce) => Self {
+            LabeledContextProperty::Nonce(nonce) => Self {
                 label: ContextLabel::Nonce,
                 context: hex::encode(nonce),
             },
-            ContextProperty::PaymentHash(hash_bytes) => Self {
+            LabeledContextProperty::PaymentHash(hash_bytes) => Self {
                 label: ContextLabel::PaymentHash,
                 context: hex::encode(hash_bytes),
             },
-            ContextProperty::BlockHash(hash_bytes) => Self {
+            LabeledContextProperty::BlockHash(hash_bytes) => Self {
                 label: ContextLabel::BlockHash,
                 context: hex::encode(hash_bytes),
             },
-            ContextProperty::ConnectionId(context) => Self {
+            LabeledContextProperty::ConnectionId(context) => Self {
                 label: ContextLabel::ConnectionId,
                 context,
             },
-            ContextProperty::ResourceId(context) => Self {
+            LabeledContextProperty::ResourceId(context) => Self {
                 label: ContextLabel::ResourceId,
                 context,
             },
-            ContextProperty::ContextString(context) => Self {
+            LabeledContextProperty::ContextString(context) => Self {
                 label: ContextLabel::ContextString,
                 context,
             },
@@ -724,7 +771,7 @@ pub enum TryFromContextPropertyJsonError {
     PaymentHash(hashes::HashFromStrError),
 }
 
-impl TryFrom<ContextPropertyJson> for ContextProperty {
+impl TryFrom<ContextPropertyJson> for LabeledContextProperty {
     type Error = TryFromContextPropertyJsonError;
 
     fn try_from(value: ContextPropertyJson) -> Result<Self, Self::Error> {
@@ -733,14 +780,15 @@ impl TryFrom<ContextPropertyJson> for ContextProperty {
             ContextLabel::ResourceId => Ok(Self::ResourceId(value.context)),
             ContextLabel::ConnectionId => Ok(Self::ConnectionId(value.context)),
             ContextLabel::Nonce => {
-                let bytes =
-                    hex::decode(value.context).map_err(TryFromContextPropertyJsonError::Nonce)?;
-
-                let arr: [u8; 32] = bytes.try_into().map_err(|_| {
-                    TryFromContextPropertyJsonError::Nonce(hex::FromHexError::InvalidStringLength)
-                })?;
-
-                Ok(Self::Nonce(arr))
+                todo!()
+                // let bytes =
+                //     hex::decode(value.context).map_err(TryFromContextPropertyJsonError::Nonce)?;
+                //
+                // let arr: hashes::Hash = bytes.try_into().map_err(|_| {
+                //     TryFromContextPropertyJsonError::Nonce(hex::FromHexError::InvalidStringLength)
+                // })?;
+                //
+                // Ok(Self::Nonce(arr))
             }
             ContextLabel::BlockHash => Ok(Self::BlockHash(
                 value
@@ -845,7 +893,7 @@ mod tests {
 
     pub fn unfilled_context_fixture() -> UnfilledContextInformation {
         UnfilledContextInformation::new_simple(
-            [0u8; 32],
+            hashes::Hash::from([0u8; 32]),
             "MyConnection".to_string(),
             "MyDappContext".to_string(),
         )
@@ -938,7 +986,9 @@ mod tests {
         }
     }
 
-    pub fn context_property_to_context_property(prop: ContextProperty) -> v1::ContextProperty {
+    pub fn context_property_to_context_property(
+        prop: LabeledContextProperty,
+    ) -> v1::ContextProperty {
         // todo ar
         v1::ContextProperty {
             label: "".to_string(),
