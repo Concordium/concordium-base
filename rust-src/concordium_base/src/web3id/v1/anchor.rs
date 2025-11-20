@@ -24,10 +24,12 @@ use crate::web3id::{did, v1, Web3IdAttribute};
 use crate::{hashes, id};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::hashes::{HashBytes, HashFromStrError};
+use serde::ser::SerializeMap;
 use sha2::Digest;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+use serde::de::Error;
 pub use verify::*;
 
 const PROTOCOL_VERSION: u16 = 1u16;
@@ -581,9 +583,9 @@ impl TryFrom<did::Method> for IdentityProviderDid {
     }
 }
 
-/// A labeled value of context information that can be provided to a verification request.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(into = "ContextPropertyJson", try_from = "ContextPropertyJson")]
+/// A statically labeled and statically typed context value. Is used
+/// in [`VerificationRequest`] context.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LabeledContextProperty {
     /// Cryptographic nonce context which should be of length 32 bytes.
     Nonce(hashes::Hash),
@@ -617,6 +619,12 @@ impl Display for PropertyValueView<'_> {
     }
 }
 
+impl serde::Serialize for PropertyValueView<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.to_string().as_str())
+    }
+}
+
 impl LabeledContextProperty {
     /// The label for the property.
     pub fn label(&self) -> ContextLabel {
@@ -630,13 +638,13 @@ impl LabeledContextProperty {
         }
     }
 
-    /// Read-only view of the value in the property.
+    /// Read-only view of the context value in the property.
     pub fn value(&self) -> PropertyValueView<'_> {
         PropertyValueView { property: self }
     }
 
     /// Creates property from label and with value parsed from the given string.
-    pub fn try_from_label_and_str(
+    pub fn try_from_label_and_value_str(
         label: ContextLabel,
         str: &str,
     ) -> Result<Self, HashFromStrError> {
@@ -650,11 +658,52 @@ impl LabeledContextProperty {
         })
     }
 
+    /// Convert to the dynamically labeled property type [`ContextProperty`]
     pub fn to_context_property(&self) -> ContextProperty {
         ContextProperty {
             label: self.label().to_string(),
             context: self.value().to_string(),
         }
+    }
+
+    /// Convert from the dynamically labeled property type [`ContextProperty`]
+    pub fn try_from_context_property(
+        prop: &ContextProperty,
+    ) -> Result<Self, FromContextPropertyError> {
+        let label = prop.label.parse()?;
+        Ok(Self::try_from_label_and_value_str(label, &prop.context)?)
+    }
+}
+
+/// Error parsing the dynamically typed [`ContextProperty`] to [`LabeledContextProperty`].
+#[derive(Debug, thiserror::Error)]
+pub enum FromContextPropertyError {
+    #[error("parse label: {0}")]
+    ParseLabel(#[from] UnknownContextLabelError),
+    #[error("parse value: {0}")]
+    ParseValue(#[from] HashFromStrError),
+}
+
+impl serde::Serialize for LabeledContextProperty {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map_serializer = serializer.serialize_map(Some(2))?;
+        map_serializer.serialize_entry("label", &self.label())?;
+        map_serializer.serialize_entry("context", &self.value())?;
+        map_serializer.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for LabeledContextProperty {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct LabeledContextPropertyRaw<'a> {
+            label: ContextLabel,
+            #[serde(borrow)]
+            context: Cow<'a, str>,
+        }
+
+        let raw = LabeledContextPropertyRaw::deserialize(deserializer)?;
+        Self::try_from_label_and_value_str(raw.label, &raw.context).map_err(D::Error::custom)
     }
 }
 
@@ -717,91 +766,6 @@ impl Deserial for LabeledContextProperty {
                 Ok(Self::ContextString(context_string))
             }
             n => anyhow::bail!("Unknown GivenContext tag: {}", n),
-        }
-    }
-}
-
-/// JSON representation of context information that is already provided in a request for a presentation.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct ContextPropertyJson {
-    /// The label identifying the type of context.
-    pub label: ContextLabel,
-    /// The context data serialized as a string.
-    pub context: String,
-}
-
-impl From<LabeledContextProperty> for ContextPropertyJson {
-    fn from(value: LabeledContextProperty) -> Self {
-        match value {
-            LabeledContextProperty::Nonce(nonce) => Self {
-                label: ContextLabel::Nonce,
-                context: hex::encode(nonce),
-            },
-            LabeledContextProperty::PaymentHash(hash_bytes) => Self {
-                label: ContextLabel::PaymentHash,
-                context: hex::encode(hash_bytes),
-            },
-            LabeledContextProperty::BlockHash(hash_bytes) => Self {
-                label: ContextLabel::BlockHash,
-                context: hex::encode(hash_bytes),
-            },
-            LabeledContextProperty::ConnectionId(context) => Self {
-                label: ContextLabel::ConnectionId,
-                context,
-            },
-            LabeledContextProperty::ResourceId(context) => Self {
-                label: ContextLabel::ResourceId,
-                context,
-            },
-            LabeledContextProperty::ContextString(context) => Self {
-                label: ContextLabel::ContextString,
-                context,
-            },
-        }
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum TryFromContextPropertyJsonError {
-    #[error("Failed decoding hex in nonce context: {0}")]
-    Nonce(hex::FromHexError),
-    #[error("Failed decoding block hash")]
-    BlockHash(hashes::HashFromStrError),
-    #[error("Failed decoding payment hash")]
-    PaymentHash(hashes::HashFromStrError),
-}
-
-impl TryFrom<ContextPropertyJson> for LabeledContextProperty {
-    type Error = TryFromContextPropertyJsonError;
-
-    fn try_from(value: ContextPropertyJson) -> Result<Self, Self::Error> {
-        match value.label {
-            ContextLabel::ContextString => Ok(Self::ContextString(value.context)),
-            ContextLabel::ResourceId => Ok(Self::ResourceId(value.context)),
-            ContextLabel::ConnectionId => Ok(Self::ConnectionId(value.context)),
-            ContextLabel::Nonce => {
-                todo!()
-                // let bytes =
-                //     hex::decode(value.context).map_err(TryFromContextPropertyJsonError::Nonce)?;
-                //
-                // let arr: hashes::Hash = bytes.try_into().map_err(|_| {
-                //     TryFromContextPropertyJsonError::Nonce(hex::FromHexError::InvalidStringLength)
-                // })?;
-                //
-                // Ok(Self::Nonce(arr))
-            }
-            ContextLabel::BlockHash => Ok(Self::BlockHash(
-                value
-                    .context
-                    .parse()
-                    .map_err(TryFromContextPropertyJsonError::BlockHash)?,
-            )),
-            ContextLabel::PaymentHash => Ok(Self::PaymentHash(
-                value
-                    .context
-                    .parse()
-                    .map_err(TryFromContextPropertyJsonError::PaymentHash)?,
-            )),
         }
     }
 }
@@ -1651,6 +1615,63 @@ mod tests {
             let json = serde_json::to_string(&label).expect("to json");
             let deserialized_label: ContextLabel = serde_json::from_str(&json).expect("from json");
             assert_eq!(deserialized_label, label);
+        }
+    }
+
+    #[test]
+    fn test_labeled_context_property_string_roundtrip() {
+        use LabeledContextProperty::*;
+        for labeled_prop in [
+            Nonce(hashes::Hash::from([1u8; 32])),
+            PaymentHash(hashes::TransactionHash::from([1u8; 32])),
+            BlockHash(hashes::BlockHash::from([1u8; 32])),
+            ConnectionId("testvalue".to_string()),
+            ResourceId("testvalue".to_string()),
+            ContextString("testvalue".to_string()),
+        ] {
+            let label_str = labeled_prop.label().to_string();
+            let value_str = labeled_prop.value().to_string();
+            let label_from_str = ContextLabel::from_str(&label_str).expect("label");
+            let labeled_prop_from_str =
+                LabeledContextProperty::try_from_label_and_value_str(label_from_str, &value_str)
+                    .expect("property");
+            assert_eq!(labeled_prop_from_str, labeled_prop);
+        }
+    }
+
+    #[test]
+    fn test_labeled_context_property_context_property_roundtrip() {
+        use LabeledContextProperty::*;
+        for labeled_prop in [
+            Nonce(hashes::Hash::from([1u8; 32])),
+            PaymentHash(hashes::TransactionHash::from([1u8; 32])),
+            BlockHash(hashes::BlockHash::from([1u8; 32])),
+            ConnectionId("testvalue".to_string()),
+            ResourceId("testvalue".to_string()),
+            ContextString("testvalue".to_string()),
+        ] {
+            let context_prop = labeled_prop.to_context_property();
+            let labeled_prop_from_str =
+                LabeledContextProperty::try_from_context_property(&context_prop).expect("property");
+            assert_eq!(labeled_prop_from_str, labeled_prop);
+        }
+    }
+
+    #[test]
+    fn test_labeled_context_property_json_roundtrip() {
+        use LabeledContextProperty::*;
+        for labeled_prop in [
+            Nonce(hashes::Hash::from([1u8; 32])),
+            PaymentHash(hashes::TransactionHash::from([1u8; 32])),
+            BlockHash(hashes::BlockHash::from([1u8; 32])),
+            ConnectionId("testvalue".to_string()),
+            ResourceId("testvalue".to_string()),
+            ContextString("testvalue".to_string()),
+        ] {
+            let json = serde_json::to_string(&labeled_prop).expect("json");
+            let labled_prop_deserialized:
+                LabeledContextProperty = serde_json::from_str(&json).expect("property");
+            assert_eq!(labled_prop_deserialized, labeled_prop);
         }
     }
 }
