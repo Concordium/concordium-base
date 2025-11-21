@@ -1,6 +1,24 @@
 ## Unreleased
 
+- Introduce protocol version 10 variant `ProtocolVersion::P10`.
+
+## 9.0.0 (2025-10-29)
+
 - Changed `Debug` implementation of secret keys and cleartext values to not print the key or value.
+- Removed `ChainParameterVersionX` types and the `MintDistributionFamily`, `GASRewardsFamily` and `AuthorizationsFamily` traits and their implementations.
+- Revised `UpdateSigner` implementations not to use references, since the one method (`sign_update_hash`) already takes a reference (`&self`).
+- Made `find_authorized_keys` public for easier re-use.
+- Changed value inside `AttributeKind` to be non-public since it has a length constraint. Implemented `AttributeKind::try_new`, `AsRef<str> for AttributeKind` and `From<AttributeKind> for String`
+  to allow constructing and accessing values.
+- Added `Eq` and `PartialEq` instances for
+  - `UpdateKeysThreshold`
+  - `InclusiveRange<T>`
+  - `LeverageFactor`
+  - `MintRate`
+  - `CapitalBound`
+  - `Ratio`
+  - `HigherLevelAccessStructure<Kind>`
+  - `AccessStructure`
 
 ## 8.0.0-alpha.3 (2025-10-08)
 
