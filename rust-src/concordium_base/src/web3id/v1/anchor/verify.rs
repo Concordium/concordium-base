@@ -203,8 +203,6 @@ fn verify_anchor_block_hash(
     request_anchor: &VerificationRequestAnchorAndBlockHash,
     presentation: &VerifiablePresentationV1,
 ) -> Result<(), CredentialInvalidReason> {
-    // todo verify request anchor block hash matches presentation context
-
     let labeled_requested_context: Vec<_> = presentation
         .presentation_context
         .requested
@@ -265,7 +263,7 @@ mod tests {
     use crate::id::types::YearMonth;
     use crate::web3id::did::Network;
     use crate::web3id::v1::anchor::{fixtures, ContextLabel, LabeledContextProperty};
-    use crate::web3id::v1::CredentialV1;
+    use crate::web3id::v1::{ContextProperty, CredentialV1};
 
     fn verification_context() -> VerificationContext {
         VerificationContext {
@@ -608,6 +606,96 @@ mod tests {
             .presentation_context
             .requested
             .retain(|prop| prop.label != ContextLabel::BlockHash.as_str());
+
+        assert_eq!(
+            verify_presentation_with_request_anchor(
+                &global_context,
+                &verification_context(),
+                &request,
+                &presentation,
+                &anchor,
+                &[material],
+            ),
+            PresentationVerificationResult::Failed(CredentialInvalidReason::NoVraBlockHash)
+        );
+    }
+
+    /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
+    /// Test that
+    #[test]
+    fn test_verify_soundness_context_unknown_property() {
+        let global_context = GlobalContext::generate("Test".into());
+        let (request, vra) = fixtures::verification_request_data_to_request_and_anchor(
+            fixtures::verification_request_data_fixture(),
+        );
+        let id_cred =
+            fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
+        let mut presentation = fixtures::generate_and_prove_presentation_identity(
+            &id_cred,
+            fixtures::verification_request_to_verifiable_presentation_request_identity(&request),
+        );
+
+        let anchor = VerificationRequestAnchorAndBlockHash {
+            verification_request_anchor: vra,
+            block_hash: *fixtures::VRA_BLOCK_HASH,
+        };
+
+        let material = VerificationMaterialWithValidity {
+            verification_material: id_cred.verification_material.clone(),
+            validity: validity(),
+        };
+
+        presentation
+            .presentation_context
+            .requested
+            .push(ContextProperty {
+                label: "UnknownPropertyLabel".to_string(),
+                context: "testvalue".to_string(),
+            });
+
+        assert_eq!(
+            verify_presentation_with_request_anchor(
+                &global_context,
+                &verification_context(),
+                &request,
+                &presentation,
+                &anchor,
+                &[material],
+            ),
+            PresentationVerificationResult::Failed(CredentialInvalidReason::NoVraBlockHash)
+        );
+    }
+
+    /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
+    /// Test that
+    #[test]
+    fn test_verify_soundness_context_invalid_property_value() {
+        let global_context = GlobalContext::generate("Test".into());
+        let (request, vra) = fixtures::verification_request_data_to_request_and_anchor(
+            fixtures::verification_request_data_fixture(),
+        );
+        let id_cred =
+            fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
+        let mut presentation = fixtures::generate_and_prove_presentation_identity(
+            &id_cred,
+            fixtures::verification_request_to_verifiable_presentation_request_identity(&request),
+        );
+
+        let anchor = VerificationRequestAnchorAndBlockHash {
+            verification_request_anchor: vra,
+            block_hash: *fixtures::VRA_BLOCK_HASH,
+        };
+
+        let material = VerificationMaterialWithValidity {
+            verification_material: id_cred.verification_material.clone(),
+            validity: validity(),
+        };
+
+        for prop in &mut presentation.presentation_context.requested {
+            if prop.label == ContextLabel::Nonce.as_str() {
+                prop.context = "invalidvalue".to_string();
+            }
+        }
 
         assert_eq!(
             verify_presentation_with_request_anchor(
