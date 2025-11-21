@@ -54,6 +54,8 @@ pub enum CredentialInvalidReason {
     Verify, // todo arg remove
     CredentialNotValidYet,
     CredentialExpired,
+    Network,
+    PresentationUnverifiable,
 }
 
 /// Result of verifying a presentation against the corresponding verification request.
@@ -135,7 +137,7 @@ fn verify_network(
 ) -> Result<(), CredentialInvalidReason> {
     for metadata in presentation.metadata() {
         if metadata.network != verification_context.network {
-            return Err(CredentialInvalidReason::Verify);
+            return Err(CredentialInvalidReason::Network);
         }
     }
     Ok(())
@@ -191,7 +193,7 @@ fn verify_presentation<'a>(
             global_context,
             verification_material.map(|vm| &vm.verification_material),
         )
-        .map_err(|_| CredentialInvalidReason::Verify)
+        .map_err(|_| CredentialInvalidReason::PresentationUnverifiable)
 }
 
 fn verify_anchor_block_hash(
@@ -239,14 +241,22 @@ mod tests {
     use crate::id::types::YearMonth;
     use crate::web3id::did::Network;
     use crate::web3id::v1::anchor::fixtures;
+    use crate::web3id::v1::CredentialV1;
 
     fn verification_context() -> VerificationContext {
         VerificationContext {
             network: Network::Testnet,
             validity_time: chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
                 .unwrap()
-                .with_timezone(&chrono::Utc),
+                .to_utc(),
         }
+    }
+
+    fn validity() -> CredentialValidityType {
+        CredentialValidityType::ValidityPeriod(types::CredentialValidity {
+            valid_to: YearMonth::new(2030, 01).unwrap(),
+            created_at: YearMonth::new(2020, 01).unwrap(),
+        })
     }
 
     /// Test [`verify_presentation_with_request_anchor`] in case where verification succeeds.
@@ -257,7 +267,8 @@ mod tests {
         let (request, vra) = fixtures::verification_request_data_to_request_and_anchor(
             fixtures::verification_request_data_fixture(),
         );
-        let id_cred = fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
+        let id_cred =
+            fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
         let presentation = fixtures::generate_and_prove_presentation_identity(
             &id_cred,
             fixtures::verification_request_to_verifiable_presentation_request_identity(&request),
@@ -270,10 +281,7 @@ mod tests {
 
         let material = VerificationMaterialWithValidity {
             verification_material: id_cred.verification_material.clone(),
-            validity: CredentialValidityType::ValidityPeriod(types::CredentialValidity {
-                valid_to: YearMonth::new(2030, 01).unwrap(),
-                created_at: YearMonth::new(2020, 01).unwrap(),
-            }),
+            validity: validity(),
         };
 
         assert_eq!(
@@ -297,10 +305,14 @@ mod tests {
         let (request, vra) = fixtures::verification_request_data_to_request_and_anchor(
             fixtures::verification_request_data_fixture(),
         );
-        let account_cred = fixtures::account_credentials_fixture(fixtures::default_attributes(), &global_context);
+        let account_cred =
+            fixtures::account_credentials_fixture(fixtures::default_attributes(), &global_context);
         let presentation = fixtures::generate_and_prove_presentation_account(
             &account_cred,
-            fixtures::verification_request_to_verifiable_presentation_request_account(&account_cred, &request),
+            fixtures::verification_request_to_verifiable_presentation_request_account(
+                &account_cred,
+                &request,
+            ),
         );
 
         let anchor = VerificationRequestAnchorAndBlockHash {
@@ -310,10 +322,7 @@ mod tests {
 
         let material = VerificationMaterialWithValidity {
             verification_material: account_cred.verification_material.clone(),
-            validity: CredentialValidityType::ValidityPeriod(types::CredentialValidity {
-                valid_to: YearMonth::new(2030, 01).unwrap(),
-                created_at: YearMonth::new(2020, 01).unwrap(),
-            }),
+            validity: validity(),
         };
 
         assert_eq!(
@@ -329,7 +338,133 @@ mod tests {
         );
     }
 
-    // todo ar tests
+    /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
+    /// Test that network is checked.
+    #[test]
+    fn test_verify_soundness_network() {
+        let global_context = GlobalContext::generate("Test".into());
+        let (request, vra) = fixtures::verification_request_data_to_request_and_anchor(
+            fixtures::verification_request_data_fixture(),
+        );
+        let id_cred =
+            fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
+        let presentation = fixtures::generate_and_prove_presentation_identity(
+            &id_cred,
+            fixtures::verification_request_to_verifiable_presentation_request_identity(&request),
+        );
+
+        let anchor = VerificationRequestAnchorAndBlockHash {
+            verification_request_anchor: vra,
+            block_hash: hashes::BlockHash::from([6u8; 32]),
+        };
+
+        let material = VerificationMaterialWithValidity {
+            verification_material: id_cred.verification_material.clone(),
+            validity: validity(),
+        };
+
+        let mut verification_context = verification_context();
+        verification_context.network = Network::Mainnet;
+
+        assert_eq!(
+            verify_presentation_with_request_anchor(
+                &global_context,
+                &verification_context,
+                &request,
+                &presentation,
+                &anchor,
+                &[material],
+            ),
+            PresentationVerificationResult::Failed(CredentialInvalidReason::Network)
+        );
+    }
+
+    /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
+    /// Test that credential validity is checked.
+    #[test]
+    fn test_verify_soundness_credential_validity() {
+        let global_context = GlobalContext::generate("Test".into());
+        let (request, vra) = fixtures::verification_request_data_to_request_and_anchor(
+            fixtures::verification_request_data_fixture(),
+        );
+        let id_cred =
+            fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
+        let presentation = fixtures::generate_and_prove_presentation_identity(
+            &id_cred,
+            fixtures::verification_request_to_verifiable_presentation_request_identity(&request),
+        );
+
+        let anchor = VerificationRequestAnchorAndBlockHash {
+            verification_request_anchor: vra,
+            block_hash: hashes::BlockHash::from([6u8; 32]),
+        };
+
+        let material = VerificationMaterialWithValidity {
+            verification_material: id_cred.verification_material.clone(),
+            validity: validity(),
+        };
+
+        let mut verification_context = verification_context();
+        verification_context.validity_time =
+            chrono::DateTime::parse_from_rfc3339("2035-08-28T23:12:15Z")
+                .unwrap()
+                .to_utc();
+
+        assert_eq!(
+            verify_presentation_with_request_anchor(
+                &global_context,
+                &verification_context,
+                &request,
+                &presentation,
+                &anchor,
+                &[material],
+            ),
+            PresentationVerificationResult::Failed(CredentialInvalidReason::CredentialExpired)
+        );
+    }
+
+    /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
+    /// Test that credential validity is checked.
+    #[test]
+    fn test_verify_soundness_cryptographic_verification() {
+        let global_context = GlobalContext::generate("Test".into());
+        let (request, vra) = fixtures::verification_request_data_to_request_and_anchor(
+            fixtures::verification_request_data_fixture(),
+        );
+        let id_cred =
+            fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
+        let mut presentation = fixtures::generate_and_prove_presentation_identity(
+            &id_cred,
+            fixtures::verification_request_to_verifiable_presentation_request_identity(&request),
+        );
+
+        let anchor = VerificationRequestAnchorAndBlockHash {
+            verification_request_anchor: vra,
+            block_hash: hashes::BlockHash::from([6u8; 32]),
+        };
+
+        let material = VerificationMaterialWithValidity {
+            verification_material: id_cred.verification_material.clone(),
+            validity: validity(),
+        };
+
+        let CredentialV1::Identity(cred) = &mut presentation.verifiable_credentials[0] else {
+            panic!("expected identity credential");
+        };
+        cred.proof.proof_value.statement_proofs.clear();
+
+        assert_eq!(
+            verify_presentation_with_request_anchor(
+                &global_context,
+                &verification_context(),
+                &request,
+                &presentation,
+                &anchor,
+                &[material],
+            ),
+            PresentationVerificationResult::Failed(CredentialInvalidReason::PresentationUnverifiable)
+        );
+    }
 
     #[test]
     fn test_verify_credential_validity_period() {
