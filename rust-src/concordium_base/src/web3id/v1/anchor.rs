@@ -1538,7 +1538,7 @@ mod fixtures {
         verification_request: &VerificationRequest,
     ) -> VerifiablePresentationRequestV1 {
         VerifiablePresentationRequestV1 {
-            challenge: unfilled_context_information_to_context_information(
+            context: unfilled_context_information_to_context_information(
                 &verification_request.context,
             ),
             subject_claims: verification_request
@@ -1554,7 +1554,7 @@ mod fixtures {
         verification_request: &VerificationRequest,
     ) -> VerifiablePresentationRequestV1 {
         VerifiablePresentationRequestV1 {
-            challenge: unfilled_context_information_to_context_information(
+            context: unfilled_context_information_to_context_information(
                 &verification_request.context,
             ),
             subject_claims: verification_request

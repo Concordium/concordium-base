@@ -60,7 +60,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         transcript.append_message(b"ctx", &global_context);
 
         let mut request = RequestV1 {
-            challenge: self.presentation_context.clone(),
+            context: self.presentation_context.clone(),
             subject_claims: Vec::new(),
         };
 
@@ -483,7 +483,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
     {
         let mut verifiable_credentials = Vec::with_capacity(private_inputs.len());
         let mut transcript = RandomOracle::domain("ConcordiumVerifiablePresentationV1");
-        append_context(&mut transcript, &self.challenge);
+        append_context(&mut transcript, &self.context);
         transcript.append_message(b"ctx", &global_context);
 
         if self.subject_claims.len() != private_inputs.len() {
@@ -508,7 +508,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
         };
 
         Ok(PresentationV1 {
-            presentation_context: self.challenge,
+            presentation_context: self.context,
             linking_proof,
             verifiable_credentials,
         })
@@ -694,7 +694,7 @@ pub mod tests {
         ];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims,
         };
 
@@ -741,7 +741,7 @@ pub mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims,
         };
 
@@ -780,7 +780,7 @@ pub mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims,
         };
 
@@ -821,7 +821,7 @@ pub mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims,
         };
 
@@ -881,7 +881,7 @@ pub mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims,
         };
 
@@ -920,7 +920,7 @@ pub mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims,
         };
 
@@ -973,7 +973,7 @@ pub mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims,
         };
 
@@ -1036,7 +1036,7 @@ pub mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims,
         };
 
@@ -1083,7 +1083,7 @@ pub mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims,
         };
 
@@ -1121,7 +1121,7 @@ pub mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims,
         };
 
@@ -1160,7 +1160,7 @@ pub mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims,
         };
 
@@ -1201,7 +1201,7 @@ pub mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims,
         };
 
@@ -1260,7 +1260,7 @@ pub mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims,
         };
 
@@ -1298,7 +1298,7 @@ pub mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims,
         };
 
@@ -1361,7 +1361,7 @@ pub mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims,
         };
 
@@ -1434,7 +1434,7 @@ pub mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims,
         };
 

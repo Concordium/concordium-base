@@ -1042,7 +1042,7 @@ impl<
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct RequestV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Context challenge for the proof
-    pub challenge: ContextInformation,
+    pub context: ContextInformation,
     /// Claims to prove
     pub subject_claims: Vec<SubjectClaims<C, AttributeType>>,
 }
@@ -1056,7 +1056,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
     {
         let mut map = serializer.serialize_map(None)?;
         map.serialize_entry("type", &CONCORDIUM_REQUEST_TYPE)?;
-        map.serialize_entry("context", &self.challenge)?;
+        map.serialize_entry("context", &self.context)?;
         map.serialize_entry("subjectClaims", &self.subject_claims)?;
         map.end()
     }
@@ -1079,11 +1079,11 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
                 CONCORDIUM_REQUEST_TYPE
             );
 
-            let challenge = take_field_de(&mut value, "context")?;
+            let context = take_field_de(&mut value, "context")?;
             let credential_statements = take_field_de(&mut value, "subjectClaims")?;
 
             Ok(Self {
-                challenge,
+                context,
                 subject_claims: credential_statements,
             })
         })();
@@ -1599,7 +1599,7 @@ mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims: credential_statements,
         };
 
@@ -1982,7 +1982,7 @@ mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims: credential_statements,
         };
 

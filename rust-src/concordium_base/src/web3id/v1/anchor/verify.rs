@@ -59,6 +59,7 @@ pub enum CredentialInvalidReason {
     RequestAnchor,
     NoVraBlockHash,
     VraBlockHash,
+    GivenContext,
 }
 
 /// Result of verifying a presentation against the corresponding verification request.
@@ -249,6 +250,16 @@ fn verify_request(
     request_from_presentation: &VerifiablePresentationRequestV1,
     verification_request: &VerificationRequest,
 ) -> Result<(), CredentialInvalidReason> {
+    let presentation_given_properties: Vec<_> = request_from_presentation
+        .context
+        .given.iter()
+        .map(|prop| LabeledContextProperty::try_from_context_property(prop).unwrap())
+        .collect();
+
+    if presentation_given_properties != verification_request.context.given {
+        return Err(CredentialInvalidReason::GivenContext);
+    }
+
     // todo verify subject claims in presentation matches request
     //      this incudes both statements and the identity provider and the credential type
     // todo verify context in presentation matches request context
@@ -385,6 +396,7 @@ mod tests {
             validity: validity(),
         };
 
+        // verify on wrong network
         let mut verification_context = verification_context();
         verification_context.network = Network::Mainnet;
 
@@ -426,6 +438,7 @@ mod tests {
             validity: validity(),
         };
 
+        // verify at a time where credential is not valid
         let mut verification_context = verification_context();
         verification_context.validity_time =
             chrono::DateTime::parse_from_rfc3339("2035-08-28T23:12:15Z")
@@ -470,6 +483,7 @@ mod tests {
             validity: validity(),
         };
 
+        // change proofs to be invalid
         let CredentialV1::Identity(cred) = &mut presentation.verifiable_credentials[0] else {
             panic!("expected identity credential");
         };
@@ -515,6 +529,7 @@ mod tests {
             validity: validity(),
         };
 
+        // set wrong request data hash in the request anchor
         anchor.verification_request_anchor.hash = hashes::Hash::from([0u8; 32]);
 
         assert_eq!(
@@ -555,6 +570,7 @@ mod tests {
             validity: validity(),
         };
 
+        // set wrong VRA block hash in the presentation context
         for prop in &mut presentation.presentation_context.requested {
             if prop.label == ContextLabel::BlockHash.as_str() {
                 prop.context =
@@ -602,6 +618,7 @@ mod tests {
             validity: validity(),
         };
 
+        // remove VRA block hash from presentation context
         presentation
             .presentation_context
             .requested
@@ -707,6 +724,63 @@ mod tests {
                 &[material],
             ),
             PresentationVerificationResult::Failed(CredentialInvalidReason::NoVraBlockHash)
+        );
+    }
+
+    /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
+    /// Test that
+    #[test]
+    fn test_verify_soundness_context_given() {
+        let global_context = GlobalContext::generate("Test".into());
+        let (request, vra) = fixtures::verification_request_data_to_request_and_anchor(
+            fixtures::verification_request_data_fixture(),
+        );
+        let id_cred =
+            fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
+
+        // change property in given request context
+        let mut modified_request = request.clone();
+        for prop in &mut modified_request.context.given {
+            match prop {
+                LabeledContextProperty::Nonce(hash) => {
+                    *hash = hashes::Hash::from([0u8; 32]);
+                }
+                _ => (),
+
+            }
+        }
+
+        let presentation = fixtures::generate_and_prove_presentation_identity(
+            &id_cred,
+            fixtures::verification_request_to_verifiable_presentation_request_identity(&modified_request),
+        );
+
+
+        let anchor = VerificationRequestAnchorAndBlockHash {
+            verification_request_anchor: vra,
+            block_hash: *fixtures::VRA_BLOCK_HASH,
+        };
+
+        let material = VerificationMaterialWithValidity {
+            verification_material: id_cred.verification_material.clone(),
+            validity: validity(),
+        };
+
+
+
+
+
+
+        assert_eq!(
+            verify_presentation_with_request_anchor(
+                &global_context,
+                &verification_context(),
+                &request,
+                &presentation,
+                &anchor,
+                &[material],
+            ),
+            PresentationVerificationResult::Failed(CredentialInvalidReason::GivenContext)
         );
     }
 
