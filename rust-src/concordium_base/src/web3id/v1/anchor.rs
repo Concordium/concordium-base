@@ -970,7 +970,8 @@ mod tests {
       ],
       "issuers": [
         "did:ccd:testnet:idp:0",
-        "did:ccd:testnet:idp:1"
+        "did:ccd:testnet:idp:1",
+        "did:ccd:testnet:idp:17"
       ],
       "source": [
         "identityCredential",
@@ -1071,7 +1072,8 @@ mod tests {
         ],
         "issuers": [
           "did:ccd:testnet:idp:0",
-          "did:ccd:testnet:idp:1"
+          "did:ccd:testnet:idp:1",
+          "did:ccd:testnet:idp:17"
         ],
         "source": [
           "identityCredential",
@@ -1228,7 +1230,7 @@ mod tests {
 
         let cbor = cbor::cbor_encode(&verification_request_anchor).unwrap();
 
-        assert_eq!(hex::encode(&cbor), "a464686173685820a23defb0b45a443a9957ea0a54c5ce08aad20a060944afb3dd98f6c3bc899185647479706566434344565241667075626c6963a1636b6579046776657273696f6e01");
+        assert_eq!(hex::encode(&cbor), "a464686173685820954ff8287b13b7d0925b55e75edf700d78e16dae07941d32be83ed177793815f647479706566434344565241667075626c6963a1636b6579046776657273696f6e01");
 
         let decoded: VerificationRequestAnchor = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(decoded, verification_request_anchor);
@@ -1239,7 +1241,7 @@ mod tests {
         let verification_audit_anchor_on_chain = fixtures::verification_audit_anchor_fixture();
 
         let cbor = cbor::cbor_encode(&verification_audit_anchor_on_chain).unwrap();
-        assert_eq!(hex::encode(&cbor), "a464686173685820ad6bbdf31cc6ee4103772397bc206fe747ecb6a894453a85077b7fae496aaaca647479706566434344564141667075626c6963a1636b6579046776657273696f6e01");
+        assert_eq!(hex::encode(&cbor), "a4646861736858209eb4aa6091914e2c5a5e64a6c5d2e23f5172b40ad8bc4d53088acf7bf43d1766647479706566434344564141667075626c6963a1636b6579046776657273696f6e01");
         let decoded: VerificationAuditAnchor = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(decoded, verification_audit_anchor_on_chain);
     }
@@ -1250,7 +1252,7 @@ mod tests {
 
         let expected_verification_request_anchor_hash = Hash::new(
             <[u8; 32]>::from_hex(
-                "a23defb0b45a443a9957ea0a54c5ce08aad20a060944afb3dd98f6c3bc899185",
+                "954ff8287b13b7d0925b55e75edf700d78e16dae07941d32be83ed177793815f",
             )
             .expect("Invalid hex"),
         );
@@ -1269,7 +1271,7 @@ mod tests {
         let verification_audit_anchor_hash = fixtures::verification_audit_anchor_fixture().hash;
         let expected_verification_audit_anchor_hash = Hash::new(
             <[u8; 32]>::from_hex(
-                "ad6bbdf31cc6ee4103772397bc206fe747ecb6a894453a85077b7fae496aaaca",
+                "9eb4aa6091914e2c5a5e64a6c5d2e23f5172b40ad8bc4d53088acf7bf43d1766",
             )
             .expect("Invalid hex"),
         );
@@ -1463,6 +1465,7 @@ mod fixtures {
         RequestedIdentitySubjectClaims::default()
             .add_issuer(IdentityProviderDid::new(0u32, did::Network::Testnet))
             .add_issuer(IdentityProviderDid::new(1u32, did::Network::Testnet))
+            .add_issuer(IdentityProviderDid::new(17u32, did::Network::Testnet))
             .add_source(IdentityCredentialType::IdentityCredential)
             .add_source(IdentityCredentialType::AccountCredential)
             .add_statements(statements)

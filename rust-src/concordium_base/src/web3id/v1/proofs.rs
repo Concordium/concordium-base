@@ -944,14 +944,6 @@ pub mod tests {
         };
         cred.issuer = IpIdentity(10);
 
-        let proof = request
-            .clone()
-            .prove(
-                &global_context,
-                [acc_cred_fixture.private_inputs()].into_iter(),
-            )
-            .expect("prove");
-
         let public = vec![acc_cred_fixture.verification_material];
 
         let err = proof

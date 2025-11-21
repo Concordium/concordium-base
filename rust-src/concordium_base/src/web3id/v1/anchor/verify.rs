@@ -51,6 +51,7 @@ pub struct VerificationMaterialWithValidity {
 /// Credential validity
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum CredentialValidityType {
+    /// Validity specified as a validity period
     ValidityPeriod(types::CredentialValidity),
 }
 
@@ -58,19 +59,31 @@ pub enum CredentialValidityType {
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CredentialInvalidReason {
+    // Credential is not valid yet at the given time
     CredentialNotValidYet,
+    // Credential is no longer valid at the given time
     CredentialExpired,
+    /// The network the credentials are issued for is not the same network we verify for1
     Network,
+    /// The verifiable presentation is not cryptographically verifiable
     PresentationUnverifiable,
+    /// The request anchor hash does not match the verification request
     RequestAnchor,
+    /// The verification request anchor (VRA) block hash is not set in the context
     NoVraBlockHash,
+    /// The verification request anchor (VRA) block hash in the context doest not match the actual block the VRA is registered in
     VraBlockHash,
-    GivenContext,
-    RequestedContext,
+    /// The context in the verifiable presentation does not match the context in the verification request
+    Context,
+    /// The context has a property with invalid value
     InvalidPropertyValue,
+    /// The context has an unknown property
     UnknownProperty,
+    /// The subject claims (statements) in the verifiable presentation does not match the subject claims (statements) in the verification request
     SubjectClaims,
+    /// The credential is not of the allowed credential types the verification request
     SubjectClaimsCredentialType,
+    /// The issuer for the credential does not match the allowed issuers in the verification request
     SubjectClaimsIssuer,
 }
 
@@ -295,7 +308,7 @@ fn verify_request_subject_claims(
 ) -> Result<(), CredentialInvalidReason> {
     match request_claims {
         RequestedSubjectClaims::Identity(req_id_claims) => {
-            let (pres_issuer, pres_statements) = match presentation_claims {
+            let (pres_issuer, pres_network, pres_statements) = match presentation_claims {
                 SubjectClaims::Account(acc_claims) => {
                     if !req_id_claims
                         .source
@@ -310,7 +323,7 @@ fn verify_request_subject_claims(
                         .map(statement_to_requested_statement)
                         .collect();
 
-                    (acc_claims.issuer, stmts)
+                    (acc_claims.issuer, acc_claims.network, stmts)
                 }
                 SubjectClaims::Identity(id_claims) => {
                     if !req_id_claims
@@ -326,19 +339,15 @@ fn verify_request_subject_claims(
                         .map(statement_to_requested_statement)
                         .collect();
 
-                    (id_claims.issuer, stmts)
+                    (id_claims.issuer, id_claims.network, stmts)
                 }
             };
 
-            if !req_id_claims
-                .issuers
-                .iter()
-                .any(|issuer| issuer.identity_provider == pres_issuer)
-            {
+            if !req_id_claims.issuers.iter().any(|issuer| {
+                issuer.identity_provider == pres_issuer && issuer.network == pres_network
+            }) {
                 return Err(CredentialInvalidReason::SubjectClaimsIssuer);
             }
-
-            // todo ar network
 
             if pres_statements != req_id_claims.statements {
                 return Err(CredentialInvalidReason::SubjectClaims);
@@ -390,7 +399,7 @@ fn verify_request_context(
         .collect();
 
     if map_parse_prop_err(presentation_given_properties_parse_res)? != request_context.given {
-        return Err(CredentialInvalidReason::GivenContext);
+        return Err(CredentialInvalidReason::Context);
     }
 
     let presentation_requested_property_labels_parse_res: Result<Vec<_>, _> = presentation_context
@@ -404,7 +413,7 @@ fn verify_request_context(
     if map_parse_prop_err(presentation_requested_property_labels_parse_res)?
         != request_context.requested
     {
-        return Err(CredentialInvalidReason::RequestedContext);
+        return Err(CredentialInvalidReason::Context);
     }
 
     Ok(())
@@ -941,7 +950,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::GivenContext)
+            PresentationVerificationResult::Failed(CredentialInvalidReason::Context)
         );
     }
 
@@ -985,7 +994,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::RequestedContext)
+            PresentationVerificationResult::Failed(CredentialInvalidReason::Context)
         );
     }
 
@@ -1154,6 +1163,55 @@ mod tests {
         assert_matches!(&mut request_data.subject_claims[0], RequestedSubjectClaims::Identity(id_claims) => {
             id_claims.issuers.clear();
             id_claims.issuers.push(IdentityProviderDid::new(1u32, did::Network::Testnet));
+        });
+
+        let (request, vra) =
+            fixtures::verification_request_data_to_request_and_anchor(request_data);
+
+        let id_cred =
+            fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
+        let presentation = fixtures::generate_and_prove_presentation_identity(
+            &id_cred,
+            fixtures::verification_request_to_verifiable_presentation_request_identity(
+                &id_cred, &request,
+            ),
+        );
+
+        let anchor = VerificationRequestAnchorAndBlockHash {
+            verification_request_anchor: vra,
+            block_hash: *fixtures::VRA_BLOCK_HASH,
+        };
+
+        let material = VerificationMaterialWithValidity {
+            verification_material: id_cred.verification_material.clone(),
+            validity: validity(),
+        };
+
+        assert_eq!(
+            verify_presentation_with_request_anchor(
+                &global_context,
+                &verification_context(),
+                &request,
+                &presentation,
+                &anchor,
+                &[material],
+            ),
+            PresentationVerificationResult::Failed(CredentialInvalidReason::SubjectClaimsIssuer)
+        );
+    }
+
+    /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
+    /// Test that issuer is only accepted if allowed in request. Tests network different.
+    #[test]
+    fn test_verify_soundness_claims_issuer_network() {
+        let global_context = GlobalContext::generate("Test".into());
+
+        let mut request_data = fixtures::verification_request_data_fixture();
+
+        // only allow issuer 1
+        assert_matches!(&mut request_data.subject_claims[0], RequestedSubjectClaims::Identity(id_claims) => {
+            id_claims.issuers.clear();
+            id_claims.issuers.push(IdentityProviderDid::new(0u32, did::Network::Mainnet));
         });
 
         let (request, vra) =
