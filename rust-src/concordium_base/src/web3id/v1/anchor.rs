@@ -1535,6 +1535,7 @@ mod fixtures {
     }
 
     pub fn verification_request_to_verifiable_presentation_request_identity(
+        id_cred: &IdentityCredentialsFixture<Web3IdAttribute>,
         verification_request: &VerificationRequest,
     ) -> VerifiablePresentationRequestV1 {
         VerifiablePresentationRequestV1 {
@@ -1544,7 +1545,7 @@ mod fixtures {
             subject_claims: verification_request
                 .subject_claims
                 .iter()
-                .map(|claims| requested_subject_claims_to_subject_claims_identity(claims))
+                .map(|claims| requested_subject_claims_to_subject_claims_identity(id_cred, claims))
                 .collect(),
         }
     }
@@ -1568,16 +1569,11 @@ mod fixtures {
     }
 
     pub fn requested_subject_claims_to_subject_claims_identity(
+        id_cred: &IdentityCredentialsFixture<Web3IdAttribute>,
         claims: &RequestedSubjectClaims,
     ) -> SubjectClaims<ArCurve, Web3IdAttribute> {
         match claims {
             RequestedSubjectClaims::Identity { request } => {
-                let issuer = request
-                    .issuers
-                    .iter()
-                    .next()
-                    .expect("issuer")
-                    .identity_provider;
                 let statements = request
                     .statements
                     .iter()
@@ -1586,7 +1582,7 @@ mod fixtures {
 
                 SubjectClaims::Identity(IdentityBasedSubjectClaims {
                     network: Network::Testnet,
-                    issuer,
+                    issuer: id_cred.issuer,
                     statements,
                 })
             }
@@ -1599,12 +1595,6 @@ mod fixtures {
     ) -> SubjectClaims<ArCurve, Web3IdAttribute> {
         match claims {
             RequestedSubjectClaims::Identity { request } => {
-                let issuer = request
-                    .issuers
-                    .iter()
-                    .next()
-                    .expect("issuer")
-                    .identity_provider;
                 let statements = request
                     .statements
                     .iter()
@@ -1735,7 +1725,10 @@ mod fixtures {
     pub fn verifiable_presentation_fixture() -> VerifiablePresentationV1 {
         let global_context = GlobalContext::generate("Test".into());
 
+        let id_cred = fixtures::identity_credentials_fixture(default_attributes(), &global_context);
+
         let request = verification_request_to_verifiable_presentation_request_identity(
+            &id_cred,
             &verification_request_fixture(),
         );
 

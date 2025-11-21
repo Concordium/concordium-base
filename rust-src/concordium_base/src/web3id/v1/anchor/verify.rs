@@ -1,14 +1,16 @@
+use crate::hashes;
 use crate::hashes::BlockHash;
 use crate::id::constants::ArCurve;
 use crate::id::types;
 use crate::id::types::GlobalContext;
 use crate::web3id::did;
 use crate::web3id::v1::anchor::{
-    LabeledContextProperty, UnfilledContextInformation, VerifiablePresentationRequestV1,
-    VerifiablePresentationV1, VerificationMaterial, VerificationRequest, VerificationRequestAnchor,
-    VerificationRequestData,
+    ContextLabel, FromContextPropertyError, LabeledContextProperty, UnfilledContextInformation,
+    VerifiablePresentationRequestV1, VerifiablePresentationV1, VerificationMaterial,
+    VerificationRequest, VerificationRequestAnchor, VerificationRequestData,
 };
 use crate::web3id::v1::ContextInformation;
+use std::str::FromStr;
 
 /// Contextual information needed for verifying credentials.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -63,6 +65,8 @@ pub enum CredentialInvalidReason {
     VraBlockHash,
     GivenContext,
     RequestedContext,
+    InvalidPropertyValue,
+    UnknownProperty,
 }
 
 /// Result of verifying a presentation against the corresponding verification request.
@@ -207,24 +211,25 @@ fn verify_anchor_block_hash(
     request_anchor: &VerificationRequestAnchorAndBlockHash,
     presentation: &VerifiablePresentationV1,
 ) -> Result<(), CredentialInvalidReason> {
-    let labeled_requested_context: Vec<_> = presentation
+    let Some(context_block_hash_parse_res) = presentation
         .presentation_context
         .requested
         .iter()
-        .map(|prop| LabeledContextProperty::try_from_context_property(prop).unwrap()) // todo ar
-        .collect();
-
-    let Some(context_block_hash) = labeled_requested_context
-        .iter()
-        .find_map(|prop| match prop {
-            LabeledContextProperty::BlockHash(hash) => Some(hash),
-            _ => None,
+        .find_map(|prop| {
+            if prop.label == ContextLabel::BlockHash.as_str() {
+                Some(hashes::BlockHash::from_str(&prop.context))
+            } else {
+                None
+            }
         })
     else {
         return Err(CredentialInvalidReason::NoVraBlockHash);
     };
 
-    if request_anchor.block_hash != *context_block_hash {
+    let context_block_hash =
+        context_block_hash_parse_res.map_err(|_| CredentialInvalidReason::InvalidPropertyValue)?;
+
+    if request_anchor.block_hash != context_block_hash {
         return Err(CredentialInvalidReason::VraBlockHash);
     }
 
@@ -260,7 +265,6 @@ fn verify_request(
 
     // todo verify subject claims in presentation matches request
     //      this incudes both statements and the identity provider and the credential type
-    // todo verify context in presentation matches request context
 
     Ok(())
 }
@@ -269,27 +273,38 @@ fn verify_request_context(
     presentation_context: &ContextInformation,
     request_context: &UnfilledContextInformation,
 ) -> Result<(), CredentialInvalidReason> {
-    let presentation_given_properties: Vec<_> = presentation_context
+    fn map_parse_prop_err<T>(
+        res: Result<T, FromContextPropertyError>,
+    ) -> Result<T, CredentialInvalidReason> {
+        res.map_err(|err| match err {
+            FromContextPropertyError::ParseLabel(_) => CredentialInvalidReason::UnknownProperty,
+            FromContextPropertyError::ParseValue(_) => {
+                CredentialInvalidReason::InvalidPropertyValue
+            }
+        })
+    }
+
+    let presentation_given_properties_parse_res: Result<Vec<_>, _> = presentation_context
         .given
         .iter()
-        .map(|prop| LabeledContextProperty::try_from_context_property(prop).unwrap())
+        .map(|prop| LabeledContextProperty::try_from_context_property(prop))
         .collect();
-    // todo ar testinvalid given and requested values
-    if presentation_given_properties != request_context.given {
+
+    if map_parse_prop_err(presentation_given_properties_parse_res)? != request_context.given {
         return Err(CredentialInvalidReason::GivenContext);
     }
 
-    let presentation_requested_property_labels: Vec<_> = presentation_context
+    let presentation_requested_property_labels_parse_res: Result<Vec<_>, _> = presentation_context
         .requested
         .iter()
         .map(|prop| {
-            LabeledContextProperty::try_from_context_property(prop)
-                .unwrap()
-                .label()
+            LabeledContextProperty::try_from_context_property(prop).map(|prop| prop.label())
         })
         .collect();
 
-    if presentation_requested_property_labels != request_context.requested {
+    if map_parse_prop_err(presentation_requested_property_labels_parse_res)?
+        != request_context.requested
+    {
         return Err(CredentialInvalidReason::RequestedContext);
     }
 
@@ -333,7 +348,9 @@ mod tests {
             fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
         let presentation = fixtures::generate_and_prove_presentation_identity(
             &id_cred,
-            fixtures::verification_request_to_verifiable_presentation_request_identity(&request),
+            fixtures::verification_request_to_verifiable_presentation_request_identity(
+                &id_cred, &request,
+            ),
         );
 
         let anchor = VerificationRequestAnchorAndBlockHash {
@@ -412,7 +429,9 @@ mod tests {
             fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
         let presentation = fixtures::generate_and_prove_presentation_identity(
             &id_cred,
-            fixtures::verification_request_to_verifiable_presentation_request_identity(&request),
+            fixtures::verification_request_to_verifiable_presentation_request_identity(
+                &id_cred, &request,
+            ),
         );
 
         let anchor = VerificationRequestAnchorAndBlockHash {
@@ -454,7 +473,9 @@ mod tests {
             fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
         let presentation = fixtures::generate_and_prove_presentation_identity(
             &id_cred,
-            fixtures::verification_request_to_verifiable_presentation_request_identity(&request),
+            fixtures::verification_request_to_verifiable_presentation_request_identity(
+                &id_cred, &request,
+            ),
         );
 
         let anchor = VerificationRequestAnchorAndBlockHash {
@@ -499,7 +520,9 @@ mod tests {
             fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
         let mut presentation = fixtures::generate_and_prove_presentation_identity(
             &id_cred,
-            fixtures::verification_request_to_verifiable_presentation_request_identity(&request),
+            fixtures::verification_request_to_verifiable_presentation_request_identity(
+                &id_cred, &request,
+            ),
         );
 
         let anchor = VerificationRequestAnchorAndBlockHash {
@@ -545,7 +568,9 @@ mod tests {
             fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
         let presentation = fixtures::generate_and_prove_presentation_identity(
             &id_cred,
-            fixtures::verification_request_to_verifiable_presentation_request_identity(&request),
+            fixtures::verification_request_to_verifiable_presentation_request_identity(
+                &id_cred, &request,
+            ),
         );
 
         let mut anchor = VerificationRequestAnchorAndBlockHash {
@@ -586,7 +611,9 @@ mod tests {
             fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
 
         let mut presentation_request =
-            fixtures::verification_request_to_verifiable_presentation_request_identity(&request);
+            fixtures::verification_request_to_verifiable_presentation_request_identity(
+                &id_cred, &request,
+            );
 
         // set wrong VRA block hash in the presentation context
         for prop in &mut presentation_request.context.requested {
@@ -636,7 +663,9 @@ mod tests {
             fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
 
         let mut presentation_request =
-            fixtures::verification_request_to_verifiable_presentation_request_identity(&request);
+            fixtures::verification_request_to_verifiable_presentation_request_identity(
+                &id_cred, &request,
+            );
 
         // remove VRA block hash from presentation context
         presentation_request
@@ -671,7 +700,7 @@ mod tests {
     }
 
     /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
-    /// Test that
+    /// Tests unknown property in context
     #[test]
     fn test_verify_soundness_context_unknown_property() {
         let global_context = GlobalContext::generate("Test".into());
@@ -682,15 +711,14 @@ mod tests {
             fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
 
         let mut presentation_request =
-            fixtures::verification_request_to_verifiable_presentation_request_identity(&request);
+            fixtures::verification_request_to_verifiable_presentation_request_identity(
+                &id_cred, &request,
+            );
         // add unknown property to context
-        presentation_request
-            .context
-            .requested
-            .push(ContextProperty {
-                label: "UnknownPropertyLabel".to_string(),
-                context: "testvalue".to_string(),
-            });
+        presentation_request.context.given.push(ContextProperty {
+            label: "UnknownPropertyLabel".to_string(),
+            context: "testvalue".to_string(),
+        });
 
         let presentation =
             fixtures::generate_and_prove_presentation_identity(&id_cred, presentation_request);
@@ -714,12 +742,12 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::NoVraBlockHash)
+            PresentationVerificationResult::Failed(CredentialInvalidReason::UnknownProperty)
         );
     }
 
     /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
-    /// Test that
+    /// Tests invalid property value.
     #[test]
     fn test_verify_soundness_context_invalid_property_value() {
         let global_context = GlobalContext::generate("Test".into());
@@ -730,7 +758,9 @@ mod tests {
             fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
 
         let mut presentation_request =
-            fixtures::verification_request_to_verifiable_presentation_request_identity(&request);
+            fixtures::verification_request_to_verifiable_presentation_request_identity(
+                &id_cred, &request,
+            );
         // set invalid property value
         for prop in &mut presentation_request.context.given {
             if prop.label == ContextLabel::Nonce.as_str() {
@@ -760,7 +790,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::NoVraBlockHash)
+            PresentationVerificationResult::Failed(CredentialInvalidReason::InvalidPropertyValue)
         );
     }
 
@@ -775,23 +805,19 @@ mod tests {
         let id_cred =
             fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
 
+        let mut presentation_request =
+            fixtures::verification_request_to_verifiable_presentation_request_identity(
+                &id_cred, &request,
+            );
         // change property in given context
-        let mut modified_request = request.clone();
-        for prop in &mut modified_request.context.given {
-            match prop {
-                LabeledContextProperty::Nonce(hash) => {
-                    *hash = hashes::Hash::from([0u8; 32]);
-                }
-                _ => (),
+        for prop in &mut presentation_request.context.given {
+            if prop.label == ContextLabel::Nonce.as_str() {
+                prop.context = hashes::Hash::from([0u8; 32]).to_string();
             }
         }
 
-        let presentation = fixtures::generate_and_prove_presentation_identity(
-            &id_cred,
-            fixtures::verification_request_to_verifiable_presentation_request_identity(
-                &modified_request,
-            ),
-        );
+        let presentation =
+            fixtures::generate_and_prove_presentation_identity(&id_cred, presentation_request);
 
         let anchor = VerificationRequestAnchorAndBlockHash {
             verification_request_anchor: vra,
@@ -827,16 +853,15 @@ mod tests {
         let id_cred =
             fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
 
-        // remove property from requested context
-        let mut modified_request = request.clone();
-        modified_request.context.requested.pop();
-
-        let presentation = fixtures::generate_and_prove_presentation_identity(
-            &id_cred,
+        let mut presentation_request =
             fixtures::verification_request_to_verifiable_presentation_request_identity(
-                &modified_request,
-            ),
-        );
+                &id_cred, &request,
+            );
+        // remove property from requested context
+        presentation_request.context.requested.pop();
+
+        let presentation =
+            fixtures::generate_and_prove_presentation_identity(&id_cred, presentation_request);
 
         let anchor = VerificationRequestAnchorAndBlockHash {
             verification_request_anchor: vra,
