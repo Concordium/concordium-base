@@ -1378,15 +1378,20 @@ mod tests {
 #[cfg(test)]
 mod fixtures {
     use super::*;
+    use crate::common;
     use crate::id::constants::AttributeKind;
     use crate::id::id_proof_types::{AttributeInRangeStatement, AttributeValueStatement};
     use crate::id::types::GlobalContext;
     use crate::web3id::did::Network;
-    use crate::web3id::v1::fixtures::IdentityCredentialsFixture;
     use crate::web3id::v1::{
-        fixtures, AtomicStatementV1, ContextInformation, IdentityBasedSubjectClaims, SubjectClaims,
+        fixtures, AccountBasedSubjectClaims, AtomicStatementV1, ContextInformation,
+        IdentityBasedSubjectClaims, SubjectClaims,
     };
+    use std::collections::BTreeMap;
+    use std::fmt::Debug;
     use std::marker::PhantomData;
+
+    pub use crate::web3id::v1::fixtures::*;
 
     pub fn unfilled_context_fixture() -> UnfilledContextInformation {
         UnfilledContextInformation::new_simple(
@@ -1524,7 +1529,7 @@ mod fixtures {
         }
     }
 
-    pub fn verification_request_to_verifiable_presentation_request(
+    pub fn verification_request_to_verifiable_presentation_request_identity(
         verification_request: &VerificationRequest,
     ) -> VerifiablePresentationRequestV1 {
         VerifiablePresentationRequestV1 {
@@ -1534,22 +1539,34 @@ mod fixtures {
             subject_claims: verification_request
                 .subject_claims
                 .iter()
-                .map(|claims| requested_subject_claims_to_subject_claims(claims))
+                .map(|claims| requested_subject_claims_to_subject_claims_identity(claims))
                 .collect(),
         }
     }
 
-    pub fn requested_subject_claims_to_subject_claims(
+    pub fn verification_request_to_verifiable_presentation_request_account(
+        account_cred: &AccountCredentialsFixture<Web3IdAttribute>,
+        verification_request: &VerificationRequest,
+    ) -> VerifiablePresentationRequestV1 {
+        VerifiablePresentationRequestV1 {
+            challenge: unfilled_context_information_to_context_information(
+                &verification_request.context,
+            ),
+            subject_claims: verification_request
+                .subject_claims
+                .iter()
+                .map(|claims| {
+                    requested_subject_claims_to_subject_claims_account(account_cred, claims)
+                })
+                .collect(),
+        }
+    }
+
+    pub fn requested_subject_claims_to_subject_claims_identity(
         claims: &RequestedSubjectClaims,
     ) -> SubjectClaims<ArCurve, Web3IdAttribute> {
         match claims {
             RequestedSubjectClaims::Identity { request } => {
-                assert!(
-                    request
-                        .source
-                        .contains(&IdentityCredentialType::IdentityCredential),
-                    "source"
-                );
                 let issuer = request
                     .issuers
                     .iter()
@@ -1565,6 +1582,33 @@ mod fixtures {
                 SubjectClaims::Identity(IdentityBasedSubjectClaims {
                     network: Network::Testnet,
                     issuer,
+                    statements,
+                })
+            }
+        }
+    }
+
+    pub fn requested_subject_claims_to_subject_claims_account(
+        account_cred: &AccountCredentialsFixture<Web3IdAttribute>,
+        claims: &RequestedSubjectClaims,
+    ) -> SubjectClaims<ArCurve, Web3IdAttribute> {
+        match claims {
+            RequestedSubjectClaims::Identity { request } => {
+                let issuer = request
+                    .issuers
+                    .iter()
+                    .next()
+                    .expect("issuer")
+                    .identity_provider;
+                let statements = request
+                    .statements
+                    .iter()
+                    .map(|stmt| requested_statement_to_statement(stmt))
+                    .collect();
+
+                SubjectClaims::Account(AccountBasedSubjectClaims {
+                    network: Network::Testnet,
+                    cred_id: account_cred.cred_id,
                     statements,
                 })
             }
@@ -1596,47 +1640,50 @@ mod fixtures {
         }
     }
 
-    pub fn identity_credentials_fixture_default_attributes(
-        global_context: &GlobalContext<ArCurve>,
-    ) -> IdentityCredentialsFixture<Web3IdAttribute> {
-        let id_cred_fixture = fixtures::identity_credentials_fixture(
-            [
-                (3.into(), Web3IdAttribute::Numeric(137)),
-                (
-                    1.into(),
-                    Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
-                ),
-                (
-                    2.into(),
-                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                ),
-                (
-                    5.into(),
-                    Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
-                ),
-                (
-                    6.into(),
-                    Web3IdAttribute::String(AttributeKind::try_new("bb".into()).unwrap()),
-                ),
-                (
-                    AttributeTag(4).to_string().parse().unwrap(),
-                    Web3IdAttribute::try_from(
-                        chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
-                            .unwrap()
-                            .to_utc(),
-                    )
-                    .unwrap(),
-                ),
-            ]
-            .into_iter()
-            .collect(),
-            &global_context,
-        );
+    /// Statements and attributes that make the statements true
+    pub fn default_attributes<TagType: FromStr + common::Serialize + Ord>(
+    ) -> BTreeMap<TagType, Web3IdAttribute>
+    where
+        <TagType as FromStr>::Err: Debug,
+    {
+        let attributes = [
+            (
+                AttributeTag(3).to_string().parse().unwrap(),
+                Web3IdAttribute::Numeric(137),
+            ),
+            (
+                AttributeTag(1).to_string().parse().unwrap(),
+                Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
+            ),
+            (
+                AttributeTag(2).to_string().parse().unwrap(),
+                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+            ),
+            (
+                AttributeTag(5).to_string().parse().unwrap(),
+                Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
+            ),
+            (
+                AttributeTag(6).to_string().parse().unwrap(),
+                Web3IdAttribute::String(AttributeKind::try_new("bb".into()).unwrap()),
+            ),
+            (
+                AttributeTag(4).to_string().parse().unwrap(),
+                Web3IdAttribute::try_from(
+                    chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
+                        .unwrap()
+                        .to_utc(),
+                )
+                .unwrap(),
+            ),
+        ]
+        .into_iter()
+        .collect();
 
-        id_cred_fixture
+        attributes
     }
 
-    pub fn generate_and_prove_presentation(
+    pub fn generate_and_prove_presentation_identity(
         id_cred: &IdentityCredentialsFixture<Web3IdAttribute>,
         request: VerifiablePresentationRequestV1,
     ) -> VerifiablePresentationV1 {
@@ -1658,16 +1705,38 @@ mod fixtures {
         presentation
     }
 
+    pub fn generate_and_prove_presentation_account(
+        account_cred: &AccountCredentialsFixture<Web3IdAttribute>,
+        request: VerifiablePresentationRequestV1,
+    ) -> VerifiablePresentationV1 {
+        let global_context = GlobalContext::generate("Test".into());
+
+        // the easiest way to construct a presentation, is just to run the prover on a request
+        let now = chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let presentation = request
+            .prove_with_rng(
+                &global_context,
+                [account_cred.private_inputs()].into_iter(),
+                &mut fixtures::seed0(),
+                now,
+            )
+            .expect("prove");
+
+        presentation
+    }
+
     pub fn verifiable_presentation_fixture() -> VerifiablePresentationV1 {
         let global_context = GlobalContext::generate("Test".into());
 
-        let request = verification_request_to_verifiable_presentation_request(
+        let request = verification_request_to_verifiable_presentation_request_identity(
             &verification_request_fixture(),
         );
 
-        let id_cred = identity_credentials_fixture_default_attributes(&global_context);
+        let id_cred = fixtures::identity_credentials_fixture(default_attributes(), &global_context);
 
-        generate_and_prove_presentation(&id_cred, request)
+        generate_and_prove_presentation_identity(&id_cred, request)
     }
 
     pub fn verification_audit_record_fixture() -> VerificationAuditRecord {

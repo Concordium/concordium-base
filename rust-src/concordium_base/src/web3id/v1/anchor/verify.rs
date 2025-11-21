@@ -79,12 +79,13 @@ impl PresentationVerificationResult {
 /// The following is verified:
 ///
 /// * the presentation is cryptographically verifiable
-/// * the credentials in the presentation are active at the given time
+/// * the credentials in the presentation are active at the time given in the verification context
 /// * the subject claims and the context information in the presentation matches
 ///   the requested claims and context in the verification request
 /// * the request anchor is formed correctly from the verification request data
 ///   and its registration block hash is correctly set in the verification request
-/// * the network to which the credential is v
+/// * the network on which the presentation credentials are valid matches the network
+///   in the verification context
 pub fn verify_presentation_with_request_anchor<'a, B>(
     global_context: &GlobalContext<ArCurve>,
     verification_context: &VerificationContext,
@@ -249,16 +250,17 @@ mod tests {
     }
 
     /// Test [`verify_presentation_with_request_anchor`] in case where verification succeeds.
+    /// Test with identity credentials.
     #[test]
-    fn test_verify_completeness() {
+    fn test_verify_completeness_identity() {
         let global_context = GlobalContext::generate("Test".into());
         let (request, vra) = fixtures::verification_request_data_to_request_and_anchor(
             fixtures::verification_request_data_fixture(),
         );
-        let id_cred = fixtures::identity_credentials_fixture_default_attributes(&global_context);
-        let presentation = fixtures::generate_and_prove_presentation(
+        let id_cred = fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
+        let presentation = fixtures::generate_and_prove_presentation_identity(
             &id_cred,
-            fixtures::verification_request_to_verifiable_presentation_request(&request),
+            fixtures::verification_request_to_verifiable_presentation_request_identity(&request),
         );
 
         let anchor = VerificationRequestAnchorAndBlockHash {
@@ -268,6 +270,46 @@ mod tests {
 
         let material = VerificationMaterialWithValidity {
             verification_material: id_cred.verification_material.clone(),
+            validity: CredentialValidityType::ValidityPeriod(types::CredentialValidity {
+                valid_to: YearMonth::new(2030, 01).unwrap(),
+                created_at: YearMonth::new(2020, 01).unwrap(),
+            }),
+        };
+
+        assert_eq!(
+            verify_presentation_with_request_anchor(
+                &global_context,
+                &verification_context(),
+                &request,
+                &presentation,
+                &anchor,
+                &[material],
+            ),
+            PresentationVerificationResult::Verified
+        );
+    }
+
+    /// Test [`verify_presentation_with_request_anchor`] in case where verification succeeds.
+    /// Test with account credentials.
+    #[test]
+    fn test_verify_completeness_account() {
+        let global_context = GlobalContext::generate("Test".into());
+        let (request, vra) = fixtures::verification_request_data_to_request_and_anchor(
+            fixtures::verification_request_data_fixture(),
+        );
+        let account_cred = fixtures::account_credentials_fixture(fixtures::default_attributes(), &global_context);
+        let presentation = fixtures::generate_and_prove_presentation_account(
+            &account_cred,
+            fixtures::verification_request_to_verifiable_presentation_request_account(&account_cred, &request),
+        );
+
+        let anchor = VerificationRequestAnchorAndBlockHash {
+            verification_request_anchor: vra,
+            block_hash: hashes::BlockHash::from([6u8; 32]),
+        };
+
+        let material = VerificationMaterialWithValidity {
+            verification_material: account_cred.verification_material.clone(),
             validity: CredentialValidityType::ValidityPeriod(types::CredentialValidity {
                 valid_to: YearMonth::new(2030, 01).unwrap(),
                 created_at: YearMonth::new(2020, 01).unwrap(),
