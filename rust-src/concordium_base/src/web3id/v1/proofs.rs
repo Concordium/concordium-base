@@ -688,6 +688,7 @@ pub mod tests {
             }),
             SubjectClaims::Account(AccountBasedSubjectClaims {
                 network: Network::Testnet,
+                issuer: acc_cred_fixture.issuer,
                 cred_id: acc_cred_fixture.cred_id,
                 statements: statements2,
             }),
@@ -736,6 +737,7 @@ pub mod tests {
 
         let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
             network: Network::Testnet,
+            issuer: acc_cred_fixture.issuer,
             cred_id: acc_cred_fixture.cred_id,
             statements,
         })];
@@ -775,6 +777,7 @@ pub mod tests {
 
         let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
             network: Network::Testnet,
+            issuer: acc_cred_fixture.issuer,
             cred_id: acc_cred_fixture.cred_id,
             statements: vec![],
         })];
@@ -816,6 +819,7 @@ pub mod tests {
 
         let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
             network: Network::Testnet,
+            issuer: acc_cred_fixture.issuer,
             cred_id: acc_cred_fixture.cred_id,
             statements,
         })];
@@ -876,6 +880,7 @@ pub mod tests {
 
         let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
             network: Network::Testnet,
+            issuer: acc_cred_fixture.issuer,
             cred_id: acc_cred_fixture.cred_id,
             statements,
         })];
@@ -915,6 +920,7 @@ pub mod tests {
 
         let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
             network: Network::Testnet,
+            issuer: acc_cred_fixture.issuer,
             cred_id: acc_cred_fixture.cred_id,
             statements,
         })];
@@ -968,6 +974,7 @@ pub mod tests {
 
         let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
             network: Network::Testnet,
+            issuer: acc_cred_fixture.issuer,
             cred_id: acc_cred_fixture.cred_id,
             statements,
         })];
@@ -1031,6 +1038,7 @@ pub mod tests {
 
         let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
             network: Network::Testnet,
+            issuer: acc_cred_fixture.issuer,
             cred_id: acc_cred_fixture.cred_id,
             statements,
         })];
@@ -1078,6 +1086,7 @@ pub mod tests {
 
         let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
             network: Network::Testnet,
+            issuer: acc_cred_fixture.issuer,
             cred_id: acc_cred_fixture.cred_id,
             statements,
         })];

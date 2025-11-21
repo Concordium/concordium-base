@@ -129,6 +129,8 @@ pub struct ContextProperty {
 pub struct AccountBasedSubjectClaims<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Network on which the account exists
     pub network: Network,
+    /// Identity provider which issued the credentials
+    pub issuer: IpIdentity,
     /// Account registration id
     pub cred_id: CredentialRegistrationID,
     /// Attribute statements
@@ -171,6 +173,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
         match self {
             Self::Account(AccountBasedSubjectClaims {
                 network,
+                issuer,
                 cred_id,
                 statements: statement,
             }) => {
@@ -184,6 +187,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 )?;
                 let id = did::Method::new_account_credential(*network, *cred_id);
                 map.serialize_entry("id", &id)?;
+                let issuer = did::Method::new_idp(*network, *issuer);
+                map.serialize_entry("issuer", &issuer)?;
                 map.serialize_entry("statement", statement)?;
                 map.end()
             }
@@ -230,10 +235,15 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
                     let did::IdentifierType::Credential { cred_id } = id.ty else {
                         bail!("expected account credential did, was {}", id);
                     };
+                    let issuer: did::Method = take_field_de(&mut value, "issuer")?;
+                    let did::IdentifierType::Idp { idp_identity } = issuer.ty else {
+                        bail!("expected issuer did, was {}", issuer);
+                    };
                     let statement = take_field_de(&mut value, "statement")?;
 
                     Self::Account(AccountBasedSubjectClaims {
                         network: id.network,
+                        issuer: idp_identity,
                         cred_id,
                         statements: statement,
                     })
@@ -422,11 +432,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
                     cred_id,
                     statements,
                 },
+            issuer,
             ..
         } = self;
 
         AccountBasedSubjectClaims {
             network: *network,
+            issuer: *issuer,
             cred_id: *cred_id,
             statements: statements.clone(),
         }
@@ -1543,6 +1555,7 @@ mod tests {
         let credential_statements = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
             network: Network::Testnet,
             cred_id: acc_cred_fixture.cred_id,
+            issuer: acc_cred_fixture.issuer,
             statements: vec![
                 AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
                     attribute_tag: 3.into(),
@@ -1630,6 +1643,7 @@ mod tests {
         "ConcordiumAccountBasedSubjectClaims"
       ],
       "id": "did:ccd:testnet:cred:856793e4ba5d058cea0b5c3a1c8affb272efcf53bbab77ee28d3e2270d5041d220c1e1a9c6c8619c84e40ebd70fb583e",
+      "issuer": "did:ccd:testnet:idp:17",
       "statement": [
         {
           "type": "AttributeInRange",
@@ -1850,6 +1864,7 @@ mod tests {
         let expected_verification_material_json = r#"
 {
   "type": "account",
+  "issuer": 17,
   "commitments": {
     "lastName": "9443780e625e360547c5a6a948de645e92b84d91425f4d9c0455bcf6040ef06a741b6977da833a1552e081fb9c4c9318",
     "sex": "83a4e3bc337339a16a97dfa4bfb426f7e660c61168f3ed922dcf26d7711e083faa841d7e70d44a5f090a9a6a67eff5ad",
@@ -2639,6 +2654,7 @@ mod fixtures {
         pub private_inputs: OwnedCredentialProofPrivateInputs<IpPairing, ArCurve, AttributeType>,
         pub verification_material: CredentialVerificationMaterial<IpPairing, ArCurve>,
         pub cred_id: CredentialRegistrationID,
+        pub issuer: IpIdentity,
     }
 
     impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>
@@ -2686,6 +2702,7 @@ mod fixtures {
 
         AccountCredentialsFixture {
             private_inputs: commitment_inputs,
+            issuer,
             verification_material: credential_inputs,
             cred_id,
         }

@@ -1457,7 +1457,8 @@ mod fixtures {
         ];
 
         RequestedIdentitySubjectClaims::default()
-            .add_issuer(IdentityProviderDid::new(3u32, did::Network::Testnet))
+            .add_issuer(IdentityProviderDid::new(0u32, did::Network::Testnet))
+            .add_issuer(IdentityProviderDid::new(1u32, did::Network::Testnet))
             .add_source(IdentityCredentialType::IdentityCredential)
             .add_source(IdentityCredentialType::AccountCredential)
             .add_statements(statements)
@@ -1501,7 +1502,7 @@ mod fixtures {
 
         VerificationRequest {
             context,
-            subject_claims: vec![RequestedSubjectClaims::Identity (subject_claims)],
+            subject_claims: vec![RequestedSubjectClaims::Identity(subject_claims)],
             anchor_transaction_hash: *VRA_TXN_HASH,
         }
     }
@@ -1599,6 +1600,7 @@ mod fixtures {
 
                 SubjectClaims::Account(AccountBasedSubjectClaims {
                     network: Network::Testnet,
+                    issuer: account_cred.issuer,
                     cred_id: account_cred.cred_id,
                     statements,
                 })
