@@ -969,10 +969,12 @@ mod tests {
         }
       ],
       "issuers": [
-        "did:ccd:testnet:idp:3"
+        "did:ccd:testnet:idp:0",
+        "did:ccd:testnet:idp:1"
       ],
       "source": [
-        "identityCredential"
+        "identityCredential",
+        "accountCredential"
       ]
     }
   ]
@@ -1068,10 +1070,12 @@ mod tests {
           }
         ],
         "issuers": [
-          "did:ccd:testnet:idp:3"
+          "did:ccd:testnet:idp:0",
+          "did:ccd:testnet:idp:1"
         ],
         "source": [
-          "identityCredential"
+          "identityCredential",
+          "accountCredential"
         ]
       }
     ],
@@ -1224,7 +1228,7 @@ mod tests {
 
         let cbor = cbor::cbor_encode(&verification_request_anchor).unwrap();
 
-        assert_eq!(hex::encode(&cbor), "a464686173685820ad975c25f95e7c8fccb5acdd2a9ffe6e20a7df072052ef0da9df51b848316202647479706566434344565241667075626c6963a1636b6579046776657273696f6e01");
+        assert_eq!(hex::encode(&cbor), "a464686173685820a23defb0b45a443a9957ea0a54c5ce08aad20a060944afb3dd98f6c3bc899185647479706566434344565241667075626c6963a1636b6579046776657273696f6e01");
 
         let decoded: VerificationRequestAnchor = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(decoded, verification_request_anchor);
@@ -1235,7 +1239,7 @@ mod tests {
         let verification_audit_anchor_on_chain = fixtures::verification_audit_anchor_fixture();
 
         let cbor = cbor::cbor_encode(&verification_audit_anchor_on_chain).unwrap();
-        assert_eq!(hex::encode(&cbor), "a464686173685820c20c4ee279179ef8e4fae22236df6028328509b6e65bb9eb59826651fa3ed684647479706566434344564141667075626c6963a1636b6579046776657273696f6e01");
+        assert_eq!(hex::encode(&cbor), "a464686173685820ad6bbdf31cc6ee4103772397bc206fe747ecb6a894453a85077b7fae496aaaca647479706566434344564141667075626c6963a1636b6579046776657273696f6e01");
         let decoded: VerificationAuditAnchor = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(decoded, verification_audit_anchor_on_chain);
     }
@@ -1246,7 +1250,7 @@ mod tests {
 
         let expected_verification_request_anchor_hash = Hash::new(
             <[u8; 32]>::from_hex(
-                "ad975c25f95e7c8fccb5acdd2a9ffe6e20a7df072052ef0da9df51b848316202",
+                "a23defb0b45a443a9957ea0a54c5ce08aad20a060944afb3dd98f6c3bc899185",
             )
             .expect("Invalid hex"),
         );
@@ -1265,7 +1269,7 @@ mod tests {
         let verification_audit_anchor_hash = fixtures::verification_audit_anchor_fixture().hash;
         let expected_verification_audit_anchor_hash = Hash::new(
             <[u8; 32]>::from_hex(
-                "c20c4ee279179ef8e4fae22236df6028328509b6e65bb9eb59826651fa3ed684",
+                "ad6bbdf31cc6ee4103772397bc206fe747ecb6a894453a85077b7fae496aaaca",
             )
             .expect("Invalid hex"),
         );

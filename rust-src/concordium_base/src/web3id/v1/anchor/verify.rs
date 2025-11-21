@@ -3,7 +3,7 @@ use crate::hashes::BlockHash;
 use crate::id::constants::ArCurve;
 use crate::id::id_proof_types::RevealAttributeStatement;
 use crate::id::types;
-use crate::id::types::{AttributeTag, GlobalContext, IpIdentity};
+use crate::id::types::{AttributeTag, GlobalContext};
 use crate::web3id::v1::anchor::{
     ContextLabel, FromContextPropertyError, IdentityCredentialType, LabeledContextProperty,
     RequestedStatement, RequestedSubjectClaims, UnfilledContextInformation,
@@ -58,7 +58,6 @@ pub enum CredentialValidityType {
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CredentialInvalidReason {
-    Verify, // todo arg remove
     CredentialNotValidYet,
     CredentialExpired,
     Network,
@@ -184,12 +183,12 @@ fn verify_credential_validity_period(
     let valid_from = credential_validity
         .created_at
         .lower()
-        .ok_or(CredentialInvalidReason::Verify)?;
+        .ok_or(CredentialInvalidReason::CredentialNotValidYet)?;
 
     let valid_to = credential_validity
         .valid_to
         .upper()
-        .ok_or(CredentialInvalidReason::Verify)?;
+        .ok_or(CredentialInvalidReason::CredentialExpired)?;
 
     if now < valid_from {
         Err(CredentialInvalidReason::CredentialNotValidYet)
@@ -311,7 +310,7 @@ fn verify_request_subject_claims(
                         .map(statement_to_requested_statement)
                         .collect();
 
-                    (IpIdentity(200), stmts) // todo ar
+                    (acc_claims.issuer, stmts)
                 }
                 SubjectClaims::Identity(id_claims) => {
                     if !req_id_claims
