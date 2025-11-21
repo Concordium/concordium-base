@@ -1390,12 +1390,19 @@ mod fixtures {
     use std::collections::BTreeMap;
     use std::fmt::Debug;
     use std::marker::PhantomData;
+    use std::sync::LazyLock;
+
+    pub static NONCE: LazyLock<hashes::Hash> = LazyLock::new(|| hashes::Hash::from([1u8; 32]));
+    pub const VRA_BLOCK_HASH: LazyLock<hashes::BlockHash> =
+        LazyLock::new(|| hashes::BlockHash::from([2u8; 32]));
+    pub const VRA_TXN_HASH: LazyLock<hashes::TransactionHash> =
+        LazyLock::new(|| hashes::TransactionHash::from([5u8; 32]));
 
     pub use crate::web3id::v1::fixtures::*;
 
     pub fn unfilled_context_fixture() -> UnfilledContextInformation {
         UnfilledContextInformation::new_simple(
-            hashes::Hash::from([1u8; 32]),
+            *NONCE,
             "testconnection".to_string(),
             "testcontext".to_string(),
         )
@@ -1475,7 +1482,7 @@ mod fixtures {
         let request = VerificationRequest {
             context: request_data.context,
             subject_claims: request_data.subject_claims,
-            anchor_transaction_hash: hashes::TransactionHash::from([5u8; 32]),
+            anchor_transaction_hash: *VRA_TXN_HASH,
         };
 
         (request, anchor)
@@ -1499,7 +1506,7 @@ mod fixtures {
             subject_claims: vec![RequestedSubjectClaims::Identity {
                 request: subject_claims,
             }],
-            anchor_transaction_hash: hashes::TransactionHash::from([5u8; 32]),
+            anchor_transaction_hash: *VRA_TXN_HASH,
         }
     }
 
@@ -1516,9 +1523,7 @@ mod fixtures {
                 .requested
                 .iter()
                 .map(|label| match label {
-                    ContextLabel::BlockHash => {
-                        LabeledContextProperty::BlockHash(hashes::BlockHash::from([2u8; 32]))
-                    }
+                    ContextLabel::BlockHash => LabeledContextProperty::BlockHash(*VRA_BLOCK_HASH),
                     ContextLabel::ResourceId => {
                         LabeledContextProperty::ResourceId("testresourceid".to_string())
                     }
