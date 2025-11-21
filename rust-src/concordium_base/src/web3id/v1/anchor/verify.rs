@@ -1,15 +1,18 @@
 use crate::hashes;
 use crate::hashes::BlockHash;
 use crate::id::constants::ArCurve;
+use crate::id::id_proof_types::RevealAttributeStatement;
 use crate::id::types;
-use crate::id::types::GlobalContext;
-use crate::web3id::did;
+use crate::id::types::{AttributeTag, GlobalContext};
 use crate::web3id::v1::anchor::{
-    ContextLabel, FromContextPropertyError, LabeledContextProperty, UnfilledContextInformation,
+    ContextLabel, FromContextPropertyError, IdentityCredentialType, LabeledContextProperty,
+    RequestedStatement, RequestedSubjectClaims, UnfilledContextInformation,
     VerifiablePresentationRequestV1, VerifiablePresentationV1, VerificationMaterial,
     VerificationRequest, VerificationRequestAnchor, VerificationRequestData,
 };
-use crate::web3id::v1::ContextInformation;
+use crate::web3id::v1::{AtomicStatementV1, ContextInformation, SubjectClaims};
+use crate::web3id::{did, Web3IdAttribute};
+use itertools::Itertools;
 use std::str::FromStr;
 
 /// Contextual information needed for verifying credentials.
@@ -67,6 +70,8 @@ pub enum CredentialInvalidReason {
     RequestedContext,
     InvalidPropertyValue,
     UnknownProperty,
+    SubjectClaims,
+    SubjectClaimsCredentialType,
 }
 
 /// Result of verifying a presentation against the corresponding verification request.
@@ -263,10 +268,73 @@ fn verify_request(
         &verification_request.context,
     )?;
 
-    // todo verify subject claims in presentation matches request
-    //      this incudes both statements and the identity provider and the credential type
+    verify_request_subject_claims_list(
+        &request_from_presentation.subject_claims,
+        &verification_request.subject_claims,
+    )?;
 
     Ok(())
+}
+
+fn verify_request_subject_claims_list(
+    presentation_claims: &[SubjectClaims<ArCurve, Web3IdAttribute>],
+    request_claims: &[RequestedSubjectClaims],
+) -> Result<(), CredentialInvalidReason> {
+    for pair in presentation_claims.iter().zip_longest(request_claims) {
+        let (pres_claims, req_claims) =
+            pair.both().ok_or(CredentialInvalidReason::SubjectClaims)?;
+        verify_request_subject_claims(pres_claims, req_claims)?;
+    }
+
+    Ok(())
+}
+
+fn verify_request_subject_claims(
+    presentation_claims: &SubjectClaims<ArCurve, Web3IdAttribute>,
+    request_claims: &RequestedSubjectClaims,
+) -> Result<(), CredentialInvalidReason> {
+    match (presentation_claims, request_claims) {
+        (SubjectClaims::Account(acc_claims), RequestedSubjectClaims::Identity(req_id_claims)) => {
+            if !req_id_claims
+                .source
+                .contains(&IdentityCredentialType::AccountCredential)
+            {
+                return Err(CredentialInvalidReason::SubjectClaimsCredentialType);
+            }
+        }
+        (SubjectClaims::Identity(id_claims), RequestedSubjectClaims::Identity(req_id_claims)) => {
+            if !req_id_claims
+                .source
+                .contains(&IdentityCredentialType::IdentityCredential)
+            {
+                return Err(CredentialInvalidReason::SubjectClaimsCredentialType);
+            }
+        }
+    }
+
+    // todo verify subject claims in presentation matches request
+    //      this incudes both statements and the identity provider
+
+    Ok(())
+}
+
+fn statement_to_requested_statement(
+    statement: &AtomicStatementV1<ArCurve, AttributeTag, Web3IdAttribute>,
+) -> RequestedStatement<AttributeTag> {
+    match statement {
+        AtomicStatementV1::AttributeValue(stmt) => {
+            RequestedStatement::RevealAttribute(RevealAttributeStatement {
+                attribute_tag: stmt.attribute_tag,
+            })
+        }
+        AtomicStatementV1::AttributeInRange(stmt) => {
+            RequestedStatement::AttributeInRange(stmt.clone())
+        }
+        AtomicStatementV1::AttributeInSet(stmt) => RequestedStatement::AttributeInSet(stmt.clone()),
+        AtomicStatementV1::AttributeNotInSet(stmt) => {
+            RequestedStatement::AttributeNotInSet(stmt.clone())
+        }
+    }
 }
 
 fn verify_request_context(
@@ -319,6 +387,8 @@ mod tests {
     use crate::web3id::did::Network;
     use crate::web3id::v1::anchor::{fixtures, ContextLabel, LabeledContextProperty};
     use crate::web3id::v1::{ContextProperty, CredentialV1};
+    use assert_matches::assert_matches;
+    use std::process::id;
 
     fn verification_context() -> VerificationContext {
         VerificationContext {
@@ -883,6 +953,110 @@ mod tests {
                 &[material],
             ),
             PresentationVerificationResult::Failed(CredentialInvalidReason::RequestedContext)
+        );
+    }
+
+    /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
+    /// Test that account credentials are only accepted if allowed in request.
+    #[test]
+    fn test_verify_soundness_cred_type_account() {
+        let global_context = GlobalContext::generate("Test".into());
+
+        let mut request_data = fixtures::verification_request_data_fixture();
+
+        // only allow identity credentials
+        assert_matches!(&mut request_data.subject_claims[0], RequestedSubjectClaims::Identity(id_claims) => {
+            id_claims.source.clear();
+            id_claims.source.push(IdentityCredentialType::IdentityCredential);
+        });
+
+        let (request, vra) =
+            fixtures::verification_request_data_to_request_and_anchor(request_data);
+
+        let account_cred =
+            fixtures::account_credentials_fixture(fixtures::default_attributes(), &global_context);
+        let presentation = fixtures::generate_and_prove_presentation_account(
+            &account_cred,
+            fixtures::verification_request_to_verifiable_presentation_request_account(
+                &account_cred,
+                &request,
+            ),
+        );
+
+        let anchor = VerificationRequestAnchorAndBlockHash {
+            verification_request_anchor: vra,
+            block_hash: *fixtures::VRA_BLOCK_HASH,
+        };
+
+        let material = VerificationMaterialWithValidity {
+            verification_material: account_cred.verification_material.clone(),
+            validity: validity(),
+        };
+
+        assert_eq!(
+            verify_presentation_with_request_anchor(
+                &global_context,
+                &verification_context(),
+                &request,
+                &presentation,
+                &anchor,
+                &[material],
+            ),
+            PresentationVerificationResult::Failed(
+                CredentialInvalidReason::SubjectClaimsCredentialType
+            )
+        );
+    }
+
+    /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
+    /// Test that identity credentials are only accepted if allowed in request.
+    #[test]
+    fn test_verify_soundness_cred_type_identity() {
+        let global_context = GlobalContext::generate("Test".into());
+
+        let mut request_data = fixtures::verification_request_data_fixture();
+
+        // only allow identity credentials
+        assert_matches!(&mut request_data.subject_claims[0], RequestedSubjectClaims::Identity(id_claims) => {
+            id_claims.source.clear();
+            id_claims.source.push(IdentityCredentialType::AccountCredential);
+        });
+
+        let (request, vra) =
+            fixtures::verification_request_data_to_request_and_anchor(request_data);
+
+        let id_cred =
+            fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
+        let presentation = fixtures::generate_and_prove_presentation_identity (
+            &id_cred,
+            fixtures::verification_request_to_verifiable_presentation_request_identity(
+                &id_cred,
+                &request,
+            ),
+        );
+
+        let anchor = VerificationRequestAnchorAndBlockHash {
+            verification_request_anchor: vra,
+            block_hash: *fixtures::VRA_BLOCK_HASH,
+        };
+
+        let material = VerificationMaterialWithValidity {
+            verification_material: id_cred.verification_material.clone(),
+            validity: validity(),
+        };
+
+        assert_eq!(
+            verify_presentation_with_request_anchor(
+                &global_context,
+                &verification_context(),
+                &request,
+                &presentation,
+                &anchor,
+                &[material],
+            ),
+            PresentationVerificationResult::Failed(
+                CredentialInvalidReason::SubjectClaimsCredentialType
+            )
         );
     }
 

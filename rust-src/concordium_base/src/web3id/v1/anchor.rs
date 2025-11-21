@@ -274,18 +274,15 @@ pub struct VerificationRequestAnchor {
 pub enum RequestedSubjectClaims {
     /// Claims based on the Concordium ID object.
     #[serde(rename = "identity")]
-    Identity {
-        #[serde(flatten)]
-        request: RequestedIdentitySubjectClaims,
-    },
+    Identity(RequestedIdentitySubjectClaims),
 }
 
 impl Serial for RequestedSubjectClaims {
     fn serial<B: Buffer>(&self, out: &mut B) {
         match self {
-            RequestedSubjectClaims::Identity { request } => {
+            RequestedSubjectClaims::Identity(claims) => {
                 0u8.serial(out);
-                request.serial(out);
+                claims.serial(out);
             }
         }
     }
@@ -295,8 +292,8 @@ impl Deserial for RequestedSubjectClaims {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         match u8::deserial(source)? {
             0u8 => {
-                let request = source.get()?;
-                Ok(Self::Identity { request })
+                let claims = source.get()?;
+                Ok(Self::Identity(claims))
             }
             n => anyhow::bail!("Unrecognized RequestedSubjectClaims tag {n}"),
         }
@@ -316,8 +313,8 @@ pub struct RequestedIdentitySubjectClaims {
 }
 
 impl From<RequestedIdentitySubjectClaims> for RequestedSubjectClaims {
-    fn from(request: RequestedIdentitySubjectClaims) -> Self {
-        Self::Identity { request }
+    fn from(claims: RequestedIdentitySubjectClaims) -> Self {
+        Self::Identity(claims)
     }
 }
 
@@ -1462,6 +1459,7 @@ mod fixtures {
         RequestedIdentitySubjectClaims::default()
             .add_issuer(IdentityProviderDid::new(3u32, did::Network::Testnet))
             .add_source(IdentityCredentialType::IdentityCredential)
+            .add_source(IdentityCredentialType::AccountCredential)
             .add_statements(statements)
     }
 
@@ -1503,9 +1501,7 @@ mod fixtures {
 
         VerificationRequest {
             context,
-            subject_claims: vec![RequestedSubjectClaims::Identity {
-                request: subject_claims,
-            }],
+            subject_claims: vec![RequestedSubjectClaims::Identity (subject_claims)],
             anchor_transaction_hash: *VRA_TXN_HASH,
         }
     }
@@ -1573,8 +1569,8 @@ mod fixtures {
         claims: &RequestedSubjectClaims,
     ) -> SubjectClaims<ArCurve, Web3IdAttribute> {
         match claims {
-            RequestedSubjectClaims::Identity { request } => {
-                let statements = request
+            RequestedSubjectClaims::Identity(claims) => {
+                let statements = claims
                     .statements
                     .iter()
                     .map(|stmt| requested_statement_to_statement(stmt))
@@ -1594,8 +1590,8 @@ mod fixtures {
         claims: &RequestedSubjectClaims,
     ) -> SubjectClaims<ArCurve, Web3IdAttribute> {
         match claims {
-            RequestedSubjectClaims::Identity { request } => {
-                let statements = request
+            RequestedSubjectClaims::Identity(id_claims) => {
+                let statements = id_claims
                     .statements
                     .iter()
                     .map(|stmt| requested_statement_to_statement(stmt))
