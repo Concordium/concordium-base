@@ -56,6 +56,7 @@ pub enum CredentialInvalidReason {
     CredentialExpired,
     Network,
     PresentationUnverifiable,
+    RequestAnchor,
 }
 
 /// Result of verifying a presentation against the corresponding verification request.
@@ -216,7 +217,7 @@ fn verify_request_anchor(
     };
 
     if verification_request_data.hash() != request_anchor.verification_request_anchor.hash {
-        return Err(CredentialInvalidReason::Verify);
+        return Err(CredentialInvalidReason::RequestAnchor);
     }
 
     Ok(())
@@ -424,7 +425,7 @@ mod tests {
     }
 
     /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
-    /// Test that credential validity is checked.
+    /// Test that presentation verifiability is checked.
     #[test]
     fn test_verify_soundness_cryptographic_verification() {
         let global_context = GlobalContext::generate("Test".into());
@@ -463,6 +464,46 @@ mod tests {
                 &[material],
             ),
             PresentationVerificationResult::Failed(CredentialInvalidReason::PresentationUnverifiable)
+        );
+    }
+
+    /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
+    /// Test that request anchor hash is checked.
+    #[test]
+    fn test_verify_soundness_request_anchor() {
+        let global_context = GlobalContext::generate("Test".into());
+        let (request, vra) = fixtures::verification_request_data_to_request_and_anchor(
+            fixtures::verification_request_data_fixture(),
+        );
+        let id_cred =
+            fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
+        let  presentation = fixtures::generate_and_prove_presentation_identity(
+            &id_cred,
+            fixtures::verification_request_to_verifiable_presentation_request_identity(&request),
+        );
+
+        let mut anchor = VerificationRequestAnchorAndBlockHash {
+            verification_request_anchor: vra,
+            block_hash: hashes::BlockHash::from([6u8; 32]),
+        };
+
+        let material = VerificationMaterialWithValidity {
+            verification_material: id_cred.verification_material.clone(),
+            validity: validity(),
+        };
+
+        anchor.verification_request_anchor.hash = hashes::Hash::from([0u8; 32]);
+
+        assert_eq!(
+            verify_presentation_with_request_anchor(
+                &global_context,
+                &verification_context(),
+                &request,
+                &presentation,
+                &anchor,
+                &[material],
+            ),
+            PresentationVerificationResult::Failed(CredentialInvalidReason::RequestAnchor)
         );
     }
 
