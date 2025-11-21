@@ -239,6 +239,10 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
                     let did::IdentifierType::Idp { idp_identity } = issuer.ty else {
                         bail!("expected issuer did, was {}", issuer);
                     };
+                    ensure!(
+                        issuer.network == id.network,
+                        "issuer and account registration id network not identical"
+                    );
                     let statement = take_field_de(&mut value, "statement")?;
 
                     Self::Account(AccountBasedSubjectClaims {
@@ -829,7 +833,10 @@ impl<
                     let did::IdentifierType::Idp { idp_identity } = issuer.ty else {
                         bail!("expected idp did, was {}", issuer);
                     };
-                    ensure!(issuer.network == subject.network, "network not identical");
+                    ensure!(
+                        issuer.network == subject.network,
+                        "issuer and account registration id network not identical"
+                    );
                     let proof: ConcordiumZKProof<AccountCredentialProofs<C>> =
                         take_field_de(&mut value, "proof")?;
 
