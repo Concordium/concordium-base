@@ -213,7 +213,7 @@ mod tests {
     }
 
     /// Test that we don't accidentally change the digest produced
-    /// by [`StructuredDigest::add_bytes`]
+    /// by [`RandomOracle::add_bytes`]
     #[test]
     pub fn test_add_bytes_stable() {
         let mut ro = RandomOracle::empty();
@@ -252,6 +252,20 @@ mod tests {
         assert_eq!(
             scalar_hex,
             "08646777f9c47efc863115861aa18d95653212c3bdf36899c7db46fbdae095cd"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`RandomOracle::extend_from`]
+    #[test]
+    pub fn test_extend_from_stable() {
+        let mut ro = RandomOracle::empty();
+        ro.extend_from("Label1", &vec![1u8, 2, 3]);
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "6b1addb1c08e887242f5e78127c31c17851f29349c45aa415adce255f95fd292"
         );
     }
 }
