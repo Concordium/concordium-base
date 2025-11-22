@@ -153,23 +153,6 @@ pub struct VerificationRequestData {
 }
 
 impl VerificationRequestData {
-    /// Create a new verification request data with no claims.
-    pub fn new(context: UnfilledContextInformation) -> Self {
-        Self {
-            context,
-            subject_claims: Vec::new(),
-        }
-    }
-
-    /// Add a subject claims request to the verification request data.
-    pub fn add_subject_claim_request(
-        mut self,
-        subject_claims: impl Into<RequestedSubjectClaims>,
-    ) -> Self {
-        self.subject_claims.push(subject_claims.into());
-        self
-    }
-
     /// Computes the hash of the verification request data.
     ///
     /// This hash is used to create a tamper-evident anchor that can be stored
@@ -198,6 +181,37 @@ impl VerificationRequestData {
     }
 }
 
+/// Builder of [`VerificationRequestData`]
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct VerificationRequestDataBuilder {
+    context: UnfilledContextInformation,
+    subject_claims: Vec<RequestedSubjectClaims>,
+}
+
+impl VerificationRequestDataBuilder {
+    /// Create builder with context but no claims
+    pub fn new(context: UnfilledContextInformation) -> Self {
+        Self {
+            context,
+            subject_claims: Vec::new(),
+        }
+    }
+
+    /// Add a subject claims request to the verification request data.
+    pub fn subject_claim(mut self, subject_claims: impl Into<RequestedSubjectClaims>) -> Self {
+        self.subject_claims.push(subject_claims.into());
+        self
+    }
+
+    /// Build the data type
+    pub fn build(self) -> VerificationRequestData {
+        VerificationRequestData {
+            context: self.context,
+            subject_claims: self.subject_claims,
+        }
+    }
+}
+
 /// Context information for a verification request.
 ///
 /// Contains both the context data that is already known (given) and
@@ -211,20 +225,27 @@ pub struct UnfilledContextInformation {
     pub requested: Vec<ContextLabel>,
 }
 
-impl UnfilledContextInformation {
-    /// Create an empty context.
+/// Builder of [`UnfilledContextInformation`]
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct UnfilledContextInformationBuilder {
+    given: Vec<LabeledContextProperty>,
+    requested: Vec<ContextLabel>,
+}
+
+impl UnfilledContextInformationBuilder {
+    /// Create builder with no given or requested context
     pub fn new() -> Self {
         Default::default()
     }
 
     /// Add to the given context.
-    pub fn add_context(mut self, context: impl Into<LabeledContextProperty>) -> Self {
+    pub fn given(mut self, context: impl Into<LabeledContextProperty>) -> Self {
         self.given.push(context.into());
         self
     }
 
     /// Add to the requested context.
-    pub fn add_request(mut self, label: ContextLabel) -> Self {
+    pub fn requested(mut self, label: ContextLabel) -> Self {
         self.requested.push(label);
         self
     }
@@ -241,12 +262,20 @@ impl UnfilledContextInformation {
     /// - `connectionId` Identifier for the verification session (e.g. wallet-connect topic).
     /// - `contextString` Additional context information.
     pub fn new_simple(nonce: hashes::Hash, connection_id: String, context_string: String) -> Self {
-        Self::default()
-            .add_context(LabeledContextProperty::Nonce(nonce))
-            .add_context(LabeledContextProperty::ConnectionId(connection_id))
-            .add_context(LabeledContextProperty::ContextString(context_string))
-            .add_request(ContextLabel::BlockHash)
-            .add_request(ContextLabel::ResourceId)
+        Self::new()
+            .given(LabeledContextProperty::Nonce(nonce))
+            .given(LabeledContextProperty::ConnectionId(connection_id))
+            .given(LabeledContextProperty::ContextString(context_string))
+            .requested(ContextLabel::BlockHash)
+            .requested(ContextLabel::ResourceId)
+    }
+
+    /// Build the data type
+    pub fn build(self) -> UnfilledContextInformation {
+        UnfilledContextInformation {
+            given: self.given,
+            requested: self.requested,
+        }
     }
 }
 
@@ -318,70 +347,72 @@ impl From<RequestedIdentitySubjectClaims> for RequestedSubjectClaims {
     }
 }
 
-impl RequestedIdentitySubjectClaims {
+/// Builder of [`RequestedIdentitySubjectClaims`]
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct RequestedIdentitySubjectClaimsBuilder {
+    statements: Vec<RequestedStatement<AttributeTag>>,
+    issuers: Vec<IdentityProviderDid>,
+    source: Vec<IdentityCredentialType>,
+}
+
+impl RequestedIdentitySubjectClaimsBuilder {
     /// Create an empty identity subject claims request.
     pub fn new() -> Self {
         Default::default()
     }
 
     /// Add a source to the given identity subject claims request.
-    pub fn add_source(mut self, source: IdentityCredentialType) -> Self {
-        if !self.source.contains(&source) {
-            self.source.push(source);
-        }
+    pub fn source(mut self, source: IdentityCredentialType) -> Self {
+        self.source.push(source);
         self
     }
 
     /// Add sources to the given identity subject claims request.
-    pub fn add_sources(
-        mut self,
-        sources: impl IntoIterator<Item = IdentityCredentialType>,
-    ) -> Self {
+    pub fn sources(mut self, sources: impl IntoIterator<Item = IdentityCredentialType>) -> Self {
         for src in sources {
-            if !self.source.contains(&src) {
-                self.source.push(src);
-            }
+            self.source.push(src);
         }
         self
     }
 
     /// Add an issuer to the given identity subject claims request.
-    pub fn add_issuer(mut self, issuer: IdentityProviderDid) -> Self {
-        if !self.issuers.contains(&issuer) {
+    pub fn issuer(mut self, issuer: IdentityProviderDid) -> Self {
+        self.issuers.push(issuer);
+        self
+    }
+
+    /// Add issuers to the given identity subject claims request.
+    pub fn issuers(mut self, issuers: impl IntoIterator<Item = IdentityProviderDid>) -> Self {
+        for issuer in issuers {
             self.issuers.push(issuer);
         }
         self
     }
 
-    /// Add issuers to the given identity subject claims request.
-    pub fn add_issuers(mut self, issuers: impl IntoIterator<Item = IdentityProviderDid>) -> Self {
-        for issuer in issuers {
-            if !self.issuers.contains(&issuer) {
-                self.issuers.push(issuer);
-            }
-        }
+    /// Add a statement/claim to the given identity subject claims.
+    pub fn statement(mut self, statement: RequestedStatement<AttributeTag>) -> Self {
+        self.statements.push(statement);
         self
     }
 
-    /// Add a statement/claim to the given identity subject claims.
-    pub fn add_statement(mut self, statement: RequestedStatement<AttributeTag>) -> Self {
-        if !self.statements.contains(&statement) {
+    /// Add statements/claims to the given identity subject claims.
+    pub fn statements(
+        mut self,
+        statements: impl IntoIterator<Item = RequestedStatement<AttributeTag>>,
+    ) -> Self {
+        for statement in statements {
             self.statements.push(statement);
         }
         self
     }
 
-    /// Add statements/claims to the given identity subject claims.
-    pub fn add_statements(
-        mut self,
-        statements: impl IntoIterator<Item = RequestedStatement<AttributeTag>>,
-    ) -> Self {
-        for statement in statements {
-            if !self.statements.contains(&statement) {
-                self.statements.push(statement);
-            }
+    /// Build the data type
+    pub fn build(self) -> RequestedIdentitySubjectClaims {
+        RequestedIdentitySubjectClaims {
+            statements: self.statements,
+            issuers: self.issuers,
+            source: self.source,
         }
-        self
     }
 }
 
@@ -1404,11 +1435,12 @@ mod fixtures {
     pub use crate::web3id::v1::fixtures::*;
 
     pub fn unfilled_context_fixture() -> UnfilledContextInformation {
-        UnfilledContextInformation::new_simple(
+        UnfilledContextInformationBuilder::new_simple(
             *NONCE,
             "testconnection".to_string(),
             "testcontext".to_string(),
         )
+        .build()
     }
 
     pub fn identity_subject_claims_fixture() -> RequestedIdentitySubjectClaims {
@@ -1462,20 +1494,23 @@ mod fixtures {
             }),
         ];
 
-        RequestedIdentitySubjectClaims::default()
-            .add_issuer(IdentityProviderDid::new(0u32, did::Network::Testnet))
-            .add_issuer(IdentityProviderDid::new(1u32, did::Network::Testnet))
-            .add_issuer(IdentityProviderDid::new(17u32, did::Network::Testnet))
-            .add_source(IdentityCredentialType::IdentityCredential)
-            .add_source(IdentityCredentialType::AccountCredential)
-            .add_statements(statements)
+        RequestedIdentitySubjectClaimsBuilder::default()
+            .issuer(IdentityProviderDid::new(0u32, did::Network::Testnet))
+            .issuer(IdentityProviderDid::new(1u32, did::Network::Testnet))
+            .issuer(IdentityProviderDid::new(17u32, did::Network::Testnet))
+            .source(IdentityCredentialType::IdentityCredential)
+            .source(IdentityCredentialType::AccountCredential)
+            .statements(statements)
+            .build()
     }
 
     pub fn verification_request_data_fixture() -> VerificationRequestData {
         let context = unfilled_context_fixture();
         let subject_claims = identity_subject_claims_fixture();
 
-        VerificationRequestData::new(context).add_subject_claim_request(subject_claims)
+        VerificationRequestDataBuilder::new(context)
+            .subject_claim(subject_claims)
+            .build()
     }
 
     pub fn verification_request_data_to_request_and_anchor(
