@@ -472,6 +472,7 @@ mod tests {
     #[test]
     pub fn test_extend_from_stable() {
         let mut ro = RandomOracle::empty();
+        #[allow(deprecated)]
         ro.extend_from("Label1", &vec![1u8, 2, 3]);
 
         let challenge_hex = hex::encode(ro.get_challenge());
