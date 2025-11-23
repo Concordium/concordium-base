@@ -1,4 +1,4 @@
-//! Functionality related to constructing and verifying V1 Concordium Web3ID proofs.
+//! Functionality related to constructing and verifying V1 Concordium verifiable presentations.
 //!
 //! The main entrypoints in this module are the [`verify`](PresentationV1::verify)
 //! function for verifying presentations in the context of given public
