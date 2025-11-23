@@ -772,7 +772,6 @@ mod test {
     /// This test protects from changes that introduces braking changes.
     ///
     /// The test uses a serialization of a previously created transaction.
-    #[allow(non_snake_case)]
     #[test]
     fn test_enc_trans_stable() {
         let sk_sender: SecretKey<SomeCurve> = SecretKey::generate_all(&mut seed0());
@@ -873,7 +872,6 @@ mod test {
     /// This test protects from changes that introduces braking changes.
     ///
     /// The test uses a serialization of a previously created transaction.
-    #[allow(non_snake_case)]
     #[test]
     fn test_sec_to_pub_stable() {
         let sk: SecretKey<SomeCurve> = SecretKey::generate_all(&mut seed0());
