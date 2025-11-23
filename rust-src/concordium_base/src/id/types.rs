@@ -2919,7 +2919,7 @@ pub struct IdentityAttributesCredentialsInfo<
 }
 
 /// A request for recovering an identity
-#[derive(SerdeSerialize, SerdeDeserialize)]
+#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IdRecoveryRequest<C: Curve> {
     /// The idCredPub to recover the identity object for.

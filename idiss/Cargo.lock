@@ -485,6 +485,7 @@ dependencies = [
  "ed25519-dalek",
  "either",
  "ff",
+ "generic-array",
  "hex",
  "itertools 0.14.0",
  "leb128",

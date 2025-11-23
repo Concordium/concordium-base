@@ -693,7 +693,7 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
 mod test {
     use ark_bls12_381::G1Projective;
 
-    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+    use crate::{common, curve_arithmetic::arkworks_instances::ArkGroup};
 
     use super::*;
 
@@ -763,6 +763,69 @@ mod test {
         )
     }
 
+    /// RNG with fixed seed to generate the stability test cases
+    fn seed0() -> rand::rngs::StdRng {
+        rand::rngs::StdRng::seed_from_u64(0)
+    }
+
+    /// Test that we can verify transactions created by previous versions of the protocol.
+    /// This test protects from changes that introduces braking changes.
+    ///
+    /// The test uses a serialization of a previously created transaction.
+    #[test]
+    fn test_enc_trans_stable() {
+        let sk_sender: SecretKey<SomeCurve> = SecretKey::generate_all(&mut seed0());
+        let pk_sender = PublicKey::from(&sk_sender);
+        let sk_receiver: SecretKey<SomeCurve> =
+            SecretKey::generate(&pk_sender.generator, &mut seed0());
+        let pk_receiver = PublicKey::from(&sk_receiver);
+
+        let m = 2; // 2 chunks
+        let n = 32;
+        let nm = n * m;
+        let context = GlobalContext::<SomeCurve>::generate_size(String::from("genesis_string"), nm);
+
+        let generator = context.encryption_in_exponent_generator(); // h
+        let s = seed0().gen::<u64>(); // amount on account.
+        let s_value = Value::from(s);
+        let S = pk_sender.encrypt_exponent_given_generator(&s_value, generator, &mut seed0());
+
+        let challenge_prefix = generate_challenge_prefix(&mut seed0());
+        let mut ro = RandomOracle::domain(challenge_prefix);
+
+        // The following commented code can be used to generate the serialized transaction
+        // let index = seed0().gen::<u64>().into(); // index is only important for on-chain stuff, not for proofs.
+        // let a = seed0().gen_range(0..s); // amount to send
+        // let transaction = gen_enc_trans(
+        //     &context,
+        //     &mut ro.split(),
+        //     &pk_sender,
+        //     &sk_sender,
+        //     &pk_receiver,
+        //     index,
+        //     &S,
+        //     Amount::from_micro_ccd(s),
+        //     Amount::from_micro_ccd(a),
+        //     &mut seed0(),
+        // )
+        // .expect("Could not produce proof.");
+        // let tx_bytes = common::to_bytes(&transaction);
+        // let tx_bytes_hex = hex::encode(tx_bytes);
+        // println!("{:}", tx_bytes_hex);
+
+        // Deserialization of the stable transaction
+        let tx_stable_hex = include_str!("enc_trans_stable.hex");
+        let tx_stable_bytes = hex::decode(&tx_stable_hex).unwrap();
+        let tx_stable: EncryptedAmountTransferData<SomeCurve> =
+            common::from_bytes(&mut tx_stable_bytes.as_slice())
+                .expect("Could not deserialize stable pio");
+
+        assert_eq!(
+            verify_enc_trans(&context, &mut ro, &tx_stable, &pk_sender, &pk_receiver, &S,),
+            Ok(())
+        )
+    }
+
     #[allow(non_snake_case)]
     #[test]
     fn test_sec_to_pub() {
@@ -801,6 +864,60 @@ mod test {
 
         assert_eq!(
             verify_sec_to_pub_trans(&context, &mut ro, &transaction, &pk, &S,),
+            Ok(())
+        )
+    }
+
+    /// Test that we can verify transactions created by previous versions of the protocol.
+    /// This test protects from changes that introduces braking changes.
+    ///
+    /// The test uses a serialization of a previously created transaction.
+    #[test]
+    fn test_sec_to_pub_stable() {
+        let sk: SecretKey<SomeCurve> = SecretKey::generate_all(&mut seed0());
+        let pk = PublicKey::from(&sk);
+        let s = seed0().gen::<u64>(); // amount on account.
+
+        let m = 2; // 2 chunks
+        let n = 32;
+        let nm = n * m;
+
+        let context = GlobalContext::<SomeCurve>::generate_size(String::from("genesis_string"), nm);
+        let generator = context.encryption_in_exponent_generator(); // h
+        let s_value = Value::from(s);
+        let S = pk.encrypt_exponent_given_generator(&s_value, generator, &mut seed0());
+
+        let challenge_prefix = generate_challenge_prefix(&mut seed0());
+        let mut ro = RandomOracle::domain(challenge_prefix);
+
+        // The following commented code can be used to generate the serialized transaction
+        // let a = seed0().gen_range(0..s); // amount to send
+        // let index = seed0().gen::<u64>().into(); // index is only important for on-chain stuff, not for proofs.
+        // let transaction = gen_sec_to_pub_trans(
+        //     &context,
+        //     &mut ro.split(),
+        //     &pk,
+        //     &sk,
+        //     index,
+        //     &S,
+        //     Amount::from_micro_ccd(s),
+        //     Amount::from_micro_ccd(a),
+        //     &mut seed0(),
+        // )
+        // .expect("Proving failed, but that is extremely unlikely, which indicates a bug.");
+        // let tx_bytes = common::to_bytes(&transaction);
+        // let tx_bytes_hex = hex::encode(tx_bytes);
+        // println!("{:}", tx_bytes_hex);
+
+        // Deserialization of the stable transaction
+        let tx_stable_hex = include_str!("enc_to_pub_stable.hex");
+        let tx_stable_bytes = hex::decode(&tx_stable_hex).unwrap();
+        let tx_stable: SecToPubAmountTransferData<SomeCurve> =
+            common::from_bytes(&mut tx_stable_bytes.as_slice())
+                .expect("Could not deserialize stable pio");
+
+        assert_eq!(
+            verify_sec_to_pub_trans(&context, &mut ro, &tx_stable, &pk, &S,),
             Ok(())
         )
     }
