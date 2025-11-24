@@ -30,6 +30,10 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
+mod verify;
+
+pub use verify::*;
+
 const PROTOCOL_VERSION: u16 = 1u16;
 
 pub type VerifiablePresentationV1 = v1::PresentationV1<IpPairing, ArCurve, Web3IdAttribute>;

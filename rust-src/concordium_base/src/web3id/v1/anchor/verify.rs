@@ -432,6 +432,7 @@ mod tests {
     use crate::web3id::did::Network;
     use crate::web3id::v1::anchor::{
         fixtures, ContextLabel, IdentityProviderDid, LabeledContextProperty,
+        VerificationRequestDataBuilder,
     };
     use crate::web3id::v1::{ContextProperty, CredentialV1};
     use assert_matches::assert_matches;
@@ -528,6 +529,87 @@ mod tests {
                 &presentation,
                 &anchor,
                 &[material],
+            ),
+            PresentationVerificationResult::Verified
+        );
+    }
+
+    /// Test [`verify_presentation_with_request_anchor`] in case where verification succeeds.
+    /// Test with multiple credentials.
+    #[test]
+    fn test_verify_completeness_multiple_credentials() {
+        let global_context = GlobalContext::generate("Test".into());
+
+        let context = fixtures::unfilled_context_fixture();
+
+        let request_data = VerificationRequestDataBuilder::new(context)
+            .subject_claim(fixtures::identity_subject_claims_fixture())
+            .subject_claim(fixtures::identity_subject_claims_fixture())
+            .build();
+
+        let (request, vra) =
+            fixtures::verification_request_data_to_request_and_anchor(request_data);
+
+        let account_cred =
+            fixtures::account_credentials_fixture(fixtures::default_attributes(), &global_context);
+        let id_cred =
+            fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
+
+        let verifiable_presentation_request = VerifiablePresentationRequestV1 {
+            context: fixtures::unfilled_context_information_to_context_information(
+                &request.context,
+            ),
+            subject_claims: vec![
+                fixtures::requested_subject_claims_to_subject_claims_account(
+                    &account_cred,
+                    &request.subject_claims[0],
+                ),
+                fixtures::requested_subject_claims_to_subject_claims_identity(
+                    &id_cred,
+                    &request.subject_claims[1],
+                ),
+            ],
+        };
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        // the easiest way to construct a presentation, is just to run the prover on a request
+        let now = chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let presentation = verifiable_presentation_request
+            .prove_with_rng(
+                &global_context,
+                [account_cred.private_inputs(), id_cred.private_inputs()].into_iter(),
+                &mut fixtures::seed0(),
+                now,
+            )
+            .expect("prove");
+
+        let anchor = VerificationRequestAnchorAndBlockHash {
+            verification_request_anchor: vra,
+            block_hash: *fixtures::VRA_BLOCK_HASH,
+        };
+
+        let material = [
+            VerificationMaterialWithValidity {
+                verification_material: account_cred.verification_material.clone(),
+                validity: validity(),
+            },
+            VerificationMaterialWithValidity {
+                verification_material: id_cred.verification_material.clone(),
+                validity: validity(),
+            },
+        ];
+
+        assert_eq!(
+            verify_presentation_with_request_anchor(
+                &global_context,
+                &verification_context(),
+                &request,
+                &presentation,
+                &anchor,
+                &material,
             ),
             PresentationVerificationResult::Verified
         );
