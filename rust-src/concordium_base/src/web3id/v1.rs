@@ -310,6 +310,7 @@ pub struct IdentityCredentialMetadataV1 {
     /// Issuer of the identity credentials. Must be used to look
     /// up the identity provider keys on chain.
     pub issuer: IpIdentity,
+    /// Validity of the credential.
     pub validity: CredentialValidity,
 }
 
