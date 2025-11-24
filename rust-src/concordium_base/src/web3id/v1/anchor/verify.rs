@@ -5,7 +5,7 @@ use crate::id::id_proof_types::RevealAttributeStatement;
 use crate::id::types;
 use crate::id::types::{AttributeTag, GlobalContext};
 use crate::web3id::v1::anchor::{
-    ContextLabel, FromContextPropertyError, IdentityCredentialType, LabeledContextProperty,
+    ContextLabel, IdentityCredentialType, LabeledContextProperty, ParseContextPropertyError,
     RequestedStatement, RequestedSubjectClaims, UnfilledContextInformation,
     VerifiablePresentationRequestV1, VerifiablePresentationV1, VerificationMaterial,
     VerificationRequest, VerificationRequestAnchor, VerificationRequestData,
@@ -383,13 +383,13 @@ fn verify_request_context(
     request_context: &UnfilledContextInformation,
 ) -> Result<(), CredentialInvalidReason> {
     fn map_parse_prop_err<T>(
-        res: Result<T, FromContextPropertyError>,
+        res: Result<T, ParseContextPropertyError>,
     ) -> Result<T, CredentialInvalidReason> {
         res.map_err(|err| match err {
-            FromContextPropertyError::ParseLabel(_) => {
+            ParseContextPropertyError::ParseLabel(_) => {
                 CredentialInvalidReason::UnknownContextProperty
             }
-            FromContextPropertyError::ParseValue(_) => {
+            ParseContextPropertyError::ParseValue(_) => {
                 CredentialInvalidReason::InvalidContextPropertyValue
             }
         })

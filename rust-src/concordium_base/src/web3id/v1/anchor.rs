@@ -21,13 +21,14 @@ use std::borrow::Cow;
 
 use crate::web3id::v1::ContextProperty;
 use crate::web3id::{did, v1, Web3IdAttribute};
-use crate::{hashes, id};
+use crate::{common, hashes, id};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::hashes::{HashBytes, HashFromStrError};
 use serde::de::Error;
 use serde::ser::SerializeMap;
 use sha2::Digest;
 use std::collections::HashMap;
+use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 pub use verify::*;
@@ -261,7 +262,7 @@ impl UnfilledContextInformationBuilder {
     /// - `nonce` Cryptographic nonce for preventing replay attacks.
     /// - `connectionId` Identifier for the verification session (e.g. wallet-connect topic).
     /// - `contextString` Additional context information.
-    pub fn new_simple(nonce: hashes::Hash, connection_id: String, context_string: String) -> Self {
+    pub fn new_simple(nonce: Nonce, connection_id: String, context_string: String) -> Self {
         Self::new()
             .given(LabeledContextProperty::Nonce(nonce))
             .given(LabeledContextProperty::ConnectionId(connection_id))
@@ -611,12 +612,59 @@ impl TryFrom<did::Method> for IdentityProviderDid {
     }
 }
 
+/// Nonce used in verification request. Should be randomly generated such that the
+/// context in the verification request cannot be obtained from the request anchor hash
+/// by trying different preimages of the hash.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, common::Serialize)]
+#[repr(transparent)]
+pub struct Nonce(pub [u8; 32]);
+
+/// Error parsing nonce
+#[derive(Debug, thiserror::Error)]
+#[error("parse nonce: {0}")]
+pub struct NonceParseError(String);
+
+impl FromStr for Nonce {
+    type Err = NonceParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let hex_decoded = hex::decode(s).map_err(|err| NonceParseError(err.to_string()))?;
+        let bytes = hex_decoded
+            .try_into()
+            .map_err(|_| NonceParseError("invalid length".to_string()))?;
+        Ok(Nonce(bytes))
+    }
+}
+
+impl Display for Nonce {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for byte in self.0.iter() {
+            write!(f, "{:02x}", byte)?;
+        }
+        Ok(())
+    }
+}
+
+impl serde::Serialize for Nonce {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Nonce {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let str = Cow::<'de, str>::deserialize(deserializer)?;
+        str.parse().map_err(D::Error::custom)
+    }
+}
+
 /// A statically labeled and statically typed context value. Is used
 /// in [`VerificationRequest`] context.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LabeledContextProperty {
-    /// Cryptographic nonce context which should be of length 32 bytes.
-    Nonce(hashes::Hash),
+    /// Cryptographic nonce context which should be of length 32 bytes. Should be randomly
+    /// generated, see [`Nonce`].
+    Nonce(Nonce),
     /// Payment hash context (Concordium transaction hash).
     PaymentHash(hashes::TransactionHash),
     /// Concordium block hash context.
@@ -653,6 +701,15 @@ impl serde::Serialize for PropertyValueView<'_> {
     }
 }
 
+/// Error parsing nonce
+#[derive(Debug, thiserror::Error)]
+pub enum ParsePropertyValueError {
+    #[error("parse nonce property value: {0}")]
+    ParseNonce(#[from] NonceParseError),
+    #[error("parse hash property value: {0}")]
+    ParseHash(#[from] HashFromStrError),
+}
+
 impl LabeledContextProperty {
     /// The label for the property.
     pub fn label(&self) -> ContextLabel {
@@ -675,7 +732,7 @@ impl LabeledContextProperty {
     pub fn try_from_label_and_value_str(
         label: ContextLabel,
         str: &str,
-    ) -> Result<Self, HashFromStrError> {
+    ) -> Result<Self, ParsePropertyValueError> {
         Ok(match label {
             ContextLabel::Nonce => Self::Nonce(str.parse()?),
             ContextLabel::PaymentHash => Self::PaymentHash(str.parse()?),
@@ -697,7 +754,7 @@ impl LabeledContextProperty {
     /// Convert from the dynamically labeled property type [`ContextProperty`]
     pub fn try_from_context_property(
         prop: &ContextProperty,
-    ) -> Result<Self, FromContextPropertyError> {
+    ) -> Result<Self, ParseContextPropertyError> {
         let label = prop.label.parse()?;
         Ok(Self::try_from_label_and_value_str(label, &prop.context)?)
     }
@@ -705,11 +762,11 @@ impl LabeledContextProperty {
 
 /// Error parsing the dynamically typed [`ContextProperty`] to [`LabeledContextProperty`].
 #[derive(Debug, thiserror::Error)]
-pub enum FromContextPropertyError {
+pub enum ParseContextPropertyError {
     #[error("parse label: {0}")]
     ParseLabel(#[from] UnknownContextLabelError),
     #[error("parse value: {0}")]
-    ParseValue(#[from] HashFromStrError),
+    ParseValue(#[from] ParsePropertyValueError),
 }
 
 impl serde::Serialize for LabeledContextProperty {
@@ -866,6 +923,8 @@ mod tests {
     use crate::hashes::Hash;
     use anyhow::Context as AnyhowContext;
     use hex::FromHex;
+    use rand::rngs::StdRng;
+    use rand::{Rng, SeedableRng};
 
     fn remove_whitespace(str: &str) -> String {
         str.chars().filter(|c| !c.is_whitespace()).collect()
@@ -1355,7 +1414,7 @@ mod tests {
     fn test_labeled_context_property_string_roundtrip() {
         use LabeledContextProperty::*;
         for labeled_prop in [
-            Nonce(hashes::Hash::from([1u8; 32])),
+            Nonce(super::Nonce([1u8; 32])),
             PaymentHash(hashes::TransactionHash::from([1u8; 32])),
             BlockHash(hashes::BlockHash::from([1u8; 32])),
             ConnectionId("testvalue".to_string()),
@@ -1376,7 +1435,7 @@ mod tests {
     fn test_labeled_context_property_context_property_roundtrip() {
         use LabeledContextProperty::*;
         for labeled_prop in [
-            Nonce(hashes::Hash::from([1u8; 32])),
+            Nonce(super::Nonce([1u8; 32])),
             PaymentHash(hashes::TransactionHash::from([1u8; 32])),
             BlockHash(hashes::BlockHash::from([1u8; 32])),
             ConnectionId("testvalue".to_string()),
@@ -1394,7 +1453,7 @@ mod tests {
     fn test_labeled_context_property_json_roundtrip() {
         use LabeledContextProperty::*;
         for labeled_prop in [
-            Nonce(hashes::Hash::from([1u8; 32])),
+            Nonce(super::Nonce([1u8; 32])),
             PaymentHash(hashes::TransactionHash::from([1u8; 32])),
             BlockHash(hashes::BlockHash::from([1u8; 32])),
             ConnectionId("testvalue".to_string()),
@@ -1406,6 +1465,24 @@ mod tests {
                 serde_json::from_str(&json).expect("property");
             assert_eq!(labeled_prop_deserialized, labeled_prop);
         }
+    }
+
+    #[test]
+    fn test_nonce_string_roundtrip() {
+        let mut rng = StdRng::seed_from_u64(0);
+        let nonce = Nonce(rng.gen());
+        let string = nonce.to_string();
+        let nonce_parsed: Nonce = string.parse().unwrap();
+        assert_eq!(nonce_parsed, nonce);
+    }
+
+    #[test]
+    fn test_nonce_json_roundtrip() {
+        let mut rng = StdRng::seed_from_u64(0);
+        let nonce = Nonce(rng.gen());
+        let json = serde_json::to_string(&nonce).unwrap();
+        let nonce_deserialized: Nonce = serde_json::from_str(&json).unwrap();
+        assert_eq!(nonce_deserialized, nonce);
     }
 }
 
@@ -1426,7 +1503,7 @@ mod fixtures {
     use std::marker::PhantomData;
     use std::sync::LazyLock;
 
-    pub static NONCE: LazyLock<hashes::Hash> = LazyLock::new(|| hashes::Hash::from([1u8; 32]));
+    pub const NONCE: Nonce = Nonce([1u8; 32]);
     pub const VRA_BLOCK_HASH: LazyLock<hashes::BlockHash> =
         LazyLock::new(|| hashes::BlockHash::from([2u8; 32]));
     pub const VRA_TXN_HASH: LazyLock<hashes::TransactionHash> =
@@ -1436,7 +1513,7 @@ mod fixtures {
 
     pub fn unfilled_context_fixture() -> UnfilledContextInformation {
         UnfilledContextInformationBuilder::new_simple(
-            *NONCE,
+            NONCE,
             "testconnection".to_string(),
             "testcontext".to_string(),
         )
