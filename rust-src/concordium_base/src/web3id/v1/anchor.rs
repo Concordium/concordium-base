@@ -786,8 +786,8 @@ impl Deserial for LabeledContextProperty {
                 Ok(Self::ConnectionId(nonce))
             }
             4u8 => {
-                let rescource_id = source.get()?;
-                Ok(Self::ResourceId(rescource_id))
+                let resource_id = source.get()?;
+                Ok(Self::ResourceId(resource_id))
             }
             5u8 => {
                 let context_string = source.get()?;

@@ -398,7 +398,7 @@ fn verify_request_context(
     let presentation_given_properties_parse_res: Result<Vec<_>, _> = presentation_context
         .given
         .iter()
-        .map(|prop| LabeledContextProperty::try_from_context_property(prop))
+        .map(LabeledContextProperty::try_from_context_property)
         .collect();
 
     if map_parse_prop_err(presentation_given_properties_parse_res)? != request_context.given {
@@ -435,7 +435,6 @@ mod tests {
     };
     use crate::web3id::v1::{ContextProperty, CredentialV1};
     use assert_matches::assert_matches;
-    use std::marker::PhantomData;
 
     fn verification_context() -> VerificationContext {
         VerificationContext {
