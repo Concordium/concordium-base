@@ -1,3 +1,9 @@
+//! Implements verification of presentations against an anchored verification request and
+//! defines the types verification request anchor (VRA) and verification audit anchor (VAA)
+//!
+//! The module defines a higher level verification flow that adds additional verifications
+//! to the cryptographic verification.
+
 use crate::common::{
     cbor, Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, Serial, Serialize,
 };
@@ -9,69 +15,83 @@ use crate::id::{
     constants::{ArCurve, IpPairing},
     types::AttributeTag,
 };
-use crate::web3id::v1::PresentationV1;
-use crate::web3id::{did, Web3IdAttribute};
-use crate::{hashes, id};
+use std::borrow::Cow;
+
+use crate::web3id::v1::ContextProperty;
+use crate::web3id::{did, v1, Web3IdAttribute};
+use crate::{common, hashes, id};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
-use concordium_contracts_common::hashes::HashBytes;
+use concordium_contracts_common::hashes::{HashBytes, HashFromStrError};
+use serde::de::Error;
+use serde::ser::SerializeMap;
 use sha2::Digest;
 use std::collections::HashMap;
+use std::fmt;
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
 const PROTOCOL_VERSION: u16 = 1u16;
 
-/// A verifiable presentation request that specifies what credentials and proofs
-/// are being requested from a credential holder.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Serialize)]
+pub type VerifiablePresentationV1 = v1::PresentationV1<IpPairing, ArCurve, Web3IdAttribute>;
+pub type VerifiableCredentialV1 = v1::CredentialV1<IpPairing, ArCurve, Web3IdAttribute>;
+pub type VerifiablePresentationRequestV1 = v1::RequestV1<ArCurve, Web3IdAttribute>;
+pub type VerificationMaterial = v1::CredentialVerificationMaterial<IpPairing, ArCurve>;
+
+/// A verification request that specifies which subject claims are requested from a credential holder
+/// and in which context.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type", rename = "ConcordiumVerificationRequestV1")]
 pub struct VerificationRequest {
-    /// Context information for a verifiable presentation request.
+    /// Context information for the verification request.
     pub context: UnfilledContextInformation,
-    /// The claims for a list of subjects containing requested statements about the subjects.
+    /// A list of subject claims containing requested statements about each subject.
     pub subject_claims: Vec<RequestedSubjectClaims>,
-    /// Blockchain transaction hash that anchors the request.
+    /// Blockchain transaction hash for the transaction that registers the [`VerificationRequestAnchor`] (VRA)
+    /// that matches this verification request. The [`VerificationRequestAnchor`] is created from
+    /// [`VerificationRequestData`].
     #[serde(rename = "transactionRef")]
     pub anchor_transaction_hash: hashes::TransactionHash,
 }
 
-/// A verification audit record that contains the complete verifiable presentation
-/// request and response data. The record contains the verification request
-/// and the verifiable presentations and should generally be kept private by the verifier.
+/// A verification audit record that contains the complete verification request and
+/// corresponding verifiable presentation.
 ///
+/// The record should generally be kept private by the verifier.
 /// Audit records are used internally by verifiers to maintain complete records
 /// of verification interactions, while only publishing hash-based public records/anchors on-chain
 /// to preserve privacy, see [`VerificationAuditAnchor`].
-#[derive(Debug, Clone, PartialEq, Serialize, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize, serde::Serialize)]
 #[serde(tag = "type", rename = "ConcordiumVerificationAuditRecord")]
 pub struct VerificationAuditRecord {
     /// Version integer, for now it is always 1.
     pub version: u16,
-    /// The verifiable presentation request to record.
-    pub request: VerificationRequest,
     /// Unique identifier chosen by the requester/merchant.
     pub id: String,
-    /// The verifiable presentation including the proof.
-    pub presentation: PresentationV1<IpPairing, ArCurve, Web3IdAttribute>,
+    /// The verification request to record.
+    pub request: VerificationRequest,
+    /// The verifiable presentation containing verifiable credentials.
+    pub presentation: VerifiablePresentationV1,
 }
 
 impl VerificationAuditRecord {
-    /// Create a new verifiable audit anchor
+    /// Create a new verification audit record
     pub fn new(
-        request: VerificationRequest,
         id: String,
-        presentation: PresentationV1<IpPairing, ArCurve, Web3IdAttribute>,
+        request: VerificationRequest,
+        presentation: VerifiablePresentationV1,
     ) -> Self {
         Self {
             version: PROTOCOL_VERSION,
-            request,
             id,
+            request,
             presentation,
         }
     }
 
     /// Computes a hash of the verification audit record.
     ///
-    /// This hash is used to create a tamper-evident anchor that can be stored
+    /// This hash is used to create a tamper-evident anchor that can be registered
     /// on-chain to prove an audit record was made at a specific time and with
     /// specific parameters.
     pub fn hash(&self) -> hashes::Hash {
@@ -81,9 +101,8 @@ impl VerificationAuditRecord {
         HashBytes::new(hasher.finalize().into())
     }
 
-    /// Generates the [`VerificationAuditAnchor`], a hash-based public record/anchor that can be published on-chain,
-    /// from the internal audit anchor [`VerificationAuditRecord`] type. Verifiers maintain the private [`VerificationAuditAnchor`]
-    /// in their backend database.
+    /// Creates the [`VerificationAuditAnchor`] from the audit record.
+    /// The anchor is a hash-based public anchor that can be registered on-chain.
     pub fn to_anchor(
         &self,
         public_info: Option<HashMap<String, cbor::value::Value>>,
@@ -98,9 +117,11 @@ impl VerificationAuditRecord {
     }
 }
 
-/// Data structure for CBOR-encoded verifiable audit
+/// The verification audit anchor (VAA). The data structure is CBOR-encodable and the CBOR
+/// encoding defines the data that should be registered on chain to create the on chain anchor of the
+/// audit record.
 ///
-/// This format is used when anchoring a verification audit on the Concordium blockchain.
+/// The anchor is created from a [`VerificationAuditRecord`].
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 pub struct VerificationAuditAnchor {
     /// Type identifier for Concordium Verifiable Request Audit Anchor/Record. Always set to "CCDVAA".
@@ -114,38 +135,23 @@ pub struct VerificationAuditAnchor {
     pub public: Option<HashMap<String, cbor::value::Value>>,
 }
 
-/// Description of the presentation being requested from a credential holder.
+/// Data that constitutes a verification request to create a verifiable presentation.
+/// Described the subject claims being requested from a credential holder.
 ///
-/// This is also used to compute the hash for in the [`VerificationRequestAnchor`].
+/// The data should be registered on chain via a [`VerificationRequestAnchor`].
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type", rename = "ConcordiumVerificationRequestDataV1")]
 pub struct VerificationRequestData {
-    /// Context information for a verifiable presentation request.
+    /// Context information for the verification request. Parts of the context must be
+    /// filled in by the credential holder to form the context of the verifiable presentation.
     pub context: UnfilledContextInformation,
-    /// The claims for a list of subjects containing requested statements about the subjects.
+    /// Claims that most be proven in the verifiable presentation.
     pub subject_claims: Vec<RequestedSubjectClaims>,
 }
 
 impl VerificationRequestData {
-    /// Create a new verifiable request data type with no statements.
-    pub fn new(context: UnfilledContextInformation) -> Self {
-        Self {
-            context,
-            subject_claims: Vec::new(),
-        }
-    }
-
-    /// Add a subject claims request to the verification request data.
-    pub fn add_subject_claim_request(
-        mut self,
-        statement_request: impl Into<RequestedSubjectClaims>,
-    ) -> Self {
-        self.subject_claims.push(statement_request.into());
-        self
-    }
-
-    /// Computes a hash of the Verification request context and statements.
+    /// Computes the hash of the verification request data.
     ///
     /// This hash is used to create a tamper-evident anchor that can be stored
     /// on-chain to prove the request was made at a specific time and with
@@ -157,8 +163,8 @@ impl VerificationRequestData {
         HashBytes::new(hasher.finalize().into())
     }
 
-    /// Generates the [`VerificationRequestAnchor`], a hash-based public record/anchor that can be published on-chain,
-    /// from the the [`VerificationRequestData`] type.
+    /// Creates the [`VerificationRequestAnchor`] from the verification request data.
+    /// The anchor is a hash-based public record/anchor that can be published on-chain.
     pub fn to_anchor(
         &self,
         public_info: Option<HashMap<String, cbor::value::Value>>,
@@ -173,33 +179,71 @@ impl VerificationRequestData {
     }
 }
 
-/// Context information for a verifiable presentation request.
+/// Builder of [`VerificationRequestData`]
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct VerificationRequestDataBuilder {
+    context: UnfilledContextInformation,
+    subject_claims: Vec<RequestedSubjectClaims>,
+}
+
+impl VerificationRequestDataBuilder {
+    /// Create builder with context but no claims
+    pub fn new(context: UnfilledContextInformation) -> Self {
+        Self {
+            context,
+            subject_claims: Vec::new(),
+        }
+    }
+
+    /// Add a subject claims request to the verification request data.
+    pub fn subject_claim(mut self, subject_claims: impl Into<RequestedSubjectClaims>) -> Self {
+        self.subject_claims.push(subject_claims.into());
+        self
+    }
+
+    /// Build the data type
+    pub fn build(self) -> VerificationRequestData {
+        VerificationRequestData {
+            context: self.context,
+            subject_claims: self.subject_claims,
+        }
+    }
+}
+
+/// Context information for a verification request.
 ///
 /// Contains both the context data that is already known (given) and
-/// the context data that needs to be provided by the presenter (requested).
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Serialize, Default)]
+/// the context data that needs to be provided by the credential holder (requested).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Serialize, Default)]
 #[serde(tag = "type", rename = "ConcordiumUnfilledContextInformationV1")]
 pub struct UnfilledContextInformation {
     /// Context information that is already provided.
-    pub given: Vec<GivenContext>,
-    /// Context information that must be provided by the presenter.
+    pub given: Vec<LabeledContextProperty>,
+    /// Context information that must be provided by the credential holder.
     pub requested: Vec<ContextLabel>,
 }
 
-impl UnfilledContextInformation {
-    /// Create an empty context.
+/// Builder of [`UnfilledContextInformation`]
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct UnfilledContextInformationBuilder {
+    given: Vec<LabeledContextProperty>,
+    requested: Vec<ContextLabel>,
+}
+
+impl UnfilledContextInformationBuilder {
+    /// Create builder with no given or requested context
     pub fn new() -> Self {
         Default::default()
     }
 
     /// Add to the given context.
-    pub fn add_context(mut self, context: impl Into<GivenContext>) -> Self {
+    pub fn given(mut self, context: impl Into<LabeledContextProperty>) -> Self {
         self.given.push(context.into());
         self
     }
 
     /// Add to the requested context.
-    pub fn add_request(mut self, label: ContextLabel) -> Self {
+    pub fn requested(mut self, label: ContextLabel) -> Self {
         self.requested.push(label);
         self
     }
@@ -212,22 +256,32 @@ impl UnfilledContextInformation {
     ///
     /// # Parameters
     ///
-    /// - `nonce` Cryptographic nonce for preventing replay attacks and should be at least of length bytes32.
+    /// - `nonce` Cryptographic nonce for preventing replay attacks.
     /// - `connectionId` Identifier for the verification session (e.g. wallet-connect topic).
     /// - `contextString` Additional context information.
-    pub fn new_simple(nonce: [u8; 32], connection_id: String, context_string: String) -> Self {
-        Self::default()
-            .add_context(GivenContext::Nonce(nonce))
-            .add_context(GivenContext::ConnectionId(connection_id))
-            .add_context(GivenContext::ContextString(context_string))
-            .add_request(ContextLabel::BlockHash)
-            .add_request(ContextLabel::ResourceId)
+    pub fn new_simple(nonce: Nonce, connection_id: String, context_string: String) -> Self {
+        Self::new()
+            .given(LabeledContextProperty::Nonce(nonce))
+            .given(LabeledContextProperty::ConnectionId(connection_id))
+            .given(LabeledContextProperty::ContextString(context_string))
+            .requested(ContextLabel::BlockHash)
+            .requested(ContextLabel::ResourceId)
+    }
+
+    /// Build the data type
+    pub fn build(self) -> UnfilledContextInformation {
+        UnfilledContextInformation {
+            given: self.given,
+            requested: self.requested,
+        }
     }
 }
 
-/// Data structure for CBOR-encoded verifiable presentation request anchors.
+/// The verification request anchor (VRA). The data structure is CBOR-encodable and the CBOR
+/// encoding defines the data that should be registered on chain to create the on chain anchor of the
+/// verification request.
 ///
-/// This format is used when anchoring presentation requests on the Concordium blockchain.
+/// The anchor is created from a [`VerificationRequestData`].
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 pub struct VerificationRequestAnchor {
     /// Type identifier for Concordium Verification Request Anchor. Always set to "CCDVRA".
@@ -241,24 +295,21 @@ pub struct VerificationRequestAnchor {
     pub public: Option<HashMap<String, cbor::value::Value>>,
 }
 
-/// The credential statements being requested.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+/// The subject claims being requested proven.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
 pub enum RequestedSubjectClaims {
-    /// Statements based on the Concordium ID object.
+    /// Claims based on the Concordium ID object.
     #[serde(rename = "identity")]
-    Identity {
-        #[serde(flatten)]
-        request: RequestedIdentitySubjectClaims,
-    },
+    Identity(RequestedIdentitySubjectClaims),
 }
 
 impl Serial for RequestedSubjectClaims {
     fn serial<B: Buffer>(&self, out: &mut B) {
         match self {
-            RequestedSubjectClaims::Identity { request } => {
+            RequestedSubjectClaims::Identity(claims) => {
                 0u8.serial(out);
-                request.serial(out);
+                claims.serial(out);
             }
         }
     }
@@ -268,102 +319,104 @@ impl Deserial for RequestedSubjectClaims {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         match u8::deserial(source)? {
             0u8 => {
-                let request = source.get()?;
-                Ok(Self::Identity { request })
+                let claims = source.get()?;
+                Ok(Self::Identity(claims))
             }
-            n => anyhow::bail!("Unrecognized CredentialStatementRequest tag {n}"),
+            n => anyhow::bail!("Unrecognized RequestedSubjectClaims tag {n}"),
         }
     }
 }
 
-/// A statement request concerning the Concordium ID object (held in the wallet).
-/// The Concordium ID object has been signed by identity providers (IDPs).
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Default, Serialize)]
+/// A subject claims request concerning the Concordium ID object (held by the credential holder
+/// in the wallet). The Concordium ID object has been signed by identity providers (IDPs).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default, Serialize)]
 pub struct RequestedIdentitySubjectClaims {
-    /// The statements requested.
+    /// The statements/claims requested proven.
     pub statements: Vec<RequestedStatement<AttributeTag>>,
     /// The credential issuers allowed.
-    pub issuers: Vec<IdentityProviderMethod>,
+    pub issuers: Vec<IdentityProviderDid>,
     /// Set of allowed credential types. Should never be empty or contain the same value twice.
-    pub source: Vec<CredentialType>,
+    pub source: Vec<IdentityCredentialType>,
 }
 
 impl From<RequestedIdentitySubjectClaims> for RequestedSubjectClaims {
-    fn from(request: RequestedIdentitySubjectClaims) -> Self {
-        Self::Identity { request }
+    fn from(claims: RequestedIdentitySubjectClaims) -> Self {
+        Self::Identity(claims)
     }
 }
 
-impl RequestedIdentitySubjectClaims {
-    /// Create an empty identity statement request.
+/// Builder of [`RequestedIdentitySubjectClaims`]
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct RequestedIdentitySubjectClaimsBuilder {
+    statements: Vec<RequestedStatement<AttributeTag>>,
+    issuers: Vec<IdentityProviderDid>,
+    source: Vec<IdentityCredentialType>,
+}
+
+impl RequestedIdentitySubjectClaimsBuilder {
+    /// Create an empty identity subject claims request.
     pub fn new() -> Self {
         Default::default()
     }
 
-    /// Add a source to the given identity statement request.
-    pub fn add_source(mut self, source: CredentialType) -> Self {
-        if !self.source.contains(&source) {
-            self.source.push(source);
-        }
+    /// Add a source to the given identity subject claims request.
+    pub fn source(mut self, source: IdentityCredentialType) -> Self {
+        self.source.push(source);
         self
     }
 
-    /// Add sources to the given identity statement request.
-    pub fn add_sources(mut self, sources: impl IntoIterator<Item = CredentialType>) -> Self {
+    /// Add sources to the given identity subject claims request.
+    pub fn sources(mut self, sources: impl IntoIterator<Item = IdentityCredentialType>) -> Self {
         for src in sources {
-            if !self.source.contains(&src) {
-                self.source.push(src);
-            }
+            self.source.push(src);
         }
         self
     }
 
-    /// Add an issuer to the given identity statement request.
-    pub fn add_issuer(mut self, issuer: IdentityProviderMethod) -> Self {
-        if !self.issuers.contains(&issuer) {
+    /// Add an issuer to the given identity subject claims request.
+    pub fn issuer(mut self, issuer: IdentityProviderDid) -> Self {
+        self.issuers.push(issuer);
+        self
+    }
+
+    /// Add issuers to the given identity subject claims request.
+    pub fn issuers(mut self, issuers: impl IntoIterator<Item = IdentityProviderDid>) -> Self {
+        for issuer in issuers {
             self.issuers.push(issuer);
         }
         self
     }
 
-    /// Add issuers to the given identity statement request.
-    pub fn add_issuers(
-        mut self,
-        issuers: impl IntoIterator<Item = IdentityProviderMethod>,
-    ) -> Self {
-        for issuer in issuers {
-            if !self.issuers.contains(&issuer) {
-                self.issuers.push(issuer);
-            }
-        }
+    /// Add a statement/claim to the given identity subject claims.
+    pub fn statement(mut self, statement: RequestedStatement<AttributeTag>) -> Self {
+        self.statements.push(statement);
         self
     }
 
-    /// Add a statement to the given identity statement request.
-    pub fn add_statement(mut self, statement: RequestedStatement<AttributeTag>) -> Self {
-        if !self.statements.contains(&statement) {
+    /// Add statements/claims to the given identity subject claims.
+    pub fn statements(
+        mut self,
+        statements: impl IntoIterator<Item = RequestedStatement<AttributeTag>>,
+    ) -> Self {
+        for statement in statements {
             self.statements.push(statement);
         }
         self
     }
 
-    /// Add statements to the given identity statement request.
-    pub fn add_statements(
-        mut self,
-        statements: impl IntoIterator<Item = RequestedStatement<AttributeTag>>,
-    ) -> Self {
-        for statement in statements {
-            if !self.statements.contains(&statement) {
-                self.statements.push(statement);
-            }
+    /// Build the data type
+    pub fn build(self) -> RequestedIdentitySubjectClaims {
+        RequestedIdentitySubjectClaims {
+            statements: self.statements,
+            issuers: self.issuers,
+            source: self.source,
         }
-        self
     }
 }
 
 /// Labels for different types of context information that can be provided in verifiable
 /// presentation requests and proofs.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ContextLabel {
     /// A nonce which should be at least of lenth bytes32.
     Nonce,
@@ -371,14 +424,66 @@ pub enum ContextLabel {
     PaymentHash,
     /// Concordium block hash.
     BlockHash,
-    #[serde(rename = "ConnectionID")]
     /// Identifier for some connection (e.g. wallet-connect topic).
     ConnectionId,
     /// Identifier for some resource (e.g. Website URL or fingerprint of TLS certificate).
-    #[serde(rename = "ResourceID")]
     ResourceId,
     /// String value for general purposes.
     ContextString,
+}
+
+impl ContextLabel {
+    /// String representation of the label
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Nonce => "Nonce",
+            Self::PaymentHash => "PaymentHash",
+            Self::BlockHash => "BlockHash",
+            Self::ConnectionId => "ConnectionID",
+            Self::ResourceId => "ResourceID",
+            Self::ContextString => "ContextString",
+        }
+    }
+}
+
+impl Display for ContextLabel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Errors occurring when parsing attribute values.
+#[derive(Debug, thiserror::Error)]
+#[error("unknown context label {0}")]
+pub struct UnknownContextLabelError(String);
+
+impl FromStr for ContextLabel {
+    type Err = UnknownContextLabelError;
+
+    fn from_str(str: &str) -> Result<Self, Self::Err> {
+        Ok(match str {
+            "Nonce" => ContextLabel::Nonce,
+            "PaymentHash" => ContextLabel::PaymentHash,
+            "BlockHash" => ContextLabel::BlockHash,
+            "ConnectionID" => ContextLabel::ConnectionId,
+            "ResourceID" => ContextLabel::ResourceId,
+            "ContextString" => ContextLabel::ContextString,
+            _ => return Err(UnknownContextLabelError(str.to_string())),
+        })
+    }
+}
+
+impl serde::Serialize for ContextLabel {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ContextLabel {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let str = Cow::<'de, str>::deserialize(deserializer)?;
+        str.parse().map_err(D::Error::custom)
+    }
 }
 
 impl Serial for ContextLabel {
@@ -421,8 +526,8 @@ impl Deserial for ContextLabel {
 }
 
 /// Identity based credential types.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum CredentialType {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum IdentityCredentialType {
     /// The type of the credential is linked directly to the Concordium ID object
     /// hold in a wallet while no account is deployed on-chain.
     /// The Concordium ID object has been signed by the identity providers (IDPs).
@@ -435,16 +540,16 @@ pub enum CredentialType {
     AccountCredential,
 }
 
-impl Serial for CredentialType {
+impl Serial for IdentityCredentialType {
     fn serial<B: Buffer>(&self, out: &mut B) {
         match self {
-            CredentialType::IdentityCredential => 0u8.serial(out),
-            CredentialType::AccountCredential => 1u8.serial(out),
+            IdentityCredentialType::IdentityCredential => 0u8.serial(out),
+            IdentityCredentialType::AccountCredential => 1u8.serial(out),
         }
     }
 }
 
-impl Deserial for CredentialType {
+impl Deserial for IdentityCredentialType {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         match u8::deserial(source)? {
             0u8 => Ok(Self::IdentityCredential),
@@ -454,17 +559,17 @@ impl Deserial for CredentialType {
     }
 }
 
-/// DID method for a Concordium Identity Provider.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Serialize)]
+/// DID for a Concordium Identity Provider.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Serialize)]
 #[serde(into = "did::Method", try_from = "did::Method")]
-pub struct IdentityProviderMethod {
+pub struct IdentityProviderDid {
     /// The network part of the method.
     pub network: did::Network,
     /// The on-chain identifier of the Concordium Identity Provider.
     pub identity_provider: id::types::IpIdentity,
 }
 
-impl IdentityProviderMethod {
+impl IdentityProviderDid {
     /// Create a new identity provider method.
     pub fn new(ip_identity: u32, network: did::Network) -> Self {
         Self {
@@ -474,8 +579,8 @@ impl IdentityProviderMethod {
     }
 }
 
-impl From<IdentityProviderMethod> for did::Method {
-    fn from(value: IdentityProviderMethod) -> Self {
+impl From<IdentityProviderDid> for did::Method {
+    fn from(value: IdentityProviderDid) -> Self {
         Self {
             network: value.network,
             ty: did::IdentifierType::Idp {
@@ -489,7 +594,7 @@ impl From<IdentityProviderMethod> for did::Method {
 #[error("Invalid DID method for a Concordium Identity Provider")]
 pub struct TryFromDidMethodError;
 
-impl TryFrom<did::Method> for IdentityProviderMethod {
+impl TryFrom<did::Method> for IdentityProviderDid {
     type Error = TryFromDidMethodError;
 
     fn try_from(value: did::Method) -> Result<Self, Self::Error> {
@@ -504,14 +609,61 @@ impl TryFrom<did::Method> for IdentityProviderMethod {
     }
 }
 
-/// A single piece of context information that can be provided in verifiable presentation interactions.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(into = "GivenContextJson", try_from = "GivenContextJson")]
-pub enum GivenContext {
-    /// Cryptographic nonce context which should be at least of length bytes32.
-    Nonce([u8; 32]),
+/// Nonce used in verification request. Should be randomly generated such that the
+/// context in the verification request cannot be obtained from the request anchor hash
+/// by trying different preimages of the hash.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, common::Serialize)]
+#[repr(transparent)]
+pub struct Nonce(pub [u8; 32]);
+
+/// Error parsing nonce
+#[derive(Debug, thiserror::Error)]
+#[error("parse nonce: {0}")]
+pub struct NonceParseError(String);
+
+impl FromStr for Nonce {
+    type Err = NonceParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let hex_decoded = hex::decode(s).map_err(|err| NonceParseError(err.to_string()))?;
+        let bytes = hex_decoded
+            .try_into()
+            .map_err(|_| NonceParseError("invalid length".to_string()))?;
+        Ok(Nonce(bytes))
+    }
+}
+
+impl Display for Nonce {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for byte in self.0.iter() {
+            write!(f, "{:02x}", byte)?;
+        }
+        Ok(())
+    }
+}
+
+impl serde::Serialize for Nonce {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Nonce {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let str = Cow::<'de, str>::deserialize(deserializer)?;
+        str.parse().map_err(D::Error::custom)
+    }
+}
+
+/// A statically labeled and statically typed context value. Is used
+/// in [`VerificationRequest`] context.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LabeledContextProperty {
+    /// Cryptographic nonce context which should be of length 32 bytes. Should be randomly
+    /// generated, see [`Nonce`].
+    Nonce(Nonce),
     /// Payment hash context (Concordium transaction hash).
-    PaymentHash(hashes::Hash),
+    PaymentHash(hashes::TransactionHash),
     /// Concordium block hash context.
     BlockHash(hashes::BlockHash),
     /// Identifier for some connection (e.g. wallet-connect topic).
@@ -522,30 +674,145 @@ pub enum GivenContext {
     ContextString(String),
 }
 
-impl Serial for GivenContext {
+/// Read-only view of the value in [`LabeledContextProperty`]
+pub struct PropertyValueView<'a> {
+    property: &'a LabeledContextProperty,
+}
+
+impl Display for PropertyValueView<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self.property {
+            LabeledContextProperty::Nonce(val) => val.fmt(f),
+            LabeledContextProperty::PaymentHash(val) => val.fmt(f),
+            LabeledContextProperty::BlockHash(val) => val.fmt(f),
+            LabeledContextProperty::ConnectionId(val) => f.write_str(val),
+            LabeledContextProperty::ResourceId(val) => f.write_str(val),
+            LabeledContextProperty::ContextString(val) => f.write_str(val),
+        }
+    }
+}
+
+impl serde::Serialize for PropertyValueView<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.to_string().as_str())
+    }
+}
+
+/// Error parsing nonce
+#[derive(Debug, thiserror::Error)]
+pub enum ParsePropertyValueError {
+    #[error("parse nonce property value: {0}")]
+    ParseNonce(#[from] NonceParseError),
+    #[error("parse hash property value: {0}")]
+    ParseHash(#[from] HashFromStrError),
+}
+
+impl LabeledContextProperty {
+    /// The label for the property.
+    pub fn label(&self) -> ContextLabel {
+        match self {
+            Self::Nonce(_) => ContextLabel::Nonce,
+            Self::PaymentHash(_) => ContextLabel::PaymentHash,
+            Self::BlockHash(_) => ContextLabel::BlockHash,
+            Self::ConnectionId(_) => ContextLabel::ConnectionId,
+            Self::ResourceId(_) => ContextLabel::ResourceId,
+            Self::ContextString(_) => ContextLabel::ContextString,
+        }
+    }
+
+    /// Read-only view of the context value in the property.
+    pub fn value(&self) -> PropertyValueView<'_> {
+        PropertyValueView { property: self }
+    }
+
+    /// Creates property from label and with value parsed from the given string.
+    pub fn try_from_label_and_value_str(
+        label: ContextLabel,
+        str: &str,
+    ) -> Result<Self, ParsePropertyValueError> {
+        Ok(match label {
+            ContextLabel::Nonce => Self::Nonce(str.parse()?),
+            ContextLabel::PaymentHash => Self::PaymentHash(str.parse()?),
+            ContextLabel::BlockHash => Self::BlockHash(str.parse()?),
+            ContextLabel::ConnectionId => Self::ConnectionId(str.to_string()),
+            ContextLabel::ResourceId => Self::ResourceId(str.to_string()),
+            ContextLabel::ContextString => Self::ContextString(str.to_string()),
+        })
+    }
+
+    /// Convert to the dynamically labeled property type [`ContextProperty`]
+    pub fn to_context_property(&self) -> ContextProperty {
+        ContextProperty {
+            label: self.label().to_string(),
+            context: self.value().to_string(),
+        }
+    }
+
+    /// Convert from the dynamically labeled property type [`ContextProperty`]
+    pub fn try_from_context_property(
+        prop: &ContextProperty,
+    ) -> Result<Self, ParseContextPropertyError> {
+        let label = prop.label.parse()?;
+        Ok(Self::try_from_label_and_value_str(label, &prop.context)?)
+    }
+}
+
+/// Error parsing the dynamically typed [`ContextProperty`] to [`LabeledContextProperty`].
+#[derive(Debug, thiserror::Error)]
+pub enum ParseContextPropertyError {
+    #[error("parse label: {0}")]
+    ParseLabel(#[from] UnknownContextLabelError),
+    #[error("parse value: {0}")]
+    ParseValue(#[from] ParsePropertyValueError),
+}
+
+impl serde::Serialize for LabeledContextProperty {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map_serializer = serializer.serialize_map(Some(2))?;
+        map_serializer.serialize_entry("label", &self.label())?;
+        map_serializer.serialize_entry("context", &self.value())?;
+        map_serializer.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for LabeledContextProperty {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct LabeledContextPropertyRaw<'a> {
+            label: ContextLabel,
+            #[serde(borrow)]
+            context: Cow<'a, str>,
+        }
+
+        let raw = LabeledContextPropertyRaw::deserialize(deserializer)?;
+        Self::try_from_label_and_value_str(raw.label, &raw.context).map_err(D::Error::custom)
+    }
+}
+
+impl Serial for LabeledContextProperty {
     fn serial<B: Buffer>(&self, out: &mut B) {
         match self {
-            GivenContext::Nonce(hash) => {
+            LabeledContextProperty::Nonce(hash) => {
                 0u8.serial(out);
                 hash.serial(out);
             }
-            GivenContext::PaymentHash(hash) => {
+            LabeledContextProperty::PaymentHash(hash) => {
                 1u8.serial(out);
                 hash.serial(out);
             }
-            GivenContext::BlockHash(hash) => {
+            LabeledContextProperty::BlockHash(hash) => {
                 2u8.serial(out);
                 hash.serial(out);
             }
-            GivenContext::ConnectionId(connection_id) => {
+            LabeledContextProperty::ConnectionId(connection_id) => {
                 3u8.serial(out);
                 connection_id.serial(out);
             }
-            GivenContext::ResourceId(rescource_id) => {
+            LabeledContextProperty::ResourceId(rescource_id) => {
                 4u8.serial(out);
                 rescource_id.serial(out);
             }
-            GivenContext::ContextString(context_string) => {
+            LabeledContextProperty::ContextString(context_string) => {
                 5u8.serial(out);
                 context_string.serial(out);
             }
@@ -553,7 +820,7 @@ impl Serial for GivenContext {
     }
 }
 
-impl Deserial for GivenContext {
+impl Deserial for LabeledContextProperty {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         match u8::deserial(source)? {
             0u8 => {
@@ -573,98 +840,14 @@ impl Deserial for GivenContext {
                 Ok(Self::ConnectionId(nonce))
             }
             4u8 => {
-                let rescource_id = source.get()?;
-                Ok(Self::ResourceId(rescource_id))
+                let resource_id = source.get()?;
+                Ok(Self::ResourceId(resource_id))
             }
             5u8 => {
                 let context_string = source.get()?;
                 Ok(Self::ContextString(context_string))
             }
             n => anyhow::bail!("Unknown GivenContext tag: {}", n),
-        }
-    }
-}
-
-/// JSON representation of context information that is already provided in a request for a presentation.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct GivenContextJson {
-    /// The label identifying the type of context.
-    pub label: ContextLabel,
-    /// The context data serialized as a string.
-    pub context: String,
-}
-
-impl From<GivenContext> for GivenContextJson {
-    fn from(value: GivenContext) -> Self {
-        match value {
-            GivenContext::Nonce(nonce) => Self {
-                label: ContextLabel::Nonce,
-                context: hex::encode(nonce),
-            },
-            GivenContext::PaymentHash(hash_bytes) => Self {
-                label: ContextLabel::PaymentHash,
-                context: hex::encode(hash_bytes),
-            },
-            GivenContext::BlockHash(hash_bytes) => Self {
-                label: ContextLabel::BlockHash,
-                context: hex::encode(hash_bytes),
-            },
-            GivenContext::ConnectionId(context) => Self {
-                label: ContextLabel::ConnectionId,
-                context,
-            },
-            GivenContext::ResourceId(context) => Self {
-                label: ContextLabel::ResourceId,
-                context,
-            },
-            GivenContext::ContextString(context) => Self {
-                label: ContextLabel::ContextString,
-                context,
-            },
-        }
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum TryFromGivenContextJsonError {
-    #[error("Failed decoding hex in nonce context: {0}")]
-    Nonce(hex::FromHexError),
-    #[error("Failed decoding block hash")]
-    BlockHash(hashes::HashFromStrError),
-    #[error("Failed decoding payment hash")]
-    PaymentHash(hashes::HashFromStrError),
-}
-
-impl TryFrom<GivenContextJson> for GivenContext {
-    type Error = TryFromGivenContextJsonError;
-
-    fn try_from(value: GivenContextJson) -> Result<Self, Self::Error> {
-        match value.label {
-            ContextLabel::ContextString => Ok(Self::ContextString(value.context)),
-            ContextLabel::ResourceId => Ok(Self::ResourceId(value.context)),
-            ContextLabel::ConnectionId => Ok(Self::ConnectionId(value.context)),
-            ContextLabel::Nonce => {
-                let bytes =
-                    hex::decode(value.context).map_err(TryFromGivenContextJsonError::Nonce)?;
-
-                let arr: [u8; 32] = bytes.try_into().map_err(|_| {
-                    TryFromGivenContextJsonError::Nonce(hex::FromHexError::InvalidStringLength)
-                })?;
-
-                Ok(Self::Nonce(arr))
-            }
-            ContextLabel::BlockHash => Ok(Self::BlockHash(
-                value
-                    .context
-                    .parse()
-                    .map_err(TryFromGivenContextJsonError::BlockHash)?,
-            )),
-            ContextLabel::PaymentHash => Ok(Self::PaymentHash(
-                value
-                    .context
-                    .parse()
-                    .map_err(TryFromGivenContextJsonError::PaymentHash)?,
-            )),
         }
     }
 }
@@ -733,263 +916,20 @@ impl<TagType: Serialize> Deserial for RequestedStatement<TagType> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::serialize_deserialize;
     use crate::hashes::Hash;
-    use crate::id::constants::AttributeKind;
-    use crate::id::id_proof_types::AttributeValueStatement;
-    use crate::id::types::GlobalContext;
-    use crate::web3id::did::Network;
-    use crate::web3id::v1::{
-        fixtures, AtomicStatementV1, ContextInformation, ContextProperty,
-        IdentityBasedSubjectClaims, RequestV1, SubjectClaims,
-    };
-    use crate::{
-        common::serialize_deserialize,
-        id::{constants::ArCurve, id_proof_types::AttributeInRangeStatement},
-    };
     use anyhow::Context as AnyhowContext;
     use hex::FromHex;
-    use std::marker::PhantomData;
+    use rand::rngs::StdRng;
+    use rand::{Rng, SeedableRng};
 
     fn remove_whitespace(str: &str) -> String {
         str.chars().filter(|c| !c.is_whitespace()).collect()
     }
 
-    fn verification_request_data_fixture() -> VerificationRequestData {
-        let context = UnfilledContextInformation::new_simple(
-            [0u8; 32],
-            "MyConnection".to_string(),
-            "MyDappContext".to_string(),
-        )
-        // While above simple context is used in practice,
-        // we add all possible context variants and context label variants to ensure test coverage.
-        .add_context(GivenContext::PaymentHash(hashes::Hash::new([1u8; 32])))
-        .add_context(GivenContext::BlockHash(hashes::BlockHash::new([2u8; 32])))
-        .add_context(GivenContext::ResourceId("MyRescourceId".to_string()))
-        .add_request(ContextLabel::Nonce)
-        .add_request(ContextLabel::PaymentHash)
-        .add_request(ContextLabel::ConnectionId)
-        .add_request(ContextLabel::ContextString);
-
-        let statements = vec![
-            RequestedStatement::AttributeInRange(AttributeInRangeStatement {
-                attribute_tag: AttributeTag(3).to_string().parse().unwrap(),
-                lower: Web3IdAttribute::Numeric(80),
-                upper: Web3IdAttribute::Numeric(1237),
-                _phantom: PhantomData,
-            }),
-            RequestedStatement::AttributeInSet(AttributeInSetStatement {
-                attribute_tag: AttributeTag(2).to_string().parse().unwrap(),
-                set: [
-                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                ]
-                .into_iter()
-                .collect(),
-                _phantom: PhantomData,
-            }),
-            RequestedStatement::AttributeNotInSet(AttributeNotInSetStatement {
-                attribute_tag: AttributeTag(1).to_string().parse().unwrap(),
-                set: [
-                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                ]
-                .into_iter()
-                .collect(),
-                _phantom: PhantomData,
-            }),
-            RequestedStatement::AttributeInRange(AttributeInRangeStatement {
-                attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
-                lower: Web3IdAttribute::try_from(
-                    chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
-                        .unwrap()
-                        .to_utc(),
-                )
-                .unwrap(),
-                upper: Web3IdAttribute::try_from(
-                    chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
-                        .unwrap()
-                        .to_utc(),
-                )
-                .unwrap(),
-                _phantom: PhantomData,
-            }),
-            RequestedStatement::RevealAttribute(RevealAttributeStatement {
-                attribute_tag: AttributeTag(5).to_string().parse().unwrap(),
-            }),
-        ];
-
-        VerificationRequestData::new(context).add_subject_claim_request(
-            RequestedIdentitySubjectClaims::default()
-                .add_issuer(IdentityProviderMethod::new(3u32, did::Network::Testnet))
-                .add_source(CredentialType::IdentityCredential)
-                .add_statements(statements),
-        )
-    }
-
-    fn verification_request_anchor_fixture() -> VerificationRequestAnchor {
-        let request_data = verification_request_data_fixture();
-
-        let mut public_info = HashMap::new();
-        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
-
-        request_data.to_anchor(Some(public_info))
-    }
-
-    fn verification_audit_record_fixture() -> VerificationAuditRecord {
-        let request_data = verification_request_data_fixture();
-
-        let verification_request = VerificationRequest {
-            context: request_data.context,
-            subject_claims: request_data.subject_claims,
-            anchor_transaction_hash: hashes::TransactionHash::new([2u8; 32]),
-        };
-
-        let challenge = ContextInformation {
-            given: vec![ContextProperty {
-                label: "prop1".to_string(),
-                context: "val1".to_string(),
-            }],
-            requested: vec![ContextProperty {
-                label: "prop2".to_string(),
-                context: "val2".to_string(),
-            }],
-        };
-
-        let global_context = GlobalContext::generate("Test".into());
-
-        let id_cred_fixture = fixtures::identity_credentials_fixture(
-            [
-                (3.into(), Web3IdAttribute::Numeric(137)),
-                (
-                    1.into(),
-                    Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
-                ),
-                (
-                    2.into(),
-                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                ),
-                (
-                    5.into(),
-                    Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
-                ),
-                (
-                    6.into(),
-                    Web3IdAttribute::String(AttributeKind::try_new("bb".into()).unwrap()),
-                ),
-                (
-                    AttributeTag(4).to_string().parse().unwrap(),
-                    Web3IdAttribute::try_from(
-                        chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
-                            .unwrap()
-                            .to_utc(),
-                    )
-                    .unwrap(),
-                ),
-            ]
-            .into_iter()
-            .collect(),
-            &global_context,
-        );
-
-        let credential_statements = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
-            network: Network::Testnet,
-            issuer: id_cred_fixture.issuer,
-            statements: vec![
-                AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
-                    attribute_tag: 3.into(),
-                    lower: Web3IdAttribute::Numeric(80),
-                    upper: Web3IdAttribute::Numeric(1237),
-                    _phantom: PhantomData,
-                }),
-                AtomicStatementV1::AttributeInSet(AttributeInSetStatement {
-                    attribute_tag: 2.into(),
-                    set: [
-                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                    ]
-                    .into_iter()
-                    .collect(),
-                    _phantom: PhantomData,
-                }),
-                AtomicStatementV1::AttributeNotInSet(AttributeNotInSetStatement {
-                    attribute_tag: 1.into(),
-                    set: [
-                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                    ]
-                    .into_iter()
-                    .collect(),
-                    _phantom: PhantomData,
-                }),
-                AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
-                    attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
-                    lower: Web3IdAttribute::try_from(
-                        chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
-                            .unwrap()
-                            .to_utc(),
-                    )
-                    .unwrap(),
-                    upper: Web3IdAttribute::try_from(
-                        chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
-                            .unwrap()
-                            .to_utc(),
-                    )
-                    .unwrap(),
-                    _phantom: PhantomData,
-                }),
-                AtomicStatementV1::AttributeValue(AttributeValueStatement {
-                    attribute_tag: AttributeTag(5).to_string().parse().unwrap(),
-                    attribute_value: Web3IdAttribute::String(
-                        AttributeKind::try_new("testvalue".into()).unwrap(),
-                    ),
-                    _phantom: Default::default(),
-                }),
-            ],
-        })];
-
-        let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
-            subject_claims: credential_statements,
-        };
-
-        // the easiest way to construct a presentation, is just to run the prover on a request
-        let now = chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
-            .unwrap()
-            .with_timezone(&chrono::Utc);
-        let presentation = request
-            .clone()
-            .prove_with_rng(
-                &global_context,
-                [id_cred_fixture.private_inputs()].into_iter(),
-                &mut fixtures::seed0(),
-                now,
-            )
-            .expect("prove");
-
-        let id = "MyUUID".to_string();
-
-        VerificationAuditRecord::new(verification_request, id, presentation)
-    }
-
-    fn verification_audit_anchor_fixture() -> VerificationAuditAnchor {
-        let verification_audit_anchor: VerificationAuditRecord =
-            verification_audit_record_fixture();
-
-        let mut public_info = HashMap::new();
-        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
-
-        verification_audit_anchor.to_anchor(Some(public_info))
-    }
-
-    // Tests about JSON serialization and deserialization roundtrips
-
     #[test]
     fn test_verification_request_json_roundtrip() -> anyhow::Result<()> {
-        let request_data = verification_request_data_fixture();
+        let request_data = fixtures::verification_request_data_fixture();
 
         let verification_request_anchor_transaction_hash = hashes::TransactionHash::new([0u8; 32]);
 
@@ -1013,7 +953,7 @@ mod tests {
 
     #[test]
     fn test_verification_request_anchor_json_roundtrip() -> anyhow::Result<()> {
-        let verification_request_anchor = verification_request_data_fixture();
+        let verification_request_anchor = fixtures::verification_request_data_fixture();
 
         let json = serde_json::to_value(&verification_request_anchor)
             .context("Failed verification request anchor to JSON value.")?;
@@ -1029,7 +969,7 @@ mod tests {
 
     #[test]
     fn test_verification_audit_anchor_json_roundtrip() -> anyhow::Result<()> {
-        let verification_audit_anchor = verification_audit_record_fixture();
+        let verification_audit_anchor = fixtures::verification_audit_record_fixture();
 
         let json = serde_json::to_value(&verification_audit_anchor)
             .context("Failed verification audit anchor to JSON value.")?;
@@ -1044,8 +984,6 @@ mod tests {
         Ok(())
     }
 
-    // Tests about the JSON interface (should align with the type representation in the webSDK/rustSDK)
-
     #[test]
     fn test_verification_request_data_json() -> anyhow::Result<()> {
         let expected_json = r#"
@@ -1056,36 +994,20 @@ mod tests {
     "given": [
       {
         "label": "Nonce",
-        "context": "0000000000000000000000000000000000000000000000000000000000000000"
-      },
-      {
-        "label": "ConnectionID",
-        "context": "MyConnection"
-      },
-      {
-        "label": "ContextString",
-        "context": "MyDappContext"
-      },
-      {
-        "label": "PaymentHash",
         "context": "0101010101010101010101010101010101010101010101010101010101010101"
       },
       {
-        "label": "BlockHash",
-        "context": "0202020202020202020202020202020202020202020202020202020202020202"
+        "label": "ConnectionID",
+        "context": "testconnection"
       },
       {
-        "label": "ResourceID",
-        "context": "MyRescourceId"
+        "label": "ContextString",
+        "context": "testcontext"
       }
     ],
     "requested": [
       "BlockHash",
-      "ResourceID",
-      "Nonce",
-      "PaymentHash",
-      "ConnectionID",
-      "ContextString"
+      "ResourceID"
     ]
   },
   "subjectClaims": [
@@ -1134,10 +1056,13 @@ mod tests {
         }
       ],
       "issuers": [
-        "did:ccd:testnet:idp:3"
+        "did:ccd:testnet:idp:0",
+        "did:ccd:testnet:idp:1",
+        "did:ccd:testnet:idp:17"
       ],
       "source": [
-        "identityCredential"
+        "identityCredential",
+        "accountCredential"
       ]
     }
   ]
@@ -1145,7 +1070,7 @@ mod tests {
             "#;
 
         let actual_json =
-            serde_json::to_string_pretty(&verification_request_data_fixture()).unwrap();
+            serde_json::to_string_pretty(&fixtures::verification_request_data_fixture()).unwrap();
         println!("verification request data json:\n{}", actual_json);
 
         assert_eq!(
@@ -1163,6 +1088,7 @@ mod tests {
 {
   "type": "ConcordiumVerificationAuditRecord",
   "version": 1,
+  "id": "MyUUID",
   "request": {
     "type": "ConcordiumVerificationRequestV1",
     "context": {
@@ -1170,94 +1096,80 @@ mod tests {
       "given": [
         {
           "label": "Nonce",
-          "context": "0000000000000000000000000000000000000000000000000000000000000000"
-        },
-        {
-          "label": "ConnectionID",
-          "context": "MyConnection"
-        },
-        {
-          "label": "ContextString",
-          "context": "MyDappContext"
-        },
-        {
-          "label": "PaymentHash",
           "context": "0101010101010101010101010101010101010101010101010101010101010101"
         },
         {
-          "label": "BlockHash",
-          "context": "0202020202020202020202020202020202020202020202020202020202020202"
+          "label": "ConnectionID",
+          "context": "testconnection"
         },
         {
-          "label": "ResourceID",
-          "context": "MyRescourceId"
+          "label": "ContextString",
+          "context": "testcontext"
         }
       ],
       "requested": [
         "BlockHash",
-        "ResourceID",
-        "Nonce",
-        "PaymentHash",
-        "ConnectionID",
-        "ContextString"
+        "ResourceID"
       ]
     },
     "subjectClaims": [
       {
         "type": "identity",
         "statements": [
-            {
-              "type": "AttributeInRange",
-              "attributeTag": "dob",
-              "lower": 80,
-              "upper": 1237
+          {
+            "type": "AttributeInRange",
+            "attributeTag": "dob",
+            "lower": 80,
+            "upper": 1237
+          },
+          {
+            "type": "AttributeInSet",
+            "attributeTag": "sex",
+            "set": [
+              "aa",
+              "ff",
+              "zz"
+            ]
+          },
+          {
+            "type": "AttributeNotInSet",
+            "attributeTag": "lastName",
+            "set": [
+              "aa",
+              "ff",
+              "zz"
+            ]
+          },
+          {
+            "type": "AttributeInRange",
+            "attributeTag": "countryOfResidence",
+            "lower": {
+              "type": "date-time",
+              "timestamp": "2023-08-27T23:12:15Z"
             },
-            {
-              "type": "AttributeInSet",
-              "attributeTag": "sex",
-              "set": [
-                "aa",
-                "ff",
-                "zz"
-              ]
-            },
-            {
-              "type": "AttributeNotInSet",
-              "attributeTag": "lastName",
-              "set": [
-                "aa",
-                "ff",
-                "zz"
-              ]
-            },
-            {
-              "type": "AttributeInRange",
-              "attributeTag": "countryOfResidence",
-              "lower": {
-                "type": "date-time",
-                "timestamp": "2023-08-27T23:12:15Z"
-              },
-              "upper": {
-                "type": "date-time",
-                "timestamp": "2023-08-29T23:12:15Z"
-              }
-            },
-            {
-              "type": "RevealAttribute",
-              "attributeTag": "nationality"
+            "upper": {
+              "type": "date-time",
+              "timestamp": "2023-08-29T23:12:15Z"
             }
+          },
+          {
+            "type": "RevealAttribute",
+            "attributeTag": "nationality"
+          }
         ],
         "issuers": [
-          "did:ccd:testnet:idp:3"
+          "did:ccd:testnet:idp:0",
+          "did:ccd:testnet:idp:1",
+          "did:ccd:testnet:idp:17"
         ],
         "source": [
-          "identityCredential"
+          "identityCredential",
+          "accountCredential"
         ]
       }
     ],
     "transactionRef": "0202020202020202020202020202020202020202020202020202020202020202"
   },
-  "id": "MyUUID",
   "presentation": {
     "type": [
       "VerifiablePresentation",
@@ -1267,14 +1179,26 @@ mod tests {
       "type": "ConcordiumContextInformationV1",
       "given": [
         {
-          "label": "prop1",
-          "context": "val1"
+          "label": "Nonce",
+          "context": "0101010101010101010101010101010101010101010101010101010101010101"
+        },
+        {
+          "label": "ConnectionID",
+          "context": "testconnection"
+        },
+        {
+          "label": "ContextString",
+          "context": "testcontext"
         }
       ],
       "requested": [
         {
-          "label": "prop2",
-          "context": "val2"
+          "label": "BlockHash",
+          "context": "0202020202020202020202020202020202020202020202020202020202020202"
+        },
+        {
+          "label": "ResourceID",
+          "context": "testresourceid"
         }
       ]
     },
@@ -1336,7 +1260,7 @@ mod tests {
         "issuer": "did:ccd:testnet:idp:0",
         "proof": {
           "created": "2023-08-28T23:12:15Z",
-          "proofValue": "0000000000000006010098ad4f48bcd0cf5440853e520858603f16058ee0fc1afdc3efe98abe98771e23c000d19119c28d704a5916929f66f2a30200abb05a0ff79b3b06f912f0ec642268d3a1ad1cdf4f050ab7d55c795aa1ab771f4be29f29134e0d7709566f9b2468805f03009158599821c271588f24e92db7ca30197ec5b0c901efaadd34cca707e56b9aab1a7f14e329816e2acf4d07a7edf1bd6b0400af07a1ba7a22bcb1602114921a48fa966a821354cd0dd63a87ce018caccc50b56f2c9f55a062cdc423657aa5cec8a4c9050100097465737476616c75650602aef4be258f8baca0ee44affd36bc9ca6299cc811ac6cb77d10792ff546153d6a84c0c0e030b131ed29111911794174859966f6ba8cafaf228cb921351c2cbc84358c0fa946ca862f8e30d920e46397bf96b56f50b66ae9c93953dc24de2904640000000000000004a547c8619f3ff2670efbefb21281e459b7cc9766c4f377f78e9f97e2c50569a8dcb155f2a502e936d2cb6ef1a73e92af9916e6353b7127d55bb525cb18074b5ec130463e03a4eda583b05c2d63db40a08ab8bf05f930ec234cc2f788d5f5bfbeab3e4881918ce964ffd55483219edd435ac865286bfd313cd834aabfa8061d2ae173cbe4b59ab2bda78faa4c2c937afba80d7fba0822579ac0ef6915f4820f968a74f00ff5ab74e90b0a7bcb2b92093a5e94a54aea1d48ffd1e5bb3fb48069bce0d38776200db38b2aa170f8b27c74ea497c638ec1b8462c490544c1ebe22a5e00000005000000012404b1242ad971ff6e57bfecd2e3068c0ed7a4be33c0558b042de299df63b9145b8d3ddb4ecbba76d96ff8288092d908ab184c8411753dcd5dc9c6d8897a15313597cc5db38f68c4c935053142d3c2da4eb167cdee40e5e4c2878d53342ded4c0000000246959ce33bb25348f64d0e585567b52253b24ce6229bd83b3fae46c03af515c83a652cd7e8fa07c78db0b70a1b7c35af6ee9f0d83521acf7569d285684ff7fc56f22277da5ab40b30a75cb1bcc60cb7a5762919a415740cc09ba27c5bb9fdaf7000000031ed1953514eda42ba220a54d745ec4b454f1f380716279ff43f0bca3cb111c732d09e8eb6edc8c23d8095a14006684127c48353d55c02d7a69d3b6f5451c0d853c6c09e1a4d07097f16ca2a3324081a7301d1810a7844d331ce3f6012eff6700000000040dd23dd94272e26b45418aea3d3cf75690cf88e17f7eb881ff95fe1f1ef61fd63778bb771eea088f2717e964ae8d3ca1b9d7814a57c0c0482b9a65103f616f9b6a4e943c333d4a6cd894f4802e57db6e9a5270c42f39ae770f4472eccea797da000000052ca1395e3dedb1e0842cd4481627aa55b2a592d64ca7f5bf6845baa3e22647d73ef788e3576f6467206a7c57b1a6b63e9ed774aad4ecb7eaa8fa6b440a7a76a665733b664b5ab5038897f85ab2cbcae9a5a58b6e1e0a442dae026c2b74174b4658e84db7c2c90b21acf4b39f23b83db7f98baf1c6c5153c0123932d329d73eee0000000c003349aa2906906b01ab75f6b6897787dcfc7ccf96212d74d02558468c8b5856405cff39ee6e21fd7db4a2b6b02ab8a6b770c6f2604b2b8db00b38706fb31efb3a025993bed7d839a22f09f5ddafa524032766f3d175cceb640c9a58a9308b3d7a980101010262c5c9fc27e61854fa91c43236139ba5d944e9e628cd1b57b9c045fa114c490000655c0c404889511e939c8c0bee6e4f8199363ca505203e3c4bc5fe45cb5664db6b82bf5f16c7aa92ca5988914f5db5202e23be8939f5225dc0aa2f3386f57cfe0044835f8e5a723bde4dad0488037806e4e094abac57d201a0d1c825023027c1aa1d057b2f767acce630ef8cffa0806f5c0a6a71b1bc3e4c4f011b267830644eb70054164b289d57391c9c6dc767624d83a6384af2ab164fc80a41a6c1fd88dc6dba69c64fa9892188c32340ca6807e9b382759453c52d4ddb7ea65bb1e76be70eab003845506b51d820542c77bc063d112d53ae60687e00b6d7d8b845ff69443167795062cbeb5af4316238d72efcf11237689c4fa7c78d31033f5f26baa14640aec901023f799320ea06418335530b3370f2a3ad555bc335f847e167a177ed5e7320384d000000000000000502803596b4ba5ea05b1fea2b78e292f935d621453cffcd207e10f3072b2813ca3e963cebf05b19cd82da4bd5aad1dcc7fda1492d7ffc8f532bc4b37e9bf4753b7ae6b8f08e05a851052fc6ac7617ce68293678747d11f9a508bab6f7a60edde9c4a27fecaacee7cac6eb0072b08de2040391f5aff1d39c1eca45e9e1ceef6a680dfdccb7c8ac5cff24ce02454dc58ca329b1413f5c39f6a27d2341d7d30041f5b52e38fa03b8888556cd7a2fd6a8012a233d7ed79910a46e4090e6e6bfffea9f0e0ade8a970e7b6480833d376652ae0c9777209a785c5a254fad593a7975d4ddeb5dd25dd7d83d97bdb2ce1cc891220eb3a4bed2913c5be128668a5a88973ef7a314fb5a6df50796cef77dec15ba05b11eb627ccc3db214a61a4017bc3120f09f8000000078a266d8f2078084649b2ed641128818654f98dc78097cf82fb9ce0c6991b18539fc1fcd9dfed877dd2deecf666001ad7b7423143d3fc06e26ceb0caa7fc4bfb01e93e4f9a526ea814ac0e62ea52c5c53822b0dd82eba58a098ab4f453b17fde6820cc74e023722080be7eaa211162d5b83c54a149d0e533efef9487747d1413d918ef00eb7fe7ace6a56b8ae115ee2f3b37c6638b3a0432be164f4a470a4242ca12f166a59d153f703cbb2642c303d2956292419c97b3f9ae170b24182789692b759e754eeb963745d43f97392774f02b6751fb299b4dfff4a56de20f26fa97da30dd49f48f282e177450959047edb1a8e44cfc98d5b2f5961aef7ba75aa7884977cb3fa85d994e532b9a1a8e9c858f7c5c2d6fb386f1d33d796006c868c6faea2d60fbb0d81cf2198f996553684c7b18d7d1bed0f264aedc6a7fcdf7f1650f39c049bdf5123299c02249c947826faa1826a28e100a24f229775f61490a8829edeea2ea86649e258875d4be63e98bd45143cb9681a1b2a3892b61f68c2b58cd793aa738350605769568745244a7a9c7d0514525745a2850f05eecfa3dd378b90b59678564617db5f7549bff21e5fa72f8229e28245371a7339831a004d8e2a2ebd935b1c7747514458f6bd6620f60ae168c5f27ae8cbf6fc43b2d4201e0ead6992978537653ffdb3b05b32aa8234a3ddf4e3cc2ea898e95b8b1be35976d65cd7f44509cd2ef2717e8fc362bedee81c0fa87f0cfaead1202669041d5f1f7d2ed362c7d1b6f1664081833912f0ea2965a332482e08fa46e1de20b0ce239a8797ddb19144d980add3e9e1fe8109868a83472cd5a495cf9674b6ec0a0a5ef5f8cb6991c40c6e96f625389cb56de87eca9526b6efd349f0bd44f1c232337c9176efa03e5ca6b78a80064793ea605a23d6e7d8ad865360d2e29e18647accbac4c5ae984b649fb9e5062f5a16f58324782bab8d4008f5eb944137a43bb031072d9127fa382cbb5eb07c7143f70e405edc38fd0d6bea2fba80388bf8a5aa0cf5e3ad9cec039035240c33b7dec4981aa53e914f67ac932328b31f3fc4d0aac1c19a4da4dab1b525a63008d0e40b86076a1b7e9f0f219955c76798ae8d5131eee35e9900c5cdc8b58badd7022044521d7ad239a91bb2ae1a02fc61472f7d3629d14070641a1eae899e6e379b568caab0141ab86ad93488e61340d917ae4f2871782b64bd070e7dc49c57ed667b35d3f84db8fc09847fb3693e84649dd1c57c317340cac5c6ef962b44e37e9bb84fc222677f00d1ec332e25e81531a84c524e23800e4ef69431345966a6ecf5aec3ce00979684c2861be62231ab74b97953a8197a39251d157a1304a673724ef8687b27beaa474a7056543dfe5cb70502ffc62af63e6ad983b75f4be55185c2b5bfafc698219dfb5079fbed6f7a21f480bae1111ad333f72f8f00000002843454765b3b8b53bb33880bad2ec21d3704ea9c04ec2a0ee82219519349767c74b93c03f3d6b35a7deba79a16051427930281f7b6e4477be5aee7cf3e365bacfa95c28a10afcf8627bae2eb4091d7270f05c56d39517bfc9fbe8c291bea271ba8490429e3a7dc4c30758f8a4c1481ae6e1b5e54187bc0476797d9a9ad2dc2035c58ba233a1faaa72f3c2503000eab59b4e01708ac8f549e4098cb764510681ddc21d86976771ace658329dacfc3232f921f7630948ae70af7c9093a42c596cb6710353288322c0a66f3e62935d8284ff9894a86fae2ee1ba619b96547e0056a192121dc406ecea4bd342d300124bd20d415606fc3c8a37fa0056cb3b4f64f9a0487cbd29bfc97194ed8868ed4e458c7b2bf8ab6f04efee532502cf588c4f26b9b2830baa635c56857be5fd6803fd35d508881bd7cf3b5872ff84640384e2576bd93d4d86fdafcba2df3f29036491573031ede2ddb09dd092ad890a68f07876aeea856a0eb127ca4c08896db9bdc0211918711eddb3175615dec61a6b00ac88ab5ece1be74a55d69d3b2d94815c542fc9da317b86f78570d167c356b0032e10cde818eeec642cc5e4a85aac3dc4ff60d6d747059218c3f3d0c918b5fdb5e0e7559404f25bd8f7ca73432e44261f4fe0c1e1a7bd944e21771168a80ca5529fb6d195bd1a150c3e8c6e8677102aba4b3bb0831c4c645bd6b0f7ed3db492b204e348738fa7a61a2f959ccb7747e3ae7471eca3f8fc2c66bf734b15f700acb82ed23c400000002a04cae736db5790f72295d165d68e0d9bda882cd9e46a4c724b4aec31b98ef396064f56d9e4884cd84aa415de23ca479b89e0735074fc47e66fb75f55308b2bf5ccdb176784ddb550f769586c9a9c154671b6f347a1f4419b1ebfe96e59142e68233bcff4b5be7957cc0bb8c436fd8617f1591c73687194346e8dce9fad3cb3decd80f4e742309707fc5a8927518611099e471bae562f9fe68af039631e6f5177fb5f7faae75f2c426ee6817b6f03a1fb104aea55f29069e3ae442f24f389e7f10399e22ff0c8438bd8475dd309b90cbeae55ef9724bd22ef44553c07eaecde90901fdd15084ee4e3f9b5b6cdacc1042e3277ba5127cdca7c66061b9503287be02b387e119ec10c4a8963ee52710d75c21710881bae7fb5a8595fd43a9156419f8080891e50139bd4af14f1ba25ebe0152b5e83d115be493372e147742d8bfe3a8269e8ecd27ec055a11055d5405192cda8c8db528f06b120fc2e3f47089897411b3cc9ed940ae6645bbc674a01a9babd2c8ed3909640ae91ef01a3039103e818c70ee3be85aa3f3804adca265c3fd97cd8d94f4f16aeaac2f6bbd06c218a421dbc1176d53c8192bca54a39ec1a4ade163b9b0c4f60b07980b7373a7e61a64dd7e28c3882ee5511a8bd20186e63bdb37713478816106bc23241851486d10ac03bb45c9df3032ffb14ce3e0d6870e6c9c8024dfebe9396a56aa408d73c719ee34052dcb8f90f3f327891ea1e6e67096e0cb22407f2d772cab457af6810288f6a867000000079348680adeaa4311e21fc4f31c2f50ffb0e427bd011455f0b3151b36b3f52c94ddf8d9079a9b485745bf99c6e5220a3ca6c115c208bc42493413fe641bb8326d37c1ba622785d04a8f7e104f591c0fafedb770c1363e67aa0d130fc434c8bf7f8ecdf1effd86e1f53c80ae9564e67ad747c84fb31c129d551ee311fbdf30c46a9cc5e7b9b8997bd91aad8de5589ffabf8a776bdbe60b2e463b90041b2247db219e6b4a5bf2ffa23c5af0bdbdedcdc8c080040061280a8394b27cb253951f8464b10f257f944db3d1545dad0cccd866d7da659256a0f104580190aad200cbb614ebf17552e8dd851b769fd19b49b0fa34b9e6a679e83101bc2f5b8a1d102aed0544d12d78bdb9a39e455da446d102d9ad21096ea853fe444923dc57c31d11ce2b8a5d882e831edc6cd2e9ad229a0c34263131854d77fdd15bd11d9820d617bd5ccacbc7c9407149fd92b46dab47e60afeb09001f49d837d5f09c0ac9da6697a5224d2808296855826429fe519a859a17158c21d38f7cf9c222602c320a2b5931a840237bc5674e3dfe9a217425a0660b349a9524c529a7b978f81488b45b9e93f7b8436e9c7d9ff19d85c2214a4fdcaab9261cd2add29201c3b9d6ce4ce657219400ae109ede3507f5057aeb85849cbb8f55593d43c18737c27b86fb33c1617fba13965a846407748fd33ae7352bb119ab71b8e09487842ce37569c13f212ad925041188a19a0bf71468ae290c5d5561bafd547949c4e5da973992729a849bf5fa4fd04eb55b3a8db7cccdc3a0ebdaa3cfdc7a7396ecca820682b40d078bdef188b609045d76fccafb6f8def22071b9eb1afed2082feeedd741b7cb89d073bbc63f773ae935249a3c50566ad71b42de17b8c7f24b153785c863be33115391516003c1d9989b78130bd7e74c0f9dcce55da0201a1eaacdb37549d84da95ee20ca70ae13e95a97a7b18b67e75b8ec1b41ad55049ada043a39a8f8282878c92ca3ba266d23195041e1198f125d0695f843b597aef1edace684e90b09abebaa85f6a101",
+          "proofValue": "0000000000000006010098ad4f48bcd0cf5440853e520858603f16058ee0fc1afdc3efe98abe98771e23c000d19119c28d704a5916929f66f2a30200abb05a0ff79b3b06f912f0ec642268d3a1ad1cdf4f050ab7d55c795aa1ab771f4be29f29134e0d7709566f9b2468805f03009158599821c271588f24e92db7ca30197ec5b0c901efaadd34cca707e56b9aab1a7f14e329816e2acf4d07a7edf1bd6b0400af07a1ba7a22bcb1602114921a48fa966a821354cd0dd63a87ce018caccc50b56f2c9f55a062cdc423657aa5cec8a4c9050100097465737476616c75650602aef4be258f8baca0ee44affd36bc9ca6299cc811ac6cb77d10792ff546153d6a84c0c0e030b131ed29111911794174859966f6ba8cafaf228cb921351c2cbc84358c0fa946ca862f8e30d920e46397bf96b56f50b66ae9c93953dc24de2904640000000000000004a547c8619f3ff2670efbefb21281e459b7cc9766c4f377f78e9f97e2c50569a8dcb155f2a502e936d2cb6ef1a73e92af9916e6353b7127d55bb525cb18074b5ec130463e03a4eda583b05c2d63db40a08ab8bf05f930ec234cc2f788d5f5bfbeab3e4881918ce964ffd55483219edd435ac865286bfd313cd834aabfa8061d2ae173cbe4b59ab2bda78faa4c2c937afba80d7fba0822579ac0ef6915f4820f968a74f00ff5ab74e90b0a7bcb2b92093a5e94a54aea1d48ffd1e5bb3fb48069bcadf8b1e6664e83c2e12f47291bdb470b47df740c2623fc0d7a0ad34fb9d64fb900000005000000015cc1f983b2a7a7debded95108cb89f65381917f8120e4deea665b9e3ca0a70212ffd481839d094662c2db50136796152e41cbbba6bf87bf02e78abee35933a9e67285f7d35a7d9bf24a37fe49620f6255f1ac78cb4aef1151e29944ecb702643000000024bce7d3ca07538e9aff9772b4cf9c2b24a67b91397f5994226a093d298b4a23633e46e7ade5ef65956edf9de27d9a975ce949f97d73a0d5258cf8e8f87adaa570463fd2f9559ef5f7dd364dc4abce05550d0e53475c9918b1e23c7b34d89d8e1000000036440ecd3c6c671a0c40ed70f884a9f5212c3d1e05af61e4d6da7c58dde7fb1ba05f41f668da5d1440ab95f5ba3691046c0b1ff3478c731785cefa5a4dda8cee6665ce1ac8c8040c932a44ed2bf077cdcca394d7eb8e3c3e91f40cc6512db24c5000000043912fd3c9a5e2167423188eebbbda54c616ded7580a3eb34500916687f11d4f00ce689c028a28370fdba1edaaf3b7a29881cf8c2602f961b2137779d7a6fa18356936262155f6b04dbda6b1d35c67248e9396ef932abed13006651b2882f155f000000056ebac799466813bd7f9ed65a9bb5c91ec3710d88aa4c1f6390e475170231bce41cd0d020868b143ce9d0a8f1543dd1ee2f5b3e85525dde8d04e1d12ac2063ada69d7bc2ac5b50cece6fc9e386d6c4b576417ae6ccee6321e5a61599eb3748d74206742d6126667ee04141b72104aacb32e580b5db3f549777b7f035a2a16a0860000000c002224a394b6edcf83998ee8d9b58095b38d6b6c5c42521d5c31b81dbc52ccc0264bda335a1e7f61ffa2bba8d356c1b48e01b58f266c50363c1798479f7a9365200266f9eb50ef10d0dc63ef4ddb238831148e01e0e38d8e0b94c373597dfb5d295501010102299f078d1e543497070baee391c060737354c015f1d0bf82faf3d78d3a48376e0005c7dc83b81accdb0954f6ad51d0ce35ad66b3201f5336ac20c3c1c08ff856272ce6116990d8266acd40309cf895f52e62e1bb357cff558e53e18d37e544ee7b006c88ea28f1502893beaac7e6d9c1905fc58c051cf077e1093c89c81cd7a671800f2b98037e637fe747200f9288272de1c67170fa3f2d3e29911784a49bcefd78004b04bc8c867d1afa3992d8a11f3a8ada1ee1ed48f348e7ddec33d32b824ebc25457b8151147ba053e00c478f95e6cd752578973ad575e09919fd6caf59d11f600024d5e6122667191464557a4e758cce911968ad9813e181522f6c2e2703576aeb69aaf0412219e752b222329904b4c29949a6d9b18c91604704dc071897bf05760102531993dd2439551210bfa191f9b66e49e693c6c189260aa605280886804ff692000000000000000502803596b4ba5ea05b1fea2b78e292f935d621453cffcd207e10f3072b2813ca3e963cebf05b19cd82da4bd5aad1dcc7fda1492d7ffc8f532bc4b37e9bf4753b7ae6b8f08e05a851052fc6ac7617ce68293678747d11f9a508bab6f7a60edde9c4a41e80bca9bbd4fad0a8dc8db2b4264dc25e35599bab793956d61dbc0c012f01b393c8cf7254a24c18b6b05f1180a555b712be45be9a9be20eed26c68683c81afb0de03c61af110d25cf10e364996a30b29fb0d4543f9bc2ed0dd1a6def19cdb09ef7c0f24f29ae9dcd5aaf809bd67d86b9cf8e639ebd28385a2ad954db1851f59737318d78ad8a990cfdc208f2229fe33ceba14c7b34dd9f0687454384206f36bbc7762e015510952538f10e502b1be9cab7e8f6637964aa58a100eb72eed7d00000007aa3d9d70c9a1112cd8bbf2f23f5d436bb038970c1cd718b65865369ac172f3edee2e353d68ca75a309e1299d03f7a50083914b99232b25f106f4cb9fea1f5ec988aa749975a9f0cd1ba56682bb2b90d2f9cb33be146d6fc81584707dedf3d660ab47522d8bb4d47e832121c792e5278040eca2900b7a8ce4c073554602a1feaa82c210550bb95f35bd4aceb1b0bf08bd8fc4e5b6c0432fcddc18e086d915bf7a5076df3be63b3ce6087abbf7e0a3f8f530407803f8fac559437c881a99c1282fa5856086c95f71ebb957d9db6514796dead2b87375f97c24bbab00d666c024872a84c8b8e26097352d10eeaed535055a85ad5c6827309fc69583c5a6e7533572222c9b38c509feb71eaec826ff703b9c9442a9c807e4a530b07912360708f441b742162d2708308e50a6a213efcccaa755288a0b8008bb7310f7cabc4a6ef02f4257ba0f91ffa237c88a3d4640c61870acfe90ce01f8112a6e4ed0e38b717c2895e438068b952e78b58461d83764d0b6e375398a5f5ebd492365b16fca7f96648f85a67c865334e72a44f5753a74fb20a49778648a6832c5eabfd6c75eea8b72235b1d4493149fbdf9cd61ca31b97d9d851188135e28dce14b0911a42c014fce1040a46d53e226011a686c216476c1775cc05b7388b72444d3c0be400c543b8588ffc4bcc9fe12a56824164b7f46c69bff954199f0df17ef4de3da2849f94e503c1d5ecee6303f58d70c61df996c383c8673869287b27a490f120a8c881087df070f3592d60322efe69da5cd4493a9c373faabfe517942a1c4d04157f18052dd87803dc0fcdf15f61f938f80ba8c44010d0950a7f8d6a5e500d74e10252a2024c5474a7a03479f929811c0ba0b6d5befb5ec49396f1c578880d587e4b949a80bf50eacff5f3180963723fcc2fb53b386547e87ce814b34d7721e8bd65fe49d594d21ae53cbf8207c14e5afc034542804febe2dcfd61dc28b7d73d3eeeeb87d5c64a83e378487375585888dc7bef240bf88f8c43782c49d7964dd3b5f0ab7f219039035240c33b7dec4981aa53e914f67ac932328b31f3fc4d0aac1c19a4da4dab1b525a63008d0e40b86076a1b7e9f0f219955c76798ae8d5131eee35e9900c5cdc8b58badd7022044521d7ad239a91bb2ae1a02fc61472f7d3629d14070641a1eb279dda86a693d9bd31eb38e677c5f85070e2cc05cb574ffc4340fe23bd4682a7faa8b4c2b7c86486dc9a3f6977442028f9adf7b0e8211df3770f580eb6f0ee86a7cea689a6888c31bb81a72fd82d7138f3cb5fbea85460d59faae9ec97e7ee914fecabac546163a683af1858ba5dd471653021a0c170b9ffdf2f63b00c225a3545ee75f4b4d1fae8e5ae3ab2a82616cfd1d28a7194606eec6a7820a4330771c0a652d08e02a418cdfa8f77915e1598b1c9c3ee01f6f2c84da643c23182c0bfc00000002934c0abe8b38512e0a8f2cdda0f7a4ccfdb8892ac0c47577b1736ff0a8760da7ab80078380f9a3f76c29c450f01e7846b7c265e81c7820c1069a01ec112e4c9f5ef2224beea1b6726f9d571a817e7878dc0081e58a2e2d6d8897590ca8bbfad592c86a5dfa048c11a1d5256168e1abbec3294fff524270dcb4e2ccf4ad1c01b2f50617bdea7cde01dfd40abceb826b72907e4627a972d0d94ac18d90b070e5138542620c162fee11e35b615c1332af593d165ad2124ee700c905eafb47bb8c1c3efa9dee61560288af752e95391e6ba8931ee2a555706893f47e4e1db4cb6ef8495975561f3d7ab3cf72a254d2d09143ab8b72a20fc808b0007d465bf25359ec0487cbd29bfc97194ed8868ed4e458c7b2bf8ab6f04efee532502cf588c4f26b9b2830baa635c56857be5fd6803fd35d508881bd7cf3b5872ff84640384e2576bd93d4d86fdafcba2df3f29036491573031ede2ddb09dd092ad890a68f07876aeeb1670ef988687963f3e3481e448df81c3887471be037c05e55b9ffa04295049a53a7bf2dc6f8f444bcdb55aa860b68c59860c8918ec080cf9da5e53ef614446784f1a59370c718c3f22b1951bf719e97e5af289407f6162ca5c790f93ca249db4999d4f766193d965457595fd708fdd1d5e45929132988a250cbb6d49047ceea5a7d229ba568f9022cdfbe5e6cd7c201ba74ac1ba1a90679a02797e3661300ea1a0cfd5b1b5f013992653794a219d4ecdaae19e0598582f48ad7496557fa709200000002b52319c25eabb5fddbf0f1329721ff50aaf0ebd5adafe2886f458f0c7f2b004d206168484605a5a9b504465ba59d254f8cadc1bd5a2ab181ddfdfafbf205f0b40ba5593e87176e42872e5e3e46e42f28eb15d389bc08e95a05bd6fe04dddd7ddb240dbca64d7b462884689308b73495a273780a25c953d32d5c298c888972df69d450581a07e6465d284b56b4eeacdd2811b655cbb86a9c7c19649bbe5df94d24b840d895c372374af8e8692e9bf66b142b3214f70c3da25c0258bc8c2eab1555f1fa270c6d9fec15b2bffdb1905f86ed286cf41ee3fb30bf7cf3e51bdf05e943fc018f613b86e8ff48aa3d9ebe0cdf6bf8a6d35626ec7b0934b6094160c087202b387e119ec10c4a8963ee52710d75c21710881bae7fb5a8595fd43a9156419f8080891e50139bd4af14f1ba25ebe0152b5e83d115be493372e147742d8bfe3a8269e8ecd27ec055a11055d5405192cda8c8db528f06b120fc2e3f470898974118e681c1b99e40a986ff74b97d61f5c4e88e52c7aef82fabd2f44256ffdbf980635cdf40bdda88c767ddbe643aae7ac4ab61f5b500bc405db39d6d0ff790878a76c5d09f8a5a21010b71ea9bccf811db26d23f437bf196fc0e42ef701068d51d33e4afcecc6ee66ed2addf6ebd1480dfdc2f9e25462d573493bd645e8a7a1336118677a442c14009d33e4bfc1756b09039789a7e806d5050c2fc70e33842b904042dce8c4121c2e82db496052715bca21c7706daf66b0990c88c2c628c1d4f23500000007a23a41c1b755d06289d7546233e2ae891c82f7f17ed0422d1f8754a20e0c7bce8b7159ea6d0680246f5542f662195263a45c271dd1a930a5791e9a2fe7d8a64cf235b20f07eb1e5af8664c15686c45e5e2811b570e27a8dfab1f71936f038320aa43184c3d0ef0bf81fc71b55d7130275eda4f851c02843c47bf5632bcddfa1797116ece6d63df159b63a22215a1f28988f6d990c1ab70d364d886e322f3147783665325302327ba4ead49d6bb759b6f45e95e391081185357516860fbf607b0932cb683faf83fbb9f31d8530facc9f9fdf04fdcbd2d83ca60f8f7f73852cb0410eaf3868c2e0d42dd2cc3cb96ecb7498dc3c337260451ee86b551c8bbac56ba350a2767f4afc4c891c00030c60629f6bbe0df10804206ed13fbe92971eb40868a9758765fa6499efeb9d1b3f924be03dae0815318a70a42a9bc836139cca5cae5239482d6a65affa6fedcc9776e77c9b65eb66297aed36094dc65d7d9f13302bb6d2b6a079cb6285e96bfb14809a8fff7fa35b63a68f295b6b977f73a4055e682ab6564c3a56bd9b63cc39c6fbdd01646b75c9d35974c4dd5cc4ad44113cd0635f903d48339fdf5276585b1ed66a991ad291af87e3b5c4f2a9247272977fdc8b74fb9dd5eba894f6e78184602e73e2045fcd3cdf8192fc038e3778599338cd9a4920be187e5b212a010a6351e865722a5ea0f55cecc492ec52b11679f8e3d2e9ce2e9bbd37683c44fef05e8c5c84dd0b8920b14c2aa9dd0e47ef96f2442a2969938fa8235eb06b166ee46115c3be5ad83cc73a0175564b6080401ca5ebe79ad8b383b94b8d167eef0459deea932a3200ee323c1542543b71b15bcf84a0d6bfdca76d30e1c5e593602a6d119e488db1b91fa39572973fc2e47ab7eaac489df7379fb9b4c2b5939f5a84b21d13545673640bc9750d94ea0aebd5fbddbc811692004e66eae5c8461c1d31a812bae721d8c76c44939b499779660f27b6bcc89168941199c1edfd9175ee71cf46036c9b362ac72922e504c42731eecfe146629257d01",
           "type": "ConcordiumZKProofV4"
         }
       }
@@ -1351,7 +1275,7 @@ mod tests {
             "#;
 
         let actual_json =
-            serde_json::to_string_pretty(&verification_audit_record_fixture()).unwrap();
+            serde_json::to_string_pretty(&fixtures::verification_audit_record_fixture()).unwrap();
         println!("audit record json:\n{}", actual_json);
 
         assert_eq!(
@@ -1363,11 +1287,9 @@ mod tests {
         Ok(())
     }
 
-    // Tests about serialization and deserialization roundtrips
-
     #[test]
     fn test_verification_request_anchor_serialization_deserialization_roundtrip() {
-        let request_data = verification_request_data_fixture();
+        let request_data = fixtures::verification_request_data_fixture();
 
         let deserialized = serialize_deserialize(&request_data).expect("Deserialization succeeds.");
 
@@ -1379,7 +1301,7 @@ mod tests {
 
     #[test]
     fn test_verification_audit_anchor_serialization_deserialization_roundtrip() {
-        let verification_audit_anchor = verification_audit_record_fixture();
+        let verification_audit_anchor = fixtures::verification_audit_record_fixture();
 
         let deserialized =
             serialize_deserialize(&verification_audit_anchor).expect("Deserialization succeeds.");
@@ -1389,15 +1311,13 @@ mod tests {
         );
     }
 
-    // Tests about cbor serialization and deserialization roundtrips for the anchors
-
     #[test]
     fn test_verification_request_anchor_cbor_roundtrip() {
-        let verification_request_anchor = verification_request_anchor_fixture();
+        let verification_request_anchor = fixtures::verification_request_anchor_fixture();
 
         let cbor = cbor::cbor_encode(&verification_request_anchor).unwrap();
 
-        assert_eq!(hex::encode(&cbor), "a464686173685820b4fbcf892fef3627717a333577921f76e41980d9ea4426f83aa98e221b39cf98647479706566434344565241667075626c6963a1636b6579046776657273696f6e01");
+        assert_eq!(hex::encode(&cbor), "a464686173685820954ff8287b13b7d0925b55e75edf700d78e16dae07941d32be83ed177793815f647479706566434344565241667075626c6963a1636b6579046776657273696f6e01");
 
         let decoded: VerificationRequestAnchor = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(decoded, verification_request_anchor);
@@ -1405,23 +1325,21 @@ mod tests {
 
     #[test]
     fn test_verification_audit_anchor_cbor_roundtrip() {
-        let verification_audit_anchor_on_chain = verification_audit_anchor_fixture();
+        let verification_audit_anchor_on_chain = fixtures::verification_audit_anchor_fixture();
 
         let cbor = cbor::cbor_encode(&verification_audit_anchor_on_chain).unwrap();
-        assert_eq!(hex::encode(&cbor), "a464686173685820ca347e796ce11a4617dc160f0c1ec5bc479d9de624e28ecb8829087b2e7f1b71647479706566434344564141667075626c6963a1636b6579046776657273696f6e01");
+        assert_eq!(hex::encode(&cbor), "a4646861736858209eb4aa6091914e2c5a5e64a6c5d2e23f5172b40ad8bc4d53088acf7bf43d1766647479706566434344564141667075626c6963a1636b6579046776657273696f6e01");
         let decoded: VerificationAuditAnchor = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(decoded, verification_audit_anchor_on_chain);
     }
 
-    // Tests about computing anchor hashes
-
     #[test]
     fn test_compute_the_correct_verification_request_anchor() -> anyhow::Result<()> {
-        let verification_request_anchor_hash = verification_request_anchor_fixture().hash;
+        let verification_request_anchor_hash = fixtures::verification_request_anchor_fixture().hash;
 
         let expected_verification_request_anchor_hash = Hash::new(
             <[u8; 32]>::from_hex(
-                "b4fbcf892fef3627717a333577921f76e41980d9ea4426f83aa98e221b39cf98",
+                "954ff8287b13b7d0925b55e75edf700d78e16dae07941d32be83ed177793815f",
             )
             .expect("Invalid hex"),
         );
@@ -1437,10 +1355,10 @@ mod tests {
 
     #[test]
     fn test_compute_the_correct_verification_audit_anchor() -> anyhow::Result<()> {
-        let verification_audit_anchor_hash = verification_audit_anchor_fixture().hash;
+        let verification_audit_anchor_hash = fixtures::verification_audit_anchor_fixture().hash;
         let expected_verification_audit_anchor_hash = Hash::new(
             <[u8; 32]>::from_hex(
-                "ca347e796ce11a4617dc160f0c1ec5bc479d9de624e28ecb8829087b2e7f1b71",
+                "9eb4aa6091914e2c5a5e64a6c5d2e23f5172b40ad8bc4d53088acf7bf43d1766",
             )
             .expect("Invalid hex"),
         );
@@ -1452,5 +1370,511 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn test_context_label_string_roundtrip() {
+        use ContextLabel::*;
+        for label in [
+            Nonce,
+            PaymentHash,
+            BlockHash,
+            ConnectionId,
+            ResourceId,
+            ContextString,
+        ] {
+            assert_eq!(
+                label.to_string().parse::<ContextLabel>().expect("parse"),
+                label
+            );
+        }
+    }
+
+    #[test]
+    fn test_context_label_json_roundtrip() {
+        use ContextLabel::*;
+        for label in [
+            Nonce,
+            PaymentHash,
+            BlockHash,
+            ConnectionId,
+            ResourceId,
+            ContextString,
+        ] {
+            let json = serde_json::to_string(&label).expect("to json");
+            let deserialized_label: ContextLabel = serde_json::from_str(&json).expect("from json");
+            assert_eq!(deserialized_label, label);
+        }
+    }
+
+    #[test]
+    fn test_labeled_context_property_string_roundtrip() {
+        use LabeledContextProperty::*;
+        for labeled_prop in [
+            Nonce(super::Nonce([1u8; 32])),
+            PaymentHash(hashes::TransactionHash::from([1u8; 32])),
+            BlockHash(hashes::BlockHash::from([1u8; 32])),
+            ConnectionId("testvalue".to_string()),
+            ResourceId("testvalue".to_string()),
+            ContextString("testvalue".to_string()),
+        ] {
+            let label_str = labeled_prop.label().to_string();
+            let value_str = labeled_prop.value().to_string();
+            let label_from_str = ContextLabel::from_str(&label_str).expect("label");
+            let labeled_prop_from_str =
+                LabeledContextProperty::try_from_label_and_value_str(label_from_str, &value_str)
+                    .expect("property");
+            assert_eq!(labeled_prop_from_str, labeled_prop);
+        }
+    }
+
+    #[test]
+    fn test_labeled_context_property_context_property_roundtrip() {
+        use LabeledContextProperty::*;
+        for labeled_prop in [
+            Nonce(super::Nonce([1u8; 32])),
+            PaymentHash(hashes::TransactionHash::from([1u8; 32])),
+            BlockHash(hashes::BlockHash::from([1u8; 32])),
+            ConnectionId("testvalue".to_string()),
+            ResourceId("testvalue".to_string()),
+            ContextString("testvalue".to_string()),
+        ] {
+            let context_prop = labeled_prop.to_context_property();
+            let labeled_prop_from_str =
+                LabeledContextProperty::try_from_context_property(&context_prop).expect("property");
+            assert_eq!(labeled_prop_from_str, labeled_prop);
+        }
+    }
+
+    #[test]
+    fn test_labeled_context_property_json_roundtrip() {
+        use LabeledContextProperty::*;
+        for labeled_prop in [
+            Nonce(super::Nonce([1u8; 32])),
+            PaymentHash(hashes::TransactionHash::from([1u8; 32])),
+            BlockHash(hashes::BlockHash::from([1u8; 32])),
+            ConnectionId("testvalue".to_string()),
+            ResourceId("testvalue".to_string()),
+            ContextString("testvalue".to_string()),
+        ] {
+            let json = serde_json::to_string(&labeled_prop).expect("json");
+            let labeled_prop_deserialized: LabeledContextProperty =
+                serde_json::from_str(&json).expect("property");
+            assert_eq!(labeled_prop_deserialized, labeled_prop);
+        }
+    }
+
+    #[test]
+    fn test_nonce_string_roundtrip() {
+        let mut rng = StdRng::seed_from_u64(0);
+        let nonce = Nonce(rng.gen());
+        let string = nonce.to_string();
+        let nonce_parsed: Nonce = string.parse().unwrap();
+        assert_eq!(nonce_parsed, nonce);
+    }
+
+    #[test]
+    fn test_nonce_json_roundtrip() {
+        let mut rng = StdRng::seed_from_u64(0);
+        let nonce = Nonce(rng.gen());
+        let json = serde_json::to_string(&nonce).unwrap();
+        let nonce_deserialized: Nonce = serde_json::from_str(&json).unwrap();
+        assert_eq!(nonce_deserialized, nonce);
+    }
+}
+
+#[cfg(test)]
+#[allow(dead_code)] // todo ar remove again
+mod fixtures {
+    use super::*;
+    use crate::common;
+    use crate::id::constants::AttributeKind;
+    use crate::id::id_proof_types::{AttributeInRangeStatement, AttributeValueStatement};
+    use crate::id::types::GlobalContext;
+    use crate::web3id::did::Network;
+    use crate::web3id::v1::{
+        fixtures, AccountBasedSubjectClaims, AtomicStatementV1, ContextInformation,
+        IdentityBasedSubjectClaims, SubjectClaims,
+    };
+    use std::collections::BTreeMap;
+    use std::fmt::Debug;
+    use std::marker::PhantomData;
+    use std::sync::LazyLock;
+
+    pub const NONCE: Nonce = Nonce([1u8; 32]);
+    pub const VRA_BLOCK_HASH: LazyLock<hashes::BlockHash> =
+        LazyLock::new(|| hashes::BlockHash::from([2u8; 32]));
+    pub const VRA_TXN_HASH: LazyLock<hashes::TransactionHash> =
+        LazyLock::new(|| hashes::TransactionHash::from([5u8; 32]));
+
+    pub use crate::web3id::v1::fixtures::*;
+
+    pub fn unfilled_context_fixture() -> UnfilledContextInformation {
+        UnfilledContextInformationBuilder::new_simple(
+            NONCE,
+            "testconnection".to_string(),
+            "testcontext".to_string(),
+        )
+        .build()
+    }
+
+    pub fn identity_subject_claims_fixture() -> RequestedIdentitySubjectClaims {
+        let statements = vec![
+            RequestedStatement::AttributeInRange(AttributeInRangeStatement {
+                attribute_tag: AttributeTag(3).to_string().parse().unwrap(),
+                lower: Web3IdAttribute::Numeric(80),
+                upper: Web3IdAttribute::Numeric(1237),
+                _phantom: PhantomData,
+            }),
+            RequestedStatement::AttributeInSet(AttributeInSetStatement {
+                attribute_tag: AttributeTag(2).to_string().parse().unwrap(),
+                set: [
+                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                ]
+                .into_iter()
+                .collect(),
+                _phantom: PhantomData,
+            }),
+            RequestedStatement::AttributeNotInSet(AttributeNotInSetStatement {
+                attribute_tag: AttributeTag(1).to_string().parse().unwrap(),
+                set: [
+                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                ]
+                .into_iter()
+                .collect(),
+                _phantom: PhantomData,
+            }),
+            RequestedStatement::AttributeInRange(AttributeInRangeStatement {
+                attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
+                lower: Web3IdAttribute::try_from(
+                    chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                        .unwrap()
+                        .to_utc(),
+                )
+                .unwrap(),
+                upper: Web3IdAttribute::try_from(
+                    chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                        .unwrap()
+                        .to_utc(),
+                )
+                .unwrap(),
+                _phantom: PhantomData,
+            }),
+            RequestedStatement::RevealAttribute(RevealAttributeStatement {
+                attribute_tag: AttributeTag(5).to_string().parse().unwrap(),
+            }),
+        ];
+
+        RequestedIdentitySubjectClaimsBuilder::default()
+            .issuer(IdentityProviderDid::new(0u32, did::Network::Testnet))
+            .issuer(IdentityProviderDid::new(1u32, did::Network::Testnet))
+            .issuer(IdentityProviderDid::new(17u32, did::Network::Testnet))
+            .source(IdentityCredentialType::IdentityCredential)
+            .source(IdentityCredentialType::AccountCredential)
+            .statements(statements)
+            .build()
+    }
+
+    pub fn verification_request_data_fixture() -> VerificationRequestData {
+        let context = unfilled_context_fixture();
+        let subject_claims = identity_subject_claims_fixture();
+
+        VerificationRequestDataBuilder::new(context)
+            .subject_claim(subject_claims)
+            .build()
+    }
+
+    pub fn verification_request_data_to_request_and_anchor(
+        request_data: VerificationRequestData,
+    ) -> (VerificationRequest, VerificationRequestAnchor) {
+        let mut public_info = HashMap::new();
+        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
+
+        let anchor = request_data.to_anchor(Some(public_info));
+        let request = VerificationRequest {
+            context: request_data.context,
+            subject_claims: request_data.subject_claims,
+            anchor_transaction_hash: *VRA_TXN_HASH,
+        };
+
+        (request, anchor)
+    }
+
+    pub fn verification_request_anchor_fixture() -> VerificationRequestAnchor {
+        let request_data = verification_request_data_fixture();
+
+        let mut public_info = HashMap::new();
+        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
+
+        request_data.to_anchor(Some(public_info))
+    }
+
+    pub fn verification_request_fixture() -> VerificationRequest {
+        let context = unfilled_context_fixture();
+        let subject_claims = identity_subject_claims_fixture();
+
+        VerificationRequest {
+            context,
+            subject_claims: vec![RequestedSubjectClaims::Identity(subject_claims)],
+            anchor_transaction_hash: *VRA_TXN_HASH,
+        }
+    }
+
+    pub fn unfilled_context_information_to_context_information(
+        context: &UnfilledContextInformation,
+    ) -> ContextInformation {
+        ContextInformation {
+            given: context
+                .given
+                .iter()
+                .map(|prop| prop.to_context_property())
+                .collect(),
+            requested: context
+                .requested
+                .iter()
+                .map(|label| match label {
+                    ContextLabel::BlockHash => LabeledContextProperty::BlockHash(*VRA_BLOCK_HASH),
+                    ContextLabel::ResourceId => {
+                        LabeledContextProperty::ResourceId("testresourceid".to_string())
+                    }
+                    _ => panic!("unexpected label"),
+                })
+                .map(|prop| prop.to_context_property())
+                .collect(),
+        }
+    }
+
+    pub fn verification_request_to_verifiable_presentation_request_identity(
+        id_cred: &IdentityCredentialsFixture<Web3IdAttribute>,
+        verification_request: &VerificationRequest,
+    ) -> VerifiablePresentationRequestV1 {
+        VerifiablePresentationRequestV1 {
+            context: unfilled_context_information_to_context_information(
+                &verification_request.context,
+            ),
+            subject_claims: verification_request
+                .subject_claims
+                .iter()
+                .map(|claims| requested_subject_claims_to_subject_claims_identity(id_cred, claims))
+                .collect(),
+        }
+    }
+
+    pub fn verification_request_to_verifiable_presentation_request_account(
+        account_cred: &AccountCredentialsFixture<Web3IdAttribute>,
+        verification_request: &VerificationRequest,
+    ) -> VerifiablePresentationRequestV1 {
+        VerifiablePresentationRequestV1 {
+            context: unfilled_context_information_to_context_information(
+                &verification_request.context,
+            ),
+            subject_claims: verification_request
+                .subject_claims
+                .iter()
+                .map(|claims| {
+                    requested_subject_claims_to_subject_claims_account(account_cred, claims)
+                })
+                .collect(),
+        }
+    }
+
+    pub fn requested_subject_claims_to_subject_claims_identity(
+        id_cred: &IdentityCredentialsFixture<Web3IdAttribute>,
+        claims: &RequestedSubjectClaims,
+    ) -> SubjectClaims<ArCurve, Web3IdAttribute> {
+        match claims {
+            RequestedSubjectClaims::Identity(claims) => {
+                let statements = claims
+                    .statements
+                    .iter()
+                    .map(|stmt| requested_statement_to_statement(stmt))
+                    .collect();
+
+                SubjectClaims::Identity(IdentityBasedSubjectClaims {
+                    network: Network::Testnet,
+                    issuer: id_cred.issuer,
+                    statements,
+                })
+            }
+        }
+    }
+
+    pub fn requested_subject_claims_to_subject_claims_account(
+        account_cred: &AccountCredentialsFixture<Web3IdAttribute>,
+        claims: &RequestedSubjectClaims,
+    ) -> SubjectClaims<ArCurve, Web3IdAttribute> {
+        match claims {
+            RequestedSubjectClaims::Identity(id_claims) => {
+                let statements = id_claims
+                    .statements
+                    .iter()
+                    .map(|stmt| requested_statement_to_statement(stmt))
+                    .collect();
+
+                SubjectClaims::Account(AccountBasedSubjectClaims {
+                    network: Network::Testnet,
+                    issuer: account_cred.issuer,
+                    cred_id: account_cred.cred_id,
+                    statements,
+                })
+            }
+        }
+    }
+
+    fn requested_statement_to_statement(
+        statement: &RequestedStatement<AttributeTag>,
+    ) -> AtomicStatementV1<ArCurve, AttributeTag, Web3IdAttribute> {
+        match statement {
+            RequestedStatement::RevealAttribute(stmt) => {
+                AtomicStatementV1::AttributeValue(AttributeValueStatement {
+                    attribute_tag: stmt.attribute_tag,
+                    attribute_value: Web3IdAttribute::String(
+                        AttributeKind::try_new("testvalue".into()).unwrap(),
+                    ),
+                    _phantom: Default::default(),
+                })
+            }
+            RequestedStatement::AttributeInRange(stmt) => {
+                AtomicStatementV1::AttributeInRange(stmt.clone())
+            }
+            RequestedStatement::AttributeInSet(stmt) => {
+                AtomicStatementV1::AttributeInSet(stmt.clone())
+            }
+            RequestedStatement::AttributeNotInSet(stmt) => {
+                AtomicStatementV1::AttributeNotInSet(stmt.clone())
+            }
+        }
+    }
+
+    /// Statements and attributes that make the statements true
+    pub fn default_attributes<TagType: FromStr + common::Serialize + Ord>(
+    ) -> BTreeMap<TagType, Web3IdAttribute>
+    where
+        <TagType as FromStr>::Err: Debug,
+    {
+        let attributes = [
+            (
+                AttributeTag(3).to_string().parse().unwrap(),
+                Web3IdAttribute::Numeric(137),
+            ),
+            (
+                AttributeTag(1).to_string().parse().unwrap(),
+                Web3IdAttribute::String(AttributeKind::try_new("xkcd".into()).unwrap()),
+            ),
+            (
+                AttributeTag(2).to_string().parse().unwrap(),
+                Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+            ),
+            (
+                AttributeTag(5).to_string().parse().unwrap(),
+                Web3IdAttribute::String(AttributeKind::try_new("testvalue".into()).unwrap()),
+            ),
+            (
+                AttributeTag(6).to_string().parse().unwrap(),
+                Web3IdAttribute::String(AttributeKind::try_new("bb".into()).unwrap()),
+            ),
+            (
+                AttributeTag(4).to_string().parse().unwrap(),
+                Web3IdAttribute::try_from(
+                    chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
+                        .unwrap()
+                        .to_utc(),
+                )
+                .unwrap(),
+            ),
+        ]
+        .into_iter()
+        .collect();
+
+        attributes
+    }
+
+    pub fn generate_and_prove_presentation_identity(
+        id_cred: &IdentityCredentialsFixture<Web3IdAttribute>,
+        request: VerifiablePresentationRequestV1,
+    ) -> VerifiablePresentationV1 {
+        let global_context = GlobalContext::generate("Test".into());
+
+        // the easiest way to construct a presentation, is just to run the prover on a request
+        let now = chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let presentation = request
+            .prove_with_rng(
+                &global_context,
+                [id_cred.private_inputs()].into_iter(),
+                &mut fixtures::seed0(),
+                now,
+            )
+            .expect("prove");
+
+        presentation
+    }
+
+    pub fn generate_and_prove_presentation_account(
+        account_cred: &AccountCredentialsFixture<Web3IdAttribute>,
+        request: VerifiablePresentationRequestV1,
+    ) -> VerifiablePresentationV1 {
+        let global_context = GlobalContext::generate("Test".into());
+
+        // the easiest way to construct a presentation, is just to run the prover on a request
+        let now = chrono::DateTime::parse_from_rfc3339("2023-08-28T23:12:15Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let presentation = request
+            .prove_with_rng(
+                &global_context,
+                [account_cred.private_inputs()].into_iter(),
+                &mut fixtures::seed0(),
+                now,
+            )
+            .expect("prove");
+
+        presentation
+    }
+
+    pub fn verifiable_presentation_fixture() -> VerifiablePresentationV1 {
+        let global_context = GlobalContext::generate("Test".into());
+
+        let id_cred = fixtures::identity_credentials_fixture(default_attributes(), &global_context);
+
+        let request = verification_request_to_verifiable_presentation_request_identity(
+            &id_cred,
+            &verification_request_fixture(),
+        );
+
+        let id_cred = fixtures::identity_credentials_fixture(default_attributes(), &global_context);
+
+        generate_and_prove_presentation_identity(&id_cred, request)
+    }
+
+    pub fn verification_audit_record_fixture() -> VerificationAuditRecord {
+        let request_data = verification_request_data_fixture();
+
+        let verification_request = VerificationRequest {
+            context: request_data.context,
+            subject_claims: request_data.subject_claims,
+            anchor_transaction_hash: hashes::TransactionHash::new([2u8; 32]),
+        };
+
+        let presentation = verifiable_presentation_fixture();
+
+        let id = "MyUUID".to_string();
+
+        VerificationAuditRecord::new(id, verification_request, presentation)
+    }
+
+    pub fn verification_audit_anchor_fixture() -> VerificationAuditAnchor {
+        let verification_audit_anchor: VerificationAuditRecord =
+            verification_audit_record_fixture();
+
+        let mut public_info = HashMap::new();
+        public_info.insert("key".to_string(), cbor::value::Value::Positive(4u64));
+
+        verification_audit_anchor.to_anchor(Some(public_info))
     }
 }

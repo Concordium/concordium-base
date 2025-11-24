@@ -1,4 +1,4 @@
-//! Functionality related to constructing and verifying V1 Concordium Web3ID proofs.
+//! Functionality related to constructing and verifying V1 Concordium verifiable presentations.
 //!
 //! The main entrypoints in this module are the [`verify`](PresentationV1::verify)
 //! function for verifying presentations in the context of given public
@@ -10,8 +10,6 @@
 //! "15.4 Identity Presentations using Zero-Knowledge Proofs" and
 //! "17 Web3 Verifiable Credentials"
 
-/// Types defining the verification request anchor (VRA) and verification audit anchor (VAA)
-/// These types are part of the higher level verification flow.
 pub mod anchor;
 mod proofs;
 
@@ -131,6 +129,8 @@ pub struct ContextProperty {
 pub struct AccountBasedSubjectClaims<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Network on which the account exists
     pub network: Network,
+    /// Identity provider which issued the credentials
+    pub issuer: IpIdentity,
     /// Account registration id
     pub cred_id: CredentialRegistrationID,
     /// Attribute statements
@@ -173,6 +173,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
         match self {
             Self::Account(AccountBasedSubjectClaims {
                 network,
+                issuer,
                 cred_id,
                 statements: statement,
             }) => {
@@ -186,6 +187,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 )?;
                 let id = did::Method::new_account_credential(*network, *cred_id);
                 map.serialize_entry("id", &id)?;
+                let issuer = did::Method::new_idp(*network, *issuer);
+                map.serialize_entry("issuer", &issuer)?;
                 map.serialize_entry("statement", statement)?;
                 map.end()
             }
@@ -232,10 +235,19 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
                     let did::IdentifierType::Credential { cred_id } = id.ty else {
                         bail!("expected account credential did, was {}", id);
                     };
+                    let issuer: did::Method = take_field_de(&mut value, "issuer")?;
+                    let did::IdentifierType::Idp { idp_identity } = issuer.ty else {
+                        bail!("expected issuer did, was {}", issuer);
+                    };
+                    ensure!(
+                        issuer.network == id.network,
+                        "issuer and account registration id network not identical"
+                    );
                     let statement = take_field_de(&mut value, "statement")?;
 
                     Self::Account(AccountBasedSubjectClaims {
                         network: id.network,
+                        issuer: idp_identity,
                         cred_id,
                         statements: statement,
                     })
@@ -287,13 +299,16 @@ fn take_field_de<T: DeserializeOwned>(
 /// identity provider.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct AccountCredentialMetadataV1 {
-    pub issuer: IpIdentity,
+    /// Account credential registration id for the credential.
+    /// Must be used to look up the account credential on chain.
     pub cred_id: CredentialRegistrationID,
 }
 
 /// Metadata of an identity based credential.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct IdentityCredentialMetadataV1 {
+    /// Issuer of the identity credentials. Must be used to look
+    /// up the identity provider keys on chain.
     pub issuer: IpIdentity,
     pub validity: CredentialValidity,
 }
@@ -313,7 +328,7 @@ pub enum CredentialMetadataTypeV1 {
 /// Metadata of a credential [`CredentialV1`].
 /// The metadata consists of
 ///
-/// * data that is part of the verification presentation and credentials but needs to be verified externally (network is an example of that)
+/// * data that is part of the verification presentation and credentials but needs to be verified externally: network, credential validity period
 /// * information about data that must be resolved externally to [`CredentialVerificationMaterial`] in order to verify
 ///   the presentation
 ///
@@ -406,14 +421,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
     pub fn metadata(&self) -> AccountCredentialMetadataV1 {
         let AccountBasedCredentialV1 {
             subject: AccountCredentialSubject { cred_id, .. },
-            issuer,
             ..
         } = self;
 
-        AccountCredentialMetadataV1 {
-            issuer: *issuer,
-            cred_id: *cred_id,
-        }
+        AccountCredentialMetadataV1 { cred_id: *cred_id }
     }
 
     /// Extract the subject claims from the credential.
@@ -425,11 +436,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
                     cred_id,
                     statements,
                 },
+            issuer,
             ..
         } = self;
 
         AccountBasedSubjectClaims {
             network: *network,
+            issuer: *issuer,
             cred_id: *cred_id,
             statements: statements.clone(),
         }
@@ -668,9 +681,10 @@ pub struct ConcordiumZKProof<T: common::Serialize> {
     pub proof_version: ConcordiumZKProofVersion,
 }
 
-/// Verifiable credential. Embeds and proofs the claims from a [`SubjectClaims`].
-/// To verify the credential, the corresponding public input [`CredentialsInputs`](super::CredentialsInputs) is needed.
-/// Also, the data in [`CredentialMetadataV1`] returned by [`CredentialV1::metadata`] must be verified externally in
+/// Verifiable credential that contains subject claims and proofs of the claims.
+/// The subject and claims can be retrieved by calling [`CredentialV1::claims`].
+/// To verify the credential, the corresponding public input [`CredentialVerificationMaterial`] is needed.
+/// Also, some of the data in [`CredentialMetadataV1`] returned by [`CredentialV1::metadata`] must be verified externally in
 /// order to verify the credential.
 // for some reason, version 1.82 clippy thinks the `Identity` variant is 0 bytes and hence gives this warning
 #[allow(clippy::large_enum_variant)]
@@ -819,7 +833,10 @@ impl<
                     let did::IdentifierType::Idp { idp_identity } = issuer.ty else {
                         bail!("expected idp did, was {}", issuer);
                     };
-                    ensure!(issuer.network == subject.network, "network not identical");
+                    ensure!(
+                        issuer.network == subject.network,
+                        "issuer and account registration id network not identical"
+                    );
                     let proof: ConcordiumZKProof<AccountCredentialProofs<C>> =
                         take_field_de(&mut value, "proof")?;
 
@@ -958,8 +975,10 @@ pub struct LinkingProofV1 {
     pub proof_type: ConcordiumLinkingProofVersion,
 }
 
-/// Verifiable presentation. Is the response to proving a [`RequestV1`] with [`RequestV1::prove`]. It contains proofs for
-/// the claims in the request. To verify the presentation, use [`PresentationV1::verify`].
+/// Verifiable presentation that contains verifiable credentials each
+/// consisting of subject claims and proofs of them.
+/// It is the response to proving a [`RequestV1`] with [`RequestV1::prove`].
+/// To verify the presentation, use [`PresentationV1::verify`].
 #[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
 pub struct PresentationV1<
     P: Pairing,
@@ -1042,7 +1061,7 @@ impl<
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct RequestV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Context challenge for the proof
-    pub challenge: ContextInformation,
+    pub context: ContextInformation,
     /// Claims to prove
     pub subject_claims: Vec<SubjectClaims<C, AttributeType>>,
 }
@@ -1056,7 +1075,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
     {
         let mut map = serializer.serialize_map(None)?;
         map.serialize_entry("type", &CONCORDIUM_REQUEST_TYPE)?;
-        map.serialize_entry("context", &self.challenge)?;
+        map.serialize_entry("context", &self.context)?;
         map.serialize_entry("subjectClaims", &self.subject_claims)?;
         map.end()
     }
@@ -1079,11 +1098,11 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
                 CONCORDIUM_REQUEST_TYPE
             );
 
-            let challenge = take_field_de(&mut value, "context")?;
+            let context = take_field_de(&mut value, "context")?;
             let credential_statements = take_field_de(&mut value, "subjectClaims")?;
 
             Ok(Self {
-                challenge,
+                context,
                 subject_claims: credential_statements,
             })
         })();
@@ -1225,7 +1244,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 #[serde(bound(serialize = "", deserialize = ""))]
 #[serde(rename_all = "camelCase")]
 pub struct AccountCredentialVerificationMaterial<C: Curve> {
-    // Commitments to attribute values. Are part of the on-chain account credentials.
+    /// Issuer of the credential
+    pub issuer: IpIdentity,
+    /// Commitments to attribute values. Are part of the on-chain account credentials.
     #[serde(rename = "commitments")]
     pub attribute_commitments: BTreeMap<AttributeTag, pedersen_commitment::Commitment<C>>,
 }
@@ -1541,6 +1562,7 @@ mod tests {
         let credential_statements = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
             network: Network::Testnet,
             cred_id: acc_cred_fixture.cred_id,
+            issuer: acc_cred_fixture.issuer,
             statements: vec![
                 AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
                     attribute_tag: 3.into(),
@@ -1597,7 +1619,7 @@ mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims: credential_statements,
         };
 
@@ -1628,6 +1650,7 @@ mod tests {
         "ConcordiumAccountBasedSubjectClaims"
       ],
       "id": "did:ccd:testnet:cred:856793e4ba5d058cea0b5c3a1c8affb272efcf53bbab77ee28d3e2270d5041d220c1e1a9c6c8619c84e40ebd70fb583e",
+      "issuer": "did:ccd:testnet:idp:17",
       "statement": [
         {
           "type": "AttributeInRange",
@@ -1848,6 +1871,7 @@ mod tests {
         let expected_verification_material_json = r#"
 {
   "type": "account",
+  "issuer": 17,
   "commitments": {
     "lastName": "9443780e625e360547c5a6a948de645e92b84d91425f4d9c0455bcf6040ef06a741b6977da833a1552e081fb9c4c9318",
     "sex": "83a4e3bc337339a16a97dfa4bfb426f7e660c61168f3ed922dcf26d7711e083faa841d7e70d44a5f090a9a6a67eff5ad",
@@ -1980,7 +2004,7 @@ mod tests {
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims: credential_statements,
         };
 
@@ -2637,6 +2661,7 @@ mod fixtures {
         pub private_inputs: OwnedCredentialProofPrivateInputs<IpPairing, ArCurve, AttributeType>,
         pub verification_material: CredentialVerificationMaterial<IpPairing, ArCurve>,
         pub cred_id: CredentialRegistrationID,
+        pub issuer: IpIdentity,
     }
 
     impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>
@@ -2667,20 +2692,24 @@ mod fixtures {
             attr_cmm.insert(*tag, cmm);
         }
 
+        let issuer = IpIdentity::from(17u32);
+
         let commitment_inputs =
             OwnedCredentialProofPrivateInputs::Account(OwnedAccountCredentialProofPrivateInputs {
                 attribute_values: attrs,
                 attribute_randomness: attr_rand,
-                issuer: IpIdentity::from(17u32),
+                issuer,
             });
 
         let credential_inputs =
             CredentialVerificationMaterial::Account(AccountCredentialVerificationMaterial {
+                issuer,
                 attribute_commitments: attr_cmm,
             });
 
         AccountCredentialsFixture {
             private_inputs: commitment_inputs,
+            issuer,
             verification_material: credential_inputs,
             cred_id,
         }
