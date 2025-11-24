@@ -476,8 +476,7 @@ $( singletons
         supportsSponsoredTransactions P7 = False
         supportsSponsoredTransactions P8 = False
         supportsSponsoredTransactions P9 = False
-
-        -- supportsSponsoredTransactions P10 = True
+        supportsSponsoredTransactions P10 = True
 
         -- \| A type representing the different hashing structures used for the block hash depending on
         -- the protocol version.
