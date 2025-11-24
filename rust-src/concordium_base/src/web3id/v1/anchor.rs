@@ -66,10 +66,10 @@ pub struct VerificationRequest {
 pub struct VerificationAuditRecord {
     /// Version integer, for now it is always 1.
     pub version: u16,
-    /// Unique identifier chosen by the requester/merchant.
-    pub id: String,
     /// The verification request to record.
     pub request: VerificationRequest,
+    /// Unique identifier chosen by the requester/merchant.
+    pub id: String,
     /// The verifiable presentation containing verifiable credentials.
     pub presentation: VerifiablePresentationV1,
 }
@@ -1088,7 +1088,6 @@ mod tests {
 {
   "type": "ConcordiumVerificationAuditRecord",
   "version": 1,
-  "id": "MyUUID",
   "request": {
     "type": "ConcordiumVerificationRequestV1",
     "context": {
@@ -1170,6 +1169,7 @@ mod tests {
     ],
     "transactionRef": "0202020202020202020202020202020202020202020202020202020202020202"
   },
+  "id": "MyUUID",
   "presentation": {
     "type": [
       "VerifiablePresentation",
@@ -1328,7 +1328,7 @@ mod tests {
         let verification_audit_anchor_on_chain = fixtures::verification_audit_anchor_fixture();
 
         let cbor = cbor::cbor_encode(&verification_audit_anchor_on_chain).unwrap();
-        assert_eq!(hex::encode(&cbor), "a4646861736858209eb4aa6091914e2c5a5e64a6c5d2e23f5172b40ad8bc4d53088acf7bf43d1766647479706566434344564141667075626c6963a1636b6579046776657273696f6e01");
+        assert_eq!(hex::encode(&cbor), "a464686173685820c32836554f661118a6e293abbe6d07216f701615e3e0bb377965c260fc9f7e54647479706566434344564141667075626c6963a1636b6579046776657273696f6e01");
         let decoded: VerificationAuditAnchor = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(decoded, verification_audit_anchor_on_chain);
     }
@@ -1358,7 +1358,7 @@ mod tests {
         let verification_audit_anchor_hash = fixtures::verification_audit_anchor_fixture().hash;
         let expected_verification_audit_anchor_hash = Hash::new(
             <[u8; 32]>::from_hex(
-                "9eb4aa6091914e2c5a5e64a6c5d2e23f5172b40ad8bc4d53088acf7bf43d1766",
+                "c32836554f661118a6e293abbe6d07216f701615e3e0bb377965c260fc9f7e54",
             )
             .expect("Invalid hex"),
         );
