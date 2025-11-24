@@ -751,6 +751,32 @@ verifyTransaction ai tx = verifyAccountSignature bodyHash maps ai
     bodyHash = transactionSignHashToByteString (transactionSignHash tx)
     TransactionSignature maps = transactionSignature tx
 
+-- | Verify that the given sponsored transaction was signed by the required number of keys for
+--  both the sender and the sponsor.  Concretely this means, for both sender and sponsor,
+--
+--  - enough credential holders signed the transaction
+--  - each of the credential signatures has the required number of signatures, see 'verifyCredentialSignatures'
+--  - all of the signatures are valid, that is, it is not sufficient that a threshold number are valid, and some extra ones are invalid.
+--
+--  If the transaction is not sponsored (`transactionSponsorSignature` returns @Nothing@) then this
+--  function returns @False@.
+verifySponsoredTransaction ::
+    (TransactionData msg) =>
+    -- | Sender account credential keys.
+    AccountInformation ->
+    -- | Sponsor account credential keys.
+    AccountInformation ->
+    -- | Transaction.
+    msg ->
+    Bool
+verifySponsoredTransaction sender sponsor tx
+    | Just sponsorSig <- transactionSponsorSignature tx =
+        verifyAccountSignature bodyHash (tsSignatures (transactionSignature tx)) sender
+            && verifyAccountSignature bodyHash (tsSignatures sponsorSig) sponsor
+    | otherwise = False
+  where
+    bodyHash = transactionSignHashToByteString (transactionSignHash tx)
+
 -----------------------------------
 
 -- * 'TransactionData' abstraction
