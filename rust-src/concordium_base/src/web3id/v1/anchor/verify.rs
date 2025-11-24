@@ -21,10 +21,9 @@ pub struct VerificationContext {
     /// The blockchain network at which the credential must be valid. This ties
     /// the credential to the network where the credential was issued. Must match
     /// the network from which [verification material](VerificationMaterialWithValidity)
-    /// and [verification request anchor](VerificationRequestAnchorAndBlockHash) is fetched.
+    /// and [verification request anchor](VerificationRequestAnchorAndBlockHash) are fetched.
     pub network: did::Network,
     /// The time at which the credential must be valid.
-    // todo ar move out of here?
     pub validity_time: chrono::DateTime<chrono::Utc>,
 }
 
@@ -55,7 +54,7 @@ pub enum CredentialValidityType {
     ValidityPeriod(types::CredentialValidity),
 }
 
-/// Reason why credential is invalid
+/// Reason why a credential is invalid
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CredentialInvalidReason {
@@ -63,7 +62,7 @@ pub enum CredentialInvalidReason {
     CredentialNotValidYet,
     // Credential is no longer valid at the given time
     CredentialExpired,
-    /// The network the credentials are issued for is not the same network we verify for1
+    /// The network the credentials are issued for and network we verify for is not the same
     Network,
     /// The verifiable presentation is not cryptographically verifiable
     PresentationUnverifiable,
@@ -73,17 +72,17 @@ pub enum CredentialInvalidReason {
     NoVraBlockHash,
     /// The verification request anchor (VRA) block hash in the context doest not match the actual block the VRA is registered in
     VraBlockHash,
-    /// The context in the verifiable presentation does not match the context in the verification request
-    Context,
+    /// The context information in the verifiable presentation does not match the context information in the verification request
+    ContextInformation,
     /// The context has a property with invalid value
-    InvalidPropertyValue,
+    InvalidContextPropertyValue,
     /// The context has an unknown property
-    UnknownProperty,
-    /// The subject claims (statements) in the verifiable presentation does not match the subject claims (statements) in the verification request
+    UnknownContextProperty,
+    /// The subject claims (statements) in the verifiable presentation do not match the subject claims (statements) in the verification request
     SubjectClaims,
-    /// The credential is not of the allowed credential types the verification request
+    /// The credential is not one of allowed credential types in the verification request
     SubjectClaimsCredentialType,
-    /// The issuer for the credential does not match the allowed issuers in the verification request
+    /// The issuer for the credential is not one of the allowed issuers in the verification request
     SubjectClaimsIssuer,
 }
 
@@ -94,11 +93,12 @@ pub enum PresentationVerificationResult {
     /// [`verify_presentation_with_request_anchor`] for a list of what is
     /// verified.
     Verified,
-    /// Verification of the presentation failed. The reason for the failure
+    /// Verification of the presentation failed.
     Failed(CredentialInvalidReason),
 }
 
 impl PresentationVerificationResult {
+    /// If verification was successful
     pub fn is_success(&self) -> bool {
         matches!(self, PresentationVerificationResult::Verified)
     }
@@ -111,9 +111,9 @@ impl PresentationVerificationResult {
 ///
 /// * the presentation is cryptographically verifiable
 /// * the credentials in the presentation are active at the time given in the verification context
-/// * the subject claims and the context information in the presentation matches
+/// * the subject claims and the context information in the presentation match
 ///   the requested claims and context in the verification request
-/// * the request anchor is formed correctly from the verification request data
+/// * the request anchor is formed correctly from the verification request data,
 ///   and its registration block hash is correctly set in the verification request
 /// * the network on which the presentation credentials are valid matches the network
 ///   in the verification context
@@ -244,8 +244,8 @@ fn verify_anchor_block_hash(
         return Err(CredentialInvalidReason::NoVraBlockHash);
     };
 
-    let context_block_hash =
-        context_block_hash_parse_res.map_err(|_| CredentialInvalidReason::InvalidPropertyValue)?;
+    let context_block_hash = context_block_hash_parse_res
+        .map_err(|_| CredentialInvalidReason::InvalidContextPropertyValue)?;
 
     if request_anchor.block_hash != context_block_hash {
         return Err(CredentialInvalidReason::VraBlockHash);
@@ -296,6 +296,7 @@ fn verify_request_subject_claims_list(
     for pair in presentation_claims.iter().zip_longest(request_claims) {
         let (pres_claims, req_claims) =
             pair.both().ok_or(CredentialInvalidReason::SubjectClaims)?;
+
         verify_request_subject_claims(pres_claims, req_claims)?;
     }
 
@@ -385,9 +386,11 @@ fn verify_request_context(
         res: Result<T, FromContextPropertyError>,
     ) -> Result<T, CredentialInvalidReason> {
         res.map_err(|err| match err {
-            FromContextPropertyError::ParseLabel(_) => CredentialInvalidReason::UnknownProperty,
+            FromContextPropertyError::ParseLabel(_) => {
+                CredentialInvalidReason::UnknownContextProperty
+            }
             FromContextPropertyError::ParseValue(_) => {
-                CredentialInvalidReason::InvalidPropertyValue
+                CredentialInvalidReason::InvalidContextPropertyValue
             }
         })
     }
@@ -399,7 +402,7 @@ fn verify_request_context(
         .collect();
 
     if map_parse_prop_err(presentation_given_properties_parse_res)? != request_context.given {
-        return Err(CredentialInvalidReason::Context);
+        return Err(CredentialInvalidReason::ContextInformation);
     }
 
     let presentation_requested_property_labels_parse_res: Result<Vec<_>, _> = presentation_context
@@ -413,7 +416,7 @@ fn verify_request_context(
     if map_parse_prop_err(presentation_requested_property_labels_parse_res)?
         != request_context.requested
     {
-        return Err(CredentialInvalidReason::Context);
+        return Err(CredentialInvalidReason::ContextInformation);
     }
 
     Ok(())
@@ -423,6 +426,8 @@ fn verify_request_context(
 mod tests {
     use super::*;
     use crate::hashes;
+    use crate::id::constants::AttributeKind;
+    use crate::id::id_proof_types::AttributeInSetStatement;
     use crate::id::types::YearMonth;
     use crate::web3id::did::Network;
     use crate::web3id::v1::anchor::{
@@ -430,6 +435,7 @@ mod tests {
     };
     use crate::web3id::v1::{ContextProperty, CredentialV1};
     use assert_matches::assert_matches;
+    use std::marker::PhantomData;
 
     fn verification_context() -> VerificationContext {
         VerificationContext {
@@ -853,7 +859,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::UnknownProperty)
+            PresentationVerificationResult::Failed(CredentialInvalidReason::UnknownContextProperty)
         );
     }
 
@@ -901,12 +907,14 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::InvalidPropertyValue)
+            PresentationVerificationResult::Failed(
+                CredentialInvalidReason::InvalidContextPropertyValue
+            )
         );
     }
 
     /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
-    /// Test check that context in presentation matches request context.
+    /// Tests check that context in presentation matches request context.
     #[test]
     fn test_verify_soundness_context_given() {
         let global_context = GlobalContext::generate("Test".into());
@@ -950,12 +958,12 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::Context)
+            PresentationVerificationResult::Failed(CredentialInvalidReason::ContextInformation)
         );
     }
 
     /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
-    /// Test check that context in presentation matches request context.
+    /// Tests check that context in presentation matches request context.
     #[test]
     fn test_verify_soundness_context_requested() {
         let global_context = GlobalContext::generate("Test".into());
@@ -994,7 +1002,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::Context)
+            PresentationVerificationResult::Failed(CredentialInvalidReason::ContextInformation)
         );
     }
 
@@ -1250,9 +1258,59 @@ mod tests {
     }
 
     /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
-    /// Test that identity credentials are only accepted if allowed in request.
+    /// Test subject claims/statements not as requested. Tests modified statement.
     #[test]
-    fn test_verify_soundness_claims_statements() {
+    fn test_verify_soundness_claims_statement_modified() {
+        let global_context = GlobalContext::generate("Test".into());
+        let (request, vra) = fixtures::verification_request_data_to_request_and_anchor(
+            fixtures::verification_request_data_fixture(),
+        );
+        let id_cred =
+            fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
+
+        let mut presentation_request =
+            fixtures::verification_request_to_verifiable_presentation_request_identity(
+                &id_cred, &request,
+            );
+
+        // modify statement
+        assert_matches!(&mut presentation_request.subject_claims[0], SubjectClaims::Identity(id_claims) => {
+            assert_matches!(&mut id_claims.statements[1],
+                AtomicStatementV1::AttributeInSet(AttributeInSetStatement { set, .. }) => {
+                   set.insert(Web3IdAttribute::String(AttributeKind::try_new("bb".into()).unwrap()));
+            });
+        });
+
+        let presentation =
+            fixtures::generate_and_prove_presentation_identity(&id_cred, presentation_request);
+
+        let anchor = VerificationRequestAnchorAndBlockHash {
+            verification_request_anchor: vra,
+            block_hash: *fixtures::VRA_BLOCK_HASH,
+        };
+
+        let material = VerificationMaterialWithValidity {
+            verification_material: id_cred.verification_material.clone(),
+            validity: validity(),
+        };
+
+        assert_eq!(
+            verify_presentation_with_request_anchor(
+                &global_context,
+                &verification_context(),
+                &request,
+                &presentation,
+                &anchor,
+                &[material],
+            ),
+            PresentationVerificationResult::Failed(CredentialInvalidReason::SubjectClaims)
+        );
+    }
+
+    /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
+    /// Test subject claims/statements not as requested. Tests removing statement.
+    #[test]
+    fn test_verify_soundness_claims_statement_removed() {
         let global_context = GlobalContext::generate("Test".into());
         let (request, vra) = fixtures::verification_request_data_to_request_and_anchor(
             fixtures::verification_request_data_fixture(),
@@ -1269,6 +1327,55 @@ mod tests {
         assert_matches!(&mut presentation_request.subject_claims[0], SubjectClaims::Identity(id_claims) => {
             id_claims.statements.pop();
         });
+
+        let presentation =
+            fixtures::generate_and_prove_presentation_identity(&id_cred, presentation_request);
+
+        let anchor = VerificationRequestAnchorAndBlockHash {
+            verification_request_anchor: vra,
+            block_hash: *fixtures::VRA_BLOCK_HASH,
+        };
+
+        let material = VerificationMaterialWithValidity {
+            verification_material: id_cred.verification_material.clone(),
+            validity: validity(),
+        };
+
+        assert_eq!(
+            verify_presentation_with_request_anchor(
+                &global_context,
+                &verification_context(),
+                &request,
+                &presentation,
+                &anchor,
+                &[material],
+            ),
+            PresentationVerificationResult::Failed(CredentialInvalidReason::SubjectClaims)
+        );
+    }
+
+    /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
+    /// Test subject claims/statements not as requested. Tests removing subject claims compared to the request.
+    #[test]
+    fn test_verify_soundness_claims_subject_claim_removed() {
+        let global_context = GlobalContext::generate("Test".into());
+        let mut request_data = fixtures::verification_request_data_fixture();
+        // add claims such that there are two subject claims in request
+        request_data
+            .subject_claims
+            .push(request_data.subject_claims[0].clone());
+        let (request, vra) =
+            fixtures::verification_request_data_to_request_and_anchor(request_data);
+        let id_cred =
+            fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
+
+        let mut presentation_request =
+            fixtures::verification_request_to_verifiable_presentation_request_identity(
+                &id_cred, &request,
+            );
+
+        // remove one of the claims again and generate the presentation
+        presentation_request.subject_claims.pop();
 
         let presentation =
             fixtures::generate_and_prove_presentation_identity(&id_cred, presentation_request);
