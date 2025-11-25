@@ -727,6 +727,21 @@ mod tests {
     }
 
     /// Test that we don't accidentally change the digest produced
+    /// by [`RandomOracle::extend_from`]
+    #[test]
+    pub fn test_extend_from_stable() {
+        let mut ro = RandomOracle::empty();
+        #[allow(deprecated)]
+        ro.extend_from("Label1", &vec![1u8, 2, 3]);
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "6b1addb1c08e887242f5e78127c31c17851f29349c45aa415adce255f95fd292"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
     /// by [`TranscriptProtocol::append_message`]
     #[test]
     pub fn test_v0_append_each_message_stable() {

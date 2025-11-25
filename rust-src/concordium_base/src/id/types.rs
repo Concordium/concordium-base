@@ -422,7 +422,7 @@ pub trait Attribute<F: Field>:
 /// The year is in Gregorian calendar and months are numbered from 1, i.e.,
 /// 1 is January, ..., 12 is December.
 /// Year must be a 4 digit year, i.e., between 1000 and 9999.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct YearMonth {
     pub year: u16,
     pub month: u8,
@@ -2805,7 +2805,7 @@ pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::
 }
 
 /// Describes the time period for which a credential is valid
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, SerdeSerialize, SerdeDeserialize)]
 pub struct CredentialValidity {
     /// When credential is valid until
     #[serde(rename = "validTo")]
@@ -2919,7 +2919,7 @@ pub struct IdentityAttributesCredentialsInfo<
 }
 
 /// A request for recovering an identity
-#[derive(SerdeSerialize, SerdeDeserialize)]
+#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IdRecoveryRequest<C: Curve> {
     /// The idCredPub to recover the identity object for.
