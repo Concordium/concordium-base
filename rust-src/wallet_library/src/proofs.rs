@@ -37,15 +37,16 @@ pub struct PresentationV1ProofInput {
 }
 
 /// Creates a PresentationV1 by calling prove on the RequestV1
-impl<'a> PresentationV1ProofInput {
+impl PresentationV1ProofInput {
     pub fn prove(
         self,
     ) -> Result<PresentationV1<IpPairing, constants::ArCurve, Web3IdAttribute>, ProveError> {
-        let borrowed_iter = self
+        let borrowed_credential_proof_inputs = self
             .credential_proof_private_inputs
             .iter()
             .map(|owned| owned.borrow());
-        self.request.prove(&self.global_context, borrowed_iter)
+        self.request
+            .prove(&self.global_context, borrowed_credential_proof_inputs)
     }
 }
 
