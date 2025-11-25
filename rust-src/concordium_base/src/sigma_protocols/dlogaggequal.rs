@@ -37,7 +37,7 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
     type SecretData = (Rc<C::Scalar>, Vec<Vec<Rc<C::Scalar>>>);
 
     fn public(&self, ro: &mut impl TranscriptProtocol) {
-        ro.append_each_message(&[], &self.aggregate_dlogs, |ro, p| p.public(ro));
+        ro.append_each_message(&[], &self.aggregate_dlogs, |ro, p| p.public(ro));// todo ar try trigger wiretrip
         self.dlog.public(ro)
     }
 

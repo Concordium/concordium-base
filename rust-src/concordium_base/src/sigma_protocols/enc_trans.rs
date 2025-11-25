@@ -183,7 +183,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
 
     fn public(&self, ro: &mut impl TranscriptProtocol) {
         self.elg_dec.public(ro);
-        ro.append_each_message(&[], &self.encexp1, |ro, p| p.public(ro));
+        ro.append_each_message(&[], &self.encexp1, |ro, p| p.public(ro)); // todo ar try trigger writetrip
         ro.append_each_message(&[], &self.encexp2, |ro, p| p.public(ro));
         self.dlog.public(ro)
     }
