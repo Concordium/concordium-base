@@ -234,6 +234,7 @@ pub extern "C" fn bls_prove(
     let ro_bytes = slice_from_c_bytes!(ro_ptr, ro_len);
     let sk = from_ptr!(sk_ptr);
 
+    #[allow(deprecated)]
     let mut ro = RandomOracle::domain(ro_bytes);
     let mut csprng = thread_rng();
     let prf = sk.prove(&mut csprng, &mut ro);
@@ -252,6 +253,7 @@ pub extern "C" fn bls_check_proof(
     let proof = from_ptr!(proof_ptr);
     let pk = from_ptr!(pk_ptr);
 
+    #[allow(deprecated)]
     let mut ro = RandomOracle::domain(ro_bytes);
     let check = pk.check_proof(&mut ro, proof);
     u8::from(check)
