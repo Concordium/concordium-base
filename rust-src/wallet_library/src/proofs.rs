@@ -1,16 +1,24 @@
+use std::collections::HashMap;
+
 use crate::statement::{AcceptableRequest, RequestCheckError, WalletConfig};
 use concordium_base::{
-    common::base16_decode,
+    common::{base16_decode, cbor},
     id::{
         constants::{self, ArCurve, IpPairing},
         types::*,
     },
     web3id::{
-        v1::{OwnedCredentialProofPrivateInputs, PresentationV1, ProveError, RequestV1},
+        v1::{
+            anchor::{
+                RequestedSubjectClaims, UnfilledContextInformation, VerificationRequest,
+                VerificationRequestData,
+            },
+            OwnedCredentialProofPrivateInputs, PresentationV1, ProveError, RequestV1,
+        },
         OwnedCommitmentInputs, Presentation, ProofError, Request, Web3IdAttribute, Web3IdSigner,
     },
 };
-use serde::Deserialize as SerdeDeserialize;
+use serde::{de, Deserialize as SerdeDeserialize};
 
 /// Serializeable wrapper for a SecretKey.
 #[derive(SerdeDeserialize)]
@@ -43,6 +51,49 @@ impl PresentationV1Input {
         let borrowed_credential_proof_inputs = self.inputs.iter().map(|owned| owned.borrow());
         self.request
             .prove(&self.global, borrowed_credential_proof_inputs)
+    }
+}
+
+/// Input for Verification request creation
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct VerificationRequestV1Input {
+    /// Context information for a verifiable presentation request.
+    pub context: UnfilledContextInformation,
+    /// The claims for a list of subjects containing requested statements about the subjects.
+    pub subject_claims: Vec<RequestedSubjectClaims>,
+    /// The optional public info to register with the anchor.
+    pub public_info: Option<PublicInfo>,
+}
+
+#[derive(Clone)]
+struct PublicInfo(HashMap<String, cbor::value::Value>);
+
+impl<'de> serde::Deserialize<'de> for PublicInfo {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let string_map: HashMap<String, String> = HashMap::deserialize(deserializer)?;
+        let mapped: Result<HashMap<String, cbor::value::Value>, D::Error> = string_map
+            .into_iter()
+            .map(|(k, v)| {
+                let bytes = hex::decode(&v).map_err(de::Error::custom)?;
+                let value: cbor::value::Value =
+                    cbor::cbor_decode(&bytes).map_err(de::Error::custom)?;
+                Ok((k, value))
+            })
+            .collect();
+        Ok(Self(mapped?))
+    }
+}
+
+impl From<VerificationRequestV1Input> for VerificationRequestData {
+    fn from(value: VerificationRequestV1Input) -> Self {
+        VerificationRequestData {
+            context: value.context,
+            subject_claims: value.subject_claims,
+        }
     }
 }
 
