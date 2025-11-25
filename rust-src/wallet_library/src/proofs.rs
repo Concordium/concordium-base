@@ -57,7 +57,7 @@ impl PresentationV1Input {
 /// Input for Verification request creation
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct VerificationRequestV1Input {
+pub struct VerificationRequestV1Input {
     /// Context information for a verifiable presentation request.
     pub context: UnfilledContextInformation,
     /// The claims for a list of subjects containing requested statements about the subjects.
@@ -67,7 +67,7 @@ struct VerificationRequestV1Input {
 }
 
 #[derive(Clone)]
-struct PublicInfo(HashMap<String, cbor::value::Value>);
+pub struct PublicInfo(HashMap<String, cbor::value::Value>);
 
 impl<'de> serde::Deserialize<'de> for PublicInfo {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
