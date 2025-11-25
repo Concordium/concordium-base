@@ -29,24 +29,20 @@ impl Web3IdSigner for Web3IdSecretKey {
 /// The input used for creating a PresentationV1 through its implemented prove function below
 #[derive(SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PresentationV1ProofInput {
+pub struct PresentationV1Input {
     request: RequestV1<ArCurve, Web3IdAttribute>,
-    credential_proof_private_inputs:
-        Vec<OwnedCredentialProofPrivateInputs<IpPairing, ArCurve, Web3IdAttribute>>,
-    global_context: GlobalContext<ArCurve>,
+    inputs: Vec<OwnedCredentialProofPrivateInputs<IpPairing, ArCurve, Web3IdAttribute>>,
+    global: GlobalContext<ArCurve>,
 }
 
 /// Creates a PresentationV1 by calling prove on the RequestV1
-impl PresentationV1ProofInput {
+impl PresentationV1Input {
     pub fn prove(
         self,
     ) -> Result<PresentationV1<IpPairing, constants::ArCurve, Web3IdAttribute>, ProveError> {
-        let borrowed_credential_proof_inputs = self
-            .credential_proof_private_inputs
-            .iter()
-            .map(|owned| owned.borrow());
+        let borrowed_credential_proof_inputs = self.inputs.iter().map(|owned| owned.borrow());
         self.request
-            .prove(&self.global_context, borrowed_credential_proof_inputs)
+            .prove(&self.global, borrowed_credential_proof_inputs)
     }
 }
 
