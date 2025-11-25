@@ -72,7 +72,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             .enumerate()
         {
             // The proof for each credential is independent, so make a copy of the transcript so far
-            let mut transcript = transcript.split();
+            let mut transcript = transcript.clone();
 
             transcript.append_message("ProofVersion", &credential.proof_version());
             transcript.append_message("CreationTime", &credential.created());
@@ -528,9 +528,25 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
     where
         AttributeType: 'a,
     {
-        let mut verifiable_credentials = Vec::with_capacity(private_inputs.len());
         let mut transcript = TranscriptProtocolV1::with_domain("ConcordiumVerifiableCredentialV1");
-        append_context(&mut transcript, &self.context);
+        self.prove_with_transcript(global_context, private_inputs, csprng, &mut transcript, now)
+    }
+
+    fn prove_with_transcript<'a, P: Pairing<ScalarField = C::Scalar>>(
+        self,
+        global_context: &GlobalContext<C>,
+        private_inputs: impl ExactSizeIterator<
+            Item = CredentialProofPrivateInputs<'a, P, C, AttributeType>,
+        >,
+        csprng: &mut (impl Rng + CryptoRng),
+        transcript: &mut (impl TranscriptProtocol + Clone),
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<PresentationV1<P, C, AttributeType>, ProveError>
+    where
+        AttributeType: 'a,
+    {
+        let mut verifiable_credentials = Vec::with_capacity(private_inputs.len());
+        append_context(transcript, &self.context);
         transcript.append_message("GlobalContext", &global_context);
 
         if self.subject_claims.len() != private_inputs.len() {
@@ -539,7 +555,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
         for (subject_claims, private_inputs) in self.subject_claims.into_iter().zip(private_inputs)
         {
             // The proof for each credential is independent, so make a copy of the transcript so far
-            let mut transcript = transcript.split();
+            let mut transcript = transcript.clone();
 
             transcript.append_message(
                 "ProofVersion",
@@ -703,6 +719,7 @@ pub mod tests {
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
     use crate::id::id_proof_types::{AttributeInRangeStatement, AttributeValueStatement};
     use crate::id::types::{AttributeTag, IpIdentity};
+    use crate::random_oracle::TranscriptProtocolTracer;
     use crate::web3id::did::Network;
     use crate::web3id::v1::{fixtures, ContextProperty};
     use crate::web3id::Web3IdAttribute;
@@ -1794,5 +1811,56 @@ pub mod tests {
         proof
             .verify(&global_context, public.iter())
             .expect("verify");
+    }
+
+    /// Test prove and verify presentation for identity credentials.
+    #[test]
+    fn test_transcript_trace_identity() {
+        let challenge = challenge_fixture();
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let (statements, attributes) = fixtures::statements_and_attributes();
+
+        let id_cred_fixture = fixtures::identity_credentials_fixture(attributes, &global_context);
+
+        let subject_claims = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
+            network: Network::Testnet,
+            issuer: id_cred_fixture.issuer,
+            statements,
+        })];
+
+        let request = RequestV1::<ArCurve, Web3IdAttribute> {
+            context: challenge,
+            subject_claims,
+        };
+
+        let mut transcript = TranscriptProtocolTracer::new(TranscriptProtocolV1::with_domain(
+            "ConcordiumVerifiableCredentialV1",
+        ));
+        let mut csprng = rand::thread_rng();
+        let proof = request
+            .clone()
+            .prove_with_transcript(
+                &global_context,
+                [id_cred_fixture.private_inputs()].into_iter(),
+                &mut csprng,
+                &mut transcript,
+                chrono::Utc::now(),
+            )
+            .expect("prove");
+
+        let public = vec![id_cred_fixture.verification_material];
+        assert_eq!(
+            proof
+                .verify(&global_context, public.iter())
+                .expect("verify"),
+            request,
+            "verify request"
+        );
+
+        for line in transcript.lines.borrow().iter() {
+            println!("{}", line);
+        }
     }
 }

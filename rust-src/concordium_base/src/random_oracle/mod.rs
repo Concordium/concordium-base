@@ -203,6 +203,7 @@
 
 use crate::{common::*, curve_arithmetic::Curve};
 use sha3::{Digest, Sha3_256};
+
 use std::convert::Infallible;
 use std::fmt::Arguments;
 use std::io::{IoSlice, Write};
@@ -220,7 +221,7 @@ pub struct RandomOracle(Sha3_256);
 /// [Transcript protocol](TranscriptProtocol) implementation V1. See [`random_oracle`](self)
 /// and [`TranscriptProtocol`] for how to use it.
 #[repr(transparent)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Default)] // todo ar remove default
 pub struct TranscriptProtocolV1(Sha3_256);
 
 /// Type of challenges computed from the random oracle.
@@ -557,11 +558,111 @@ impl TranscriptProtocolV1 {
         transcript.append_label(domain);
         transcript
     }
+}
 
-    /// Duplicate the transcript, creating a new copy of it.
-    /// Further updates are independent.
-    pub fn split(&self) -> Self {
-        TranscriptProtocolV1(self.0.clone())
+#[cfg(test)]
+#[derive(Debug, Clone)]
+pub struct TranscriptProtocolTracer<P> {
+    pub inner: P,
+    pub lines: std::cell::RefCell<Vec<String>>,
+}
+
+#[cfg(test)]
+impl<P> TranscriptProtocolTracer<P> {
+    pub fn new(inner: P) -> Self {
+        Self {
+            inner,
+            lines: std::cell::RefCell::new(vec![]),
+        }
+    }
+}
+
+#[cfg(test)]
+impl<P: TranscriptProtocol + Default> TranscriptProtocol for TranscriptProtocolTracer<P> {
+    fn append_label(&mut self, label: impl AsRef<[u8]>) {
+        self.inner.append_label(label.as_ref());
+        self.lines
+            .borrow_mut()
+            .push(String::from_utf8_lossy(label.as_ref()).into_owned());
+    }
+
+    fn append_message(&mut self, label: impl AsRef<[u8]>, message: &impl Serial) {
+        self.inner.append_message(label, message);
+        self.lines
+            .borrow_mut()
+            .last_mut()
+            .expect("last line")
+            .extend(format!(", {} bytes", to_bytes(message).len()).chars());
+    }
+
+    fn append_messages<'a, T: Serial + 'a, B: IntoIterator<Item = &'a T>>(
+        &mut self,
+        label: impl AsRef<[u8]>,
+        messages: B,
+    ) where
+        B::IntoIter: ExactSizeIterator,
+    {
+        let messages: Vec<_> = messages.into_iter().collect();
+        self.inner.append_messages(label, &messages);
+        self.lines
+            .borrow_mut()
+            .last_mut()
+            .expect("last line")
+            .extend(
+                format!(
+                    ", {} items, {} bytes total",
+                    messages.len(),
+                    messages
+                        .iter()
+                        .map(|msg| to_bytes(msg).len())
+                        .sum::<usize>()
+                )
+                .chars(),
+            );
+    }
+
+    fn append_final_prover_message(&mut self, label: impl AsRef<[u8]>, message: &impl Serial) {
+        self.inner.append_final_prover_message(label, message);
+        self.lines
+            .borrow_mut()
+            .last_mut()
+            .expect("last line")
+            .extend(format!(", final prover message, {} bytes", to_bytes(message).len()).chars());
+    }
+
+    fn append_each_message<T, B: IntoIterator<Item = T>>(
+        &mut self,
+        label: impl AsRef<[u8]>,
+        messages: B,
+        mut append_item: impl FnMut(&mut Self, T),
+    ) where
+        B::IntoIter: ExactSizeIterator,
+    {
+        let messages: Vec<_> = messages.into_iter().collect();
+        self.inner
+            .append_each_message(label, messages, |inner, item| {
+                let mut tracer = TranscriptProtocolTracer::new(std::mem::take(inner));
+                append_item(&mut tracer, item);
+                *inner = std::mem::take(&mut tracer.inner);
+            });
+    }
+
+    fn extract_challenge_scalar<C: Curve>(&mut self, label: impl AsRef<[u8]>) -> C::Scalar {
+        let val = self.inner.extract_challenge_scalar::<C>(label);
+        self.lines
+            .borrow_mut()
+            .last_mut()
+            .expect("last line")
+            .extend(", extract scalar challenge".chars());
+        val
+    }
+
+    fn extract_raw_challenge(&self) -> Challenge {
+        let val = self.inner.extract_raw_challenge();
+        self.lines
+            .borrow_mut()
+            .push("<extract raw challenge>".to_string());
+        val
     }
 }
 
@@ -821,10 +922,10 @@ mod tests {
     /// by [`<TranscriptProtocolV1 as TranscriptProtocol>::extract_challenge_scalar`]
     #[test]
     pub fn test_v1_extract_challenge_scalar_stable() {
-        let ro = TranscriptProtocolV1::with_domain("Domain1");
+        let mut ro = TranscriptProtocolV1::with_domain("Domain1");
 
         let scalar_hex = hex::encode(common::to_bytes(
-            &ro.split().extract_challenge_scalar::<ArCurve>("Scalar1"),
+            &ro.extract_challenge_scalar::<ArCurve>("Scalar1"),
         ));
         assert_eq!(
             scalar_hex,
