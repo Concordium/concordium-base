@@ -1,3 +1,4 @@
+use crate::random_oracle::{TranscriptProtocol, TranscriptProtocolV1};
 use crate::{
     curve_arithmetic::Curve,
     id::types::{Attribute, GlobalContext},
@@ -16,7 +17,6 @@ use crate::id::types::{
     IdentityAttributesCredentialsInfo, IdentityAttributesCredentialsValues, IpContextOnly,
 };
 use crate::pedersen_commitment::Commitment;
-use crate::random_oracle::{TranscriptProtocol, TranscriptProtocolV1};
 use crate::web3id::v1::{
     AccountBasedCredentialV1, AccountBasedSubjectClaims, AccountCredentialProofPrivateInputs,
     AccountCredentialProofs, AccountCredentialSubject, AccountCredentialVerificationMaterial,
@@ -54,11 +54,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         global_context: &GlobalContext<C>,
         verification_material: impl ExactSizeIterator<Item = &'a CredentialVerificationMaterial<P, C>>,
     ) -> Result<RequestV1<C, AttributeType>, VerifyError> {
-        #[allow(deprecated)]
-        let mut transcript =
-            TranscriptProtocolV1::with_domain("ConcordiumVerifiablePresentationV1");
+        let mut transcript = TranscriptProtocolV1::with_domain("ConcordiumVerifiableCredentialV1");
         append_context(&mut transcript, &self.presentation_context);
-        transcript.append_message(b"ctx", &global_context);
+        transcript.append_message("GlobalContext", &global_context);
 
         let mut request = RequestV1 {
             context: self.presentation_context.clone(),
@@ -73,7 +71,14 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             .zip(&self.verifiable_credentials)
             .enumerate()
         {
-            request.subject_claims.push(credential.claims());
+            let mut transcript = transcript.split();
+
+            transcript.append_message("ProofVersion", &credential.proof_version());
+            transcript.append_message("CreationTime", &credential.created());
+
+            let claims = credential.claims();
+
+            request.subject_claims.push(claims);
 
             if !credential.verify(global_context, &mut transcript, verification_material) {
                 return Err(VerifyError::InvalidCredential(i));
@@ -127,6 +132,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
             return false;
         }
 
+        transcript.append_label("AccountBasedCredential");
+        transcript.append_message("Issuer", &self.issuer);
+        transcript.append_message("Statements", &self.subject.statements);
+        transcript.append_message("Network", &self.subject.network);
+        transcript.append_message("AccountCredId", &self.subject.cred_id);
+
         verify_statements(
             &self.subject.statements,
             &self.proof.proof_value.statement_proofs,
@@ -157,6 +168,11 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             return false;
         };
 
+        transcript.append_label("IdentityBasedCredential");
+        transcript.append_message("Issuer", &self.issuer);
+        transcript.append_message("Statements", &self.subject.statements);
+        transcript.append_message("Network", &self.subject.network);
+
         let Ok(cred_id_data) = self.subject.cred_id.try_to_data() else {
             return false;
         };
@@ -185,6 +201,11 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         {
             return false;
         }
+
+        // Append values that are not part of subject claims
+        transcript.append_message("ValidFrom", &id_attr_cred_info.values.validity.created_at);
+        transcript.append_message("ValidTo", &id_attr_cred_info.values.validity.valid_to);
+        transcript.append_message("EncryptedIdentityCredentialId", &self.subject.cred_id);
 
         let cmm_attributes: BTreeMap<_, _> = self
             .proof
@@ -225,14 +246,18 @@ fn verify_statements<
     AttributeType: Attribute<C::Scalar> + 'a,
     TagType: Ord + crate::common::Serialize + 'a,
 >(
-    statements: impl IntoIterator<Item = &'a AtomicStatementV1<C, TagType, AttributeType>>,
-    proofs: impl IntoIterator<Item = &'a AtomicProofV1<C>>,
+    statements: &[AtomicStatementV1<C, TagType, AttributeType>],
+    proofs: &[AtomicProofV1<C>],
     cmm_attributes: &BTreeMap<TagType, Commitment<C>>,
     revealed_attributes: &BTreeMap<TagType, &AttributeType>,
     global_context: &GlobalContext<C>,
     transcript: &mut impl TranscriptProtocol,
 ) -> bool {
-    statements.into_iter().zip_longest(proofs).all(|elm| {
+    // Notice that we already added the number of statements to the transcript
+    // by adding statements to the transcript. This acts as a variable length
+    // prefix of the loop over statements.
+
+    statements.iter().zip_longest(proofs).all(|elm| {
         elm.both().map_or(false, |(statement, proof)| {
             statement.verify(
                 ProofVersion::Version2,
@@ -264,6 +289,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
         else {
             return Err(ProveError::PrivateInputsMismatch);
         };
+
+        transcript.append_label("AccountBasedCredential");
+        transcript.append_message("Issuer", &issuer);
+        transcript.append_message("Statements", &self.statements);
+        transcript.append_message("Network", &self.network);
+        transcript.append_message("AccountCredId", &self.cred_id);
 
         let statement_proofs = prove_statements(
             &self.statements,
@@ -310,6 +341,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
             return Err(ProveError::PrivateInputsMismatch);
         };
 
+        transcript.append_label("IdentityBasedCredential");
+        transcript.append_message("Issuer", &self.issuer);
+        transcript.append_message("Statements", &self.statements);
+        transcript.append_message("Network", &self.network);
+
         let attributes_handling: BTreeMap<_, _> = self
             .statements
             .iter()
@@ -344,6 +380,17 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
             )
             .map_err(|err| ProveError::IdentityAttributeCredentials(err.to_string()))?;
 
+        let cred_id =
+            IdentityCredentialEphemeralId::from_data(IdentityCredentialEphemeralIdDataRef {
+                ar_data: &id_attr_cred_info.values.ar_data,
+                threshold: id_attr_cred_info.values.threshold,
+            });
+
+        // Append values that are not part of subject claims
+        transcript.append_message("ValidFrom", &id_attr_cred_info.values.validity.created_at);
+        transcript.append_message("ValidTo", &id_attr_cred_info.values.validity.valid_to);
+        transcript.append_message("EncryptedIdentityCredentialId", &cred_id);
+
         let revealed_attributes: BTreeMap<_, _> = id_attr_cred_info
             .values
             .attributes
@@ -370,12 +417,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
             statement_proofs,
         };
 
-        let cred_id =
-            IdentityCredentialEphemeralId::from_data(IdentityCredentialEphemeralIdDataRef {
-                ar_data: &id_attr_cred_info.values.ar_data,
-                threshold: id_attr_cred_info.values.threshold,
-            });
-
         Ok(IdentityBasedCredentialV1 {
             proof: ConcordiumZKProof {
                 created_at: now,
@@ -399,7 +440,7 @@ fn prove_statements<
     AttributeType: Attribute<C::Scalar> + 'a,
     TagType: Ord + crate::common::Serialize + 'a,
 >(
-    statements: impl IntoIterator<Item = &'a AtomicStatementV1<C, TagType, AttributeType>>,
+    statements: &[AtomicStatementV1<C, TagType, AttributeType>],
     attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
     attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
     revealed_attributes: &BTreeMap<TagType, &AttributeType>,
@@ -407,8 +448,12 @@ fn prove_statements<
     transcript: &mut impl TranscriptProtocol,
     csprng: &mut (impl Rng + CryptoRng),
 ) -> Result<Vec<AtomicProofV1<C>>, ProveError> {
+    // Notice that we already added the number of statements to the transcript
+    // by adding statements to the transcript. This acts as a variable length
+    // prefix of the loop over statements.
+
     statements
-        .into_iter()
+        .iter()
         .map(|statement| {
             statement
                 .prove(
@@ -483,16 +528,23 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
         AttributeType: 'a,
     {
         let mut verifiable_credentials = Vec::with_capacity(private_inputs.len());
-        let mut transcript =
-            TranscriptProtocolV1::with_domain("ConcordiumVerifiablePresentationV1");
+        let mut transcript = TranscriptProtocolV1::with_domain("ConcordiumVerifiableCredentialV1");
         append_context(&mut transcript, &self.context);
-        transcript.append_message(b"ctx", &global_context);
+        transcript.append_message("GlobalContext", &global_context);
 
         if self.subject_claims.len() != private_inputs.len() {
             return Err(ProveError::PrivateInputsMismatch);
         }
         for (subject_claims, private_inputs) in self.subject_claims.into_iter().zip(private_inputs)
         {
+            let mut transcript = transcript.split();
+
+            transcript.append_message(
+                "ProofVersion",
+                &ConcordiumZKProofVersion::ConcordiumZKProofV4,
+            );
+            transcript.append_message("CreationTime", &now);
+
             let credential = subject_claims.prove(
                 global_context,
                 &mut transcript,
