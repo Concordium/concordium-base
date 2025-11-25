@@ -950,8 +950,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     /// When credentials were created
     pub fn proof_version(&self) -> ConcordiumZKProofVersion {
         match self {
-            CredentialV1::Account(acc) => acc.proof.proof_type,
-            CredentialV1::Identity(id) => id.proof.proof_type,
+            CredentialV1::Account(acc) => acc.proof.proof_version,
+            CredentialV1::Identity(id) => id.proof.proof_version,
         }
     }
 

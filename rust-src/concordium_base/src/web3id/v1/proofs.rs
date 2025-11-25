@@ -247,7 +247,7 @@ fn verify_statements<
     TagType: Ord + crate::common::Serialize + 'a,
 >(
     statements: &[AtomicStatementV1<C, TagType, AttributeType>],
-    proofs: &[AtomicProofV1<C, AttributeType>],
+    proofs: &[AtomicProofV1<C>],
     cmm_attributes: &BTreeMap<TagType, Commitment<C>>,
     revealed_attributes: &BTreeMap<TagType, &AttributeType>,
     global_context: &GlobalContext<C>,
@@ -257,7 +257,7 @@ fn verify_statements<
     // by adding statements to the transcript. This acts as a variable length
     // prefix of the loop over statements.
 
-    statements.into_iter().zip_longest(proofs).all(|elm| {
+    statements.iter().zip_longest(proofs).all(|elm| {
         elm.both().map_or(false, |(statement, proof)| {
             statement.verify(
                 ProofVersion::Version2,
@@ -390,7 +390,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
         transcript.append_message("ValidFrom", &id_attr_cred_info.values.validity.created_at);
         transcript.append_message("ValidTo", &id_attr_cred_info.values.validity.valid_to);
         transcript.append_message("EncryptedIdentityCredentialId", &cred_id);
-        
+
         let revealed_attributes: BTreeMap<_, _> = id_attr_cred_info
             .values
             .attributes
@@ -400,7 +400,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
                 _ => None,
             })
             .collect();
-
 
         let statement_proofs = prove_statements(
             &self.statements,
@@ -454,7 +453,7 @@ fn prove_statements<
     // prefix of the loop over statements.
 
     statements
-        .into_iter()
+        .iter()
         .map(|statement| {
             statement
                 .prove(
@@ -588,7 +587,7 @@ impl<
         &self,
         version: ProofVersion,
         global: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         csprng: &mut impl rand::Rng,
         attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
         attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
@@ -664,7 +663,7 @@ impl<
         &self,
         version: ProofVersion,
         global: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         cmm_attributes: &BTreeMap<TagType, Commitment<C>>,
         revealed_attributes: &BTreeMap<TagType, &AttributeType>,
         proof: &AtomicProofV1<C>,

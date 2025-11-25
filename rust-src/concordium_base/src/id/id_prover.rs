@@ -2,10 +2,10 @@
 //! accounts.
 
 use super::{id_proof_types::*, types::*};
-use crate::random_oracle::{RandomOracle, TranscriptProtocol};
 use crate::bulletproofs::set_membership_proof::SetMembershipProof;
 use crate::bulletproofs::set_non_membership_proof::SetNonMembershipProof;
 use crate::pedersen_commitment::Randomness;
+use crate::random_oracle::{RandomOracle, TranscriptProtocol};
 use crate::sigma_protocols::common::SigmaProof;
 use crate::sigma_protocols::dlog;
 use crate::{
@@ -136,7 +136,7 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
         &self,
         version: ProofVersion,
         global: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         csprng: &mut impl rand::Rng,
         attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
         attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
@@ -169,7 +169,7 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
         &self,
         version: ProofVersion,
         global: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         csprng: &mut impl rand::Rng,
         attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
         attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
@@ -202,7 +202,7 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
         &self,
         version: ProofVersion,
         global: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         csprng: &mut impl rand::Rng,
         attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
         attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
@@ -231,11 +231,11 @@ pub(crate) fn prove_value_equal_to_commitment<C: Curve, AttributeType: Attribute
     attribute_cmm_randomness: Randomness<C>,
     version: ProofVersion,
     global: &GlobalContext<C>,
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     csprng: &mut impl rand::Rng,
 ) -> Option<SigmaProof<dlog::Response<C>>> {
     let x = attribute_value.to_field_element(); // This is public in the sense that the verifier should learn it
-    transcript.add_bytes(b"RevealAttributeDlogProof");
+    transcript.append_label(b"RevealAttributeDlogProof");
     transcript.append_message(b"x", &x);
     if version >= ProofVersion::Version2 {
         transcript.append_message(b"keys", &global.on_chain_commitment_key);
@@ -266,7 +266,7 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
         &self,
         version: ProofVersion,
         global: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         csprng: &mut impl rand::Rng,
         attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
     ) -> Option<AttributeValueProof<C>> {
@@ -285,7 +285,7 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
     }
 
     /// Prove attribute value based on that attribute is already revealed
-    pub(crate) fn prove_for_already_revealed(&self, transcript: &mut RandomOracle) {
+    pub(crate) fn prove_for_already_revealed(&self, transcript: &mut impl TranscriptProtocol) {
         transcript.append_message("RevealedAttribute", &self.attribute_value);
     }
 }
