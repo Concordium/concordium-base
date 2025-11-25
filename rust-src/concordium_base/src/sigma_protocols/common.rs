@@ -20,7 +20,7 @@ pub trait SigmaProtocol: Sized {
     type SecretData;
 
     /// Given a random oracle, feed it all of the public input of this instance.
-    fn public(&self, ro: &mut RandomOracle);
+    fn public(&self, ro: &mut impl TranscriptProtocol);
 
     /// Compute the first message of the prover. We allow this function
     /// to return 'None' if the inputs are inconsistent.
@@ -107,7 +107,7 @@ impl<P1: SigmaProtocol, P2: SigmaProtocol> SigmaProtocol for AndAdapter<P1, P2> 
     type Response = AndResponse<P1::Response, P2::Response>;
     type SecretData = (P1::SecretData, P2::SecretData);
 
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         self.first.public(ro);
         self.second.public(ro)
     }
@@ -214,9 +214,9 @@ impl<P: SigmaProtocol> SigmaProtocol for ReplicateAdapter<P> {
     type Response = ReplicateResponse<P::Response>;
     type SecretData = Vec<P::SecretData>;
 
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         // add all public data in sequence from left to right
-        self.protocols.iter().for_each(|p| p.public(ro))
+        ro.append_each_message(&[], &self.protocols, |ro, p| p.public(ro));
     }
 
     fn compute_commit_message<R: rand::Rng>(
@@ -299,7 +299,7 @@ impl<P: SigmaProtocol> ReplicateAdapter<P> {
 /// oracle), produce a sigma proof and update the context. This function can
 /// return 'None' if the input data is inconsistent.
 pub fn prove<R: rand::Rng, D: SigmaProtocol>(
-    ro: &mut RandomOracle,
+    ro: &mut impl TranscriptProtocol,
     prover: &D,
     secret: D::SecretData,
     csprng: &mut R,
@@ -309,9 +309,10 @@ pub fn prove<R: rand::Rng, D: SigmaProtocol>(
     // For legacy reasons the label `point` is used when adding the commit message
     // to the RO
     ro.append_message("point", &commit_message);
-    let challenge_bytes = ro.split().get_challenge();
+    let challenge_bytes = ro.extract_raw_challenge();
     let challenge = prover.get_challenge(&challenge_bytes);
     let response = prover.compute_response(secret, state, &challenge)?;
+    ro.append_final_prover_message("response", &response); // todo ar try trigger stability tests
     Some(SigmaProof {
         challenge: challenge_bytes,
         response,
@@ -321,7 +322,7 @@ pub fn prove<R: rand::Rng, D: SigmaProtocol>(
 /// Given a single sigma proof and a context in the form of an instantiated
 /// random oracle, verify the sigma proof and update the state of the context.
 pub fn verify<D: SigmaProtocol>(
-    ro: &mut RandomOracle,
+    ro: &mut impl TranscriptProtocol,
     verifier: &D,
     proof: &SigmaProof<D::Response>,
 ) -> bool {
@@ -331,7 +332,8 @@ pub fn verify<D: SigmaProtocol>(
         Some(ref point) => {
             verifier.public(ro);
             ro.append_message("point", &point);
-            let computed_challenge = ro.split().get_challenge();
+            let computed_challenge = ro.extract_raw_challenge();
+            ro.append_final_prover_message("response", &proof.response); // todo ar try trigger stability tests
             computed_challenge == proof.challenge
         }
     }

@@ -14,7 +14,7 @@ use crate::bulletproofs::{
 use super::id_proof_types::*;
 use crate::bulletproofs::set_membership_proof::SetMembershipProof;
 use crate::bulletproofs::set_non_membership_proof::SetNonMembershipProof;
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::{RandomOracle, TranscriptProtocol};
 use crate::sigma_protocols::common::SigmaProof;
 use crate::sigma_protocols::dlog;
 use crate::{
@@ -22,7 +22,6 @@ use crate::{
     pedersen_commitment::{
         Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
     },
-    random_oracle::RandomOracle,
     sigma_protocols::{common::verify as sigma_verify, dlog::Dlog},
 };
 use sha2::{Digest, Sha256};
@@ -59,7 +58,7 @@ pub fn verify_attribute<C: Curve, AttributeType: Attribute<C::Scalar>>(
 #[allow(clippy::too_many_arguments)]
 pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     version: ProofVersion,
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     keys: &PedersenKey<C>,
     gens: &Generators<C>,
     lower: &AttributeType,
@@ -84,7 +83,7 @@ pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
             )
         }
         ProofVersion::Version2 => {
-            transcript.add_bytes(b"AttributeRangeProof");
+            transcript.append_label(b"AttributeRangeProof");
             transcript.append_message(b"a", &a);
             transcript.append_message(b"b", &b);
             verify_in_range(
@@ -166,7 +165,7 @@ impl<
         &self,
         version: ProofVersion,
         global: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         cmm_attributes: &BTreeMap<Q, Commitment<C>>,
         proof: &AtomicProof<C, AttributeType>,
     ) -> bool {
@@ -213,7 +212,7 @@ impl<
         &self,
         version: ProofVersion,
         global: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         cmm_attributes: &BTreeMap<Q, Commitment<C>>,
         proof: &RangeProof<C>,
     ) -> bool {
@@ -248,7 +247,7 @@ impl<
         &self,
         version: ProofVersion,
         global: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         cmm_attributes: &BTreeMap<Q, Commitment<C>>,
         proof: &SetMembershipProof<C>,
     ) -> bool {
@@ -281,7 +280,7 @@ impl<
         &self,
         version: ProofVersion,
         global: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         cmm_attributes: &BTreeMap<Q, Commitment<C>>,
         proof: &SetNonMembershipProof<C>,
     ) -> bool {
@@ -309,13 +308,13 @@ fn verify_value_equal_to_commitment<C: Curve, AttributeType: Attribute<C::Scalar
     attribute_cmm: &Commitment<C>,
     version: ProofVersion,
     global: &GlobalContext<C>,
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     proof: &SigmaProof<dlog::Response<C>>,
 ) -> bool {
     // There is a commitment to the relevant attribute. We can then check the
     // proof.
     let x = attribute_value.to_field_element();
-    transcript.add_bytes(b"RevealAttributeDlogProof");
+    transcript.append_label(b"RevealAttributeDlogProof");
     // x is known to the verifier and should go into the transcript
     transcript.append_message(b"x", &x);
     if version >= ProofVersion::Version2 {
@@ -343,7 +342,7 @@ impl<
         &self,
         version: ProofVersion,
         global: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         cmm_attributes: &BTreeMap<Q, Commitment<C>>,
         proof: &AttributeValueProof<C>,
     ) -> bool {
@@ -364,7 +363,7 @@ impl<
     /// Verify attribute value based on that attribute is already revealed
     pub(crate) fn verify_for_already_revealed(
         &self,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         revealed_attributes: &BTreeMap<TagType, &AttributeType>,
     ) -> bool {
         let Some(revealed_attribute) = revealed_attributes.get(&self.attribute_tag) else {

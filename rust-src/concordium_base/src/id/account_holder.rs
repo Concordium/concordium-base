@@ -1,7 +1,7 @@
 //! Functionality needed by the account holder, either when interacting with the
 //! identity provider, or when interacting with the chain.
 use super::{id_proof_types::ProofVersion, secret_sharing::*, types::*, utils};
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     bulletproofs::{
         inner_product_proof::inner_product,

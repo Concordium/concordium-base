@@ -1,4 +1,3 @@
-use crate::random_oracle::StructuredDigest;
 use crate::{
     curve_arithmetic::Curve,
     id::types::{Attribute, GlobalContext},
@@ -18,6 +17,7 @@ use crate::id::types::{
     IdentityAttributesCredentialsInfo, IdentityAttributesCredentialsValues, IpContextOnly,
 };
 use crate::pedersen_commitment::Commitment;
+use crate::random_oracle::TranscriptProtocol;
 use crate::web3id::v1::{
     AccountBasedCredentialV1, AccountBasedSubjectClaims, AccountCredentialProofPrivateInputs,
     AccountCredentialProofs, AccountCredentialSubject, AccountCredentialVerificationMaterial,
@@ -515,8 +515,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
     }
 }
 
-fn append_context(digest: &mut impl StructuredDigest, context: &ContextInformation) {
-    digest.add_bytes("ConcordiumContextInformationV1");
+fn append_context(digest: &mut impl TranscriptProtocol, context: &ContextInformation) {
+    digest.append_label("ConcordiumContextInformationV1");
     digest.append_message("given", &context.given);
     digest.append_message("requested", &context.requested);
 }
