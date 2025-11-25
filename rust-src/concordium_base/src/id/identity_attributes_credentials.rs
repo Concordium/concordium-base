@@ -181,9 +181,9 @@ pub fn prove_identity_attributes<
     // IdentityAttributesCommitmentValues struct.
     // This should make the proof non-reusable.
     // We should add the genesis hash also at some point
-    transcript.append_label(b"IdentityAttributesCredentials");
-    transcript.append_message(b"identity_attribute_values", &id_attribute_values);
-    transcript.append_message(b"global_context", &global_context);
+    transcript.append_label("IdentityAttributesCredentials");
+    transcript.append_message("IdentityAttributeValues", &id_attribute_values);
+    transcript.append_message("GlobalContext", &global_context);
 
     let proof = sigma_protocols::common::prove(transcript, &prover, witness, csprng)
         .context("cannot produce zero knowledge proof")?;
@@ -413,9 +413,9 @@ pub fn verify_identity_attributes<
     }
 
     // Compute the challenge prefix by hashing the values.
-    transcript.append_label(b"IdentityAttributesCredentials");
-    transcript.append_message(b"identity_attribute_values", &id_attr_info.values);
-    transcript.append_message(b"global_context", &global_context);
+    transcript.append_label("IdentityAttributesCredentials");
+    transcript.append_message("IdentityAttributeValues", &id_attr_info.values);
+    transcript.append_message("GlobalContext", &global_context);
 
     let verifier_sig = signature_knowledge_verifier(
         &global_context.on_chain_commitment_key,
@@ -1208,19 +1208,21 @@ mod test {
     pub fn test_identity_attributes_stable() {
         let id_object_fixture = identity_object_fixture();
 
-        // Comment out to regenerate proof. We can do that as long as we have not released yet
-
+        // // Comment out to regenerate proof. We can do that as long as we have not released yet
+        //
         // let mut attributes_handling = BTreeMap::new();
         // attributes_handling.insert(TAG_0, IdentityAttributeHandling::Commit);
         // attributes_handling.insert(TAG_1, IdentityAttributeHandling::Reveal);
         //
         // let mut transcript = RandomOracle::empty();
+        // let mut csprng =  rand::thread_rng();
         // let (id_attr_info, rand) = prove_identity_attributes(
         //     &id_object_fixture.global_ctx,
         //     ip_context(&id_object_fixture),
         //     &id_object_fixture.id_object,
         //     &id_object_fixture.id_use_data,
         //     &attributes_handling,
+        //     &mut csprng,
         //     &mut transcript,
         // )
         // .expect("prove");
