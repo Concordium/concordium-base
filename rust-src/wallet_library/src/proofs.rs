@@ -3,7 +3,7 @@ use concordium_base::{
     common::base16_decode,
     id::{constants::{self, ArCurve, IpPairing}, types::*},
     web3id::{
-        OwnedCommitmentInputs, Presentation, ProofError, Request, Web3IdAttribute, Web3IdSigner, v1::{CredentialProofPrivateInputs, PresentationV1, ProveError, RequestV1},
+        OwnedCommitmentInputs, Presentation, ProofError, Request, Web3IdAttribute, Web3IdSigner, v1::{OwnedCredentialProofPrivateInputs, PresentationV1, ProveError, RequestV1},
     },
 };
 use serde::Deserialize as SerdeDeserialize;
@@ -23,16 +23,22 @@ impl Web3IdSigner for Web3IdSecretKey {
 }
 
 /// The input used for creating a PresentationV1 through its implemented prove function below
-pub struct PresentationV1ProofInput<'a> {
+#[derive(SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresentationV1ProofInput {
     request: RequestV1<ArCurve, Web3IdAttribute>,
-    credential_proof_private_inputs: Vec<CredentialProofPrivateInputs<'a, IpPairing, ArCurve, Web3IdAttribute>>,
+    credential_proof_private_inputs: Vec<OwnedCredentialProofPrivateInputs<IpPairing, ArCurve, Web3IdAttribute>>,
     global_context: GlobalContext<ArCurve>,
 } 
 
 /// Creates a PresentationV1 by calling prove on the RequestV1
-impl<'a> PresentationV1ProofInput<'a> {
+impl<'a> PresentationV1ProofInput {
     pub fn prove(self) -> Result<PresentationV1<IpPairing, constants::ArCurve, Web3IdAttribute>, ProveError>{
-        self.request.prove(&self.global_context, self.credential_proof_private_inputs.into_iter())
+         let borrowed_iter = self
+            .credential_proof_private_inputs
+            .iter()
+            .map(|owned| owned.borrow());
+        self.request.prove(&self.global_context, borrowed_iter)
     }
 }
 
