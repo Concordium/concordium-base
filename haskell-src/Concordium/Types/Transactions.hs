@@ -8,6 +8,7 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -336,6 +337,17 @@ instance HashableTo TransactionHashV0 AccountTransactionV1 where
 instance HashableTo TransactionSignHashV0 AccountTransactionV1 where
     getHash = atrv1SignHash
 
+-- | An versioned account transaction.
+data VersionedTransaction
+    = TransactionV0 !AccountTransaction
+    | TransactionV1 !AccountTransactionV1
+    deriving (Eq, Show)
+
+-- | Convert a 'VersionedTransaction' to a 'BareBlockItem'.
+versionedTransactionToBareBlockItem :: VersionedTransaction -> BareBlockItem
+versionedTransactionToBareBlockItem (TransactionV0 tr) = NormalTransaction tr
+versionedTransactionToBareBlockItem (TransactionV1 tr) = ExtendedTransaction tr
+
 -- | An 'AccountCreation' is a credential together with an expiry. It is a
 --  message that is included in a block, if valid, but it is not paid for
 --  directly by the sender.
@@ -401,12 +413,52 @@ instance HashableTo TransactionHash (WithMetadata value) where
     {-# INLINE getHash #-}
     getHash = wmdHash
 
-type Transaction = WithMetadata AccountTransaction
+type Transaction = WithMetadata VersionedTransaction
 type CredentialDeploymentWithMeta = WithMetadata AccountCreation
-type TransactionV1 = WithMetadata AccountTransactionV1
 
-addMetadata :: (a -> BareBlockItem) -> TransactionTime -> a -> WithMetadata a
-addMetadata f time a =
+-- | Types that can be converted to a 'BareBlockItem' in a canonical fashion.
+class ToBareBlockItem a where
+    -- | Convert the value to a 'BareBlockItem'.
+    toBareBlockItem :: a -> BareBlockItem
+
+instance ToBareBlockItem BareBlockItem where
+    toBareBlockItem = id
+
+instance ToBareBlockItem AccountTransaction where
+    toBareBlockItem = NormalTransaction
+
+instance ToBareBlockItem AccountTransactionV1 where
+    toBareBlockItem = ExtendedTransaction
+
+instance ToBareBlockItem AccountCreation where
+    toBareBlockItem = CredentialDeployment
+
+instance ToBareBlockItem UpdateInstruction where
+    toBareBlockItem = ChainUpdate
+
+instance ToBareBlockItem VersionedTransaction where
+    toBareBlockItem (TransactionV0 t) = NormalTransaction t
+    toBareBlockItem (TransactionV1 t) = ExtendedTransaction t
+
+-- | Construct a 'BlockItem' from a value convertable to a 'BareBlockItem', given the arrival time.
+makeBlockItem :: (ToBareBlockItem a) => TransactionTime -> a -> BlockItem
+{-# INLINE makeBlockItem #-}
+makeBlockItem time a =
+    WithMetadata
+        { wmdData = d,
+          wmdSize = BS.length bs,
+          wmdHash = transactionHashFromBytes bs,
+          wmdArrivalTime = time
+        }
+  where
+    d = toBareBlockItem a
+    bs = S.runPut $ putBareBlockItem d
+
+-- | Instrument a value representing a 'BareBlockItem' (possibly of a specialized type) with
+--  metadata, given the provided arrival time for the transaction.
+addMetadata :: (ToBareBlockItem a) => TransactionTime -> a -> WithMetadata a
+{-# INLINE addMetadata #-}
+addMetadata time a =
     WithMetadata
         { wmdData = a,
           wmdSize = BS.length bs,
@@ -414,47 +466,20 @@ addMetadata f time a =
           wmdArrivalTime = time
         }
   where
-    bs = S.runPut $ putBareBlockItem (f a)
+    d = toBareBlockItem a
+    bs = S.runPut $ putBareBlockItem d
 
+-- | Convert a transaction type with metadata to a 'BlockItem'. The metadata is preserved.
+toBlockItem :: (ToBareBlockItem a) => WithMetadata a -> BlockItem
+toBlockItem WithMetadata{..} = WithMetadata{wmdData = toBareBlockItem wmdData, ..}
+
+-- | Convert an 'AccountTransaction' to a 'Transaction' given the arrival time.
 fromAccountTransaction :: TransactionTime -> AccountTransaction -> Transaction
-fromAccountTransaction wmdArrivalTime wmdData =
-    let wmdHash = getHash wmdData
-        wmdSize = BS.length (S.encode wmdData) + 1
-    in  WithMetadata{..}
+fromAccountTransaction arrivalTime = addMetadata arrivalTime . TransactionV0
 
-fromAccountTransactionV1 :: TransactionTime -> AccountTransactionV1 -> TransactionV1
-fromAccountTransactionV1 wmdArrivalTime wmdData =
-    let wmdHash = getHash wmdData
-        wmdSize = BS.length (S.encode wmdData) + 1
-    in  WithMetadata{..}
-
-fromCDI ::
-    -- | Arrival time
-    TransactionTime ->
-    -- | Expiry time of the message
-    TransactionExpiryTime ->
-    CredentialDeploymentInformation ->
-    CredentialDeploymentWithMeta
-fromCDI wmdArrivalTime messageExpiry cdi =
-    let cdiBytes = S.encode wmdData
-        wmdSize = BS.length cdiBytes + 1 -- + 1 for the tag
-        wmdData = AccountCreation{credential = NormalACWP cdi, ..}
-        wmdHash = getHash (CredentialDeployment wmdData)
-    in  WithMetadata{..}
-
-fromICDI ::
-    -- | Arrival time
-    TransactionTime ->
-    -- | Expiry time of the message
-    TransactionExpiryTime ->
-    InitialCredentialDeploymentInfo ->
-    CredentialDeploymentWithMeta
-fromICDI wmdArrivalTime messageExpiry icdi =
-    let cdiBytes = S.encode wmdData
-        wmdSize = BS.length cdiBytes + 1 -- + 1 for the tag
-        wmdData = AccountCreation{credential = InitialACWP icdi, ..}
-        wmdHash = getHash (CredentialDeployment wmdData)
-    in  WithMetadata{..}
+-- | Convert an 'AccountTransactionV1' to a 'Transaction' given the arrival time.
+fromAccountTransactionV1 :: TransactionTime -> AccountTransactionV1 -> Transaction
+fromAccountTransactionV1 arrivalTime = addMetadata arrivalTime . TransactionV1
 
 -----------------
 
@@ -546,6 +571,11 @@ instance HasMessageExpiry AccountTransactionV1 where
     {-# INLINE msgExpiry #-}
     msgExpiry = thExpiry . thv1HeaderV0 . atrv1Header
 
+instance HasMessageExpiry VersionedTransaction where
+    {-# INLINE msgExpiry #-}
+    msgExpiry (TransactionV0 tr) = msgExpiry tr
+    msgExpiry (TransactionV1 tr) = msgExpiry tr
+
 instance HasMessageExpiry BareBlockItem where
     msgExpiry (NormalTransaction t) = msgExpiry t
     msgExpiry (CredentialDeployment t) = msgExpiry t
@@ -553,6 +583,7 @@ instance HasMessageExpiry BareBlockItem where
     msgExpiry (ExtendedTransaction t) = msgExpiry t
 
 instance (HasMessageExpiry a) => HasMessageExpiry (WithMetadata a) where
+    {-# SPECIALIZE instance HasMessageExpiry Transaction #-}
     {-# INLINE msgExpiry #-}
     msgExpiry = msgExpiry . wmdData
 
@@ -587,21 +618,6 @@ instance (CredentialValuesFields CredentialRegistrationID a) => CredentialValues
     policy = policy . wmdData
     {-# INLINE credPubKeys #-}
     credPubKeys = credPubKeys . wmdData
-
--- | Embed a transaction as a block item.
-normalTransaction :: Transaction -> BlockItem
--- the +1 is for the additional tag.
-normalTransaction WithMetadata{..} = WithMetadata{wmdData = NormalTransaction wmdData, wmdSize = wmdSize + 1, ..}
-
-credentialDeployment :: CredentialDeploymentWithMeta -> BlockItem
-credentialDeployment WithMetadata{..} = WithMetadata{wmdData = CredentialDeployment wmdData, wmdSize = wmdSize + 1, ..}
-
-chainUpdate :: WithMetadata UpdateInstruction -> BlockItem
-chainUpdate WithMetadata{..} = WithMetadata{wmdData = ChainUpdate wmdData, wmdSize = wmdSize + 1, ..}
-
--- | Embed a v1 transaction as a block item.
-extendedTransaction :: TransactionV1 -> BlockItem
-extendedTransaction WithMetadata{..} = WithMetadata{wmdData = ExtendedTransaction wmdData, wmdSize = wmdSize + 1, ..}
 
 -- | Serialize a block item according to V0 format, without the metadata.
 putBlockItemV0 :: BlockItem -> S.Put
@@ -832,20 +848,6 @@ instance TransactionData AccountTransaction where
     transactionHeaderPayloadSize = getTransactionHeaderPayloadSize . atrHeader
     transactionNumSigs = getTransactionNumSigs . atrSignature
 
-instance TransactionData Transaction where
-    transactionHeader = atrHeader . wmdData
-    transactionSender = thSender . atrHeader . wmdData
-    transactionNonce = thNonce . atrHeader . wmdData
-    transactionGasAmount = thEnergyAmount . atrHeader . wmdData
-    transactionPayload = atrPayload . wmdData
-    transactionSignature = atrSignature . wmdData
-    transactionSignHash = atrSignHash . wmdData
-    transactionHash = wmdHash
-    transactionSponsor _ = Nothing
-    transactionSponsorSignature _ = Nothing
-    transactionHeaderPayloadSize = getTransactionHeaderPayloadSize . atrHeader . wmdData
-    transactionNumSigs = getTransactionNumSigs . atrSignature . wmdData
-
 instance TransactionData AccountTransactionV1 where
     transactionHeader = thv1HeaderV0 . atrv1Header
     transactionSender = thSender . thv1HeaderV0 . atrv1Header
@@ -859,7 +861,28 @@ instance TransactionData AccountTransactionV1 where
     transactionSponsorSignature = tsv1Sponsor . atrv1Signature
     transactionHeaderPayloadSize = getTransactionV1HeaderPayloadSize . atrv1Header
 
-instance TransactionData TransactionV1 where
+-- | A helper function for lifting 'TransactionData' operations to 'VersionedTransaction'.
+{-# INLINE liftTransactionDataToVersionedTransaction #-}
+liftTransactionDataToVersionedTransaction :: (forall t. (TransactionData t) => t -> a) -> VersionedTransaction -> a
+liftTransactionDataToVersionedTransaction f = \case
+    TransactionV0 t -> f t
+    TransactionV1 t -> f t
+
+instance TransactionData VersionedTransaction where
+    transactionHeader = liftTransactionDataToVersionedTransaction transactionHeader
+    transactionSender = liftTransactionDataToVersionedTransaction transactionSender
+    transactionNonce = liftTransactionDataToVersionedTransaction transactionNonce
+    transactionGasAmount = liftTransactionDataToVersionedTransaction transactionGasAmount
+    transactionPayload = liftTransactionDataToVersionedTransaction transactionPayload
+    transactionSignature = liftTransactionDataToVersionedTransaction transactionSignature
+    transactionSignHash = liftTransactionDataToVersionedTransaction transactionSignHash
+    transactionHash = liftTransactionDataToVersionedTransaction transactionHash
+    transactionSponsor = liftTransactionDataToVersionedTransaction transactionSponsor
+    transactionSponsorSignature = liftTransactionDataToVersionedTransaction transactionSponsorSignature
+    transactionHeaderPayloadSize = liftTransactionDataToVersionedTransaction transactionHeaderPayloadSize
+
+instance (TransactionData t) => TransactionData (WithMetadata t) where
+    {-# SPECIALIZE instance TransactionData Transaction #-}
     transactionHeader = transactionHeader . wmdData
     transactionSender = transactionSender . wmdData
     transactionNonce = transactionNonce . wmdData
@@ -870,7 +893,7 @@ instance TransactionData TransactionV1 where
     transactionHash = wmdHash
     transactionSponsor = transactionSponsor . wmdData
     transactionSponsorSignature = transactionSponsorSignature . wmdData
-    transactionHeaderPayloadSize = getTransactionV1HeaderPayloadSize . atrv1Header . wmdData
+    transactionHeaderPayloadSize = transactionHeaderPayloadSize . wmdData
 
 --------------------------
 

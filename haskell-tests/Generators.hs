@@ -982,18 +982,6 @@ genAccountTransactionV1 = do
     atrv1Signature <- genTransactionSignaturesV1
     return $! makeAccountTransactionV1 atrv1Signature atrv1Header atrv1Payload
 
-genTransaction :: Gen Transaction
-genTransaction = do
-    wmdData <- genAccountTransaction
-    wmdArrivalTime <- TransactionTime <$> arbitrary
-    return $ addMetadata NormalTransaction wmdArrivalTime wmdData
-
-genTransactionV1 :: Gen TransactionV1
-genTransactionV1 = do
-    wmdData <- genAccountTransactionV1
-    wmdArrivalTime <- TransactionTime <$> arbitrary
-    return $ addMetadata ExtendedTransaction wmdArrivalTime wmdData
-
 genInitialCredentialDeploymentInformation :: Gen InitialCredentialDeploymentInfo
 genInitialCredentialDeploymentInformation = do
     icdvAccount <- genCredentialPublicKeys
@@ -1011,22 +999,24 @@ genAccountCredentialWithProofs =
           InitialACWP <$> genInitialCredentialDeploymentInformation
         ]
 
-genCredentialDeploymentWithMeta :: Gen CredentialDeploymentWithMeta
-genCredentialDeploymentWithMeta = do
+genAccountCreation :: Gen AccountCreation
+genAccountCreation = do
     credential <- genAccountCredentialWithProofs
     messageExpiry <- TransactionTime <$> arbitrary
-    wmdArrivalTime <- TransactionTime <$> arbitrary
-    return $ addMetadata CredentialDeployment wmdArrivalTime AccountCreation{..}
+    return AccountCreation{..}
 
 genBlockItem :: Gen BlockItem
-genBlockItem =
+genBlockItem = do
+    arrivalTime <- TransactionTime <$> arbitrary
     oneof
-        [ normalTransaction <$> genTransaction,
-          credentialDeployment <$> genCredentialDeploymentWithMeta
+        [ makeBlockItem arrivalTime <$> genAccountTransaction,
+          makeBlockItem arrivalTime <$> genAccountCreation
         ]
 
 genBlockItemTransactionExt :: Gen BlockItem
-genBlockItemTransactionExt = extendedTransaction <$> genTransactionV1
+genBlockItemTransactionExt = do
+    arrivalTime <- TransactionTime <$> arbitrary
+    makeBlockItem arrivalTime <$> genAccountTransactionV1
 
 genElectionDifficulty :: Gen ElectionDifficulty
 genElectionDifficulty = makeElectionDifficulty <$> chooseBoundedIntegral (0, 99999)
