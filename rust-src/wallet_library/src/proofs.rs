@@ -29,7 +29,7 @@ impl Web3IdSigner for Web3IdSecretKey {
 /// The input used for creating a PresentationV1 through its implemented prove function below
 #[derive(SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PresentationV1ProofInput {
+pub struct PresentationV1Input {
     request: RequestV1<ArCurve, Web3IdAttribute>,
     credential_proof_private_inputs:
         Vec<OwnedCredentialProofPrivateInputs<IpPairing, ArCurve, Web3IdAttribute>>,
@@ -37,7 +37,7 @@ pub struct PresentationV1ProofInput {
 }
 
 /// Creates a PresentationV1 by calling prove on the RequestV1
-impl PresentationV1ProofInput {
+impl PresentationV1Input {
     pub fn prove(
         self,
     ) -> Result<PresentationV1<IpPairing, constants::ArCurve, Web3IdAttribute>, ProveError> {
