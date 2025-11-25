@@ -181,9 +181,9 @@ pub fn prove_identity_attributes<
     // IdentityAttributesCommitmentValues struct.
     // This should make the proof non-reusable.
     // We should add the genesis hash also at some point
-    transcript.append_label("IdentityAttributesCredentials");
-    transcript.append_message("IdentityAttributeValues", &id_attribute_values);
-    transcript.append_message("GlobalContext", &global_context);
+    transcript.append_label(b"IdentityAttributesCredentials");
+    transcript.append_message(b"identity_attribute_values", &id_attribute_values);
+    transcript.append_message(b"global_context", &global_context);
 
     let proof = sigma_protocols::common::prove(transcript, &prover, witness, csprng)
         .context("cannot produce zero knowledge proof")?;
@@ -413,9 +413,9 @@ pub fn verify_identity_attributes<
     }
 
     // Compute the challenge prefix by hashing the values.
-    transcript.append_label("IdentityAttributesCredentials");
-    transcript.append_message("IdentityAttributeValues", &id_attr_info.values);
-    transcript.append_message("GlobalContext", &global_context);
+    transcript.append_label(b"IdentityAttributesCredentials");
+    transcript.append_message(b"identity_attribute_values", &id_attr_info.values);
+    transcript.append_message(b"global_context", &global_context);
 
     let verifier_sig = signature_knowledge_verifier(
         &global_context.on_chain_commitment_key,

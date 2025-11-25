@@ -38,8 +38,8 @@
 //! or nested proofs should also be labelled for domain separation.
 //!
 //! ```
-//! # use concordium_base::random_oracle::{TranscriptProtocol, TranscriptV1};
-//! let mut transcript = TranscriptV1::with_domain("ProofOfSomething");
+//! # use concordium_base::random_oracle::{TranscriptProtocol, TranscriptProtocolV1};
+//! let mut transcript = TranscriptProtocolV1::with_domain("ProofOfSomething");
 //! // ...
 //! transcript.append_label("Subproof1");
 //! // ...
@@ -84,7 +84,7 @@
 //! to define the data message bytes.
 //!
 //! ```rust,ignore
-//! # use concordium_base::random_oracle::{TranscriptProtocol, TranscriptV1};
+//! # use concordium_base::random_oracle::{TranscriptProtocol, TranscriptProtocolV1};
 //! # use concordium_base::common::{Serialize};
 //!
 //! #[derive(Serialize)]
@@ -98,7 +98,7 @@
 //!     field_2: 2u8,
 //! };
 //!
-//! let mut transcript = TranscriptV1::with_domain("ProofOfSomething");
+//! let mut transcript = TranscriptProtocolV1::with_domain("ProofOfSomething");
 //! transcript.append_message("Type1", &example);
 //!```
 //!
@@ -139,8 +139,8 @@
 //! Serialization of variable-length primitives like `String` will prepend the length.
 //!
 //!```
-//! # use concordium_base::random_oracle::{TranscriptProtocol, TranscriptV1};
-//! let mut transcript = TranscriptV1::with_domain("ProofOfSomething");
+//! # use concordium_base::random_oracle::{TranscriptProtocol, TranscriptProtocolV1};
+//! let mut transcript = TranscriptProtocolV1::with_domain("ProofOfSomething");
 //! let string = "abc".to_string();
 //! // The serialization implementation of the `String` type prepends the length of the field values.
 //! transcript.append_message("String1", &string);
@@ -151,8 +151,8 @@
 //! Serialization of collections like `Vec` will prepend the size of the collection.
 //!
 //!```
-//! # use concordium_base::random_oracle::{TranscriptProtocol, TranscriptV1};
-//! let mut transcript = TranscriptV1::with_domain("ProofOfSomething");
+//! # use concordium_base::random_oracle::{TranscriptProtocol, TranscriptProtocolV1};
+//! let mut transcript = TranscriptProtocolV1::with_domain("ProofOfSomething");
 //! let collection = vec![2,3,4];
 //! transcript.append_message("Collection1", &collection);
 //! ```
@@ -162,7 +162,7 @@
 //! Digesting a variable number of items without relying on `Serial` implementation on the items:
 //!
 //!```
-//! # use concordium_base::random_oracle::{TranscriptProtocol, TranscriptV1};
+//! # use concordium_base::random_oracle::{TranscriptProtocol, TranscriptProtocolV1};
 //!
 //! struct Type1;
 //!
@@ -172,7 +172,7 @@
 //!
 //! let vec = vec![Type1, Type1];
 //!
-//! let mut transcript = TranscriptV1::with_domain("ProofOfSomething");
+//! let mut transcript = TranscriptProtocolV1::with_domain("ProofOfSomething");
 //! transcript.append_each_message("Collection", &vec, |transcript, item| {
 //!     append_type1(transcript, item);
 //! });
@@ -184,14 +184,14 @@
 //! to the transcript followed by the variant data.
 //!
 //!```
-//! # use concordium_base::random_oracle::{TranscriptProtocol, TranscriptV1};
+//! # use concordium_base::random_oracle::{TranscriptProtocol, TranscriptProtocolV1};
 //!
 //! enum Enum1 {
 //!     Variant_0,
 //!     Variant_1
 //! }
 //!
-//! let mut transcript = TranscriptV1::with_domain("ProofOfSomething");
+//! let mut transcript = TranscriptProtocolV1::with_domain("ProofOfSomething");
 //!
 //! transcript.append_label("Enum1");
 //! transcript.append_label("Variant_0");
@@ -215,7 +215,7 @@ use std::io::{IoSlice, Write};
 // #[cfg_attr(
 //     not(test),
 //     deprecated(
-//         note = "Use TranscriptV1 which does proper length prefixing of labels and includes last prover message in transcript for proper sequential composition. Do not change existing protocols without changing their proof version since it will break compatability with existing proofs."
+//         note = "Use TranscriptProtocolV1 which does proper length prefixing of labels and includes last prover message in transcript for proper sequential composition. Do not change existing protocols without changing their proof version since it will break compatability with existing proofs."
 //     )
 // )]
 pub struct RandomOracle(Sha3_256);
@@ -224,7 +224,7 @@ pub struct RandomOracle(Sha3_256);
 /// and [`TranscriptProtocol`] for how to use it.
 #[repr(transparent)]
 #[derive(Debug)]
-pub struct TranscriptV1(Sha3_256);
+pub struct TranscriptProtocolV1(Sha3_256);
 
 /// Type of challenges computed from the random oracle.
 /// We use 32 byte output of SHA3-256
@@ -295,7 +295,7 @@ impl PartialEq for RandomOracle {
 /// prefixing data variants with a variant discriminator. Using [`Serial`] is one of the approaches to achieve this,
 /// since the corresponding [`Deserial`] implementation guarantees the message bytes are unique for the data,
 /// and hence naturally length and discriminator prefixed. Notice that the "legacy" implementation
-/// [`RandomOracle`] does not properly length prefix all variable length data, hence the implementation [`TranscriptV1`] should
+/// [`RandomOracle`] does not properly length prefix all variable length data, hence the implementation [`TranscriptProtocolV1`] should
 /// be used in new proofs systems and new proof versions.
 pub trait TranscriptProtocol {
     /// Add domain separating label to the digest.
@@ -483,7 +483,7 @@ impl<T: Write> Buffer for BufferAdapter<T> {
     }
 }
 
-impl TranscriptProtocol for TranscriptV1 {
+impl TranscriptProtocol for TranscriptProtocolV1 {
     fn append_label(&mut self, label: impl AsRef<[u8]>) {
         let label = label.as_ref();
         BufferAdapter(&mut self.0).put(&(label.len() as u64));
@@ -542,10 +542,10 @@ impl TranscriptProtocol for TranscriptV1 {
     }
 }
 
-impl TranscriptV1 {
+impl TranscriptProtocolV1 {
     /// Start with the initial domain string.
     pub fn with_domain(domain: impl AsRef<[u8]>) -> Self {
-        let mut transcript = TranscriptV1(Sha3_256::new());
+        let mut transcript = TranscriptProtocolV1(Sha3_256::new());
         transcript.append_label(domain);
         transcript
     }
@@ -553,7 +553,7 @@ impl TranscriptV1 {
     /// Duplicate the transcript, creating a new copy of it.
     /// Further updates are independent.
     pub fn split(&self) -> Self {
-        TranscriptV1(self.0.clone())
+        TranscriptProtocolV1(self.0.clone())
     }
 }
 
@@ -741,10 +741,10 @@ mod tests {
     }
 
     /// Test that we don't accidentally change the digest produced
-    /// by [`TranscriptV1::with_domain`]
+    /// by [`TranscriptProtocolV1::with_domain`]
     #[test]
     pub fn test_v1_with_domain_stable() {
-        let ro = TranscriptV1::with_domain("Domain1");
+        let ro = TranscriptProtocolV1::with_domain("Domain1");
 
         let challenge_hex = hex::encode(ro.extract_raw_challenge());
         assert_eq!(
@@ -754,10 +754,10 @@ mod tests {
     }
 
     /// Test that we don't accidentally change the digest produced
-    /// by [`<TranscriptV1 as TranscriptProtocol>::append_label`]
+    /// by [`<TranscriptProtocolV1 as TranscriptProtocol>::append_label`]
     #[test]
     pub fn test_v1_append_label_stable() {
-        let mut ro = TranscriptV1::with_domain("Domain1");
+        let mut ro = TranscriptProtocolV1::with_domain("Domain1");
         ro.append_label([1u8, 2, 3]);
 
         let challenge_hex = hex::encode(ro.extract_raw_challenge());
@@ -768,10 +768,10 @@ mod tests {
     }
 
     /// Test that we don't accidentally change the digest produced
-    /// by [`<TranscriptV1 as TranscriptProtocol>::append_message`]
+    /// by [`<TranscriptProtocolV1 as TranscriptProtocol>::append_message`]
     #[test]
     pub fn test_v1_append_message_stable() {
-        let mut ro = TranscriptV1::with_domain("Domain1");
+        let mut ro = TranscriptProtocolV1::with_domain("Domain1");
         ro.append_message("Label1", &vec![1u8, 2, 3]);
 
         let challenge_hex = hex::encode(ro.extract_raw_challenge());
@@ -782,10 +782,10 @@ mod tests {
     }
 
     /// Test that we don't accidentally change the digest produced
-    /// by [`<TranscriptV1 as TranscriptProtocol>::append_messages`]
+    /// by [`<TranscriptProtocolV1 as TranscriptProtocol>::append_messages`]
     #[test]
     pub fn test_v1_append_messages_stable() {
-        let mut ro = TranscriptV1::with_domain("Domain1");
+        let mut ro = TranscriptProtocolV1::with_domain("Domain1");
         ro.append_messages("Label1", &vec![1u8, 2, 3]);
 
         let challenge_hex = hex::encode(ro.extract_raw_challenge());
@@ -796,10 +796,10 @@ mod tests {
     }
 
     /// Test that we don't accidentally change the digest produced
-    /// by [`<TranscriptV1 as TranscriptProtocol>::append_final_prover_message`]
+    /// by [`<TranscriptProtocolV1 as TranscriptProtocol>::append_final_prover_message`]
     #[test]
     pub fn test_v1_append_final_prover_message_stable() {
-        let mut ro = TranscriptV1::with_domain("Domain1");
+        let mut ro = TranscriptProtocolV1::with_domain("Domain1");
         ro.append_final_prover_message("Label1", &vec![1u8, 2, 3]);
 
         let challenge_hex = hex::encode(ro.extract_raw_challenge());
@@ -810,10 +810,10 @@ mod tests {
     }
 
     /// Test that we don't accidentally change the scalar produced
-    /// by [`<TranscriptV1 as TranscriptProtocol>::extract_challenge_scalar`]
+    /// by [`<TranscriptProtocolV1 as TranscriptProtocol>::extract_challenge_scalar`]
     #[test]
     pub fn test_v1_extract_challenge_scalar_stable() {
-        let ro = TranscriptV1::with_domain("Domain1");
+        let ro = TranscriptProtocolV1::with_domain("Domain1");
 
         let scalar_hex = hex::encode(common::to_bytes(
             &ro.split().extract_challenge_scalar::<ArCurve>("Scalar1"),
@@ -825,10 +825,10 @@ mod tests {
     }
 
     /// Test that we don't accidentally change the digest produced
-    /// by [`<TranscriptV1 as TranscriptProtocol>::append_each_message`]
+    /// by [`<TranscriptProtocolV1 as TranscriptProtocol>::append_each_message`]
     #[test]
     pub fn test_v1_append_each_message_stable() {
-        let mut ro = TranscriptV1::with_domain("Domain1");
+        let mut ro = TranscriptProtocolV1::with_domain("Domain1");
         ro.append_each_message("Label1", &vec![1u8, 2, 3], |ro, item| {
             ro.append_message("Item", item)
         });
