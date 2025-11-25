@@ -67,7 +67,7 @@ pub struct VerificationRequestV1Input {
 }
 
 #[derive(Clone)]
-pub struct PublicInfo(HashMap<String, cbor::value::Value>);
+pub struct PublicInfo(pub HashMap<String, cbor::value::Value>);
 
 impl<'de> serde::Deserialize<'de> for PublicInfo {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
