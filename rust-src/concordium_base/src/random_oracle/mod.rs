@@ -215,13 +215,6 @@ use std::io::{IoSlice, Write};
 /// be used in new proofs systems and new proof versions.
 #[repr(transparent)]
 #[derive(Debug)]
-// todo ar deprecate?
-// #[cfg_attr(
-//     not(test),
-//     deprecated(
-//         note = "Use TranscriptProtocolV1 which does proper length prefixing of labels and includes last prover message in transcript for proper sequential composition. Do not change existing protocols without changing their proof version since it will break compatability with existing proofs."
-//     )
-// )]
 pub struct RandomOracle(Sha3_256);
 
 /// [Transcript protocol](TranscriptProtocol) implementation V1. See [`random_oracle`](self)
@@ -271,6 +264,7 @@ impl Buffer for RandomOracle {
 
     #[inline(always)]
     fn start() -> Self {
+        #[allow(deprecated)]
         RandomOracle::empty()
     }
 
@@ -393,11 +387,23 @@ impl TranscriptProtocol for RandomOracle {
 
 impl RandomOracle {
     /// Start with the initial empty state of the oracle.
+    #[cfg_attr(
+        not(test),
+        deprecated(
+            note = "Use TranscriptProtocolV1 instead, see documentation on RandomOracle. Do not change existing protocols without changing their proof version since it will break compatability with existing proofs."
+        )
+    )]
     pub fn empty() -> Self {
         RandomOracle(Sha3_256::new())
     }
 
     /// Start with the initial domain string.
+    #[cfg_attr(
+        not(test),
+        deprecated(
+            note = "Use TranscriptProtocolV1 instead, see documentation on RandomOracle. Do not change existing protocols without changing their proof version since it will break compatability with existing proofs."
+        )
+    )]
     pub fn domain<B: AsRef<[u8]>>(data: B) -> Self {
         RandomOracle(Sha3_256::new().chain_update(data))
     }

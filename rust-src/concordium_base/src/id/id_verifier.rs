@@ -70,6 +70,7 @@ pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     let b = upper.to_field_element();
     match version {
         ProofVersion::Version1 => {
+            #[allow(deprecated)]
             let mut transcript_v1 = RandomOracle::domain("attribute_range_proof");
             verify_in_range(
                 ProofVersion::Version1,
@@ -396,6 +397,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
         commitments: &CredentialDeploymentCommitments<C>,
         proofs: &Proof<C, AttributeType>,
     ) -> bool {
+        #[allow(deprecated)]
         let mut transcript = RandomOracle::domain("Concordium ID2.0 proof");
         transcript.append_message(b"ctx", &global);
         transcript.add_bytes(challenge);
