@@ -1488,7 +1488,6 @@ mod tests {
 }
 
 #[cfg(test)]
-#[allow(dead_code)] // todo ar remove again
 mod fixtures {
     use super::*;
     use crate::common;
