@@ -207,8 +207,12 @@ use std::convert::Infallible;
 use std::fmt::Arguments;
 use std::io::{IoSlice, Write};
 
-/// Transcript implementation V0. Implements [`TranscriptProtocol`]. See [`random_oracle`](self)
+/// "Legacy" [transcript protocol](TranscriptProtocol) implementation. See [`random_oracle`](self)
 /// and [`TranscriptProtocol`] for how to use it.
+/// Notice that this "legacy" implementation
+/// does not properly length prefix all variable length data, and also does not add
+/// the final prover message in sub-proofs, hence the implementation [`TranscriptProtocolV1`] should
+/// be used in new proofs systems and new proof versions.
 #[repr(transparent)]
 #[derive(Debug)]
 // todo ar deprecate?
@@ -220,7 +224,7 @@ use std::io::{IoSlice, Write};
 // )]
 pub struct RandomOracle(Sha3_256);
 
-/// Transcript implementation V1. Implements [`TranscriptProtocol`]. See [`random_oracle`](self)
+/// [Transcript protocol](TranscriptProtocol) implementation V1. See [`random_oracle`](self)
 /// and [`TranscriptProtocol`] for how to use it.
 #[repr(transparent)]
 #[derive(Debug)]
@@ -294,9 +298,7 @@ impl PartialEq for RandomOracle {
 /// Part of the responsibility of the transcript protocol is to apply length prefixes for variable-length data and
 /// prefixing data variants with a variant discriminator. Using [`Serial`] is one of the approaches to achieve this,
 /// since the corresponding [`Deserial`] implementation guarantees the message bytes are unique for the data,
-/// and hence naturally length and discriminator prefixed. Notice that the "legacy" implementation
-/// [`RandomOracle`] does not properly length prefix all variable length data, hence the implementation [`TranscriptProtocolV1`] should
-/// be used in new proofs systems and new proof versions.
+/// and hence naturally length and discriminator prefixed.
 pub trait TranscriptProtocol {
     /// Add domain separating label to the digest.
     fn append_label(&mut self, label: impl AsRef<[u8]>);
