@@ -71,6 +71,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             .zip(&self.verifiable_credentials)
             .enumerate()
         {
+            // The proof for each credential is independent, so make a copy of the transcript so far
             let mut transcript = transcript.split();
 
             transcript.append_message("ProofVersion", &credential.proof_version());
@@ -132,7 +133,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
             return false;
         }
 
-        transcript.append_label("AccountBasedCredential");
+        transcript.append_label("ConcordiumAccountBasedCredential");
         transcript.append_message("Issuer", &self.issuer);
         transcript.append_message("Statements", &self.subject.statements);
         transcript.append_message("Network", &self.subject.network);
@@ -168,7 +169,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             return false;
         };
 
-        transcript.append_label("IdentityBasedCredential");
+        transcript.append_label("ConcordiumIdBasedCredential");
         transcript.append_message("Issuer", &self.issuer);
         transcript.append_message("Statements", &self.subject.statements);
         transcript.append_message("Network", &self.subject.network);
@@ -290,7 +291,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C,
             return Err(ProveError::PrivateInputsMismatch);
         };
 
-        transcript.append_label("AccountBasedCredential");
+        transcript.append_label("ConcordiumAccountBasedCredential");
         transcript.append_message("Issuer", &issuer);
         transcript.append_message("Statements", &self.statements);
         transcript.append_message("Network", &self.network);
@@ -341,7 +342,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
             return Err(ProveError::PrivateInputsMismatch);
         };
 
-        transcript.append_label("IdentityBasedCredential");
+        transcript.append_label("ConcordiumIdBasedCredential");
         transcript.append_message("Issuer", &self.issuer);
         transcript.append_message("Statements", &self.statements);
         transcript.append_message("Network", &self.network);
@@ -537,6 +538,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
         }
         for (subject_claims, private_inputs) in self.subject_claims.into_iter().zip(private_inputs)
         {
+            // The proof for each credential is independent, so make a copy of the transcript so far
             let mut transcript = transcript.split();
 
             transcript.append_message(
