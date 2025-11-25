@@ -216,7 +216,7 @@ impl<P: SigmaProtocol> SigmaProtocol for ReplicateAdapter<P> {
 
     fn public(&self, ro: &mut impl TranscriptProtocol) {
         // add all public data in sequence from left to right
-        ro.append_each_message(&[], &self.protocols, |ro, p| p.public(ro)); // todo ar trigger tripwire
+        ro.append_each_message(&[], &self.protocols, |ro, p| p.public(ro));
     }
 
     fn compute_commit_message<R: rand::Rng>(
@@ -312,7 +312,7 @@ pub fn prove<R: rand::Rng, D: SigmaProtocol>(
     let challenge_bytes = ro.extract_raw_challenge();
     let challenge = prover.get_challenge(&challenge_bytes);
     let response = prover.compute_response(secret, state, &challenge)?;
-    ro.append_final_prover_message("response", &response); // todo ar try trigger stability tests
+    ro.append_final_prover_message("response", &response);
     Some(SigmaProof {
         challenge: challenge_bytes,
         response,
@@ -333,7 +333,7 @@ pub fn verify<D: SigmaProtocol>(
             verifier.public(ro);
             ro.append_message("point", &point);
             let computed_challenge = ro.extract_raw_challenge();
-            ro.append_final_prover_message("response", &proof.response); // todo ar try trigger stability tests
+            ro.append_final_prover_message("response", &proof.response);
             computed_challenge == proof.challenge
         }
     }
