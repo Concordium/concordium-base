@@ -1,10 +1,9 @@
 //! Logarithmic sized inner product proof used as base for the other proofs in
 //! this crate
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
-    random_oracle::RandomOracle,
 };
 
 /// Inner product proof
@@ -35,7 +34,7 @@ pub struct InnerProductProof<C: Curve> {
 /// this length must be a power of 2.
 #[allow(non_snake_case)]
 pub fn prove_inner_product<C: Curve>(
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     G_slice: &[C],
     H_slice: &[C],
     Q: &C,
@@ -68,7 +67,7 @@ pub fn prove_inner_product<C: Curve>(
 /// this length must be a power of 2.
 #[allow(non_snake_case)]
 pub fn prove_inner_product_with_scalars<C: Curve>(
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     G_slice: &[C],
     H_slice: &[C],
     H_prime_scalars: &[C::Scalar],
@@ -137,7 +136,7 @@ pub fn prove_inner_product_with_scalars<C: Curve>(
         transcript.append_message(b"Lj", &Lj);
         transcript.append_message(b"Rj", &Rj);
         L_R.push((Lj, Rj));
-        let u_j: C::Scalar = transcript.challenge_scalar::<C, _>(b"uj");
+        let u_j: C::Scalar = transcript.extract_challenge_scalar::<C>(b"uj");
         // println!("Prover's u_{:?} = {:?}", j, u_j);
         let u_j_inv = match u_j.inverse() {
             Some(inv) => inv,
@@ -202,6 +201,9 @@ pub fn prove_inner_product_with_scalars<C: Curve>(
     let a = a_vec[0];
     let b = b_vec[0];
 
+    transcript.append_final_prover_message(b"a", &a);
+    transcript.append_final_prover_message(b"b", &b);
+
     Some(InnerProductProof { lr_vec: L_R, a, b })
 }
 
@@ -224,7 +226,7 @@ pub struct VerificationScalars<C: Curve> {
 #[allow(non_snake_case)]
 #[allow(clippy::many_single_char_names)]
 pub fn verify_scalars<C: Curve>(
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     n: usize,
     proof: &InnerProductProof<C>,
 ) -> Option<VerificationScalars<C>> {
@@ -242,7 +244,7 @@ pub fn verify_scalars<C: Curve>(
     for (Lj, Rj) in L_R {
         transcript.append_message(b"Lj", Lj);
         transcript.append_message(b"Rj", Rj);
-        let u_j: C::Scalar = transcript.challenge_scalar::<C, _>(b"uj");
+        let u_j: C::Scalar = transcript.extract_challenge_scalar::<C>(b"uj");
         let u_j_inv = match u_j.inverse() {
             Some(inv) => inv,
             _ => return None,
@@ -274,6 +276,10 @@ pub fn verify_scalars<C: Curve>(
         s_i.mul_assign(&u_sq[L_R.len() - 1 - lg_i]);
         s.push(s_i);
     }
+
+    transcript.append_final_prover_message(b"a", &a);
+    transcript.append_final_prover_message(b"b", &b);
+
     Some(VerificationScalars { u_sq, u_inv_sq, s })
 }
 
@@ -293,7 +299,7 @@ pub fn verify_scalars<C: Curve>(
 /// of 2.
 #[allow(non_snake_case)]
 pub fn verify_inner_product<C: Curve>(
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     G_vec: &[C],
     H_vec: &[C],
     P_prime: &C,
@@ -347,7 +353,7 @@ pub fn verify_inner_product<C: Curve>(
 ///   `P_prime_bases`
 #[allow(non_snake_case)]
 pub(crate) fn verify_inner_product_with_scalars<C: Curve>(
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     H_exponents: &[C::Scalar],
     P_prime_bases: &[C],
     P_prime_exponents: &[C::Scalar],
@@ -464,8 +470,10 @@ mod tests {
     use crate::curve_arithmetic::arkworks_instances::ArkGroup;
 
     use super::*;
+    use crate::random_oracle::RandomOracle;
     use ark_bls12_381::G1Projective;
     use rand::thread_rng;
+
     type SomeCurve = ArkGroup<G1Projective>;
 
     #[test]

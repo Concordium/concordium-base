@@ -49,6 +49,7 @@ pub fn enc_trans_bench(c: &mut Criterion) {
     let S = pk_sender.encrypt_exponent_given_generator(&s_value, generator, &mut csprng);
 
     let challenge_prefix = generate_challenge_prefix(&mut csprng);
+    #[allow(deprecated)]
     let ro = RandomOracle::domain(challenge_prefix);
 
     let index = csprng.gen::<u64>().into();
@@ -78,6 +79,7 @@ pub fn enc_trans_bench(c: &mut Criterion) {
     );
 
     let challenge_prefix = generate_challenge_prefix(&mut csprng);
+    #[allow(deprecated)]
     let ro = RandomOracle::domain(&challenge_prefix);
     let mut ro_copy = ro.split();
 
@@ -99,6 +101,7 @@ pub fn enc_trans_bench(c: &mut Criterion) {
         &format!("{}: Verify transaction and proofs", module_path!()),
         move |b| {
             b.iter(|| {
+                #[allow(deprecated)]
                 let mut ro = RandomOracle::domain(&challenge_prefix);
                 assert_eq!(
                     verify_enc_trans(
@@ -136,6 +139,7 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
     let S = pk.encrypt_exponent_given_generator(&s_value, generator, &mut csprng);
 
     let challenge_prefix = generate_challenge_prefix(&mut csprng);
+    #[allow(deprecated)]
     let ro = RandomOracle::domain(challenge_prefix);
 
     let index = csprng.gen::<u64>().into();
@@ -167,6 +171,7 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
     );
 
     let challenge_prefix = generate_challenge_prefix(&mut csprng);
+    #[allow(deprecated)]
     let ro = RandomOracle::domain(&challenge_prefix);
     let mut ro_copy = ro.split();
 
@@ -190,6 +195,7 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
         ),
         move |b| {
             b.iter(|| {
+                #[allow(deprecated)]
                 let mut ro = RandomOracle::domain(&challenge_prefix);
                 assert_eq!(
                     verify_sec_to_pub_trans(&context, &mut ro, &transaction, &pk, &S,),
