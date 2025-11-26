@@ -306,6 +306,8 @@ fn hash_message(m: &[u8]) -> Output<Sha512> {
 
 #[cfg(test)]
 mod test {
+    use crate::common;
+
     use super::*;
     use rand::thread_rng;
     use std::convert::TryFrom;
@@ -540,6 +542,10 @@ mod test {
         }
     }
 
+    /// Test that we can verify proof of knowledge created by previous versions of the protocol.
+    /// This test protects from changes that introduces braking changes.
+    ///
+    /// The test uses a serialization of a previously created proof.
     #[test]
     fn test_proof_of_knowledge() {
         let mut csprng = thread_rng();
@@ -580,5 +586,24 @@ mod test {
             let pk2 = PublicKey::<Bls12>::from_secret(&sk2);
             assert!(!(pk2.check_proof(&mut ro1, &proof)));
         }
+    }
+
+    #[test]
+    fn test_proof_of_knowledge_stable() {
+        let mut ro = RandomOracle::domain(b"");
+        let sk = SecretKey::<Bls12>::generate(&mut seed0());
+        let pk = PublicKey::<Bls12>::from_secret(&sk);
+
+        // let proof = sk.prove(&mut seed0(), &mut ro.split());
+        // let proof_bytes = common::to_bytes(&proof);
+        // let proof_bytes_hex = hex::encode(proof_bytes);
+        // println!("{:}", proof_bytes_hex);
+
+        let proof_bytes_hex_stable = "33b8b30e889bc7353c5e9cb4bbeb139b6f36b83712637cfe3b3e20a3465b2d45565575677522ac94b842edd28a06989027d527980cb13c786eadf786db35384a";
+        let proof_bytes_stable = hex::decode(&proof_bytes_hex_stable).unwrap();
+        let proof_stable = common::from_bytes(&mut proof_bytes_stable.as_slice())
+            .expect("Could not deserialized proof");
+
+        assert!(pk.check_proof(&mut ro.split(), &proof_stable))
     }
 }
