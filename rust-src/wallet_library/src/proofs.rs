@@ -85,15 +85,6 @@ impl<'de> serde::Deserialize<'de> for PublicInfo {
     }
 }
 
-impl From<VerificationRequestV1Input> for VerificationRequestData {
-    fn from(value: VerificationRequestV1Input) -> Self {
-        VerificationRequestData {
-            context: value.context,
-            subject_claims: value.subject_claims,
-        }
-    }
-}
-
 /// The input used for creating a web3Id proof. It requires the request itself,
 /// the global context of the chain, and the secret commitments for the
 /// attributes.
