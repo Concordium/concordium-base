@@ -1859,8 +1859,6 @@ pub mod tests {
             "verify request"
         );
 
-        for line in transcript.lines.borrow().iter() {
-            println!("{}", line);
-        }
+
     }
 }

@@ -207,6 +207,7 @@ use sha3::{Digest, Sha3_256};
 use std::convert::Infallible;
 use std::fmt::Arguments;
 use std::io::{IoSlice, Write};
+use std::mem::MaybeUninit;
 
 /// "Legacy" [transcript protocol](TranscriptProtocol) implementation. See [`random_oracle`](self)
 /// and [`TranscriptProtocol`] for how to use it.
@@ -577,8 +578,16 @@ impl<P> TranscriptProtocolTracer<P> {
     }
 }
 
+impl<P> Drop for TranscriptProtocolTracer<P> {
+    fn drop(&mut self) {
+        for line in self.lines.borrow().iter() {
+            println!("{}", line);
+        }
+    }
+}
+
 #[cfg(test)]
-impl<P: TranscriptProtocol + Default> TranscriptProtocol for TranscriptProtocolTracer<P> {
+impl<P: TranscriptProtocol> TranscriptProtocol for TranscriptProtocolTracer<P> {
     fn append_label(&mut self, label: impl AsRef<[u8]>) {
         self.inner.append_label(label.as_ref());
         self.lines
@@ -641,9 +650,12 @@ impl<P: TranscriptProtocol + Default> TranscriptProtocol for TranscriptProtocolT
         let messages: Vec<_> = messages.into_iter().collect();
         self.inner
             .append_each_message(label, messages, |inner, item| {
-                let mut tracer = TranscriptProtocolTracer::new(std::mem::take(inner));
-                append_item(&mut tracer, item);
-                *inner = std::mem::take(&mut tracer.inner);
+                unsafe {
+                    let mut tracer = TranscriptProtocolTracer::new(MaybeUninit::uninit().assume_init());
+                    std::mem::swap(inner, &mut tracer.inner);
+                    append_item(&mut tracer, item);
+                    std::mem::swap(inner, &mut tracer.inner);
+                }
             });
     }
 
