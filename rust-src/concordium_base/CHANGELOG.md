@@ -1,5 +1,6 @@
 ## Unreleased
 
+- Introduce protocol version 10 variant `ProtocolVersion::P10`.
 - Introduced `AccountTransactionV1` and related types to support sponsored transactions.
 
 ## 9.0.0 (2025-10-29)
@@ -19,7 +20,6 @@
   - `Ratio`
   - `HigherLevelAccessStructure<Kind>`
   - `AccessStructure`
-
 
 ## 8.0.0-alpha.3 (2025-10-08)
 
