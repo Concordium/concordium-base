@@ -540,11 +540,6 @@ pub fn test_pipeline_v1() {
     assert_ne!(cdi_check, Ok(()));
 }
 
-/// RNG with fixed seed to generate the stability test cases
-fn seed0() -> rand::rngs::StdRng {
-    rand::rngs::StdRng::seed_from_u64(0)
-}
-
 /// Test that we can verify CDIs created by previous versions of the protocol.
 /// This test protects from changes that introduces braking changes.
 ///

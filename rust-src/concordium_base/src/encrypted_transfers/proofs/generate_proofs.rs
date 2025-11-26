@@ -693,7 +693,7 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
 mod test {
     use ark_bls12_381::G1Projective;
 
-    use crate::{common, curve_arithmetic::arkworks_instances::ArkGroup};
+    use crate::{common::{self, seed0}, curve_arithmetic::arkworks_instances::ArkGroup};
 
     use super::*;
 
@@ -761,11 +761,6 @@ mod test {
             ),
             Ok(())
         )
-    }
-
-    /// RNG with fixed seed to generate the stability test cases
-    fn seed0() -> rand::rngs::StdRng {
-        rand::rngs::StdRng::seed_from_u64(0)
     }
 
     /// Test that we can verify transactions created by previous versions of the protocol.
