@@ -78,7 +78,6 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             transcript.append_message("CreationTime", &credential.created());
 
             let claims = credential.claims();
-
             request.subject_claims.push(claims);
 
             if !credential.verify(global_context, &mut transcript, verification_material) {
