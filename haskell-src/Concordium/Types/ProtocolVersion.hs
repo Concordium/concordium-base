@@ -424,7 +424,7 @@ $( singletons
         transactionOutcomesVersionFor P7 = TOV2
         transactionOutcomesVersionFor P8 = TOV2
         transactionOutcomesVersionFor P9 = TOV2
-        transactionOutcomesVersionFor P10 = TOV2
+        transactionOutcomesVersionFor P10 = TOV3
 
         -- \| Whether the `TransactionSummary` for the given transaction outcome
         --  version contains the sponsor details field. Present since P10.
