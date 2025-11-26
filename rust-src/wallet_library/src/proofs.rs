@@ -9,7 +9,7 @@ use concordium_base::{
     },
     web3id::{
         v1::{
-            anchor::{RequestedSubjectClaims, UnfilledContextInformation, VerificationRequestData},
+            anchor::{RequestedSubjectClaims, UnfilledContextInformation},
             OwnedCredentialProofPrivateInputs, PresentationV1, ProveError, RequestV1,
         },
         OwnedCommitmentInputs, Presentation, ProofError, Request, Web3IdAttribute, Web3IdSigner,
