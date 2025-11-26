@@ -1,4 +1,3 @@
-use crate::random_oracle::{TranscriptProtocol, TranscriptProtocolV1};
 use crate::{
     curve_arithmetic::Curve,
     id::types::{Attribute, GlobalContext},
@@ -17,6 +16,7 @@ use crate::id::types::{
     IdentityAttributesCredentialsInfo, IdentityAttributesCredentialsValues, IpContextOnly,
 };
 use crate::pedersen_commitment::Commitment;
+use crate::random_oracle::{TranscriptProtocol, TranscriptProtocolV1};
 use crate::web3id::v1::{
     AccountBasedCredentialV1, AccountBasedSubjectClaims, AccountCredentialProofPrivateInputs,
     AccountCredentialProofs, AccountCredentialSubject, AccountCredentialVerificationMaterial,

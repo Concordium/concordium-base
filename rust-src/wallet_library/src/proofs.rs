@@ -1,8 +1,12 @@
 use crate::statement::{AcceptableRequest, RequestCheckError, WalletConfig};
 use concordium_base::{
     common::base16_decode,
-    id::{constants, types::*},
+    id::{
+        constants::{self, ArCurve, IpPairing},
+        types::*,
+    },
     web3id::{
+        v1::{OwnedCredentialProofPrivateInputs, PresentationV1, ProveError, RequestV1},
         OwnedCommitmentInputs, Presentation, ProofError, Request, Web3IdAttribute, Web3IdSigner,
     },
 };
@@ -19,6 +23,26 @@ impl Web3IdSigner for Web3IdSecretKey {
 
     fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature {
         self.0.sign(msg)
+    }
+}
+
+/// The input used for creating a PresentationV1 through its implemented prove function below
+#[derive(SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresentationV1Input {
+    request: RequestV1<ArCurve, Web3IdAttribute>,
+    inputs: Vec<OwnedCredentialProofPrivateInputs<IpPairing, ArCurve, Web3IdAttribute>>,
+    global: GlobalContext<ArCurve>,
+}
+
+/// Creates a PresentationV1 by calling prove on the RequestV1
+impl PresentationV1Input {
+    pub fn prove(
+        self,
+    ) -> Result<PresentationV1<IpPairing, constants::ArCurve, Web3IdAttribute>, ProveError> {
+        let borrowed_credential_proof_inputs = self.inputs.iter().map(|owned| owned.borrow());
+        self.request
+            .prove(&self.global, borrowed_credential_proof_inputs)
     }
 }
 
