@@ -1236,4 +1236,26 @@ mod test {
     //     let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
     //     assert_eq!(decoded, value);
     // }
+
+    /// Tests serializing tuple struct with derived implementation
+    #[test]
+    fn test_unit_enum_derived_serialization() {
+        #[derive(Debug, PartialEq, Serialize)]
+        enum TestEnum {
+            A,
+            B,
+        }
+
+        let value = TestEnum::A;
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "00");
+        let decoded: TestEnum = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+
+        let value = TestEnum::B;
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "01");
+        let decoded: TestEnum = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+    }
 }
