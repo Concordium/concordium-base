@@ -1073,9 +1073,9 @@ mod test {
         assert_eq!(decoded, date_time);
     }
 
-    /// Tests serializing struct with derived implementation
+    /// Tests serializing struct with named fields with derived implementation
     #[test]
-    fn test_struct_derived_serialization() {
+    fn test_named_struct_derived_serialization() {
         #[derive(Debug, PartialEq, Serialize)]
         struct TestStruct {
             a: u8,
@@ -1092,10 +1092,10 @@ mod test {
         assert_eq!(decoded, value);
     }
 
-    /// Tests serializing struct with derived implementation.
+    /// Tests serializing struct with named fields with derived implementation.
     /// Tests attribute string_size_length
     #[test]
-    fn test_struct_derived_serialization_string_size_length() {
+    fn test_named_struct_derived_serialization_string_size_length() {
         #[derive(Debug, PartialEq, Serialize)]
         struct TestStruct {
             #[string_size_length = 2]
@@ -1111,10 +1111,10 @@ mod test {
         assert_eq!(decoded, value);
     }
 
-    /// Tests serializing struct with derived implementation.
+    /// Tests serializing struct with named fields with derived implementation.
     /// Tests attribute size_length
     #[test]
-    fn test_struct_derived_serialization_size_length() {
+    fn test_named_struct_derived_serialization_size_length() {
         #[derive(Debug, PartialEq, Serialize)]
         struct TestStruct {
             #[size_length = 2]
@@ -1128,10 +1128,10 @@ mod test {
         assert_eq!(decoded, value);
     }
 
-    /// Tests serializing struct with derived implementation.
+    /// Tests serializing struct with named fields with derived implementation.
     /// Tests attribute map_size_length
     #[test]
-    fn test_struct_derived_serialization_map_size_length() {
+    fn test_named_struct_derived_serialization_map_size_length() {
         #[derive(Debug, PartialEq, Serialize)]
         struct TestStruct {
             #[map_size_length = 2]
@@ -1147,10 +1147,10 @@ mod test {
         assert_eq!(decoded, value);
     }
 
-    /// Tests serializing struct with derived implementation.
+    /// Tests serializing struct with named fields with derived implementation.
     /// Tests attribute set_size_length
     #[test]
-    fn test_struct_derived_serialization_set_size_length() {
+    fn test_named_struct_derived_serialization_set_size_length() {
         #[derive(Debug, PartialEq, Serialize)]
         struct TestStruct {
             #[set_size_length = 2]
@@ -1165,4 +1165,75 @@ mod test {
         let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
         assert_eq!(decoded, value);
     }
+
+    /// Tests serializing tuple struct with derived implementation
+    #[test]
+    fn test_tuple_struct_derived_serialization() {
+        #[derive(Debug, PartialEq, Serialize)]
+        struct TestStruct(u8, String);
+
+        let value = TestStruct(2, "test".to_string());
+
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "02000000000000000474657374");
+        let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    // /// Tests serializing tuple struct with derived implementation.
+    // /// Tests attribute string_size_length
+    // #[test]
+    // fn test_tuple_struct_derived_serialization_string_size_length() {
+    //     #[derive(Debug, PartialEq, Serialize)]
+    //     struct TestStruct(#[string_size_length = 2] String);
+    //
+    //
+    //     let value = TestStruct("test".to_string());
+    //     let bytes = to_bytes(&value);
+    //     assert_eq!(hex::encode(&bytes), "02000474657374");
+    //     let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
+    //     assert_eq!(decoded, value);
+    // }
+    //
+    // /// Tests serializing tuple struct with derived implementation.
+    // /// Tests attribute size_length
+    // #[test]
+    // fn test_tuple_struct_derived_serialization_size_length() {
+    //     #[derive(Debug, PartialEq, Serialize)]
+    //     struct TestStruct(#[size_length = 2] Vec<u8>);
+    //
+    //     let value = TestStruct(vec![1, 2]);
+    //     let bytes = to_bytes(&value);
+    //     assert_eq!(hex::encode(&bytes), "00020102");
+    //     let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
+    //     assert_eq!(decoded, value);
+    // }
+    //
+    // /// Tests serializing tuple struct with derived implementation.
+    // /// Tests attribute map_size_length
+    // #[test]
+    // fn test_tuple_struct_derived_serialization_map_size_length() {
+    //     #[derive(Debug, PartialEq, Serialize)]
+    //     struct TestStruct(#[map_size_length = 2] BTreeMap<u8, u8>);
+    //
+    //     let value = TestStruct([(1, 2), (3, 4)].into_iter().collect());
+    //     let bytes = to_bytes(&value);
+    //     assert_eq!(hex::encode(&bytes), "000201020304");
+    //     let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
+    //     assert_eq!(decoded, value);
+    // }
+    //
+    // /// Tests serializing tuple struct with derived implementation.
+    // /// Tests attribute set_size_length
+    // #[test]
+    // fn test_tuple_struct_derived_serialization_set_size_length() {
+    //     #[derive(Debug, PartialEq, Serialize)]
+    //     struct TestStruct(#[set_size_length = 2] BTreeSet<u8>);
+    //
+    //     let value = TestStruct([1, 2].into_iter().collect());
+    //     let bytes = to_bytes(&value);
+    //     assert_eq!(hex::encode(&bytes), "00020102");
+    //     let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
+    //     assert_eq!(decoded, value);
+    // }
 }
