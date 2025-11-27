@@ -19,6 +19,7 @@ import Data.Aeson (FromJSON (..), ToJSON (..))
 import qualified Data.Aeson as AE
 import Data.Aeson.TH
 import Data.Bits
+import Data.Bool.Singletons
 import qualified Data.ByteString as BS
 import Data.Char (isLower)
 import qualified Data.Map.Strict as Map
@@ -544,11 +545,10 @@ getBareBlockItem spv =
             AccountTransactionKind -> NormalTransaction <$> S.get
             CredentialDeploymentKind -> CredentialDeployment <$> S.get
             UpdateInstructionKind -> ChainUpdate <$> getUpdateInstruction spv
-            AccountTransactionV1Kind -> do
-                unless (pv >= 10) $ fail "Extended transactions are not supported prior to p10"
-                ExtendedTransaction <$> S.get
-  where
-    pv = protocolVersionToWord64 (demoteProtocolVersion spv)
+            AccountTransactionV1Kind
+                | STrue <- sSupportsSponsoredTransactions spv ->
+                    ExtendedTransaction <$> S.get
+                | otherwise -> fail "Extended transactions are not supported prior to P10"
 
 -- | Datatypes which have an expiry, which here we set to mean the latest time
 --  the item can be included in a block.
@@ -583,6 +583,7 @@ instance HasMessageExpiry BareBlockItem where
     msgExpiry (ExtendedTransaction t) = msgExpiry t
 
 instance (HasMessageExpiry a) => HasMessageExpiry (WithMetadata a) where
+    {-# SPECIALIZE instance HasMessageExpiry BlockItem #-}
     {-# SPECIALIZE instance HasMessageExpiry Transaction #-}
     {-# INLINE msgExpiry #-}
     msgExpiry = msgExpiry . wmdData
@@ -815,6 +816,10 @@ class TransactionData t where
     transactionSponsor :: t -> Maybe AccountAddress
     transactionSponsorSignature :: t -> Maybe TransactionSignature
 
+    -- | 'True' if the transaction is an 'AccountTransactionV1', and 'False' if it
+    --  is an 'AccountTransaction'.
+    transactionIsExtended :: t -> Bool
+
     -- | The size of the transaction header and payload together.
     transactionHeaderPayloadSize :: t -> Word64
 
@@ -845,6 +850,7 @@ instance TransactionData AccountTransaction where
     transactionHash = getHash
     transactionSponsor _ = Nothing
     transactionSponsorSignature _ = Nothing
+    transactionIsExtended = const False
     transactionHeaderPayloadSize = getTransactionHeaderPayloadSize . atrHeader
     transactionNumSigs = getTransactionNumSigs . atrSignature
 
@@ -859,6 +865,7 @@ instance TransactionData AccountTransactionV1 where
     transactionHash = getHash
     transactionSponsor = thv1Sponsor . atrv1Header
     transactionSponsorSignature = tsv1Sponsor . atrv1Signature
+    transactionIsExtended = const True
     transactionHeaderPayloadSize = getTransactionV1HeaderPayloadSize . atrv1Header
 
 -- | A helper function for lifting 'TransactionData' operations to 'VersionedTransaction'.
@@ -879,6 +886,9 @@ instance TransactionData VersionedTransaction where
     transactionHash = liftTransactionDataToVersionedTransaction transactionHash
     transactionSponsor = liftTransactionDataToVersionedTransaction transactionSponsor
     transactionSponsorSignature = liftTransactionDataToVersionedTransaction transactionSponsorSignature
+    transactionIsExtended = \case
+        TransactionV0{} -> False
+        TransactionV1{} -> True
     transactionHeaderPayloadSize = liftTransactionDataToVersionedTransaction transactionHeaderPayloadSize
 
 instance (TransactionData t) => TransactionData (WithMetadata t) where
@@ -893,7 +903,9 @@ instance (TransactionData t) => TransactionData (WithMetadata t) where
     transactionHash = wmdHash
     transactionSponsor = transactionSponsor . wmdData
     transactionSponsorSignature = transactionSponsorSignature . wmdData
+    transactionIsExtended = transactionIsExtended . wmdData
     transactionHeaderPayloadSize = transactionHeaderPayloadSize . wmdData
+    transactionNumSigs = transactionNumSigs . wmdData
 
 --------------------------
 
