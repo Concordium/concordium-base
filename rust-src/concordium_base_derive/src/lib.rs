@@ -253,8 +253,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
         let mut arms = proc_macro2::TokenStream::new();
         for (variant_index, variant) in data.variants.iter().enumerate() {
             let mut fields_deserialize = proc_macro2::TokenStream::new();
-            let fields_constructor: proc_macro2::TokenStream;
-            match &variant.fields {
+            let fields_constructor = match &variant.fields {
                 Fields::Named(fields) => {
                     let mut field_idents = Vec::new();
                     for f in fields.named.iter() {
@@ -266,7 +265,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                         });
                         field_idents.push(ident);
                     }
-                    fields_constructor = quote!({ #( #field_idents ),* })
+                    quote!({ #( #field_idents ),* })
                 }
                 Fields::Unnamed(fields) => {
                     let mut field_idents = Vec::new();
@@ -279,13 +278,13 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                         });
                         field_idents.push(ident);
                     }
-                    fields_constructor = quote!(( #( #field_idents ),* ))
+                    quote!(( #( #field_idents ),* ))
                 }
                 Fields::Unit => {
                     // no fields to deserialize
-                    fields_constructor = Default::default();
+                    Default::default()
                 }
-            }
+            };
 
             let variant_index_tk =
                 Literal::u8_suffixed(variant_index.try_into().expect("variant index to u8"));
@@ -451,8 +450,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
         let mut arms = proc_macro2::TokenStream::new();
         for (variant_index, variant) in data.variants.iter().enumerate() {
             let mut fields_serialize = proc_macro2::TokenStream::new();
-            let fields_pattern: proc_macro2::TokenStream;
-            match &variant.fields {
+            let fields_pattern = match &variant.fields {
                 Fields::Named(fields) => {
                     let mut field_idents = Vec::new();
                     for f in fields.named.iter() {
@@ -464,7 +462,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         });
                         field_idents.push(ident);
                     }
-                    fields_pattern = quote!({ #( #field_idents ),* })
+                    quote!({ #( #field_idents ),* })
                 }
                 Fields::Unnamed(fields) => {
                     let mut field_idents = Vec::new();
@@ -477,13 +475,13 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         });
                         field_idents.push(ident);
                     }
-                    fields_pattern = quote!(( #( #field_idents ),* ))
+                    quote!(( #( #field_idents ),* ))
                 }
                 Fields::Unit => {
                     // no fields to serialize
-                    fields_pattern = Default::default();
+                    Default::default()
                 }
-            }
+            };
 
             let variant_index_tk =
                 Literal::u8_suffixed(variant_index.try_into().expect("variant index to u8"));
