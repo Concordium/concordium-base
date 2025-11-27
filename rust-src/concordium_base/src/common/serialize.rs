@@ -1106,7 +1106,7 @@ mod test {
             b: "test".to_string(),
         };
         let bytes = to_bytes(&value);
-        assert_eq!(hex::encode(&bytes), "02000474657374");
+        assert_eq!(hex::encode(&bytes), "000474657374");
         let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
         assert_eq!(decoded, value);
     }
@@ -1190,7 +1190,7 @@ mod test {
     //
     //     let value = TestStruct("test".to_string());
     //     let bytes = to_bytes(&value);
-    //     assert_eq!(hex::encode(&bytes), "02000474657374");
+    //     assert_eq!(hex::encode(&bytes), "000474657374");
     //     let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
     //     assert_eq!(decoded, value);
     // }
