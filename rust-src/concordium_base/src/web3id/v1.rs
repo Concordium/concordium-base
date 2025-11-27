@@ -1,4 +1,4 @@
-//! Functionality related to constructing and verifying V1 Concordium Web3ID proofs.
+//! Functionality related to constructing and verifying V1 Concordium verifiable presentations.
 //!
 //! The main entrypoints in this module are the [`verify`](PresentationV1::verify)
 //! function for verifying presentations in the context of given public
@@ -10,15 +10,19 @@
 //! "15.4 Identity Presentations using Zero-Knowledge Proofs" and
 //! "17 Web3 Verifiable Credentials"
 
-/// Types defining the verification request anchor (VRA) and verification audit anchor (VAA)
-/// These types are part of the higher level verification flow.
 pub mod anchor;
 mod proofs;
 
 use crate::base::CredentialRegistrationID;
+use crate::bulletproofs::set_membership_proof::SetMembershipProof;
+use crate::bulletproofs::set_non_membership_proof::SetNonMembershipProof;
 use crate::common::{Buffer, Get, ParseResult, Put};
 use crate::curve_arithmetic::{Curve, Pairing};
-use crate::id::id_proof_types::{AtomicProof, AtomicStatement};
+use crate::id::id_proof_types::{
+    AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
+    AttributeValueProof, AttributeValueStatement,
+};
+use crate::id::range_proof::RangeProof;
 use crate::id::secret_sharing::Threshold;
 use crate::id::types::{
     ArIdentity, ArInfos, Attribute, AttributeTag, ChainArData, CredentialValidity,
@@ -121,14 +125,19 @@ pub struct ContextProperty {
 
 /// Claims about a single account based subject. Accounts are on-chain credentials
 /// deployed from identity credentials.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AccountBasedSubjectClaims<C: Curve, AttributeType: Attribute<C::Scalar>> {
+#[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
+pub struct AccountBasedSubjectClaims<
+    C: Curve,
+    AttributeType: Attribute<C::Scalar> + common::Serialize,
+> {
     /// Network on which the account exists
     pub network: Network,
+    /// Identity provider which issued the credentials
+    pub issuer: IpIdentity,
     /// Account registration id
     pub cred_id: CredentialRegistrationID,
     /// Attribute statements
-    pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
+    pub statements: Vec<AtomicStatementV1<C, AttributeTag, AttributeType>>,
 }
 
 /// Claims about a single identity based subject. Identity credentials
@@ -136,14 +145,17 @@ pub struct AccountBasedSubjectClaims<C: Curve, AttributeType: Attribute<C::Scala
 /// only the identity provider that issued the identity credentials is identified. The corresponding
 /// credentials will contain and ephemeral id [`IdentityCredentialEphemeralId`] that can be decrypted
 /// by the privacy guardians to IdCredPub, which is an identifier for the identity credentials.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IdentityBasedSubjectClaims<C: Curve, AttributeType: Attribute<C::Scalar>> {
+#[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
+pub struct IdentityBasedSubjectClaims<
+    C: Curve,
+    AttributeType: Attribute<C::Scalar> + common::Serialize,
+> {
     /// Network to which the identity credentials are issued
     pub network: Network,
     /// Identity provider which issued the credentials
     pub issuer: IpIdentity,
     /// Attribute statements
-    pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
+    pub statements: Vec<AtomicStatementV1<C, AttributeTag, AttributeType>>,
 }
 
 /// Claims about a subject.
@@ -157,6 +169,42 @@ pub enum SubjectClaims<C: Curve, AttributeType: Attribute<C::Scalar>> {
     Identity(IdentityBasedSubjectClaims<C, AttributeType>),
 }
 
+impl<C: Curve, AttributeType: Attribute<C::Scalar> + common::Serial> common::Serial
+    for SubjectClaims<C, AttributeType>
+{
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            Self::Account(claims) => {
+                out.put(&0u8);
+                out.put(claims);
+            }
+            Self::Identity(claims) => {
+                out.put(&1u8);
+                out.put(claims);
+            }
+        }
+    }
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar> + common::Deserial> common::Deserial
+    for SubjectClaims<C, AttributeType>
+{
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let tag: u8 = source.get()?;
+        Ok(match tag {
+            0 => {
+                let claims = source.get()?;
+                Self::Account(claims)
+            }
+            1 => {
+                let claims = source.get()?;
+                Self::Identity(claims)
+            }
+            _ => bail!("unsupported SubjectClaims: {}", tag),
+        })
+    }
+}
+
 impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
     for SubjectClaims<C, AttributeType>
 {
@@ -167,6 +215,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
         match self {
             Self::Account(AccountBasedSubjectClaims {
                 network,
+                issuer,
                 cred_id,
                 statements: statement,
             }) => {
@@ -180,6 +229,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 )?;
                 let id = did::Method::new_account_credential(*network, *cred_id);
                 map.serialize_entry("id", &id)?;
+                let issuer = did::Method::new_idp(*network, *issuer);
+                map.serialize_entry("issuer", &issuer)?;
                 map.serialize_entry("statement", statement)?;
                 map.end()
             }
@@ -226,10 +277,19 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
                     let did::IdentifierType::Credential { cred_id } = id.ty else {
                         bail!("expected account credential did, was {}", id);
                     };
+                    let issuer: did::Method = take_field_de(&mut value, "issuer")?;
+                    let did::IdentifierType::Idp { idp_identity } = issuer.ty else {
+                        bail!("expected issuer did, was {}", issuer);
+                    };
+                    ensure!(
+                        issuer.network == id.network,
+                        "issuer and account registration id network not identical"
+                    );
                     let statement = take_field_de(&mut value, "statement")?;
 
                     Self::Account(AccountBasedSubjectClaims {
                         network: id.network,
+                        issuer: idp_identity,
                         cred_id,
                         statements: statement,
                     })
@@ -281,14 +341,18 @@ fn take_field_de<T: DeserializeOwned>(
 /// identity provider.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct AccountCredentialMetadataV1 {
-    pub issuer: IpIdentity,
+    /// Account credential registration id for the credential.
+    /// Must be used to look up the account credential on chain.
     pub cred_id: CredentialRegistrationID,
 }
 
 /// Metadata of an identity based credential.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct IdentityCredentialMetadataV1 {
+    /// Issuer of the identity credentials. Must be used to look
+    /// up the identity provider keys on chain.
     pub issuer: IpIdentity,
+    /// Validity of the credential.
     pub validity: CredentialValidity,
 }
 
@@ -307,7 +371,7 @@ pub enum CredentialMetadataTypeV1 {
 /// Metadata of a credential [`CredentialV1`].
 /// The metadata consists of
 ///
-/// * data that is part of the verification presentation and credentials but needs to be verified externally (network is an example of that)
+/// * data that is part of the verification presentation and credentials but needs to be verified externally: network, credential validity period
 /// * information about data that must be resolved externally to [`CredentialVerificationMaterial`] in order to verify
 ///   the presentation
 ///
@@ -332,7 +396,7 @@ pub struct AccountBasedCredentialV1<C: Curve, AttributeType: Attribute<C::Scalar
     /// Credential subject
     pub subject: AccountCredentialSubject<C, AttributeType>,
     /// Proofs of the credential
-    pub proof: ConcordiumZKProof<AccountCredentialProofs<C, AttributeType>>,
+    pub proof: ConcordiumZKProof<AccountCredentialProofs<C>>,
 }
 
 /// Subject of account based credential
@@ -343,7 +407,7 @@ pub struct AccountCredentialSubject<C: Curve, AttributeType: Attribute<C::Scalar
     /// Account credentials registration id. Identifies the subject.
     pub cred_id: CredentialRegistrationID,
     /// Proven statements
-    pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
+    pub statements: Vec<AtomicStatementV1<C, AttributeTag, AttributeType>>,
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
@@ -390,9 +454,9 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
 
 /// Proof of account based credential
 #[derive(Clone, Debug, Eq, PartialEq, common::Serialize)]
-pub struct AccountCredentialProofs<C: Curve, AttributeType: Attribute<C::Scalar>> {
+pub struct AccountCredentialProofs<C: Curve> {
     /// Proofs of the atomic statements on attributes
-    pub statement_proofs: Vec<AtomicProof<C, AttributeType>>,
+    pub statement_proofs: Vec<AtomicProofV1<C>>,
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, AttributeType> {
@@ -400,14 +464,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
     pub fn metadata(&self) -> AccountCredentialMetadataV1 {
         let AccountBasedCredentialV1 {
             subject: AccountCredentialSubject { cred_id, .. },
-            issuer,
             ..
         } = self;
 
-        AccountCredentialMetadataV1 {
-            issuer: *issuer,
-            cred_id: *cred_id,
-        }
+        AccountCredentialMetadataV1 { cred_id: *cred_id }
     }
 
     /// Extract the subject claims from the credential.
@@ -419,24 +479,26 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
                     cred_id,
                     statements,
                 },
+            issuer,
             ..
         } = self;
 
         AccountBasedSubjectClaims {
             network: *network,
+            issuer: *issuer,
             cred_id: *cred_id,
             statements: statements.clone(),
         }
     }
 }
 
-/// Encrypted ephemeral id for an identity credential. It will have a new value for each time a credential is proven
+/// Encrypted, ephemeral id for an identity credential. It will have a new value for each time a credential is proven
 /// derived from the identity credential (the encryption is a randomized function).
 /// The id can be decrypted to IdCredPub by first converting the value to [`IdentityCredentialEphemeralIdData`].
 #[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
 pub struct IdentityCredentialEphemeralId(pub Vec<u8>);
 
-/// Encrypted ephemeral id for an identity credential. The id can be decrypted to IdCredPub by the privacy guardians (anonymity revokers).
+/// Encrypted, ephemeral id for an identity credential. The id can be decrypted to IdCredPub by the privacy guardians (anonymity revokers).
 /// It will have a new value for each time credential is proven (the encryption is a randomized function).
 #[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
 pub struct IdentityCredentialEphemeralIdData<C: Curve> {
@@ -458,7 +520,7 @@ impl<C: Curve> IdentityCredentialEphemeralIdData<C> {
     }
 }
 
-/// Encrypted ephemeral id for an identity credential. The id can be decrypted to IdCredPub by the privacy guardians (anonymity revokers).
+/// Encrypted, ephemeral id for an identity credential. The id can be decrypted to IdCredPub by the privacy guardians (anonymity revokers).
 /// It will have a new value for each time credential is proven (the encryption is a randomized function)
 #[derive(Debug, Clone, PartialEq, Eq, common::Serial)]
 pub struct IdentityCredentialEphemeralIdDataRef<'a, C: Curve> {
@@ -515,7 +577,7 @@ pub struct IdentityCredentialSubject<C: Curve, AttributeType: Attribute<C::Scala
     /// Since the id is ephemeral, the identity derived credential is an [unlinkable disclosure](https://www.w3.org/TR/vc-data-model-2.0/#dfn-unlinkable-disclosure)
     pub cred_id: IdentityCredentialEphemeralId,
     /// Proven statements
-    pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
+    pub statements: Vec<AtomicStatementV1<C, AttributeTag, AttributeType>>,
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
@@ -570,13 +632,14 @@ pub struct IdentityCredentialProofs<
     /// The attributes that are part of the underlying identity credential from which this credential is derived
     pub identity_attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
     /// Proof of:
+    ///
     /// * knowledge of a signature from the identity provider on the attributes
     ///   in `identity_attributes` and on [`IdentityBasedCredentialV1::validity`]
     /// * correctness of the encryption of IdCredPub in [`IdentityCredentialSubject::cred_id`]
     pub identity_attributes_proofs: IdentityAttributesCredentialsProofs<P, C>,
     /// Proofs for the atomic statements based on the attribute commitments
     /// and values in `identity_attributes`
-    pub statement_proofs: Vec<AtomicProof<C, AttributeType>>,
+    pub statement_proofs: Vec<AtomicProofV1<C>>,
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
@@ -616,7 +679,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 }
 
 /// Version of proof
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ConcordiumZKProofVersion {
     #[serde(rename = "ConcordiumZKProofV4")]
     ConcordiumZKProofV4,
@@ -646,21 +709,25 @@ impl common::Deserial for ConcordiumZKProofVersion {
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, common::Serialize)]
 #[serde(bound(serialize = "T: common::Serial", deserialize = "T: common::Deserial"))]
 pub struct ConcordiumZKProof<T: common::Serialize> {
+    /// When proof was created
     #[serde(rename = "created")]
     pub created_at: chrono::DateTime<chrono::Utc>,
+    /// The actual proof
     #[serde(
         rename = "proofValue",
         serialize_with = "common::base16_encode",
         deserialize_with = "common::base16_decode"
     )]
     pub proof_value: T,
+    /// Version/type of proof
     #[serde(rename = "type")]
-    pub proof_type: ConcordiumZKProofVersion,
+    pub proof_version: ConcordiumZKProofVersion,
 }
 
-/// Verifiable credential. Embeds and proofs the claims from a [`SubjectClaims`].
-/// To verify the credential, the corresponding public input [`CredentialsInputs`](super::CredentialsInputs) is needed.
-/// Also, the data in [`CredentialMetadataV1`] returned by [`CredentialV1::metadata`] must be verified externally in
+/// Verifiable credential that contains subject claims and proofs of the claims.
+/// The subject and claims can be retrieved by calling [`CredentialV1::claims`].
+/// To verify the credential, the corresponding public input [`CredentialVerificationMaterial`] is needed.
+/// Also, some of the data in [`CredentialMetadataV1`] returned by [`CredentialV1::metadata`] must be verified externally in
 /// order to verify the credential.
 // for some reason, version 1.82 clippy thinks the `Identity` variant is 0 bytes and hence gives this warning
 #[allow(clippy::large_enum_variant)]
@@ -809,8 +876,11 @@ impl<
                     let did::IdentifierType::Idp { idp_identity } = issuer.ty else {
                         bail!("expected idp did, was {}", issuer);
                     };
-                    ensure!(issuer.network == subject.network, "network not identical");
-                    let proof: ConcordiumZKProof<AccountCredentialProofs<C, AttributeType>> =
+                    ensure!(
+                        issuer.network == subject.network,
+                        "issuer and account registration id network not identical"
+                    );
+                    let proof: ConcordiumZKProof<AccountCredentialProofs<C>> =
                         take_field_de(&mut value, "proof")?;
 
                     Self::Account(AccountBasedCredentialV1 {
@@ -877,6 +947,14 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         }
     }
 
+    /// When credentials were created
+    pub fn proof_version(&self) -> ConcordiumZKProofVersion {
+        match self {
+            CredentialV1::Account(acc) => acc.proof.proof_version,
+            CredentialV1::Identity(id) => id.proof.proof_version,
+        }
+    }
+
     /// Metadata about the credential. This contains data that must be externally verified
     /// and also data needed to look up [`CredentialVerificationMaterial`].
     pub fn metadata(&self) -> CredentialMetadataV1 {
@@ -906,7 +984,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 }
 
 /// Version of proof
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ConcordiumLinkingProofVersion {
     #[serde(rename = "ConcordiumWeakLinkingProofV1")]
     ConcordiumWeakLinkingProofV1,
@@ -948,8 +1026,10 @@ pub struct LinkingProofV1 {
     pub proof_type: ConcordiumLinkingProofVersion,
 }
 
-/// Verifiable presentation. Is the response to proving a [`RequestV1`] with [`RequestV1::prove`]. It contains proofs for
-/// the claims in the request. To verify the presentation, use [`PresentationV1::verify`].
+/// Verifiable presentation that contains verifiable credentials each
+/// consisting of subject claims and proofs of them.
+/// It is the response to proving a [`RequestV1`] with [`RequestV1::prove`].
+/// To verify the presentation, use [`PresentationV1::verify`].
 #[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
 pub struct PresentationV1<
     P: Pairing,
@@ -1032,7 +1112,7 @@ impl<
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct RequestV1<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Context challenge for the proof
-    pub challenge: ContextInformation,
+    pub context: ContextInformation,
     /// Claims to prove
     pub subject_claims: Vec<SubjectClaims<C, AttributeType>>,
 }
@@ -1046,7 +1126,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
     {
         let mut map = serializer.serialize_map(None)?;
         map.serialize_entry("type", &CONCORDIUM_REQUEST_TYPE)?;
-        map.serialize_entry("context", &self.challenge)?;
+        map.serialize_entry("context", &self.context)?;
         map.serialize_entry("subjectClaims", &self.subject_claims)?;
         map.end()
     }
@@ -1069,11 +1149,11 @@ impl<'de, C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> serd
                 CONCORDIUM_REQUEST_TYPE
             );
 
-            let challenge = take_field_de(&mut value, "context")?;
+            let context = take_field_de(&mut value, "context")?;
             let credential_statements = take_field_de(&mut value, "subjectClaims")?;
 
             Ok(Self {
-                challenge,
+                context,
                 subject_claims: credential_statements,
             })
         })();
@@ -1215,7 +1295,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 #[serde(bound(serialize = "", deserialize = ""))]
 #[serde(rename_all = "camelCase")]
 pub struct AccountCredentialVerificationMaterial<C: Curve> {
-    // Commitments to attribute values. Are part of the on-chain account credentials.
+    /// Issuer of the credential
+    pub issuer: IpIdentity,
+    /// Commitments to attribute values. Are part of the on-chain account credentials.
     #[serde(rename = "commitments")]
     pub attribute_commitments: BTreeMap<AttributeTag, pedersen_commitment::Commitment<C>>,
 }
@@ -1264,9 +1346,165 @@ pub enum ProveError {
 #[non_exhaustive]
 pub enum VerifyError {
     #[error("the number of verification material inputs does not match the credentials to verify")]
-    VeficationMaterialMismatch,
+    VerificationMaterialMismatch,
     #[error("the credential was not valid (index {0})")]
     InvalidCredential(usize),
+}
+
+/// The types of statements that can be used in subject claims
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Eq)]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize, TagType: \
+                 serde::Serialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + serde::Deserialize<'de>, \
+                   TagType: serde::Deserialize<'de>"
+))]
+#[serde(tag = "type")]
+pub enum AtomicStatementV1<
+    C: Curve,
+    TagType: common::Serialize,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    /// The atomic statement stating that an attribute is equal to a public value
+    AttributeValue(AttributeValueStatement<C, TagType, AttributeType>),
+    /// The atomic statement stating that an attribute is in a range.
+    AttributeInRange(AttributeInRangeStatement<C, TagType, AttributeType>),
+    /// The atomic statement stating that an attribute is in a set.
+    AttributeInSet(AttributeInSetStatement<C, TagType, AttributeType>),
+    /// The atomic statement stating that an attribute is not in a set.
+    AttributeNotInSet(AttributeNotInSetStatement<C, TagType, AttributeType>),
+}
+
+impl<C: Curve, TagType: common::Serialize + Copy, AttributeType: Attribute<C::Scalar>>
+    AtomicStatementV1<C, TagType, AttributeType>
+{
+    /// Attribute to which this statement applies.
+    pub fn attribute(&self) -> TagType {
+        match self {
+            Self::AttributeValue(statement) => statement.attribute_tag,
+            Self::AttributeInRange(statement) => statement.attribute_tag,
+            Self::AttributeInSet(statement) => statement.attribute_tag,
+            Self::AttributeNotInSet(statement) => statement.attribute_tag,
+        }
+    }
+}
+
+impl<C: Curve, TagType: common::Serialize, AttributeType: Attribute<C::Scalar>> common::Serial
+    for AtomicStatementV1<C, TagType, AttributeType>
+{
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            Self::AttributeValue(statement) => {
+                0u8.serial(out);
+                statement.serial(out);
+            }
+            Self::AttributeInRange(statement) => {
+                1u8.serial(out);
+                statement.serial(out);
+            }
+            Self::AttributeInSet(statement) => {
+                2u8.serial(out);
+                statement.serial(out);
+            }
+            Self::AttributeNotInSet(statement) => {
+                3u8.serial(out);
+                statement.serial(out);
+            }
+        }
+    }
+}
+
+impl<C: Curve, TagType: common::Serialize, AttributeType: Attribute<C::Scalar>> common::Deserial
+    for AtomicStatementV1<C, TagType, AttributeType>
+{
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        match u8::deserial(source)? {
+            0u8 => {
+                let statement = source.get()?;
+                Ok(Self::AttributeValue(statement))
+            }
+            1u8 => {
+                let statement = source.get()?;
+                Ok(Self::AttributeInRange(statement))
+            }
+            2u8 => {
+                let statement = source.get()?;
+                Ok(Self::AttributeInSet(statement))
+            }
+            3u8 => {
+                let statement = source.get()?;
+                Ok(Self::AttributeNotInSet(statement))
+            }
+            n => anyhow::bail!("Unknown statement tag: {}.", n),
+        }
+    }
+}
+
+/// Proof of a [`AtomicStatementV1`].
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum AtomicProofV1<C: Curve> {
+    /// A proof that an attribute is equal to a public value
+    AttributeValue(AttributeValueProof<C>),
+    /// A proof that an attribute is equal to a public value but where
+    /// the value is already revealed as part of composed proofs
+    AttributeValueAlreadyRevealed,
+    /// A proof that an attribute is in a range
+    AttributeInRange(RangeProof<C>),
+    /// A proof that an attribute is in a set
+    AttributeInSet(SetMembershipProof<C>),
+    /// A proof that an attribute is not in a set
+    AttributeNotInSet(SetNonMembershipProof<C>),
+}
+
+impl<C: Curve> common::Serial for AtomicProofV1<C> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            Self::AttributeValue(proof) => {
+                0u8.serial(out);
+                proof.serial(out);
+            }
+            Self::AttributeValueAlreadyRevealed => {
+                1u8.serial(out);
+            }
+            Self::AttributeInRange(proof) => {
+                2u8.serial(out);
+                proof.serial(out);
+            }
+            Self::AttributeInSet(proof) => {
+                3u8.serial(out);
+                proof.serial(out);
+            }
+            Self::AttributeNotInSet(proof) => {
+                4u8.serial(out);
+                proof.serial(out);
+            }
+        }
+    }
+}
+
+impl<C: Curve> common::Deserial for AtomicProofV1<C> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        match u8::deserial(source)? {
+            0u8 => {
+                let proof = source.get()?;
+                Ok(Self::AttributeValue(proof))
+            }
+            1u8 => Ok(Self::AttributeValueAlreadyRevealed),
+            2u8 => {
+                let proof = source.get()?;
+                Ok(Self::AttributeInRange(proof))
+            }
+            3u8 => {
+                let proof = source.get()?;
+                Ok(Self::AttributeInSet(proof))
+            }
+            4u8 => {
+                let proof = source.get()?;
+                Ok(Self::AttributeNotInSet(proof))
+            }
+            n => anyhow::bail!("Unknown proof type tag: {}", n),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1275,8 +1513,7 @@ mod tests {
     use crate::elgamal::Cipher;
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
     use crate::id::id_proof_types::{
-        AtomicStatement, AttributeInRangeStatement, AttributeInSetStatement,
-        AttributeNotInSetStatement, RevealAttributeStatement,
+        AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
     };
     use crate::id::types::{AttributeTag, GlobalContext};
     use crate::web3id::did::Network;
@@ -1376,69 +1613,64 @@ mod tests {
         let credential_statements = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
             network: Network::Testnet,
             cred_id: acc_cred_fixture.cred_id,
+            issuer: acc_cred_fixture.issuer,
             statements: vec![
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: 3.into(),
-                        lower: Web3IdAttribute::Numeric(80),
-                        upper: Web3IdAttribute::Numeric(1237),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeInSet {
-                    statement: AttributeInSetStatement {
-                        attribute_tag: 2.into(),
-                        set: [
-                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeNotInSet {
-                    statement: AttributeNotInSetStatement {
-                        attribute_tag: 1.into(),
-                        set: [
-                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
-                        lower: Web3IdAttribute::try_from(
-                            chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
-                                .unwrap()
-                                .to_utc(),
-                        )
-                        .unwrap(),
-                        upper: Web3IdAttribute::try_from(
-                            chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
-                                .unwrap()
-                                .to_utc(),
-                        )
-                        .unwrap(),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::RevealAttribute {
-                    statement: RevealAttributeStatement {
-                        attribute_tag: 5.into(),
-                    },
-                },
+                AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+                    attribute_tag: 3.into(),
+                    lower: Web3IdAttribute::Numeric(80),
+                    upper: Web3IdAttribute::Numeric(1237),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeInSet(AttributeInSetStatement {
+                    attribute_tag: 2.into(),
+                    set: [
+                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeNotInSet(AttributeNotInSetStatement {
+                    attribute_tag: 1.into(),
+                    set: [
+                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+                    attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
+                    lower: Web3IdAttribute::try_from(
+                        chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                            .unwrap()
+                            .to_utc(),
+                    )
+                    .unwrap(),
+                    upper: Web3IdAttribute::try_from(
+                        chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                            .unwrap()
+                            .to_utc(),
+                    )
+                    .unwrap(),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeValue(AttributeValueStatement {
+                    attribute_tag: AttributeTag(5).to_string().parse().unwrap(),
+                    attribute_value: Web3IdAttribute::String(
+                        AttributeKind::try_new("testvalue".into()).unwrap(),
+                    ),
+                    _phantom: Default::default(),
+                }),
             ],
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims: credential_statements,
         };
 
@@ -1469,6 +1701,7 @@ mod tests {
         "ConcordiumAccountBasedSubjectClaims"
       ],
       "id": "did:ccd:testnet:cred:856793e4ba5d058cea0b5c3a1c8affb272efcf53bbab77ee28d3e2270d5041d220c1e1a9c6c8619c84e40ebd70fb583e",
+      "issuer": "did:ccd:testnet:idp:17",
       "statement": [
         {
           "type": "AttributeInRange",
@@ -1507,8 +1740,9 @@ mod tests {
           }
         },
         {
-          "type": "RevealAttribute",
-          "attributeTag": "nationality"
+          "type": "AttributeValue",
+          "attributeTag": "nationality",
+          "attributeValue": "testvalue"
         }
       ]
     }
@@ -1651,15 +1885,16 @@ mod tests {
             }
           },
           {
-            "type": "RevealAttribute",
-            "attributeTag": "nationality"
+            "type": "AttributeValue",
+            "attributeTag": "nationality",
+            "attributeValue": "testvalue"
           }
         ]
       },
       "issuer": "did:ccd:testnet:idp:17",
       "proof": {
         "created": "2023-08-28T23:12:15Z",
-        "proofValue": "000000000000000501b12365d42dbcdda54216b524d94eda74809018b8179d90c747829da5d24df4b2d835d7f77879cf52d5b1809564c5ec49990998db469e5c04553de3f787a3998d660204fe2dd1033a310bfc06ab8a9e5426ff90fdaf554ac11e96bbf18b1e1da898425e0f42bb5b91f650cffc83890c5c3634217e1ca6df0150d100aedc6c49b36b548e9e853f9180b3b994f2b9e6e302840ce0d443ca529eba7fb3b15cd10987be5a40a2e5cf825467588a00584b228bea646482954922ae2bffad62c65eebb71a4ca5367d4ac3e3b4cb0e56190e95f6af1c47d0b45991d39e58ee3a25c32de75c9d91cabd2cc5bc4325a4699b8a1c2e486059d472917ba1c5e4a2b66f77dbcf08a2aa21cbd0ec8f78061aa92cc1b126e06e1fc0da0d03c30e444721fbe07a1100000007ae9f2dffa4e4102b834e7930e7bb9476b00b8f0077e5fb48bc953f44571a9f9f8bcf46ea1cc3e93ca6e635d85ee5a63fa2a1c92e0bf7fba3e61a37f858f8fa52f40644f59e1fb65b6fb34eaaa75a907e85e2c8efd664a0c6a9d40cbe3e96fd7ab0ff06a4a1e66fd3950cf1af6c8a7d30197ae6aec4ecf463c368f3b587b5b65b93a6b77167e112e724a5fe6e7b3ce16b8402d736cb9b207e0e3833bb47d0e3ddc581790c9539ecd3190bdee690120c9b8e322e3fb2799ada40f5e7d9b66a8774aa662ab85c9e330410a19d0c1311c13cf59c798fa021d24afd85fabfe151802cbde37dafc0046920345961db062e5fb9b2fe0334debe1670ef88142a625e6acd1b7ded9f63b68d7b938b108dbf4cca60257bdf32fed399b2d0f11a10c59a4089937a28cbeefc28a93e533722d6060856baf26ccd9470a9c50229acc54753534888e1c8f8c612b5e6af0705dceeac85a5ac3d641b3033c5d3af066f33147256b86b1fffaaceea3bf9e4fd98f7a5371e4a882dd3c7cbe5d9b34e933d6ac224d7198cc4c8d3e5f0cef03fad810ca36499dc3a5e157d435843d60eb6a3fc3c3624d9fef8b5f2f2335af0a8ecca5cf71a9ffab6651d7c899d560264a6c9e361ee10a17dcb18522acdc0a19ab004f15ba1e23fa2aa3bb75f3767678d12c6dc35b2a04bb5239ce2cf35649a42525f42f91d6b80266af0fbd86645611332203ac555250fc29f6bb1b50932c7e48418bbadf57db4931789a0dd44e9b70d437af1ae686ede83e6965108a655caf34bd7b0b587eef0a29350020abae08bd2d979752316f749ab4686da684dcae5b571213c7bfb914cb70965e9b643862f71bab5d22b7dbf7d3f84636ba514ef2cf0c87ecf225e3bdc99e15368b3d814fb1e257ac1fc0b9114cbb8ed594ce50688c88d8ea9d0e97f55e89fbddd282e13d7303d3604e969bc0e699388c2f6fbb310aa82f18af896019d79f26f72fbe3a5dfc6fd30c34ac8d57d499e49664ecfa76094c6fba2372dba87a2b55dd9dc30877af0d6fdd2b2ea54be02b39554bf77b9ad30ef725df82bdb6c5456adf9ac3187ffbeaab1b4ce68782829850f10182deb13eaa94edd3640768224a178b8bac224d12711c7d3bec925db4da9bd1424db872757a1f2e10c9dac40483a69972504e5d69163a9f13c5dc8fc60a1634554a5009d948704f92e701eeb0a5b2cbfdcf62fd7b8cc0db65b2ba52dd1bbe2e46eddeff70f5fb3686917587b82a9cf1e1c8a7b6cf44dbe57bbf83d541bfbfccac677a377ef4e1a5ced1e7e5147bde759150f531780bcfc5658b099787d68277d3d41d992022be434194d8307d2a90a518705017affec5796354ff2432f57f525cf014bdcf0b9fd84b9501d3938259c433b4e6181e2630b56826c4a0c7d03cc0a8768ce7226703cf97ee83d6bc1c0c044a2e0d4439780d1c7351ea8ece10000000298ff27cb9f1c4afb38c535cee5dbde71599f727976298c540cdb7ff0b10a439f1599c9bf879e35746e2fd04dda05368d966efc49f07a5c48baaca5853de36dd2f0c7fab8106f1158f34ece1d0fd8576eb727d834cb0c380c150086e2222ba38283d8c26a9af828584cbd90801cc0c3e1855b9a26f81efd3931000b8a2109ac9cd5070b98963d700560fd6c6de1df8202ac21dfbdf141bdf58ee96d7a72cb2dfba962159a2c9d0fe1d312aca7a56ce97716d7d16e47b7c59e651ee8fe8dbbf56c3048a31df649d9da46f669b80d5cb31c3ee70c5e6a05de8be814833934befaef06757e390f83ce84b4fd84fb9d86eb30a897faa4718d7b5a12c086255a0a21cc038b69df7282cd3234e4423e85d15c09d49fc2005e869a4876fec01369c3b0ec0ae6f710797b4e5294a7fdf72c05341b6887da98066400436af27e739c140e3a481df2845cd78df942a2c0fb01429d5b04cd96b18c0b2bbf764b533a6f095edbea844cbc0d196b4e423c7fd409c1ceb6572812707c9048ec5a373c29e3cefbbd128e1ebe72b84be67ae22e3dfee5b47f57b289755b558624daeb22ce521c432fbf2cab96826ec670f18a194b151ec0f49c31237f35caae1296715571520e22caff2912531b1ee43d555dee29e7105161dfe86f133b3fb7c194e72c12b1eaac010160a3e8a44cad0b1c1ef89d492014997603a37b26e9461572edcf93a011d639550e0505ad8932c2a205c688d70d6414717c7a31868b5d01c37993085cf28d1c670000000295c326f59171824b2fc3e09816b73c6f75a03fb50f611559855d295e0a565ff6d2505f970464ca12e81031d286866dd5b73c285de994b592f8d8c2e64227bcc5ae2058339d11af025cfcb126c2b3c9a7839b87c8d218f93b0f30a0876076eb9598e1ec92a57f4ce785b1a05c01e8db34b4cefe8e518a859aa6d9530bbe72a033af7e87a95433de67b86f389e178b1aaaa53eddcdf1be990d96ba7e7f18ffa83d60385e1a1130dbf245e1b4bac2e8bceb2c1184380e6e0f7876157d7ae074d1fb013266272083b5420b3fc654141046e5bee9e3ffe50497f372d55b3f0aec05873c7409c8a1507c38f6c87b726e9355d5d326658e1e7e67b349ef1a65185ec51801b2a44460fcbf28d7ce0fce6c677113a88b88ec272d3cfac24d33afc47b6fa15259af84fa6543ef673cbd18a44d47420c8c53d7eaf9272dfa62fadd8d118c2055480b6494a67b0346c9fa0b2ba2cba9c0591224a2ed7b399ea35b89111a53059cb410c51ffb45d0aab4b642087698fcb67d55d33a711db3f84a125f970705b68c5ae5b8ea2394c891911d7f1032ec08ec8df792bcbcb1a953214317be0085b4b7b23a45d52a83f77cade01752c7ae6fe1d81bb5dc3b6a74e3d2f4130178263b9e633914559cf75d5902b5fc696198bff1d25812b05ade020d0aadcae022336b3c49639dd8dd90381bb59828ca9a82d87610d1e01b4ee4827f30d11ac72fa911f4439ca4fbfe164dc370e5c96dcc329bbf9972d71e811d17f5dd2ffb760ac0e31400000007b9e19ad95babc1c31bf657ae20a5420cf05bbf024ae2ffe13b363d5404c5a0ef360c54d49e8725210a5bba290d29cb58a2607e5134fdb367631e10d8e159396e39bbc09bd7084038f6b5cebd5386da5cd18cfe3ce9dbf75b51f4d7de00e00c5993a3b4d05fb3f4edb2a8d05cece2da96d7d87081c1610eb949caed95520479c662d623ad1464fee46bc3486521d44427ad8d76db0cc6ab51cb69d1dfd59c1938b68b80a8813c9dad15f9466941e377836693dfdcfc96e12a296699ef77ab274293a917b64e48f413ee2908b574ad8875951ce40dceadaf104145a2a937bce6707a962355a61efbf9379a1da606f98915a21a9255eaf105b04651d789fc90ddab8a402d11fd8e5befece4956d1d0c9c47987c7d282cb045c053fc860e8c07365b9937aae7fa435190992a02a24e388bd0b0836775d0e01c7faba3e92c5d3e8975fcad16cce9e9b01f378a572ab4039e0b8582d4d3a47c3b3fb587483cd1a760e628d0f3d63ac9e8b10cefa8b94d02cade0ab47005ad368f4f9e5b766a5c353a6eb1a7fd5bed46fbd1554c4ec47d8b6d3b38dcc66db969c646a34928eeb40147adc94878a1b237fcbe21f779e723e8a4f6a6cec0cb57205789e8d781bf465a833608b5181ad27d420e0e1f7383c0222df32259ace41dc092dfc745bbfc4bd371cd99e5a1c73baeb8ad15c34e060af529a8babad63c3a131ca089053f498170afb30b26e0f2794b0d1f417d870af7daf37694430db13f00b7af5101723d656d334c72b5e0bbe13478722e954935e6701ecf3cc725d61e42edbb896b6d4dff5b51f48e194337fb086908d50edcb61a295dcf57f54b6b41d5a760f5ff8992a6e45acfec08157dc3640fa1878cdb5ce41cb27ab9096beb3ded0b7cd57c1c4a850abc08ac822a3be26b4deb5a3cd11914ae5ac2c29430fe91be97fea012981dbb389da64d4a794017f91fb40e3188bd7190025a5b39c323a90f5a8496d5f64e200093072f1379728f1f0e741b51db5e4967d1e5437ca1d531ed742fe9ad2708ba06b3f80000097465737476616c75656d9f6e451166c885818931efbf878b5d041b211441fa707013ebe73e41ca25da68cebf07b67ef99e5fef798d5bdff3378d766b8116e710384d1530280b79e945",
+        "proofValue": "000000000000000502b12365d42dbcdda54216b524d94eda74809018b8179d90c747829da5d24df4b2d835d7f77879cf52d5b1809564c5ec49990998db469e5c04553de3f787a3998d660204fe2dd1033a310bfc06ab8a9e5426ff90fdaf554ac11e96bbf18b1e1da88db85b1fecf20f66e9a4cca89ca261430d9a775de164636011003d72d1d522dae8488fb5ff2b348e8f4f4f68d7bc33e38a29abf47db4d15f9d1b703efff0ed234a668d779cad8e592041828446206bb98c48e23e06684405903c6cd14e06f4c4389c1954fd8c8be55052680025ff77e060416cea8d8a9cd512da8d6a4d3651092557b7ec885d994d32e775174bebb4f61630fdd1192dfa1cd0fe0b76cbdbc167571a3b82445887427d46f406f2e8139e93bd8950368cb74d9219fcf3cc195b7400000007a6bbc0b7dedae5d3c9b4096410d050e926f6aaa65b63d6e903bdf533762b3f0eab62286575e4261a5adcaf800aef0a3394b567034287af3f6fa990315e29ab084ccefeca9ef5a185a64170b169fd3c90d3f70ce1f0df4b1f2a8a88efefcf2ac9831d560dd6c8328b470d21163a8fc3174a2456e76bb0672b85fd8d14ee08b257e6b54df0c9bd2142ce9a176af53c3b6794aeacbdb1b40f22c4ae645b10b218a5cc6d50dbf7b374e706de7b6ec9faf72d89e6e91b3383b1ab3b6d2d5be95af2d192eddb29452b78545944d23b578dc4a364cd626e57fffc2e4e284e67c4c58d4a58029ad2fe82a74c4f79ef643e3d417493b5a25ffc04b8968cf6ad43a6ff2e0bdad32cd83fc26f958177add5a5dc61dfda8e3c95f17ebef3d0d364c2ba4f55eeb7e5f7beff294a7df714d83a5cbbf665b711877e4497941d5eb99b4ee4ddbcb0b22d04df8a2290d1c29a4d2b559f28308ff961fad1c524478e5fce35f2b05b64e3d36ddf55af7b269436ae1e06cb2b106af4d3465e171f8b2f8d5c7de50cb9068b186360d490384d75fedb0bdc6e7349ff43f86b6ac6a3578281aca11c1c15ee191da64f61e9a28cad750167ad86b781b7d204a1f241d65006c6ba2de1bbbe35d00d55893780c487e5e772c5a12f20b61ec355d75fedb5969096200f7d1afc5b805db4b2b001629af1cb3f6aaa3abef758c282261264b36525e7d16a76ecc09070e9a0ec300b679bd773137b81335fb792609ae55831fb97c96449e29a438ec9f60e9c6ffdebe8f3b168e33b51e3cec726067ddd143537f21713968f8dbb04c796b66f80e11f416c7db00b43d7272f824ea5e5059579e746c032310cbe801ecb5f04b23346926141ee8b79e2e4d522bd93d263844569fdb5a5f29e522c31868408a82b29d6b0392c1ff173431155190c630145f1c9ad989060c456e7979b32b46ea6e831a80f9d4bdd4b3bb5dfa32cac82415a5258a1d3528eddf116378d51c449b7071b1902c289f468d5212aabb6fea40a3d4e9cddd9444e00b1b36369bb6c03b39554bf77b9ad30ef725df82bdb6c5456adf9ac3187ffbeaab1b4ce68782829850f10182deb13eaa94edd3640768224a178b8bac224d12711c7d3bec925db4da9bd1424db872757a1f2e10c9dac40483a69972504e5d69163a9f13c5dc8fc60b1ae7e6d38e19aa6374b3db2d0ed6918fac19a79981df368bb842f5b3e88ed9f88af521c771e336233d35dab81a3ef02b12475047f017ddc597aa597f49dadc9cbb0c72cb50b08c7e3a155f35b7879d64ea48923d6a550399e33a167dc783c7f6ced1b69d4180cca76304febb32c320703294b174da590c3607aa1651f0a88573997ddc59deb816d401a5130517c7a81f1e92cd4e5511bbdc15dd8762a9d285616c3a0b58c0ed867cc74128f52006aeb802f1a07237c66d8c4feef00fd2b1ae400000002a83a469f8f002dc2bf11e8c1b65e2a17b1f398c6806744425e444bffeafc34128320d8a061e226b6d7541ee0e0466327b14b41d7d8142aa18f5b3e734ca8b07cbe0d024a0f648e4db512ee56f4e7ef71d08b1fe3985db75d0beb6e1cc9b8c428971e9c0858baed4e935768dd2201aa82cfbf1692770dc92c7558f23fd46f5d050cd11a1cb476380011fca121f1ce23b9b43e16948af3b3fe4c8a15d4ff935476b23a67f14b0d2ee19a9c48ab89228be2772d63a50fe87fb9ce56dbf43f261b8a0de90b8f7cf375db6016b9b3fa0af14594312df176ea4070eae321a8b22f573c7183f0d3655b15dda99339fd9caa66e9134861e6504c7cc8188c19d1756383ec048b69df7282cd3234e4423e85d15c09d49fc2005e869a4876fec01369c3b0ec0ae6f710797b4e5294a7fdf72c05341b6887da98066400436af27e739c140e3a481df2845cd78df942a2c0fb01429d5b04cd96b18c0b2bbf764b533a6f095edbeaa506a369ea1e6bf58a89075f51344b7db1e4899a12383642a04091aaaef9fcf49281d22d23faca75c7de65be46fb3ae787822af473431d3b611a1aa63051cf37c2a5cae78b26e6e66e8994d62a5b1098bf61306a3418422199a614e4b09269953ec7d6cd85b83e0d4bb6d5370506f505e0e255e3fc86321938647e5638d47a3f711431d0e050a141c2d7a9ff7473515d24fcf7d49df7c62c7a311de1ba74e1eb017f29dec74a0c4b6c1033754c4cec0c45c85e99c62e654d0b6ed8087e811b560000000286384013b18b78f466a96c266b36cd1b3ae84b6746e1cddb521d5248c62eac29c1f7faddfe5094ce8fd5b457d65f0fc18c018bcac96884e2907c390ee2ecbe057336d4c1bd0c6edeba8340910f5ed88b1169283ff98cfecb016af2476595f835806f969e3a7b594d41af1abf47619d929ca35323890888d58febdb488ce9a2a170dcdc0222a6b33d1ce367702a5e6f6e84bb20150993878b7e5023bf51c427b7bf8cfb7b504e5e0258b25c7fe094a79dd4051c2807f480a36bf6d38795526a4f02ee00fa5456eac9e78022d1593bba9d6f4b09c064558cc5d433b81346c7b4f60c731be525a641825de736e0ea4776de5cbbe0c4d8c5b9c080b8160a39f868e702b2a44460fcbf28d7ce0fce6c677113a88b88ec272d3cfac24d33afc47b6fa15259af84fa6543ef673cbd18a44d47420c8c53d7eaf9272dfa62fadd8d118c2055480b6494a67b0346c9fa0b2ba2cba9c0591224a2ed7b399ea35b89111a53059c862afeedd50d8b65c822e69a213b0fc8f2e4188289ebbc5828ff043f0365453989208210c97536a7e9ee865af8872688935b3a9616c8802e3482a4074d0b759e11d052195453ef95945cd0557916d80a9eda70f61ffc653ce99d66caf1cdf7f0688f3bd5adc04f23552b0ef780e6c804f2738b60c3e812cc36c9c02484a47b831c0ff050e1513f54ba97372b1b8b48a278a56d5088ef09d2f24a6c9b95697c1406e4718f3bc71070191eaff6f89ce06c9aa5fedaeb0dabbbd4da46eb22a74ae200000007a5df6c977b2cceed7dc03296768edbe510f0674341d6732cd366a56b13469408ca9a94c1bd50f77074e351ebd8ec6a9485fa5193e1d6574ed673a8ea871fcf9621b0a67f370f56f882c062360c0f4038c1afb1d25dfb554f03b7757a71e61f21ab3baa7c7ac3d30ef2d5328fff37fb6658052001b90bf00000d1b553d8fe988342bee11e6cd1423131c019a9766272069248846381908bbefcf3129f8dbc3cf848ce7fa2e8e7d90c51e03634cf23574ecf51b9efb3b5c244bbbaf8f136c2e917874397a528529aa95cd3076f0ad4fe1751d25e5351dc4fbe28efabae297827a47f902d822b561304db940dfec34db5778e00039f96cb100e76c29cd3b71733f139054e8a39df0d5644285ac93486a2374ecea315f961f59a9c9f6d18fce437e286e11cc988e03ba537773e37fee3bd4a222bcc4361743621916bfd8e982b5957ce2f1dedc3e5fdedea8ae8574ef10e2ab24f53383813f54832fc7b3e79bc7a82c46b4b66ff5aa24086a59041ca4d9db7bff59c37820129d9f3df31007c17d1e48e63b20c1b9ca5106b3baac41a29318810fa8fed1e954c2cd4793db870fed9b17350aeea535ed51ff96fff8c1d7b67518a913efebe3dc3eaac543787be142064eb2fa0559b9f4e570d297ecf1d09bb704595217a5643016e52df4e1c20c0be398ef9832c8343626967d7f81eadd5d81d27a208ed586ef24d69ce7101e4a8384fc5a3cd25716c550c73a4b079d297b507a4ca1d6099346c31b4ade498589f40a04d072e6e9a664e07c9165eb8bb2d1f7568c00c09e4421cf5da5a466684df2e3987f692dff494949916f3bde458fd16f3ef4ddf09563b93b239ea442430d449c27a21215b5dba2930237640088c5d176cb3e5941d5f0a56982b2b05f35503cfc007b730475f28f4241ac28c5f955723f9d92124ab4aab89d198444db0de63fc100df9dab06a3e0591a5096877b581e7304278af7fe8778c13df4f0bc72e0801e663f075db89c119b8639b836a3d6026ec7610ed05fc405228c03e2bec4d60d61b00fee62d95135d4f7f9b06628d14597d9045d70e3d27d9ab7847b71e968b3639f70b5faf58f07543f340c7b5a6a12542209795ae19544a3e32bd966df630815b60",
         "type": "ConcordiumZKProofV4"
       }
     }
@@ -1687,6 +1922,7 @@ mod tests {
         let expected_verification_material_json = r#"
 {
   "type": "account",
+  "issuer": 17,
   "commitments": {
     "lastName": "9443780e625e360547c5a6a948de645e92b84d91425f4d9c0455bcf6040ef06a741b6977da833a1552e081fb9c4c9318",
     "sex": "83a4e3bc337339a16a97dfa4bfb426f7e660c61168f3ed922dcf26d7711e083faa841d7e70d44a5f090a9a6a67eff5ad",
@@ -1764,68 +2000,62 @@ mod tests {
             network: Network::Testnet,
             issuer: id_cred_fixture.issuer,
             statements: vec![
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: 3.into(),
-                        lower: Web3IdAttribute::Numeric(80),
-                        upper: Web3IdAttribute::Numeric(1237),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeInSet {
-                    statement: AttributeInSetStatement {
-                        attribute_tag: 2.into(),
-                        set: [
-                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeNotInSet {
-                    statement: AttributeNotInSetStatement {
-                        attribute_tag: 1.into(),
-                        set: [
-                            Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                            Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::AttributeInRange {
-                    statement: AttributeInRangeStatement {
-                        attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
-                        lower: Web3IdAttribute::try_from(
-                            chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
-                                .unwrap()
-                                .to_utc(),
-                        )
-                        .unwrap(),
-                        upper: Web3IdAttribute::try_from(
-                            chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
-                                .unwrap()
-                                .to_utc(),
-                        )
-                        .unwrap(),
-                        _phantom: PhantomData,
-                    },
-                },
-                AtomicStatement::RevealAttribute {
-                    statement: RevealAttributeStatement {
-                        attribute_tag: 5.into(),
-                    },
-                },
+                AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+                    attribute_tag: 3.into(),
+                    lower: Web3IdAttribute::Numeric(80),
+                    upper: Web3IdAttribute::Numeric(1237),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeInSet(AttributeInSetStatement {
+                    attribute_tag: 2.into(),
+                    set: [
+                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeNotInSet(AttributeNotInSetStatement {
+                    attribute_tag: 1.into(),
+                    set: [
+                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+                    attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
+                    lower: Web3IdAttribute::try_from(
+                        chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                            .unwrap()
+                            .to_utc(),
+                    )
+                    .unwrap(),
+                    upper: Web3IdAttribute::try_from(
+                        chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                            .unwrap()
+                            .to_utc(),
+                    )
+                    .unwrap(),
+                    _phantom: PhantomData,
+                }),
+                AtomicStatementV1::AttributeValue(AttributeValueStatement {
+                    attribute_tag: AttributeTag(5).to_string().parse().unwrap(),
+                    attribute_value: Web3IdAttribute::String(
+                        AttributeKind::try_new("testvalue".into()).unwrap(),
+                    ),
+                    _phantom: Default::default(),
+                }),
             ],
         })];
 
         let request = RequestV1::<ArCurve, Web3IdAttribute> {
-            challenge,
+            context: challenge,
             subject_claims: credential_statements,
         };
 
@@ -1894,8 +2124,9 @@ mod tests {
           }
         },
         {
-          "type": "RevealAttribute",
-          "attributeTag": "nationality"
+          "type": "AttributeValue",
+          "attributeTag": "nationality",
+          "attributeValue": "testvalue"
         }
       ]
     }
@@ -2147,8 +2378,9 @@ mod tests {
             }
           },
           {
-            "type": "RevealAttribute",
-            "attributeTag": "nationality"
+            "type": "AttributeValue",
+            "attributeTag": "nationality",
+            "attributeValue": "testvalue"
           }
         ]
       },
@@ -2157,7 +2389,7 @@ mod tests {
       "issuer": "did:ccd:testnet:idp:0",
       "proof": {
         "created": "2023-08-28T23:12:15Z",
-        "proofValue": "0000000000000006010098ad4f48bcd0cf5440853e520858603f16058ee0fc1afdc3efe98abe98771e23c000d19119c28d704a5916929f66f2a30200abb05a0ff79b3b06f912f0ec642268d3a1ad1cdf4f050ab7d55c795aa1ab771f4be29f29134e0d7709566f9b2468805f03009158599821c271588f24e92db7ca30197ec5b0c901efaadd34cca707e56b9aab1a7f14e329816e2acf4d07a7edf1bd6b0400af07a1ba7a22bcb1602114921a48fa966a821354cd0dd63a87ce018caccc50b56f2c9f55a062cdc423657aa5cec8a4c9050092e74b23368a65b53b31889206da71a1fead62a4f68e8753ace1de719063a49d3f0a6c0f17675db9a5652e7a8429edb50602a76a6838f8d93d6d8e9e946d6bcf98c33e287673804ed9ccdbe6b9620db5fc506f0c7bf26d0bd661579f0ae018ab12cb87fd224a72890dab2e238aa4bb364eeb57c7776cb062dfd32dabaaeab5e8291327ddf00bd6c2d0a367da63ee73a3684c0000000000000004a547c8619f3ff2670efbefb21281e459b7cc9766c4f377f78e9f97e2c50569a8dcb155f2a502e936d2cb6ef1a73e92af9916e6353b7127d55bb525cb18074b5ec130463e03a4eda583b05c2d63db40a08ab8bf05f930ec234cc2f788d5f5bfbeab3e4881918ce964ffd55483219edd435ac865286bfd313cd834aabfa8061d2ae173cbe4b59ab2bda78faa4c2c937afba80d7fba0822579ac0ef6915f4820f968a74f00ff5ab74e90b0a7bcb2b92093a5e94a54aea1d48ffd1e5bb3fb48069bc80a923e289f1fca6c77bd65b90546b0fe69262b316d5448cc73302434fe52b05000000050000000143763c5ae7fbc4afcac9eba89de1bc52eb8ab7493ae5792614d1e4eec3cdeca6514173ecf5cf92cab53fe2ebc8569f866e97641531319b2ef27acad5fcef8a9709d5bbe8cf8f7844c08111abd9868f051d1eee6d01216c653bc8aecaa3578cfe00000002738d2525cd94ecc5b0970ff4ec4230cc6dcca3da41a251bca193406ce6773a592171758a81d60b3a14986ebc40562938ca75284298093835c3774740119fa64e5cff3a2a5e05a5bed356375091a1590c66a92b30144de9f44c1eb539da24ca1a00000003106f64c53781e0d6dcd74fbf20b5fc93d92a4357d0c54e3b3c38d5846110ace967c1e84b4363c96202de715a57b4dcafdd931c3dda0d0300109363666f7762f55e54208872003b5d9221a1db5b39046b7c6f11f98995ddde8b2a4f63f0b4d3db0000000424a8cd2b5b7201cc31cbb2587ce79afba29d165a8bb75b030b504e7158e502dc1fa68efb1aa8cdd9a74d8356fe7f44b22d755ef7f7b0cfcf17a56a7b8d6bceca6f3a96cb97b6c10af673b3347e0e15b614f5032b5efc4ff4476f94367af79fb9000000055c1c96177b50d76e89abbe2954c433e461a54e54b1017fa49cbe98e48ea11b1a70bf31b0d789f5fa30eac8a582209c888aa8695549c7e5ad3b13ef3b81743f305180023c53bee13a20c7a0bbfab26ae5fdbcabc66e9267d61e6dd17a18abd0d83c02c90793cf2e1d354ca03c85af924a4501853357051e5f960faae2d94204a60000000c0027d9ca86d157f53f0854a230b1ced054028ac5dd5661963fd32403730fa9767e4cb8b670f2a34d3415172d8fc5a177727ff908ebd6cbdce5ed1b3581643b24fb023270a95114ca7cc3d2132a4ede62af17506ebd07b6e20120e9f3c599717928220101010235b9f0411d81717269bef6a00ba6b777b479874e8083fcc6f1e46105c9ad7ff20043661ace7f1e8ebfff542f8d6e87679be9b04759239228811aa4411181d4a5a646fe6e6b0a114818746c6cb604845be1ae385d3b038a329e5a1db87de481cf4500183a883591a3a38071180df35beae7d743df68fee24743d2c332b34809949fd16aea0d598d958823c784c93f4a9514aeebb556864a36e0036f5d3b53a46209cc0054ed2bf6410b8cd36b1e398931db850b2a00fa34949b823f6b933a1a0c72e7f52c0762b145b2f370f3834430f23190a599c3fe0ca331d17050dfd5e50ba2c5af0049e83ecf884ab4fa05812c6b0c41b8d7c3642830bedcaa880ffdd51262cbaa84531cd128952d9af61422f54da3550b29ba8c1a5b8535b6e3fe39ed5df70cb6d5004e228384ae1aa7b0bd7897808694b6682e0d1b81b8e6adb242ddf32d7453a48e71f9866fb30c0b849c3ebede8de053d8cc2e134e6a5a84bcdee26440bad59e68026294fc38a506ac3b980f6a42c5c91e16c2dd50f99c925cd70ac48a73ac83a63a000000000000000501b61331d68d01dd74bb7d3afdbc875a4a6c72526ff35b4103af1a4da7b44ec1551ea9d4c27076884b98000dce54a2e868877cd48fc801f8a6b246d94f03c4d69a23bb6aea23067ba5b49ea8048c5f00c138a159f63fc41e284bc974e3a82b24d0a8524e36801912a4b0066e78eaa27b873ac33ad22ae39de12e6e2e949812b72ff46a5c26c75750c4a0db8600d4845d6c90b27ebfbb06c796090c00d361eca4ddd944020f88bd5629c069e01f073a485b1b2b08e11a14faf75e17e2ce79a1e411382454becf7c3f3761b482ee3d0a46f2cc6c3fe95286270aa0174d37a58123652fc4b3749dd44a1ece8a69415c353e8e56047b97ae3774a68e8a88a72513152f13034c8c7022c8cd999b189acfea580f2618e864a84c1567e9047d0ba74d80540000000793e2781f8acaf610b03dc83f55e5a8eb213ef4d258c2e446c979ddbe20b663e3aa82177b1f4823e940b96ed71e51ca3489752a39921134a5f6fef9a0ca8796958ce38881d02fc5ec60cb10cd709cab0a169b46d5159773d97d4497e096657a6b897e603d276827ddca5b2fe7d3d652933371bc8d685d288ea3666d37e2dc8bfa60dc0ebfa97e229b333e998e632d92c9b28de3338bf8f443bba16c5b0130c919437e2daaa44ea561ea6dd6046d4bebf84d1dcb5b2439ea18f713446a63468101b82ccff503d3e5a0dee8f3aa6b5907bc5d3de132dfd448890eb1c8ed8d32b71bc009e1ae5ffcefc603a97aba73481bf2adc259d01e98c9e8e85f08481c1d2a5854dbacc099920dbbaf7f8a0b8e3a539d569d19ce33f05bbe81e8c39ad0e202dfb85efcd2b8c5c3700be3e250ae9308568c0b394b2d527c1f9219675b66bbc6c44a6015fb06ee337a3635cadc2270f665a0c890c61c7333a872d8f92097ffbdf13b400d39aba8a09c6f5e28ad51737a18dc29667c2a5eb7db63a36cb5dc2245ff8a709ef51d1d8e53c21c4b61e9c6fa6abcf4de546d029746e10afa6db89d9469e43414ad4d6de65d43bdde9d461adb6ba512e5e59e39140eceaa00f52cc95251b7a6a79f1e7399c953c4540a0fb7da31a625c3a28124917adeb72788438f592c81197bedeb0816883be53009255668d9759c9ae013041e13de1bf9a4cb80e52bb2dc62579dd5b2bdbfbc709d7ebaac6087defcc5964d5aa97a0c360b484d42f8717d359b0c36d55b44bc9e411de22105b82bbd2ea83f448690e838b1e0d1f4dba4f6e1f538231b3eb62967d28a350d37f3eef91e5b9a59154377ee38b871859eff3eede93b062151e3395bdb25e28565988c690e596820b137c9d3b7bf66111acf1694134f9fe937004fae3d128033cb14295e60731b4499a030b3367632015a3cef3e032e90baa07a04ccd0e8a89287ae3b159f12865850bfab25cd2a3a0e466d6d60fe49ef6eacfaed80238d67564d6bb14348b4603b82f84728a28a77701d02abc6020a9302be54227a66fb1625475d097e9f75c97f1224090da03bb1db2fac3e1e0527b101631f3086936c465fff978d34288b74de204979fb8f3f327645799d3889d40f5cbcc61ae0448874a1bb59904c8b910bbcdf77c09b15545d84e985b0036d2445c5209c9b91d4735132da89bdd4916ffca2ec6cd070dac7aa470e19c7177111205e1bb5ee00707da4723474819cadd811550537a49ff9a4f9330fb6ecaddc736379487aca9c5b5e15989fb7d78356b645681db9f712e755991c10600349272d61da3c12ab4c354fc5be8a8c17fac55795ac3fc983e7c4feb7ca18143a6290893cf99253a03ec5f6aeb503c7f5d67e54ee3c31392c57520c519705c339fca0414d34feec9bef1b5d15f1962b620e94105a9394e249b2bdb32a63eced00000002ae23a3a4d8e72583611092c9b99ec275ae816a7ca1b225f1d95af75d8e5f89f1a44205885259b384ff69c44180d5dca48b1b2086b112de26e72d1b120dc2afe4e2ed3c52281b91d854fcf6b07f690bcbc67661af91c60e4f300e4aad75a5a3e9845f499a4184413aadeea9f8e2d82ff9aad39b5329ec5fdcc67d1566939a71f79d815068f5092a8d40e254f25674728f8b8c17b5bcdd75c4236097510213f2d18d90b5160d6cd3fa52879d7ec5725708ea4bf5ff13302a5d088896961d92ebaa27d90d46278ba50e551449fa2bdceaf261a65ea2b444e02ade2ad8d800628f436609d3cb325e378a10ea27963e561dbb485964044768e17f26936fd26fda235e0383765378621a7ce73a07b8c51ae60b98031cdaf29466142c0d3b83c627245a55c11ffa525a3b96f59169dd106f313ad493969b422412f746bfd9b2ab48e6b74d26f9b290b2141f8a4070d0a30f1832c641b2380d49af6287d85fc90bc8829637a5c6ac060f1a0d8a88e95e6cf0d0cc6a0c0ffaad2c8bfa3446d9bc8ff090fb9b7415a7942accea5d5394f801c67f923db7e523a18db43c1c364e53ffa7a6835f72da85c577b5ee230c1d7b04dd75d8bd42434f006004d34784ba96911da7dfde63621b0d5674a21cdbb745e7d0d0f19383ea27de57a29bfac52906f25896b0b90644bc2496b6fcb428aded9d8cce6c7cbaae5d48b0dd611ad9e570c7a8590d7931bae041aaa4db42bb6866b9a3ed75a8bbfa42c44beeb7a786030230be4c831500000002a1800ac3c07bcec245b3ba44c5f6d49857fed47d79c6273f7b0a7f886a8a20e4ae3859cef8d34a2a339443b8cedd97e28611e968e0231f039114b0f56882aaf8cb46fc8e035bef97db58183cab34c4966906e585db194cf962c282412084a89bb8cae478b44fbfd9205c705f1109831fe8f38aa89511ccf0cf961f4231b4bda863a854a838396299ee3292a60c2bdea3b22740dfbe1ab164114fefdcfe9e78bc6267079c07ab5068f80d80cc7a1c8bd683cd0763c357215ea93d1353e727d8821cf59c1161593e418466695e062418cc3da2ba6c6f587c3ad4e8bfc83b142f83262cf8b17a6c5fb17bc9ac5472785176a5e4bff95e32d6f0b839ebeb43825bbd01b6b7bc5a9d3a706bf5c7d8e6c22ac024270a95234030c0b553a958667073b935798cb22e9e57b04d2996e74d70509abc87f930c212b75796978cf882834240f98a14bcb1de18e26a2702cb8a94643e2fc06d71593c0adbb1ea3f00c5b666ddffb86be034f357095862dee04772ead188f87c435340312aeaa9cb6376461ad775ff5a7b633e4b5c2ec261cebc499666b9b525b11434ed8dd0631aae0b00ae178722bd07e97875bc259ebf488b93f7f8e3e740fa5883c30fbc4a4f9942443894813af5a6aafd4f84228b2c731dfdf33228a1fcdab676e52df91640bb911f95793b6b353e05cdc4057c1243c3c1cbf1221beb849a14f755993fdad412768ff570522c0a9d05d671bf187803bc7dd1bb21a2b26ea2527cb1b5b92fc3fdebe3cce2a200000007ae07e22eda7b5de57befb8a3480ba62c6325b6f1adefda3cb64a8761eb9e7b408e9141d9ab0d26e9a6f612ce03fb1a9ab43be20029d962f2bd1a61acd95def136619bf42c8780d992c63fc5d8e63c6078e177d89d8a4100c4746fec41ad6d9a29901d998c7b70a35087de4af6ce3d2e3eb41c8ebd0e63e0dc79ed9c1fccee5c0b156f23ebab10bfbc8f823dfca2714fa9240a498da590e08d3be16e6c6622ede2c99ab5a8ffd066f9b02481f7540dc8d2a8af4cef1f0d009bfcee7e4ce25576f91408600d90eb9883dc78dcabaff66d32a67a04db577fceda834907a2b8b60ed146540c00500ad7a8783383840a70582b9c9ed83de75560a93d22d495a05753e63fa520d79c95b4ef71a678fbbebfb3446e3eda66a48b261e6a84b7ac89ceae79758f2e70b69967740322648bc4b85dce541e3a9f3d6ef98dbd254997c910e7f55059b031aaf01aaab48a56d89b4d6bb98b4daf414417cae94999e5f51d7afa4d6f988cc9c7b28effae8cc98132deb785826428cd895b0f588d4f72f1c07e9f0a033fdc6ce957e4bff66f4fc65e41e6c666c955ea756bb82d9d383d103dc545147db2a1be19cb873560c22b7a610503197dc2ddabb97a03cbf2321e957ff0045f67103aa5e744a7938818558cf53b239fded36ef7c4baaaea357a9307fa006bfa7ec9865427955e80a365bbf2b11ad75ecac33fd332ffbbba4bff30888be4cec6da03eb65675a7a0026bf9e5309a80cea0b6f4a554aea6f1ff021c39f34f9b3441a507861346d8f544e69993a3273db851f40dfbe4f8cd5f7ae061f983dcd53588d7fc85e51ea28313afe09c1545b29bf200a4f692094026778221451cfcd43071ab14421a7a68759197fe32cf2689d28754e201f336930e36bef575dcb24431803f133913eaa1ac004a27817cd35f51666a8e022872586c3c96a29eec0ae869706550a9c2d58d430b5601560b2ffa59b57ec48807754f113cb7f8e22be0405a73cf54b6a1c8ebbac687fe690ef6ccf50538ca09da7f3e82bec3d8f2bb29729d0000097465737476616c75653e5879cfb054cb908f54994d43a9e657a69b3b4565a1126e709b1b020634622b6b49d69d2dafde98b9df25d85aab294cfdc801eb336e9ea6666800ee298f796c",
+        "proofValue": "0000000000000006010098ad4f48bcd0cf5440853e520858603f16058ee0fc1afdc3efe98abe98771e23c000d19119c28d704a5916929f66f2a30200abb05a0ff79b3b06f912f0ec642268d3a1ad1cdf4f050ab7d55c795aa1ab771f4be29f29134e0d7709566f9b2468805f03009158599821c271588f24e92db7ca30197ec5b0c901efaadd34cca707e56b9aab1a7f14e329816e2acf4d07a7edf1bd6b0400af07a1ba7a22bcb1602114921a48fa966a821354cd0dd63a87ce018caccc50b56f2c9f55a062cdc423657aa5cec8a4c9050100097465737476616c75650602aef4be258f8baca0ee44affd36bc9ca6299cc811ac6cb77d10792ff546153d6a84c0c0e030b131ed29111911794174859966f6ba8cafaf228cb921351c2cbc84358c0fa946ca862f8e30d920e46397bf96b56f50b66ae9c93953dc24de2904640000000000000004a547c8619f3ff2670efbefb21281e459b7cc9766c4f377f78e9f97e2c50569a8dcb155f2a502e936d2cb6ef1a73e92af9916e6353b7127d55bb525cb18074b5ec130463e03a4eda583b05c2d63db40a08ab8bf05f930ec234cc2f788d5f5bfbeab3e4881918ce964ffd55483219edd435ac865286bfd313cd834aabfa8061d2ae173cbe4b59ab2bda78faa4c2c937afba80d7fba0822579ac0ef6915f4820f968a74f00ff5ab74e90b0a7bcb2b92093a5e94a54aea1d48ffd1e5bb3fb48069bc022d40f10bd9f0db027ee76e5d78722b22605a1f420c0d8923f384fd2e9df4d500000005000000014996e6a8d95d738baf684228c059ffda43b6a801240c467ff648b24c1e32a8fa25e6348ea46cfe7a6134f6754367715ab1fa97f963720164fd4af47882ea5f5c68917936ca63783c8e7252b3add6d60427580f639caec877eaf62af847e260b0000000022edfd6a9b5f6cb325c2ddafc2f37328768062360b94ff89b795eefc2bdd8b8c7566f982f3189e2158c9932e6c2236beae9c4a1767de64235066fc668c43590a466a5e08b9552ff74c7850795edfb41de40a8183b3ae27e25e14a851192492649000000035477e4693d1f65ba2c6d911de408be4b4164ae853b9d944859a7125c7f80c8b6737b58adf891170ac056de0907671899121fede2fd7cbcd6c266fef9d011baf65e6529fb326268ad4394ac4bdcd594901d2d649c9633ed273d47472550a6ed1d00000004636f324e0c8d9958f960f621ba0bdb0a12c2fdac465fab6f3d6b0219edf20bda34bcc475e9e940e5f2c166aab81bb46a24fe84a7c150f60f19b25a9aa26b02960fb8204657da982ecc80099255157f127037fc1d01bae5e751dfd1b568d5d3b2000000055252326e4bd286ff449e1e4191ad5bfd3834498357850252b2efdf71e5a195801b0b139f690a241db78ffae798e90adf5468ed485dd47c396dafdbf95846ab3f1dfc26f4044279839a74ef3d99d3e683ddfd948707a841052beed7fa59d3cfe10a85e4f590f94aeec5694aa34ce7809e6409635c3dcc06c48e2b6eb7c88e805b0000000c0044de5e492f26cdc8d9dd7353c8f4561776db5cf1e9e56765f8a27325bea23c7c6e93ee0e96b86044e30a334d6a3574f1eb257fbc13e38045de829d08e668e1760233b357f18e2fb13b681affb3100a76389289b0a672fb4c018b496086e907a8d9010101024a3c3d379c549361b01f1da35dc354171e8b08e37cde8b26708a7d0a74a1c475001607576a587bc3724829d37a211c4e7ac685f5d2ff8d183878c47761fa207a2772c92a29d9723c60fcf02a5f3ee44f16c8d719ef0ff7306017e8abcca0ac43da002c1306c3df6c321d1827b482e5bdd43d9ae0ebda13ee87f8ffce45b9280974d30da67ed93028333a98441ec283b84ef993ba16ee3f63abeb6913cb84c6087e520031d913edbe710a6ef608a7496ddb24b62af6dc53b0c400515094a102dc34ba7e5101b14654477c70600fc619c536a55689a34483d87a607c616b8e4a7f588b1c0020de9f2cbea7cb077e1dc06c4f2f3286792ff9ab865d04a264699b063387d3565a810470a1a3f0b94ed0a313bf2558035cb562112fe9d4ce3db05035da60dfb401023ecf78fe04bea07742a2b68c1dfc848ced58d50cc72e3aa9417456c137f07042000000000000000502803596b4ba5ea05b1fea2b78e292f935d621453cffcd207e10f3072b2813ca3e963cebf05b19cd82da4bd5aad1dcc7fda1492d7ffc8f532bc4b37e9bf4753b7ae6b8f08e05a851052fc6ac7617ce68293678747d11f9a508bab6f7a60edde9c4975a76ced40574074001091721440b1d62252454c2b26494f5014ef4b5f0adaab23eea032dabcf7fc274915ed26a38ea985468e8f27f81f378870fdf0c9fa880b75d301d54dead22ebe69d98305b8bcb1825f77084a3fe794ef69ae07ca2f40c327c3b8055a8dc2823524df825d4748e84c743856120bf5bc77826884412154e26cf2b601c2b869084806c5e670919b8cb8d6ea8f7a8fd14096f7dc9765bcd0d5a04e5770764de9318b0f4f5fd1343b30f0954656423cbb994da605956acc5e30000000792698ceb941b32e6ff12451a75d1eb465ca0710879a4d67ecf75ff5e614605b7284f07109a658007dd94b499322649a68af4e7b7ad848fbc3e2dfe248fe846d0836279a0a8045909516fa2de9ce9d456e68278372af302a891a3c138596bb369abb626f0e5ccd6ceb9d6f7f0bd979a37afdeff02c294ad7db9ad1335f0d532027bf7fc78c7fe3d1025bbd9b754e8ce068ef1e251727d48cb25040091f05b327ac2ec733c1cb349f6aa20c00f644a3f9c84df72112b4f4b247126df77eb27933db078a098bc904d01ce5de1be0fdb9d8796b3d427c7a89d7ace44209339c5577416dff5094858771314c6dcb8562f7d17a30c84630530510bff914ff0398b4616171386c23145d4cff3e4a0f698715bd68dbe2233b851ee49c17c0b7dc9b6f5f4ae461de98c4d582c8be6f490e75a0c2b1a61dfca366e86ca6ed131b93d43c93292f6182cf3d86e98d0baf613630e7a34a54dcba10f680b641579909c138223182443f71f110d7eb97d0bc99c795d95f28611ddf484208c3aa9763b517024d32faaea07a4343e4fa9b72ffb951fddd5e811def887a8d92e89c574d7820ed46df10da13e63ec1223d2bf1ee4b8f6cd353eae032fd8b3f6f886d5feb3032ac2c6cef1f03513e04646ffdbd0be6597f674bfcbce9f16127b43aa49f4e6853c56e2cd96c75aab089f07d04515e52a097c1b08c75ddb30315af1d65aebd00585c3818e7587baa5b11b80a0fd5fd2e0b7b473c9ad112a3168aadaf83ba4d94ad7e6b47c639684d634fe5ae59fc1f9e6741e924bdc8ed49c2a72bf1e7869fff80d17a7a0adacbf2123fbed51683d0897fd76310f3896381f47c675764b6475a027f92a0b89d863218dce9b3ac48524b3d1def4f0877aeab34415a27e33d305e9ae39dc8c918125498ab16932378e9f739bd2e0c4866265ff9f98c7b562000c762254336c3ac576cdfd96936c3f32ded9523594401d0ad2f2232a01b9c8443395180f1ec80a119e63e0bf631cb93a9db4ee6a2a29e06f520835f7af238e1c8cd873bef1e4039035240c33b7dec4981aa53e914f67ac932328b31f3fc4d0aac1c19a4da4dab1b525a63008d0e40b86076a1b7e9f0f219955c76798ae8d5131eee35e9900c5cdc8b58badd7022044521d7ad239a91bb2ae1a02fc61472f7d3629d14070641a1e86c2ef60ae3a42de23a15550c75b135a7be766fc38a2554377afc4892fef23e54ad59b72bfa590493d3a0e6d0c3692f9b12c28a4c2fcbfc8331381867935bdbdbe83220fe2330b5024ffdaeb37eb9a4f8dc8505ff846ce16a24ad0f36b8145591838c8cd056b4fa56d76e3f0d3c04cd58a13fc953ac12f292817ad4c1b46d62e372b5a5f8c7f3a4dcb29beb03b75d7b9d0a4a463e37f00da224c7fde6d34c3d53f34ac41a47b698e9b381d0debc448c465c594d9cf9c42e8cbce7e0e03091000000000028f08b690d86821cdcd517648214e22b5b0b73e2c7f82a3ccae933d61bc0e28fc69b047aba5cc6b8e9e6f4578e02924db920fdd2cbc3f1171c98169f4fd5676b77f210f9ae5e949afab54b2e52137538906ea05c5fc5e0ca989eb081a3ba9285ea611a9d69bbefb08d3142a7523a3ca91961b4f6deaa87286a4fe776607572b5db7e6ea488c5b9007731663b4537b584983937bfa8ec12bc8f6b1ec8185cb2863f7dc15f82f50978301f7441901d2921799af71fbf5f3a83162ddaed844b5647970b4bf4cb7d8bae88457f65c2e5f09b71b6585303e4783642c20949423fba406002407e6a58cd57836650e76df878926d0b6315f4c4329385566667701fe7f820487cbd29bfc97194ed8868ed4e458c7b2bf8ab6f04efee532502cf588c4f26b9b2830baa635c56857be5fd6803fd35d508881bd7cf3b5872ff84640384e2576bd93d4d86fdafcba2df3f29036491573031ede2ddb09dd092ad890a68f07876aeeb5ed24f1e21e96aa8f81d1b57f7963fdb0d617a6c302365781dcbe1628103ba3e9fb7c05ec5064aa5f518a2dd54deb3bb6547660749326b8e7c23931f938d1f94b2b199330c7cf4e21caaf3586b5ce3f56d5a1a06a78729f9e8b7838eef1f95828f2e1f46ccd7642fae51f13d2b0d6c55b328e0d6bae6355d412db989f82a3fa47b167da18c385588da0d8b2715d09c06cb2e03a1bccf8e112893d054c79b8d850d3c90fc8866865a2f85a8b3f64d9dfad1381b1bc0653335ac741925dccaac600000002895dca7ed412bae0cb70d758773dcfbb2254c95be80f230ceb3a73883bd6b6220cff45b7e9d058da58071acb8a32767b99a869379b6095f4e2b7ddecbd8a4d17a094f9681a4345c35c87dd86cba4074e56dae9e1ddadb7edfa248058f12f8f0c965d922130d696027a12fdfd06b1c39c7fba1875b39f751be361ccf330dfcdfa68623eb78747bc06f9ac45b812d5d313abfbfabdb4411220d1e78b5384749bb890b3f220139e0200315d516b3fb2e156b2a5c1c2a081a3e67eb6e8fc97be9bb4439a9eaadaab8e29db023baa98322d0d0e7f06efd708b5c7f8846e799e8607a20242d81c399a6571f8ea9c203a534ebfc6bf416540b8ad6a2c82e66dd9d2c0c502b387e119ec10c4a8963ee52710d75c21710881bae7fb5a8595fd43a9156419f8080891e50139bd4af14f1ba25ebe0152b5e83d115be493372e147742d8bfe3a8269e8ecd27ec055a11055d5405192cda8c8db528f06b120fc2e3f47089897411aaae9e0b0179b2e09afee8e5d56ea05b85694d71186f6d6dba1465c19cfc41f55751c1c7e3e071f0a97733f2ad4a8d7eb5038bb97411c01f77d451d483611c939f1910f388110198c69a2efdce02ad2334a1c39958bd66abb940ef1f42143a65010e383128f291e962c579ec7cb9f24f373554e84ce1a21f459d5ea4ab1a41ec733322f9b95611de75450bf415e60dc15f8d33fdb61f14d9c73c92cd6ace0943403768e8947e8122b2cbbc663a5373940daf22b914730c980c66e87e444db56f000000078c1751517b7f76514a5ea7af097099c03cc64d9416494d5a9f448c2615903650ab7c8c2358619073d84f04034ba7f768b62b4825d8a12f4c0378b2b271eb05f8b3cff514ebdae3b6de637539305437c2bc0bc6c2649961a1d22295035d07f460863a3d0467f01e79c4199bf3dd73a57a58315be6b4e465e43fe66e82dc933ee622598672fbd0c5bae12d8e187c7a6dc8a2c4b3dc57040a759e23594760d76c8d6655c0860e4a1187e89d7451b1507bc5e0ff3eeb28577af943a44afb61d96eca898cb8417551edffc189fe2d24e83f554206c397b80153044e45be32aef5b46deff4625d1d316338bf3521ee32ef50388a067b5c0972ca68797b98b337c09589c307d5adfac00a524ccca6d8d5450a0eea765673fbea3956aa0edf0dc0a2c7318dd61540865a408715c148e406489f7e56d953af3df90585b2dd12e99a4a6878009001b62f9fa0a023041fd77f41be2da2ed746a07bb3fa3864ab5e76be4f98d480fd97280735eb9f44c6bb0b1b02e2ee8c9d1c71c68de3325e6d14f44ef98b68b50ddef96b312c9a17296ecf837591659252f25670d9744c7334abca978eab4d7c40276b876ca682c2c06ba2809082d842c021fadb934bff19025c4dc1d80f6a9fac3cf59a7209c1d73113b87b8d34a8d618a5534db6fbc4492cfb6439a2c088cbbd44febb15f56e1d119bbf1e2bd108325711d56938eeffce12ecc900059822448666fd380701afb94887ff3a73d5ab6e3a9614ec319bb579d02de414db8a02d54f80928255dafc2b7833159aab87daffd5e143e7e939ec2c05496573f7de1aa46492cc29053e0ab0d7a2b524b3cade5e2ee0fbb0aa8f0b340cf139321230da9d50df0e36794ff03927ebdfaeb5b4c88612f9a7cb6660d8a088433ec92cd24ad06e4bb75885b0b7103d524f4f6b080be40484b9138278d95feb40af1c52cbb29f7623675d081c0930866586fee0476a9f21bffe406e3265413f792e0d464e9476becd32bb6af4856aaf4dfdbd6f1a2fea4cbe6df332e324f091fa74e7d9cdf01",
         "type": "ConcordiumZKProofV4"
       }
     }
@@ -2267,7 +2499,6 @@ mod fixtures {
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
     use crate::id::id_proof_types::{
         AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
-        RevealAttributeStatement,
     };
     use crate::id::types::{
         ArInfos, AttributeList, AttributeTag, GlobalContext, IdentityObjectV1, IpData, IpIdentity,
@@ -2298,70 +2529,64 @@ mod fixtures {
 
     /// Statements and attributes that make the statements true
     pub fn statements_and_attributes<TagType: FromStr + common::Serialize + Ord>() -> (
-        Vec<AtomicStatement<ArCurve, TagType, Web3IdAttribute>>,
+        Vec<AtomicStatementV1<ArCurve, TagType, Web3IdAttribute>>,
         BTreeMap<TagType, Web3IdAttribute>,
     )
     where
         <TagType as FromStr>::Err: Debug,
     {
         let statements = vec![
-            AtomicStatement::AttributeInSet {
-                statement: AttributeInSetStatement {
-                    attribute_tag: AttributeTag(1).to_string().parse().unwrap(),
-                    set: [
-                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                    ]
-                    .into_iter()
-                    .collect(),
-                    _phantom: PhantomData,
-                },
-            },
-            AtomicStatement::AttributeNotInSet {
-                statement: AttributeNotInSetStatement {
-                    attribute_tag: AttributeTag(2).to_string().parse().unwrap(),
-                    set: [
-                        Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
-                        Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
-                        Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
-                    ]
-                    .into_iter()
-                    .collect(),
-                    _phantom: PhantomData,
-                },
-            },
-            AtomicStatement::AttributeInRange {
-                statement: AttributeInRangeStatement {
-                    attribute_tag: AttributeTag(3).to_string().parse().unwrap(),
-                    lower: Web3IdAttribute::Numeric(80),
-                    upper: Web3IdAttribute::Numeric(1237),
-                    _phantom: PhantomData,
-                },
-            },
-            AtomicStatement::AttributeInRange {
-                statement: AttributeInRangeStatement {
-                    attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
-                    lower: Web3IdAttribute::try_from(
-                        chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
-                            .unwrap()
-                            .to_utc(),
-                    )
-                    .unwrap(),
-                    upper: Web3IdAttribute::try_from(
-                        chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
-                            .unwrap()
-                            .to_utc(),
-                    )
-                    .unwrap(),
-                    _phantom: PhantomData,
-                },
-            },
-            AtomicStatement::RevealAttribute {
-                statement: RevealAttributeStatement {
-                    attribute_tag: AttributeTag(5).to_string().parse().unwrap(),
-                },
-            },
+            AtomicStatementV1::AttributeInSet(AttributeInSetStatement {
+                attribute_tag: AttributeTag(1).to_string().parse().unwrap(),
+                set: [
+                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                ]
+                .into_iter()
+                .collect(),
+                _phantom: PhantomData,
+            }),
+            AtomicStatementV1::AttributeNotInSet(AttributeNotInSetStatement {
+                attribute_tag: AttributeTag(2).to_string().parse().unwrap(),
+                set: [
+                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                ]
+                .into_iter()
+                .collect(),
+                _phantom: PhantomData,
+            }),
+            AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+                attribute_tag: AttributeTag(3).to_string().parse().unwrap(),
+                lower: Web3IdAttribute::Numeric(80),
+                upper: Web3IdAttribute::Numeric(1237),
+                _phantom: PhantomData,
+            }),
+            AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
+                attribute_tag: AttributeTag(4).to_string().parse().unwrap(),
+                lower: Web3IdAttribute::try_from(
+                    chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+                        .unwrap()
+                        .to_utc(),
+                )
+                .unwrap(),
+                upper: Web3IdAttribute::try_from(
+                    chrono::DateTime::parse_from_rfc3339("2023-08-29T23:12:15Z")
+                        .unwrap()
+                        .to_utc(),
+                )
+                .unwrap(),
+                _phantom: PhantomData,
+            }),
+            AtomicStatementV1::AttributeValue(AttributeValueStatement {
+                attribute_tag: AttributeTag(5).to_string().parse().unwrap(),
+                attribute_value: Web3IdAttribute::String(
+                    AttributeKind::try_new("testvalue".into()).unwrap(),
+                ),
+                _phantom: Default::default(),
+            }),
         ];
 
         let attributes = [
@@ -2487,6 +2712,7 @@ mod fixtures {
         pub private_inputs: OwnedCredentialProofPrivateInputs<IpPairing, ArCurve, AttributeType>,
         pub verification_material: CredentialVerificationMaterial<IpPairing, ArCurve>,
         pub cred_id: CredentialRegistrationID,
+        pub issuer: IpIdentity,
     }
 
     impl<AttributeType: Attribute<<ArCurve as Curve>::Scalar>>
@@ -2517,20 +2743,24 @@ mod fixtures {
             attr_cmm.insert(*tag, cmm);
         }
 
+        let issuer = IpIdentity::from(17u32);
+
         let commitment_inputs =
             OwnedCredentialProofPrivateInputs::Account(OwnedAccountCredentialProofPrivateInputs {
                 attribute_values: attrs,
                 attribute_randomness: attr_rand,
-                issuer: IpIdentity::from(17u32),
+                issuer,
             });
 
         let credential_inputs =
             CredentialVerificationMaterial::Account(AccountCredentialVerificationMaterial {
+                issuer,
                 attribute_commitments: attr_cmm,
             });
 
         AccountCredentialsFixture {
             private_inputs: commitment_inputs,
+            issuer,
             verification_material: credential_inputs,
             cred_id,
         }

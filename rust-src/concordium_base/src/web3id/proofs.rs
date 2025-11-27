@@ -1,4 +1,4 @@
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     curve_arithmetic::Curve,
     id::types::{Attribute, GlobalContext},
@@ -59,6 +59,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
         params: &GlobalContext<C>,
         public: impl ExactSizeIterator<Item = &'a CredentialsInputs<C>>,
     ) -> Result<Request<C, AttributeType>, PresentationVerificationError> {
+        #[allow(deprecated)]
         let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
         transcript.add_bytes(self.presentation_context);
         transcript.append_message(b"ctx", &params);
@@ -329,6 +330,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
         AttributeType: 'a,
     {
         let mut proofs = Vec::with_capacity(attrs.len());
+        #[allow(deprecated)]
         let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
         transcript.add_bytes(self.challenge);
         transcript.append_message(b"ctx", &params);
