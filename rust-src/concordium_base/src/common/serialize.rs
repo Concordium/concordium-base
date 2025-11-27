@@ -1010,7 +1010,6 @@ pub fn base16_ignore_length_decode<'de, D: Deserializer<'de>, T: Deserial>(
     des.deserialize_str(Base16IgnoreLengthVisitor(Default::default()))
 }
 
-
 /// Reexports and types for derive macros
 #[doc(hidden)]
 pub mod __serialize_private {
@@ -1024,7 +1023,6 @@ mod test {
     use crate::common::{from_bytes, serialize_deserialize, to_bytes};
     use chrono::{DateTime, Utc};
     use concordium_base_derive::Serialize;
-    use std::io::Read;
 
     #[test]
     fn test_map_serialization() {
@@ -1245,7 +1243,7 @@ mod test {
     //     assert_eq!(decoded, value);
     // }
 
-    /// Tests serializing tuple struct with derived implementation
+    /// Tests serializing enum with unit variants with derived implementation
     #[test]
     fn test_unit_enum_derived_serialization() {
         #[derive(Debug, PartialEq, Serialize)]
@@ -1263,6 +1261,41 @@ mod test {
         let value = TestEnum::B;
         let bytes = to_bytes(&value);
         assert_eq!(hex::encode(&bytes), "01");
+        let decoded: TestEnum = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    /// Tests serializing enum with named fields variants with derived implementation
+    #[test]
+    fn test_named_enum_derived_serialization() {
+        #[derive(Debug, PartialEq, Serialize)]
+        enum TestEnum {
+            A { a: u8, b: String },
+            B { a: u8, b: String },
+        }
+
+        let value = TestEnum::B {
+            a: 2,
+            b: "test".to_string(),
+        };
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "0102000000000000000474657374");
+        let decoded: TestEnum = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    /// Tests serializing enum with tuple variants with derived implementation
+    #[test]
+    fn test_tuple_enum_derived_serialization() {
+        #[derive(Debug, PartialEq, Serialize)]
+        enum TestEnum {
+            A(u8, String),
+            B(u8, String),
+        }
+
+        let value = TestEnum::B(2, "test".to_string());
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "0102000000000000000474657374");
         let decoded: TestEnum = from_bytes(&mut bytes.as_slice()).unwrap();
         assert_eq!(decoded, value);
     }

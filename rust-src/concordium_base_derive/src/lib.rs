@@ -253,32 +253,35 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
         let mut arms = proc_macro2::TokenStream::new();
         for (variant_index, variant) in data.variants.iter().enumerate() {
             let mut fields_deserialize = proc_macro2::TokenStream::new();
-            let mut fields_constructor = proc_macro2::TokenStream::new();
+            let fields_constructor: proc_macro2::TokenStream;
             match &variant.fields {
                 Fields::Named(fields) => {
-                    // for f in fields.named.iter() {
-                    //     let ident = f.ident.clone().expect("named field ident");
-                    //
-                    //     fields_deserialize.extend(quote! {
-                    //         #ident.serial(#out);
-                    //     });
-                    //     fields_constructor.extend(ident.to_token_stream());
-                    // }
-                    // fields_constructor = quote!({ #fields_constructor })
+                    let mut field_idents = Vec::new();
+                    for f in fields.named.iter() {
+                        let ident = f.ident.clone().expect("named field ident");
+
+                        fields_deserialize.extend(quote! {
+                            let #ident = #root::common::Deserial::deserial(#source)?;
+                        });
+                        field_idents.push(ident);
+                    }
+                    fields_constructor = quote!({ #( #field_idents ),* })
                 }
                 Fields::Unnamed(fields) => {
-                    // for (i, _f) in fields.unnamed.iter().enumerate() {
-                    //     let ident = format_ident!("x_{}", i);
-                    //
-                    //     fields_deserialize.extend(quote! {
-                    //         #ident.serial(#out);
-                    //     });
-                    //     fields_constructor.extend(ident.to_token_stream());
-                    // }
-                    // fields_constructor = quote!({ #fields_constructor })
+                    let mut field_idents = Vec::new();
+                    for (i, _f) in fields.unnamed.iter().enumerate() {
+                        let ident = format_ident!("x_{}", i);
+                    
+                        fields_deserialize.extend(quote! {
+                            let #ident = #root::common::Deserial::deserial(#source)?;
+                        });
+                        field_idents.push(ident);
+                    }
+                    fields_constructor = quote!(( #( #field_idents ),* ))
                 }
                 Fields::Unit => {
-                    // no fields to serialize
+                    // no fields to deserialize
+                    fields_constructor = Default::default();
                 }
             }
 
@@ -297,10 +300,10 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
             #[automatically_derived]
             impl #impl_generics #root::common::Deserial for #name #ty_generics #where_clauses {
                 fn deserial<#ident: #root::common::ReadBytesExt>(#source: &mut #ident) -> #root::common::ParseResult<Self> {
-                    let tag: u8 = #source.get()?;
+                    let tag: u8 = #root::common::Deserial::deserial(#source)?;
                     let value = match tag {
                         #arms
-                        _ => #root::common::__serialize_private::anyhow::bail!(concat!("unsupported ", stringify!(#ident), " variant: {}"), tag),
+                        _ => #root::common::__serialize_private::anyhow::bail!(concat!("unsupported ", stringify!(#name), " variant: {}"), tag),
                     };
                     Ok(value)
                 }
@@ -446,32 +449,35 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
         let mut arms = proc_macro2::TokenStream::new();
         for (variant_index, variant) in data.variants.iter().enumerate() {
             let mut fields_serialize = proc_macro2::TokenStream::new();
-            let mut fields_pattern = proc_macro2::TokenStream::new();
+            let fields_pattern:  proc_macro2::TokenStream;
             match &variant.fields {
                 Fields::Named(fields) => {
+                    let mut field_idents = Vec::new();
                     for f in fields.named.iter() {
                         let ident = f.ident.clone().expect("named field ident");
 
                         fields_serialize.extend(quote! {
-                            #ident.serial(#out);
+                            #root::common::Serial::serial(#ident, #out);
                         });
-                        fields_pattern.extend(ident.to_token_stream());
+                        field_idents.push(ident);
                     }
-                    fields_pattern = quote!({ #fields_pattern })
+                    fields_pattern = quote!({ #( #field_idents ),* })
                 }
                 Fields::Unnamed(fields) => {
+                    let mut field_idents = Vec::new();
                     for (i, _f) in fields.unnamed.iter().enumerate() {
                         let ident = format_ident!("x_{}", i);
 
                         fields_serialize.extend(quote! {
-                            #ident.serial(#out);
+                            #root::common::Serial::serial(#ident, #out);
                         });
-                        fields_pattern.extend(ident.to_token_stream());
+                        field_idents.push(ident);
                     }
-                    fields_pattern = quote!({ #fields_pattern })
+                    fields_pattern = quote!(( #( #field_idents ),* ))
                 }
                 Fields::Unit => {
                     // no fields to serialize
+                    fields_pattern = Default::default();
                 }
             }
 
@@ -480,7 +486,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
             let variant_ident = &variant.ident;
             arms.extend(quote! {
                 Self::#variant_ident #fields_pattern => {
-                    #variant_index_tk.serial(#out);
+                    #root::common::Serial::serial(&#variant_index_tk, #out);
                     #fields_serialize
                 }
             });
