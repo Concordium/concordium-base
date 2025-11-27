@@ -221,7 +221,7 @@ pub struct RandomOracle(Sha3_256);
 /// [Transcript protocol](TranscriptProtocol) implementation V1. See [`random_oracle`](self)
 /// and [`TranscriptProtocol`] for how to use it.
 #[repr(transparent)]
-#[derive(Debug, Clone, Default)] // todo ar remove default
+#[derive(Debug, Clone)]
 pub struct TranscriptProtocolV1(Sha3_256);
 
 /// Type of challenges computed from the random oracle.
