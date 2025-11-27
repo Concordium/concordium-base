@@ -1010,6 +1010,14 @@ pub fn base16_ignore_length_decode<'de, D: Deserializer<'de>, T: Deserial>(
     des.deserialize_str(Base16IgnoreLengthVisitor(Default::default()))
 }
 
+
+/// Reexports and types for derive macros
+#[doc(hidden)]
+pub mod __serialize_private {
+    // Reexports
+    pub use anyhow;
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

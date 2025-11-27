@@ -7,8 +7,8 @@ mod cbor;
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Literal, Span};
 use proc_macro_crate::FoundCrate;
-use quote::{format_ident, quote};
-use syn::{parse_macro_input, spanned::Spanned, LitInt};
+use quote::{format_ident, quote, ToTokens};
+use syn::{parse_macro_input, spanned::Spanned, Fields, LitInt};
 
 fn get_crate_root() -> syn::Result<proc_macro2::TokenStream> {
     let found_crate = proc_macro_crate::crate_name("concordium_base").map_err(|err| {
@@ -165,11 +165,12 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
 
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
     let root = get_crate_root().expect("concordium_base root");
+    let source = format_ident!("source");
 
     if let syn::Data::Struct(ref data) = ast.data {
         let mut tokens = proc_macro2::TokenStream::new();
         let mut names = proc_macro2::TokenStream::new();
-        let source = format_ident!("source");
+
         let mut pusher = |f: &syn::Field, ident| {
             if let Some(l) = find_length_attribute(&f.attrs, "size_length") {
                 let id = format_ident!("u{}", 8 * l);
@@ -248,8 +249,65 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
             _ => panic!("#[derive(Deserial)] not implemented for empty structs."),
         };
         gen.into()
+    } else if let syn::Data::Enum(ref data) = ast.data {
+        let mut arms = proc_macro2::TokenStream::new();
+        for (variant_index, variant) in data.variants.iter().enumerate() {
+            let mut fields_deserialize = proc_macro2::TokenStream::new();
+            let mut fields_constructor = proc_macro2::TokenStream::new();
+            match &variant.fields {
+                Fields::Named(fields) => {
+                    // for f in fields.named.iter() {
+                    //     let ident = f.ident.clone().expect("named field ident");
+                    //
+                    //     fields_deserialize.extend(quote! {
+                    //         #ident.serial(#out);
+                    //     });
+                    //     fields_constructor.extend(ident.to_token_stream());
+                    // }
+                    // fields_constructor = quote!({ #fields_constructor })
+                }
+                Fields::Unnamed(fields) => {
+                    // for (i, _f) in fields.unnamed.iter().enumerate() {
+                    //     let ident = format_ident!("x_{}", i);
+                    //
+                    //     fields_deserialize.extend(quote! {
+                    //         #ident.serial(#out);
+                    //     });
+                    //     fields_constructor.extend(ident.to_token_stream());
+                    // }
+                    // fields_constructor = quote!({ #fields_constructor })
+                }
+                Fields::Unit => {
+                    // no fields to serialize
+                }
+            }
+
+            let variant_index_tk =
+                Literal::u8_suffixed(variant_index.try_into().expect("variant index to u8"));
+            let variant_ident = &variant.ident;
+            arms.extend(quote! {
+                #variant_index_tk => {
+                    #fields_deserialize
+                    Self::#variant_ident #fields_constructor
+                }
+            });
+        }
+
+        quote! {
+            #[automatically_derived]
+            impl #impl_generics #root::common::Deserial for #name #ty_generics #where_clauses {
+                fn deserial<#ident: #root::common::ReadBytesExt>(#source: &mut #ident) -> #root::common::ParseResult<Self> {
+                    let tag: u8 = #source.get()?;
+                    let value = match tag {
+                        #arms
+                        _ => #root::common::__serialize_private::anyhow::bail!(concat!("unsupported ", stringify!(#ident), " variant: {}"), tag),
+                    };
+                    Ok(value)
+                }
+            }
+        }.into()
     } else {
-        panic!("#[derive(Deserial)] only implemented for structs.")
+        panic!("#[derive(Deserial)] only implemented for structs and enums.")
     }
 }
 
@@ -387,22 +445,45 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
     } else if let syn::Data::Enum(ref data) = ast.data {
         let mut arms = proc_macro2::TokenStream::new();
         for (variant_index, variant) in data.variants.iter().enumerate() {
+            let mut fields_serialize = proc_macro2::TokenStream::new();
+            let mut fields_pattern = proc_macro2::TokenStream::new();
+            match &variant.fields {
+                Fields::Named(fields) => {
+                    for f in fields.named.iter() {
+                        let ident = f.ident.clone().expect("named field ident");
+
+                        fields_serialize.extend(quote! {
+                            #ident.serial(#out);
+                        });
+                        fields_pattern.extend(ident.to_token_stream());
+                    }
+                    fields_pattern = quote!({ #fields_pattern })
+                }
+                Fields::Unnamed(fields) => {
+                    for (i, _f) in fields.unnamed.iter().enumerate() {
+                        let ident = format_ident!("x_{}", i);
+
+                        fields_serialize.extend(quote! {
+                            #ident.serial(#out);
+                        });
+                        fields_pattern.extend(ident.to_token_stream());
+                    }
+                    fields_pattern = quote!({ #fields_pattern })
+                }
+                Fields::Unit => {
+                    // no fields to serialize
+                }
+            }
+
             let variant_index_tk =
                 Literal::u8_suffixed(variant_index.try_into().expect("variant index to u8"));
             let variant_ident = &variant.ident;
             arms.extend(quote! {
-                Self::#variant_ident => {
+                Self::#variant_ident #fields_pattern => {
                     #variant_index_tk.serial(#out);
+                    #fields_serialize
                 }
             });
-
-            // for f in data.fields.iter() {
-            //     let ident = f.ident.clone().unwrap(); // safe since named fields.
-            //
-            //     body.extend(quote! {
-            //         self.#ident.serial(#out);
-            //     });
-            // }
         }
 
         quote! {
