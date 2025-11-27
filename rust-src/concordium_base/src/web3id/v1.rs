@@ -160,7 +160,7 @@ pub struct IdentityBasedSubjectClaims<
 
 /// Claims about a subject.
 /// To prove the claims and create a credential, the corresponding private input [`CredentialProofPrivateInputs`] is needed.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, common::Serialize)]
 pub enum SubjectClaims<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Claims about an account based subject. Accounts are on-chain credentials
     /// deployed from identity credentials.
@@ -169,41 +169,7 @@ pub enum SubjectClaims<C: Curve, AttributeType: Attribute<C::Scalar>> {
     Identity(IdentityBasedSubjectClaims<C, AttributeType>),
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar> + common::Serial> common::Serial
-    for SubjectClaims<C, AttributeType>
-{
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        match self {
-            Self::Account(claims) => {
-                out.put(&0u8);
-                out.put(claims);
-            }
-            Self::Identity(claims) => {
-                out.put(&1u8);
-                out.put(claims);
-            }
-        }
-    }
-}
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar> + common::Deserial> common::Deserial
-    for SubjectClaims<C, AttributeType>
-{
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let tag: u8 = source.get()?;
-        Ok(match tag {
-            0 => {
-                let claims = source.get()?;
-                Self::Account(claims)
-            }
-            1 => {
-                let claims = source.get()?;
-                Self::Identity(claims)
-            }
-            _ => bail!("unsupported SubjectClaims: {}", tag),
-        })
-    }
-}
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
     for SubjectClaims<C, AttributeType>
@@ -679,31 +645,13 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 }
 
 /// Version of proof
-#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, common::Serialize)]
 pub enum ConcordiumZKProofVersion {
     #[serde(rename = "ConcordiumZKProofV4")]
     ConcordiumZKProofV4,
 }
 
-impl common::Serial for ConcordiumZKProofVersion {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        match self {
-            Self::ConcordiumZKProofV4 => {
-                out.put(&0u8);
-            }
-        }
-    }
-}
 
-impl common::Deserial for ConcordiumZKProofVersion {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let tag: u8 = source.get()?;
-        Ok(match tag {
-            0 => Self::ConcordiumZKProofV4,
-            _ => bail!("unsupported ConcordiumZKProofVersion: {}", tag),
-        })
-    }
-}
 
 /// Credential proof. Wraps the actual credential specific proof.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, common::Serialize)]
@@ -731,7 +679,7 @@ pub struct ConcordiumZKProof<T: common::Serialize> {
 /// order to verify the credential.
 // for some reason, version 1.82 clippy thinks the `Identity` variant is 0 bytes and hence gives this warning
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, common::Serialize)]
 pub enum CredentialV1<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -743,41 +691,6 @@ pub enum CredentialV1<
     Identity(IdentityBasedCredentialV1<P, C, AttributeType>),
 }
 
-impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
-    common::Serial for CredentialV1<P, C, AttributeType>
-{
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        match self {
-            Self::Account(cred) => {
-                out.put(&0u8);
-                out.put(cred)
-            }
-            Self::Identity(cred) => {
-                out.put(&1u8);
-                out.put(cred)
-            }
-        }
-    }
-}
-
-impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
-    common::Deserial for CredentialV1<P, C, AttributeType>
-{
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let tag: u8 = source.get()?;
-        Ok(match tag {
-            0 => {
-                let cred = source.get()?;
-                Self::Account(cred)
-            }
-            1 => {
-                let cred = source.get()?;
-                Self::Identity(cred)
-            }
-            _ => bail!("unsupported CredentialV1: {}", tag),
-        })
-    }
-}
 
 impl<
         P: Pairing,
@@ -984,31 +897,13 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 }
 
 /// Version of proof
-#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, common::Serialize)]
 pub enum ConcordiumLinkingProofVersion {
     #[serde(rename = "ConcordiumWeakLinkingProofV1")]
     ConcordiumWeakLinkingProofV1,
 }
 
-impl common::Serial for ConcordiumLinkingProofVersion {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        match self {
-            Self::ConcordiumWeakLinkingProofV1 => {
-                out.put(&0u8);
-            }
-        }
-    }
-}
 
-impl common::Deserial for ConcordiumLinkingProofVersion {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let tag: u8 = source.get()?;
-        Ok(match tag {
-            0 => Self::ConcordiumWeakLinkingProofV1,
-            _ => bail!("unsupported ConcordiumLinkingProofVersion: {}", tag),
-        })
-    }
-}
 
 /// Proof that the credential holder has created the presentation. Currently
 /// not used.
@@ -1352,7 +1247,7 @@ pub enum VerifyError {
 }
 
 /// The types of statements that can be used in subject claims
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Eq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Eq, common::Serialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize, TagType: \
                  serde::Serialize",
@@ -1389,59 +1284,9 @@ impl<C: Curve, TagType: common::Serialize + Copy, AttributeType: Attribute<C::Sc
     }
 }
 
-impl<C: Curve, TagType: common::Serialize, AttributeType: Attribute<C::Scalar>> common::Serial
-    for AtomicStatementV1<C, TagType, AttributeType>
-{
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        match self {
-            Self::AttributeValue(statement) => {
-                0u8.serial(out);
-                statement.serial(out);
-            }
-            Self::AttributeInRange(statement) => {
-                1u8.serial(out);
-                statement.serial(out);
-            }
-            Self::AttributeInSet(statement) => {
-                2u8.serial(out);
-                statement.serial(out);
-            }
-            Self::AttributeNotInSet(statement) => {
-                3u8.serial(out);
-                statement.serial(out);
-            }
-        }
-    }
-}
-
-impl<C: Curve, TagType: common::Serialize, AttributeType: Attribute<C::Scalar>> common::Deserial
-    for AtomicStatementV1<C, TagType, AttributeType>
-{
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        match u8::deserial(source)? {
-            0u8 => {
-                let statement = source.get()?;
-                Ok(Self::AttributeValue(statement))
-            }
-            1u8 => {
-                let statement = source.get()?;
-                Ok(Self::AttributeInRange(statement))
-            }
-            2u8 => {
-                let statement = source.get()?;
-                Ok(Self::AttributeInSet(statement))
-            }
-            3u8 => {
-                let statement = source.get()?;
-                Ok(Self::AttributeNotInSet(statement))
-            }
-            n => anyhow::bail!("Unknown statement tag: {}.", n),
-        }
-    }
-}
 
 /// Proof of a [`AtomicStatementV1`].
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, common::Serialize)]
 pub enum AtomicProofV1<C: Curve> {
     /// A proof that an attribute is equal to a public value
     AttributeValue(AttributeValueProof<C>),
@@ -1456,56 +1301,6 @@ pub enum AtomicProofV1<C: Curve> {
     AttributeNotInSet(SetNonMembershipProof<C>),
 }
 
-impl<C: Curve> common::Serial for AtomicProofV1<C> {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        match self {
-            Self::AttributeValue(proof) => {
-                0u8.serial(out);
-                proof.serial(out);
-            }
-            Self::AttributeValueAlreadyRevealed => {
-                1u8.serial(out);
-            }
-            Self::AttributeInRange(proof) => {
-                2u8.serial(out);
-                proof.serial(out);
-            }
-            Self::AttributeInSet(proof) => {
-                3u8.serial(out);
-                proof.serial(out);
-            }
-            Self::AttributeNotInSet(proof) => {
-                4u8.serial(out);
-                proof.serial(out);
-            }
-        }
-    }
-}
-
-impl<C: Curve> common::Deserial for AtomicProofV1<C> {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        match u8::deserial(source)? {
-            0u8 => {
-                let proof = source.get()?;
-                Ok(Self::AttributeValue(proof))
-            }
-            1u8 => Ok(Self::AttributeValueAlreadyRevealed),
-            2u8 => {
-                let proof = source.get()?;
-                Ok(Self::AttributeInRange(proof))
-            }
-            3u8 => {
-                let proof = source.get()?;
-                Ok(Self::AttributeInSet(proof))
-            }
-            4u8 => {
-                let proof = source.get()?;
-                Ok(Self::AttributeNotInSet(proof))
-            }
-            n => anyhow::bail!("Unknown proof type tag: {}", n),
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {

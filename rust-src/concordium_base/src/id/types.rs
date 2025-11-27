@@ -2817,7 +2817,7 @@ pub struct CredentialValidity {
 
 /// Attribute value as represented in the identity attribute credential values. An attribute value has either been committed to,
 /// revealed, or just proven known.
-#[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone, Serialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
@@ -2832,43 +2832,9 @@ pub enum IdentityAttribute<C: Curve, AttributeType: Attribute<C::Scalar>> {
     Known,
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for IdentityAttribute<C, AttributeType> {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        match self {
-            Self::Committed(cmm) => {
-                out.put(&0u8);
-                out.put(cmm);
-            }
-            Self::Revealed(value) => {
-                out.put(&1u8);
-                out.put(value);
-            }
-            Self::Known => {
-                out.put(&2u8);
-            }
-        }
-    }
-}
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial
-    for IdentityAttribute<C, AttributeType>
-{
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let tag: u8 = source.get()?;
-        Ok(match tag {
-            0 => {
-                let cmm = source.get()?;
-                Self::Committed(cmm)
-            }
-            1 => {
-                let attr = source.get()?;
-                Self::Revealed(attr)
-            }
-            2 => Self::Known,
-            _ => bail!("unsupported IdentityAttribute item type: {}", tag),
-        })
-    }
-}
+
+
 
 /// Values (as opposed to proofs) in identity attribute credentials created from identity credential.
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]

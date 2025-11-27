@@ -35,7 +35,7 @@ use concordium_base_derive::Serialize;
 use rand::Rng;
 
 /// How to handle a single part of the signed message
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum PsSigMsg<C: Curve> {
     /// The message is proven known and equal to the value in commitment $C_i$
     EqualToCommitment(Commitment<C>),
@@ -45,24 +45,6 @@ pub enum PsSigMsg<C: Curve> {
     Known,
 }
 
-// Serialization used to hash into the transcript
-impl<C: Curve> Serial for PsSigMsg<C> {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        match &self {
-            Self::EqualToCommitment(cmm) => {
-                out.put(&0u8);
-                out.put(cmm);
-            }
-            Self::Public(value) => {
-                out.put(&1u8);
-                out.put(value);
-            }
-            Self::Known => {
-                out.put(&2u8);
-            }
-        }
-    }
-}
 
 /// Proof of knowledge of a PS (Pointcheval-Sanders) signature. See
 /// module documentation [`self`].
@@ -91,7 +73,7 @@ pub struct PsSigCommitSecret<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 type CommitSecretMsg<C> = PsSigWitnessMsg<C>;
 
 /// How to handle a signed message
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize)]
 pub enum PsSigWitnessMsg<C: Curve> {
     /// The value/message part $m_i$ is proven known and equal to a commitment to the value under the randomness $r_i$
     EqualToCommitment(Value<C>, Randomness<C>),
@@ -101,43 +83,6 @@ pub enum PsSigWitnessMsg<C: Curve> {
     Known(Value<C>),
 }
 
-impl<C: Curve> Serial for PsSigWitnessMsg<C> {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        match self {
-            Self::EqualToCommitment(m, cmm) => {
-                out.put(&0u8);
-                out.put(m);
-                out.put(cmm);
-            }
-            Self::Public => {
-                out.put(&1u8);
-            }
-            Self::Known(m) => {
-                out.put(&2u8);
-                out.put(m);
-            }
-        }
-    }
-}
-
-impl<C: Curve> Deserial for PsSigWitnessMsg<C> {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let tag: u8 = source.get()?;
-        Ok(match tag {
-            0 => {
-                let m = source.get()?;
-                let cmm = source.get()?;
-                Self::EqualToCommitment(m, cmm)
-            }
-            1 => Self::Public,
-            2 => {
-                let m = source.get()?;
-                Self::Known(m)
-            }
-            _ => anyhow::bail!("unsupported PsSigWitnessMsg item type: {}", tag),
-        })
-    }
-}
 
 /// Witness used in proof, maps to the "statement" $\boldsymbol{y}$ under $\varphi$
 pub struct PsSigWitness<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
