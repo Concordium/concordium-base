@@ -5,6 +5,8 @@
 - Implemented anchor model for the new version of verifiable presentations in `web3id::v1::anchor`.
   The primary types in the module are `VerificationRequest`, `VerificationRequestData`, `VerificationRequestAnchor`,
   `VerificationAuditRecord`, and `VerificationAuditRecord`.
+- Serialization derive macros `common::Serial`, `common::Deserial` and `common::Serialize` now supports
+  deriving serialization on enums. 
 
 ## 9.0.0 (2025-10-29)
 

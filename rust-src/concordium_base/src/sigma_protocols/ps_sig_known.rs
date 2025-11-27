@@ -25,7 +25,7 @@ use crate::curve_arithmetic::{Curve, Field, Pairing, Secret};
 use crate::random_oracle::StructuredDigest;
 use crate::sigma_protocols::common::SigmaProtocol;
 use crate::{
-    common, curve_arithmetic,
+    curve_arithmetic,
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
     ps_sig,
     ps_sig::BlindedSignature,
@@ -93,7 +93,6 @@ type CommitSecretMsg<C> = PsSigWitnessMsg<C>;
 
 /// How to handle a signed message
 #[derive(Debug, Eq, PartialEq, Clone)]
-// #[derive(common::Serial)]
 pub enum PsSigWitnessMsg<C: Curve> {
     /// The value/message part $m_i$ is proven known and equal to a commitment to the value under the randomness $r_i$
     EqualToCommitment(Value<C>, Randomness<C>),
