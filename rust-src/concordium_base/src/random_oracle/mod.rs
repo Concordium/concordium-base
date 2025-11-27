@@ -560,14 +560,14 @@ impl TranscriptProtocolV1 {
     }
 }
 
-#[cfg(test)]
+// #[cfg(test)]
 #[derive(Debug, Clone)]
 pub struct TranscriptProtocolTracer<P> {
     pub inner: P,
     pub lines: std::cell::RefCell<Vec<String>>,
 }
 
-#[cfg(test)]
+// #[cfg(test)]
 impl<P> TranscriptProtocolTracer<P> {
     pub fn new(inner: P) -> Self {
         Self {
@@ -577,7 +577,9 @@ impl<P> TranscriptProtocolTracer<P> {
     }
 }
 
-#[cfg(test)]
+// todo ar also support with_domain
+
+// #[cfg(test)]
 impl<P: TranscriptProtocol + Default> TranscriptProtocol for TranscriptProtocolTracer<P> {
     fn append_label(&mut self, label: impl AsRef<[u8]>) {
         self.inner.append_label(label.as_ref());
@@ -587,12 +589,12 @@ impl<P: TranscriptProtocol + Default> TranscriptProtocol for TranscriptProtocolT
     }
 
     fn append_message(&mut self, label: impl AsRef<[u8]>, message: &impl Serial) {
-        self.inner.append_message(label, message);
-        self.lines
-            .borrow_mut()
-            .last_mut()
-            .expect("last line")
-            .extend(format!(", {} bytes", to_bytes(message).len()).chars());
+        self.inner.append_message(label.as_ref(), message);
+        self.lines.borrow_mut().push(format!(
+            "{}, {} bytes",
+            String::from_utf8_lossy(label.as_ref()).into_owned(),
+            to_bytes(message).len()
+        ));
     }
 
     fn append_messages<'a, T: Serial + 'a, B: IntoIterator<Item = &'a T>>(
@@ -603,31 +605,26 @@ impl<P: TranscriptProtocol + Default> TranscriptProtocol for TranscriptProtocolT
         B::IntoIter: ExactSizeIterator,
     {
         let messages: Vec<_> = messages.into_iter().collect();
-        self.inner.append_messages(label, &messages);
-        self.lines
-            .borrow_mut()
-            .last_mut()
-            .expect("last line")
-            .extend(
-                format!(
-                    ", {} items, {} bytes total",
-                    messages.len(),
-                    messages
-                        .iter()
-                        .map(|msg| to_bytes(msg).len())
-                        .sum::<usize>()
-                )
-                .chars(),
-            );
+        self.inner.append_messages(label.as_ref(), &messages);
+        self.lines.borrow_mut().push(format!(
+            "{}, {} items, {} bytes total",
+            String::from_utf8_lossy(label.as_ref()).into_owned(),
+            messages.len(),
+            messages
+                .iter()
+                .map(|msg| to_bytes(msg).len())
+                .sum::<usize>()
+        ));
     }
 
     fn append_final_prover_message(&mut self, label: impl AsRef<[u8]>, message: &impl Serial) {
-        self.inner.append_final_prover_message(label, message);
-        self.lines
-            .borrow_mut()
-            .last_mut()
-            .expect("last line")
-            .extend(format!(", final prover message, {} bytes", to_bytes(message).len()).chars());
+        self.inner
+            .append_final_prover_message(label.as_ref(), message);
+        self.lines.borrow_mut().push(format!(
+            "{}, final prover message, {} bytes",
+            String::from_utf8_lossy(label.as_ref()).into_owned(),
+            to_bytes(message).len()
+        ));
     }
 
     fn append_each_message<T, B: IntoIterator<Item = T>>(
@@ -639,21 +636,28 @@ impl<P: TranscriptProtocol + Default> TranscriptProtocol for TranscriptProtocolT
         B::IntoIter: ExactSizeIterator,
     {
         let messages: Vec<_> = messages.into_iter().collect();
+        self.lines.borrow_mut().push(format!(
+            "{}, {} messages",
+            String::from_utf8_lossy(label.as_ref()).into_owned(),
+            messages.len(),
+        ));
+        let mut lines = Vec::new();
         self.inner
             .append_each_message(label, messages, |inner, item| {
                 let mut tracer = TranscriptProtocolTracer::new(std::mem::take(inner));
                 append_item(&mut tracer, item);
                 *inner = std::mem::take(&mut tracer.inner);
+                lines.extend(tracer.lines.into_inner());
             });
+        self.lines.borrow_mut().extend(lines);
     }
 
     fn extract_challenge_scalar<C: Curve>(&mut self, label: impl AsRef<[u8]>) -> C::Scalar {
-        let val = self.inner.extract_challenge_scalar::<C>(label);
-        self.lines
-            .borrow_mut()
-            .last_mut()
-            .expect("last line")
-            .extend(", extract scalar challenge".chars());
+        let val = self.inner.extract_challenge_scalar::<C>(label.as_ref());
+        self.lines.borrow_mut().push(format!(
+            "{}, extract scalar challenge",
+            String::from_utf8_lossy(label.as_ref()).into_owned(),
+        ));
         val
     }
 
