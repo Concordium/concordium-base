@@ -7,8 +7,8 @@ mod cbor;
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Literal, Span};
 use proc_macro_crate::FoundCrate;
-use quote::{format_ident, quote, ToTokens};
-use syn::{parse_macro_input, spanned::Spanned, Fields, LitInt};
+use quote::{format_ident, quote};
+use syn::{parse_macro_input, spanned::Spanned, Field, Fields};
 
 fn get_crate_root() -> syn::Result<proc_macro2::TokenStream> {
     let found_crate = proc_macro_crate::crate_name("concordium_base").map_err(|err| {
@@ -258,6 +258,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 Fields::Named(fields) => {
                     let mut field_idents = Vec::new();
                     for f in fields.named.iter() {
+                        check_no_length_size_attribute(f);
                         let ident = f.ident.clone().expect("named field ident");
 
                         fields_deserialize.extend(quote! {
@@ -269,9 +270,10 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 }
                 Fields::Unnamed(fields) => {
                     let mut field_idents = Vec::new();
-                    for (i, _f) in fields.unnamed.iter().enumerate() {
+                    for (i, f) in fields.unnamed.iter().enumerate() {
+                        check_no_length_size_attribute(f);
                         let ident = format_ident!("x_{}", i);
-                    
+
                         fields_deserialize.extend(quote! {
                             let #ident = #root::common::Deserial::deserial(#source)?;
                         });
@@ -409,7 +411,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         body.extend(quote! {
                             let #len_ident: #id = #ident.len() as #id;
                             #len_ident.serial(#out);
-                            serial_map_no_length(&self.#ident, #out);
+                            serial_map_no_length(#ident, #out);
                         })
                     } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
                         let id = format_ident!("u{}", 8 * l);
@@ -417,7 +419,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         body.extend(quote! {
                             let #len_ident: #id = #ident.len() as #id;
                             #len_ident.serial(#out);
-                            serial_set_no_length(&self.#ident, #out);
+                            serial_set_no_length(#ident, #out);
                         })
                     } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
                         let id = format_ident!("u{}", 8 * l);
@@ -425,7 +427,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         body.extend(quote! {
                             let #len_ident: #id = #ident.len() as #id;
                             #len_ident.serial(#out);
-                            serial_string(self.#ident.as_str(), #out);
+                            serial_string(#ident.as_str(), #out);
                         })
                     } else {
                         body.extend(quote!(#ident.serial(#out);));
@@ -449,11 +451,12 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
         let mut arms = proc_macro2::TokenStream::new();
         for (variant_index, variant) in data.variants.iter().enumerate() {
             let mut fields_serialize = proc_macro2::TokenStream::new();
-            let fields_pattern:  proc_macro2::TokenStream;
+            let fields_pattern: proc_macro2::TokenStream;
             match &variant.fields {
                 Fields::Named(fields) => {
                     let mut field_idents = Vec::new();
                     for f in fields.named.iter() {
+                        check_no_length_size_attribute(f);
                         let ident = f.ident.clone().expect("named field ident");
 
                         fields_serialize.extend(quote! {
@@ -465,7 +468,8 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                 }
                 Fields::Unnamed(fields) => {
                     let mut field_idents = Vec::new();
-                    for (i, _f) in fields.unnamed.iter().enumerate() {
+                    for (i, f) in fields.unnamed.iter().enumerate() {
+                        check_no_length_size_attribute(f);
                         let ident = format_ident!("x_{}", i);
 
                         fields_serialize.extend(quote! {
@@ -505,6 +509,16 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
         .into()
     } else {
         panic!("#[derive(Serial)] only implemented for structs and enums.")
+    }
+}
+
+fn check_no_length_size_attribute(f: &Field) {
+    if find_length_attribute(&f.attrs, "size_length").is_some()
+        || find_length_attribute(&f.attrs, "map_size_length").is_some()
+        || find_length_attribute(&f.attrs, "set_size_length").is_some()
+        || find_length_attribute(&f.attrs, "string_size_length").is_some()
+    {
+        panic!("size length attribute not supported in the context where used")
     }
 }
 
