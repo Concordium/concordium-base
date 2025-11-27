@@ -4,9 +4,7 @@
 //! The module defines a higher level verification flow that adds additional verifications
 //! to the cryptographic verification.
 
-use crate::common::{
-    cbor, Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, Serial, Serialize,
-};
+use crate::common::{cbor, Serialize};
 use crate::id::id_proof_types::{
     AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
     RevealAttributeStatement,
@@ -304,7 +302,6 @@ pub enum RequestedSubjectClaims {
     Identity(RequestedIdentitySubjectClaims),
 }
 
-
 /// A subject claims request concerning the Concordium ID object (held by the credential holder
 /// in the wallet). The Concordium ID object has been signed by identity providers (IDPs).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default, Serialize)]
@@ -464,7 +461,6 @@ impl<'de> serde::Deserialize<'de> for ContextLabel {
     }
 }
 
-
 /// Identity based credential types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Serialize)]
 pub enum IdentityCredentialType {
@@ -479,7 +475,6 @@ pub enum IdentityCredentialType {
     #[serde(rename = "accountCredential")]
     AccountCredential,
 }
-
 
 /// DID for a Concordium Identity Provider.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Serialize)]
@@ -724,7 +719,6 @@ pub enum RequestedStatement<TagType: Serialize> {
     /// The atomic statement stating that an attribute is not in a set.
     AttributeNotInSet(AttributeNotInSetStatement<ArCurve, TagType, Web3IdAttribute>),
 }
-
 
 #[cfg(test)]
 mod tests {

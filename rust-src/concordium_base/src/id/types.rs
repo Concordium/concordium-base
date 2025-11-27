@@ -2832,10 +2832,6 @@ pub enum IdentityAttribute<C: Curve, AttributeType: Attribute<C::Scalar>> {
     Known,
 }
 
-
-
-
-
 /// Values (as opposed to proofs) in identity attribute credentials created from identity credential.
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
 #[serde(bound(

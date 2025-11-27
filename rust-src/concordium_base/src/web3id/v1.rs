@@ -16,7 +16,6 @@ mod proofs;
 use crate::base::CredentialRegistrationID;
 use crate::bulletproofs::set_membership_proof::SetMembershipProof;
 use crate::bulletproofs::set_non_membership_proof::SetNonMembershipProof;
-use crate::common::{Buffer, Get, ParseResult, Put};
 use crate::curve_arithmetic::{Curve, Pairing};
 use crate::id::id_proof_types::{
     AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
@@ -34,7 +33,6 @@ use crate::web3id::did;
 use crate::web3id::did::Network;
 use crate::{common, pedersen_commitment};
 use anyhow::{bail, ensure, Context};
-use byteorder::ReadBytesExt;
 use itertools::Itertools;
 use nom::AsBytes;
 use serde::de::{DeserializeOwned, Error as _};
@@ -168,8 +166,6 @@ pub enum SubjectClaims<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Claims about an identity based subject.
     Identity(IdentityBasedSubjectClaims<C, AttributeType>),
 }
-
-
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
     for SubjectClaims<C, AttributeType>
@@ -645,13 +641,13 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 }
 
 /// Version of proof
-#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, common::Serialize)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, common::Serialize,
+)]
 pub enum ConcordiumZKProofVersion {
     #[serde(rename = "ConcordiumZKProofV4")]
     ConcordiumZKProofV4,
 }
-
-
 
 /// Credential proof. Wraps the actual credential specific proof.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, common::Serialize)]
@@ -690,7 +686,6 @@ pub enum CredentialV1<
     /// Identity based credential
     Identity(IdentityBasedCredentialV1<P, C, AttributeType>),
 }
-
 
 impl<
         P: Pairing,
@@ -897,13 +892,13 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 }
 
 /// Version of proof
-#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, common::Serialize)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, common::Serialize,
+)]
 pub enum ConcordiumLinkingProofVersion {
     #[serde(rename = "ConcordiumWeakLinkingProofV1")]
     ConcordiumWeakLinkingProofV1,
 }
-
-
 
 /// Proof that the credential holder has created the presentation. Currently
 /// not used.
@@ -1284,7 +1279,6 @@ impl<C: Curve, TagType: common::Serialize + Copy, AttributeType: Attribute<C::Sc
     }
 }
 
-
 /// Proof of a [`AtomicStatementV1`].
 #[derive(Debug, Clone, Eq, PartialEq, common::Serialize)]
 pub enum AtomicProofV1<C: Curve> {
@@ -1300,7 +1294,6 @@ pub enum AtomicProofV1<C: Curve> {
     /// A proof that an attribute is not in a set
     AttributeNotInSet(SetNonMembershipProof<C>),
 }
-
 
 #[cfg(test)]
 mod tests {

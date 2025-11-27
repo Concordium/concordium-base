@@ -20,7 +20,6 @@
 //! Notice that the input to $\varphi$ has a signature blinding component $r'$ and a component for each message part.
 //! The output has a signature component and a commitment component for each message part that is proven equal to a commitment.
 
-use crate::common::{Buffer, Deserial, Get, ParseResult, Put, Serial};
 use crate::curve_arithmetic::{Curve, Field, Pairing, Secret};
 use crate::random_oracle::TranscriptProtocol;
 use crate::sigma_protocols::common::SigmaProtocol;
@@ -30,7 +29,6 @@ use crate::{
     ps_sig,
     ps_sig::BlindedSignature,
 };
-use byteorder::ReadBytesExt;
 use concordium_base_derive::Serialize;
 use rand::Rng;
 
@@ -44,7 +42,6 @@ pub enum PsSigMsg<C: Curve> {
     /// The value is proven known
     Known,
 }
-
 
 /// Proof of knowledge of a PS (Pointcheval-Sanders) signature. See
 /// module documentation [`self`].
@@ -82,7 +79,6 @@ pub enum PsSigWitnessMsg<C: Curve> {
     /// The value/message part $m_i$ is proven known
     Known(Value<C>),
 }
-
 
 /// Witness used in proof, maps to the "statement" $\boldsymbol{y}$ under $\varphi$
 pub struct PsSigWitness<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
