@@ -560,14 +560,14 @@ impl TranscriptProtocolV1 {
     }
 }
 
-// #[cfg(test)]
+#[cfg(test)]
 #[derive(Debug, Clone)]
 pub struct TranscriptProtocolTracer<P> {
     pub inner: P,
     pub lines: std::cell::RefCell<Vec<String>>,
 }
 
-// #[cfg(test)]
+#[cfg(test)]
 impl<P> TranscriptProtocolTracer<P> {
     pub fn new(inner: P) -> Self {
         Self {
@@ -577,10 +577,17 @@ impl<P> TranscriptProtocolTracer<P> {
     }
 }
 
-// todo ar also support with_domain
+#[cfg(test)]
+impl<P> Drop for TranscriptProtocolTracer<P> {
+    fn drop(&mut self) {
+        for line in self.lines.borrow().iter() {
+            println!("{}", line);
+        }
+    }
+}
 
-// #[cfg(test)]
-impl<P: TranscriptProtocol + Default> TranscriptProtocol for TranscriptProtocolTracer<P> {
+#[cfg(test)]
+impl<P: TranscriptProtocol> TranscriptProtocol for TranscriptProtocolTracer<P> {
     fn append_label(&mut self, label: impl AsRef<[u8]>) {
         self.inner.append_label(label.as_ref());
         self.lines
@@ -643,11 +650,13 @@ impl<P: TranscriptProtocol + Default> TranscriptProtocol for TranscriptProtocolT
         ));
         let mut lines = Vec::new();
         self.inner
-            .append_each_message(label, messages, |inner, item| {
-                let mut tracer = TranscriptProtocolTracer::new(std::mem::take(inner));
+            .append_each_message(label, messages, |inner, item| unsafe {
+                let mut tracer =
+                    TranscriptProtocolTracer::new(std::mem::MaybeUninit::uninit().assume_init());
+                std::mem::swap(inner, &mut tracer.inner);
                 append_item(&mut tracer, item);
-                *inner = std::mem::take(&mut tracer.inner);
-                lines.extend(tracer.lines.into_inner());
+                std::mem::swap(inner, &mut tracer.inner);
+                lines.extend(tracer.lines.take());
             });
         self.lines.borrow_mut().extend(lines);
     }

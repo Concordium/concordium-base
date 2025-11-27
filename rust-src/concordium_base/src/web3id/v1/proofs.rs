@@ -1,4 +1,4 @@
-use crate::random_oracle::{TranscriptProtocol, TranscriptProtocolTracer, TranscriptProtocolV1};
+use crate::random_oracle::{TranscriptProtocol, TranscriptProtocolV1};
 use crate::{
     curve_arithmetic::Curve,
     id::types::{Attribute, GlobalContext},
@@ -528,10 +528,24 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
     where
         AttributeType: 'a,
     {
+        let transcript = TranscriptProtocolV1::with_domain("ConcordiumVerifiableCredentialV1");
+        self.prove_with_transcript(global_context, private_inputs, csprng, now, transcript)
+    }
 
+    pub fn prove_with_transcript<'a, P: Pairing<ScalarField = C::Scalar>>(
+        self,
+        global_context: &GlobalContext<C>,
+        private_inputs: impl ExactSizeIterator<
+            Item = CredentialProofPrivateInputs<'a, P, C, AttributeType>,
+        >,
+        csprng: &mut (impl Rng + CryptoRng),
+        now: chrono::DateTime<chrono::Utc>,
+        mut transcript: impl TranscriptProtocol + Clone,
+    ) -> Result<PresentationV1<P, C, AttributeType>, ProveError>
+    where
+        AttributeType: 'a,
+    {
         let mut verifiable_credentials = Vec::with_capacity(private_inputs.len());
-        // todo ar revert
-        let mut transcript = TranscriptProtocolTracer::new(TranscriptProtocolV1::with_domain("ConcordiumVerifiableCredentialV1"));
         append_context(&mut transcript, &self.context);
         transcript.append_message("GlobalContext", &global_context);
 
@@ -557,11 +571,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> RequestV1<C, AttributeType> 
                 private_inputs,
             )?;
             verifiable_credentials.push(credential);
-
-            // todo ar revert
-            for line in transcript.lines.borrow().iter() {
-                println!("{}", line);
-            }
         }
 
         let linking_proof = LinkingProofV1 {
@@ -1826,14 +1835,18 @@ pub mod tests {
             subject_claims,
         };
 
-        let mut transcript = TranscriptProtocolTracer::new(TranscriptProtocolV1::with_domain(
+        let transcript = TranscriptProtocolTracer::new(TranscriptProtocolV1::with_domain(
             "ConcordiumVerifiableCredentialV1",
         ));
+
         let proof = request
             .clone()
-            .prove(
+            .prove_with_transcript(
                 &global_context,
                 [id_cred_fixture.private_inputs()].into_iter(),
+                &mut rand::thread_rng(),
+                chrono::Utc::now(),
+                transcript,
             )
             .expect("prove");
 
@@ -1845,9 +1858,5 @@ pub mod tests {
             request,
             "verify request"
         );
-
-        // for line in transcript.lines.borrow().iter() {
-        //     println!("{}", line);
-        // }
     }
 }
