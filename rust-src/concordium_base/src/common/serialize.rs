@@ -1193,7 +1193,6 @@ mod test {
         #[derive(Debug, PartialEq, Serialize)]
         struct TestStruct(#[string_size_length = 2] String);
 
-
         let value = TestStruct("test".to_string());
         let bytes = to_bytes(&value);
         assert_eq!(hex::encode(&bytes), "000474657374");
