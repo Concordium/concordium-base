@@ -141,5 +141,5 @@ tests = parallel $ do
     specify "TransactionHeaderV1 serialization matches transactionHeaderV1Size." $ testAccountTransactionHeaderV1Size
     specify "TransactionHeaderV1 + payload serialization matches getTransactionV1HeaderPayloadSize" $ testGetTransactionV1HeaderPayloadSize
 
-    focus $ specify "transactionBaseCost for AccountTransaction. " $ testTransactionBaseCostAccountTransaction
-    focus $ specify "transactionBaseCost for AccountTransactionV1. " $ testTransactionBaseCostAccountTransactionV1
+    specify "transactionBaseCost for AccountTransaction. " $ testTransactionBaseCostAccountTransaction
+    specify "transactionBaseCost for AccountTransactionV1. " $ testTransactionBaseCostAccountTransactionV1
