@@ -45,7 +45,7 @@ impl Deserial for Threshold {
 pub struct ThresholdZero;
 
 impl Threshold {
-    /// Create threshold value. The value cannot be zero
+    /// Create threshold value. The value cannot be zero.
     pub fn try_new(threshold: u8) -> Result<Self, ThresholdZero> {
         if threshold >= 1 {
             Ok(Threshold(threshold))
@@ -374,7 +374,6 @@ mod test {
             assert_ne!(revealed_data_point, secret_point);
         }
     }
-
 
     #[test]
     fn test_threshold_try_new() {

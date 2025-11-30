@@ -11,7 +11,7 @@
 - Revised `UpdateSigner` implementations not to use references, since the one method (`sign_update_hash`) already takes a reference (`&self`).
 - Made `find_authorized_keys` public for easier re-use.
 - Changed value inside `AttributeKind` to be non-public since it has a length constraint. Implemented `AttributeKind::try_new`, `AsRef<str> for AttributeKind` and `From<AttributeKind> for String`
-  to allow constructing and accessing values. 
+  to allow constructing and accessing values.
 - Added `Eq` and `PartialEq` instances for
   - `UpdateKeysThreshold`
   - `InclusiveRange<T>`
