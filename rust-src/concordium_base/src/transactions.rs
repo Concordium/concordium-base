@@ -513,6 +513,25 @@ pub struct AccountTransactionV1<PayloadType> {
     pub payload: PayloadType,
 }
 
+impl AccountTransactionV1<EncodedPayload> {
+    // Add the sponsor signature to the transaction.
+    pub fn sponsor_sign(
+        self,
+        sponsor: &impl TransactionSigner,
+    ) -> AccountTransactionV1<EncodedPayload> {
+        let hash_to_sign = compute_transaction_sign_hash_v1(&self.header, &self.payload);
+        let signature = sponsor.sign_transaction_hash(&hash_to_sign);
+        AccountTransactionV1 {
+            signatures: TransactionSignaturesV1 {
+                sender: self.signatures.sender,
+                sponsor: Some(signature),
+            },
+            header: self.header,
+            payload: self.payload,
+        }
+    }
+}
+
 impl<P: PayloadLike> Serial for AccountTransactionV1<P> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         out.put(&self.signatures);
@@ -2363,6 +2382,26 @@ pub mod construct {
         pub fn sign(self, signer: &impl TransactionSigner) -> AccountTransaction<EncodedPayload> {
             sign_transaction(signer, self.header, self.encoded)
         }
+
+        /// Extend a `PreAccountTransaction` to a `PreAccountTransactionV1` by
+        /// adding the sponsor information.
+        pub fn extend(self, sponsor: AccountAddress) -> PreAccountTransactionV1 {
+            let header_v1 = TransactionHeaderV1 {
+                sender: self.header.sender,
+                nonce: self.header.nonce,
+                energy_amount: self.header.energy_amount,
+                payload_size: self.header.payload_size,
+                expiry: self.header.expiry,
+                sponsor: Some(sponsor),
+            };
+            let hash_to_sign = compute_transaction_sign_hash_v1(&header_v1, &self.encoded);
+            PreAccountTransactionV1 {
+                payload: self.payload,
+                header: header_v1,
+                encoded: self.encoded,
+                hash_to_sign,
+            }
+        }
     }
 
     /// Serialize only the header and payload, so that this can be deserialized
@@ -2386,6 +2425,45 @@ pub mod construct {
                 encoded,
                 hash_to_sign,
             })
+        }
+    }
+
+    /// A transaction that is prepared to be signed.
+    /// The serde instance serializes the structured payload and skips
+    /// serializing the encoded one.
+    #[derive(Debug, Clone, SerdeSerialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct PreAccountTransactionV1 {
+        pub header: TransactionHeaderV1,
+        /// The payload.
+        pub payload: Payload,
+        /// The encoded payload. This is already serialized payload that is
+        /// constructed during construction of the prepared transaction
+        /// since we need it to compute the cost.
+        #[serde(skip_serializing)]
+        pub encoded: EncodedPayload,
+        /// Hash of the transaction to sign.
+        pub hash_to_sign: hashes::TransactionSignHash,
+    }
+
+    impl PreAccountTransactionV1 {
+        /// Sign the transaction with the provided signer. Note that this signer
+        /// must match the account address and the number of keys that
+        /// were used in construction, otherwise the transaction will be
+        /// invalid.
+        pub fn sender_sign(
+            self,
+            sender: &impl TransactionSigner,
+        ) -> AccountTransactionV1<EncodedPayload> {
+            let signature = sender.sign_transaction_hash(&self.hash_to_sign);
+            AccountTransactionV1 {
+                signatures: TransactionSignaturesV1 {
+                    sender: signature,
+                    sponsor: None,
+                },
+                header: self.header,
+                payload: self.encoded,
+            }
         }
     }
 
