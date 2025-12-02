@@ -2432,28 +2432,31 @@ pub mod construct {
 
     impl PreAccountTransactionV1 {
         /// Add a sponsor for the transaction.
-        pub fn add_sponsor(&mut self, sponsor: AccountAddress) -> () {
+        pub fn add_sponsor(&mut self, sponsor: AccountAddress) -> &mut Self {
             self.header.sponsor = Some(sponsor);
-            self.hash_to_sign = compute_transaction_sign_hash_v1(&self.header, &self.encoded)
+            self.hash_to_sign = compute_transaction_sign_hash_v1(&self.header, &self.encoded);
+            self
         }
 
         /// Sign the transaction as sender.
-        pub fn sign(&mut self, sender: &impl TransactionSigner) -> () {
+        pub fn sign(&mut self, sender: &impl TransactionSigner) -> &mut Self {
             let signature = sender.sign_transaction_hash(&self.hash_to_sign);
-            self.sender_signature = Some(signature)
+            self.sender_signature = Some(signature);
+            self
         }
 
         /// Sign the transaction as sponsor.
-        pub fn sponsor(&mut self, sponsor: &impl TransactionSigner) -> Result<(), String> {
+        pub fn sponsor(&mut self, sponsor: &impl TransactionSigner) -> Result<&mut Self, String> {
             self.header.sponsor.ok_or(String::from(
                 "Failed to sponsor. Missing sponsor. Add sponsor account before signing!",
             ))?;
             let signature = sponsor.sign_transaction_hash(&self.hash_to_sign);
             self.sponsor_signature = Some(signature);
-            Ok(())
+            Ok(self)
         }
 
-        /// Finalize the transaction. Check invariants and build the final `AccountTransactionV1`.
+        /// Finalize the transaction. Check that the transaction contains a
+        /// sender signature and build the final `AccountTransactionV1`.
         pub fn finalize(&self) -> Result<AccountTransactionV1<EncodedPayload>, String> {
             let sender_signature = self.sender_signature.to_owned().ok_or(String::from(
                 "Failed to finalize. Missing sender signature.",
