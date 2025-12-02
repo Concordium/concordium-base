@@ -2433,20 +2433,34 @@ pub mod construct {
 
     impl PreAccountTransactionV1 {
         /// Add a sponsor for the transaction.
-        pub fn add_sponsor(&mut self, sponsor: AccountAddress, num_sponsor_sigs: u32) -> &mut Self {
+        pub fn add_sponsor(
+            &mut self,
+            sponsor: AccountAddress,
+            num_sponsor_sigs: u32,
+        ) -> Result<&mut Self, String> {
+            if let Some(_sponsor) = self.header.sponsor {
+                return Err(String::from(
+                    "Failed to add sponsor. A sponsor is already present.",
+                ));
+            }
             self.header.sponsor = Some(sponsor);
             // Add 32 for the sponsor account address and 100 * #(sponsor signatures).
             self.header.energy_amount =
                 self.header.energy_amount + Energy::from(32 + cost::A * u64::from(num_sponsor_sigs));
             self.hash_to_sign = compute_transaction_sign_hash_v1(&self.header, &self.encoded);
-            self
+            Ok(self)
         }
 
         /// Sign the transaction as sender.
-        pub fn sign(&mut self, sender: &impl TransactionSigner) -> &mut Self {
+        pub fn sign(&mut self, sender: &impl TransactionSigner) -> Result<&mut Self, String> {
+            if let Some(_sig) = self.sender_signature.as_ref() {
+                return Err(String::from(
+                    "Failed to sign transaction. A sender signature is already present.",
+                ));
+            }
             let signature = sender.sign_transaction_hash(&self.hash_to_sign);
             self.sender_signature = Some(signature);
-            self
+            Ok(self)
         }
 
         /// Sign the transaction as sponsor.
