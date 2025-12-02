@@ -1,10 +1,12 @@
 ## Unreleased
 
 - Implemented new version of verifiable presentations in `web3id::v1` that includes account based and identity based credentials.
-  The primary types in the module are `PresentationV1` and `RequestV1`.
+  The primary types in the module are `PresentationV1` and `RequestV1` and the entrypoints to prove and verify are
+  `RequestV1::prove` and `PresentationV1::verify`.
 - Implemented anchor model for the new version of verifiable presentations in `web3id::v1::anchor`.
   The primary types in the module are `VerificationRequest`, `VerificationRequestData`, `VerificationRequestAnchor`,
-  `VerificationAuditRecord`, and `VerificationAuditRecord`.
+  `VerificationAuditRecord`, and `VerificationAuditRecord` and the entrypoint to verify a presentation
+  together with a request anchor is `verify_presentation_with_request_anchor`.
 
 ## 9.0.0 (2025-10-29)
 
