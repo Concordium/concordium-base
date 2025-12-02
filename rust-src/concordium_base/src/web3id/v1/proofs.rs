@@ -1,3 +1,7 @@
+//! The cryptographic protocol is described in the internal blue paper (v2.3.3) in
+//! "15.4 Identity Presentations using Zero-Knowledge Proofs" and
+//! "17 Web3 Verifiable Credentials"
+
 use crate::{
     curve_arithmetic::Curve,
     id::types::{Attribute, GlobalContext},
