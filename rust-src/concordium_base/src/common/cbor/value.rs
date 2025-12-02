@@ -7,7 +7,7 @@ use ciborium_ll::simple;
 
 /// Generic CBOR data item that can represent
 /// any data item type.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Value {
     /// Positive integer (major type 0)
     Positive(u64),

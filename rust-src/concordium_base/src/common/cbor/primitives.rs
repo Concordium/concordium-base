@@ -37,7 +37,7 @@ impl CborSerialize for [u8] {
 ///
 /// Notice that this serializes different from a plain `Vec<u8>` which
 /// serializes to an array data item.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Bytes(pub Vec<u8>);
 
 impl AsRef<[u8]> for Bytes {

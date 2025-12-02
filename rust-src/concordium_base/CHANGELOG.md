@@ -9,6 +9,7 @@
   together with a request anchor is `verify_presentation_with_request_anchor`.
 - Serialization derive macros `common::Serial`, `common::Deserial` and `common::Serialize` now supports
   deriving serialization on enums. 
+- Derived `serde::Serialize` and `serde::Deserialize` on `cbor::value::Value`.
 
 ## 9.0.0 (2025-10-29)
 
