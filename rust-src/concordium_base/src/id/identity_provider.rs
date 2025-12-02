@@ -1,7 +1,7 @@
 //! Functionality needed by the identity provider. This gathers together the
 //! primitives from the rest of the library into a convenient package.
 use super::{id_proof_types::ProofVersion, secret_sharing::Threshold, types::*, utils};
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     bulletproofs::range_proof::verify_efficient,
     common::{to_bytes, types::TransactionTime},
@@ -82,6 +82,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         return Err(Reason::IncorrectProof);
     }
 
+    #[allow(deprecated)]
     let mut transcript = RandomOracle::domain("PreIdentityProof");
     // Construct the common verifier and verify the range proof
     let (verifier, response) = validate_request_common(
@@ -131,6 +132,7 @@ pub fn validate_request_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let common_fields = pre_id_obj.get_common_pio_fields();
     let poks_common = &pre_id_obj.poks;
 
+    #[allow(deprecated)]
     let mut transcript = RandomOracle::domain("PreIdentityProof");
     // Construct the common verifier and verify the range proof
     let (verifier, response) = validate_request_common(
@@ -691,6 +693,7 @@ pub fn validate_id_recovery_request<P: Pairing, C: Curve<Scalar = P::ScalarField
         public: request.id_cred_pub,
         coeff: context.on_chain_commitment_key.g,
     };
+    #[allow(deprecated)]
     let mut transcript = RandomOracle::domain("IdRecoveryProof");
     transcript.append_message(b"ctx", &context);
     transcript.append_message(b"timestamp", &request.timestamp);

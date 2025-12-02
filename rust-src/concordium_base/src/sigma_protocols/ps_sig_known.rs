@@ -22,14 +22,13 @@
 
 use crate::common::{Buffer, Deserial, Get, ParseResult, Put, Serial};
 use crate::curve_arithmetic::{Curve, Field, Pairing, Secret};
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::sigma_protocols::common::SigmaProtocol;
 use crate::{
     curve_arithmetic,
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
     ps_sig,
     ps_sig::BlindedSignature,
-    random_oracle::RandomOracle,
 };
 use byteorder::ReadBytesExt;
 use concordium_base_derive::Serialize;
@@ -169,8 +168,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
     type SecretData = PsSigWitness<P, C>;
 
     #[inline]
-    fn public(&self, ro: &mut RandomOracle) {
-        ro.add_bytes("PsSigKnown");
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
+        ro.append_label("PsSigKnown");
         // public input to statement:
         ro.append_message("blinded_sig", &self.blinded_sig);
         ro.append_message("messages", &self.msgs);
@@ -441,6 +440,7 @@ mod tests {
     type G1 = ArkGroup<G1Projective>;
     type Bls12 = ark_ec::models::bls12::Bls12<ark_bls12_381::Config>;
     use crate::ps_sig::{SigRetrievalRandomness, UnknownMessage};
+    use crate::random_oracle::RandomOracle;
     use crate::sigma_protocols::common::SigmaProof;
 
     #[derive(Debug, Clone, Copy)]
