@@ -13,6 +13,7 @@ use crate::web3id::v1::anchor::{
 use crate::web3id::v1::{AtomicStatementV1, ContextInformation, SubjectClaims};
 use crate::web3id::{did, Web3IdAttribute};
 use itertools::Itertools;
+use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
 /// Contextual information needed for verifying credentials.
@@ -20,8 +21,9 @@ use std::str::FromStr;
 pub struct VerificationContext {
     /// The blockchain network at which the credential must be valid. This ties
     /// the credential to the network where the credential was issued. Must match
-    /// the network from which [verification material](VerificationMaterialWithValidity)
-    /// and [verification request anchor](VerificationRequestAnchorAndBlockHash) are fetched.
+    /// the network from which [verification material](VerificationMaterialWithValidity),
+    /// [verification request anchor](VerificationRequestAnchorAndBlockHash) and
+    /// [global context](GlobalContext) are fetched.
     pub network: did::Network,
     /// The time at which the credential must be valid.
     pub validity_time: chrono::DateTime<chrono::Utc>,
@@ -54,13 +56,13 @@ pub enum CredentialValidityType {
     ValidityPeriod(types::CredentialValidity),
 }
 
-/// Reason why a credential is invalid
+/// Reason why a credential is not verifiable
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum CredentialInvalidReason {
-    // Credential is not valid yet at the given time
+pub enum PresentationVerifyFailure {
+    /// Credential is not valid yet at the given time
     CredentialNotValidYet,
-    // Credential is no longer valid at the given time
+    /// Credential is no longer valid at the given time
     CredentialExpired,
     /// The network the credentials are issued for and network we verify for is not the same
     Network,
@@ -81,9 +83,51 @@ pub enum CredentialInvalidReason {
     /// The subject claims (statements) in the verifiable presentation do not match the subject claims (statements) in the verification request
     SubjectClaims,
     /// The credential is not one of allowed credential types in the verification request
-    SubjectClaimsCredentialType,
+    CredentialType,
     /// The issuer for the credential is not one of the allowed issuers in the verification request
-    SubjectClaimsIssuer,
+    CredentialIssuer,
+}
+
+impl PresentationVerifyFailure {
+    fn as_str(self) -> &'static str {
+        match self {
+            PresentationVerifyFailure::CredentialNotValidYet => "credential not valid yet",
+            PresentationVerifyFailure::CredentialExpired => "credential expired",
+            PresentationVerifyFailure::Network => "blockchain network does not match",
+            PresentationVerifyFailure::PresentationUnverifiable => {
+                "presentation not cryptographically verifiable"
+            }
+            PresentationVerifyFailure::RequestAnchor => {
+                "verification request anchor hash does not match verification request"
+            }
+            PresentationVerifyFailure::NoVraBlockHash => {
+                "verification request anchor block hash not set in context"
+            }
+            PresentationVerifyFailure::VraBlockHash => {
+                "verification request anchor block hash does not match block hash set in context"
+            }
+            PresentationVerifyFailure::ContextInformation => {
+                "context does not match request context"
+            }
+            PresentationVerifyFailure::InvalidContextPropertyValue => "invalid value in context",
+            PresentationVerifyFailure::UnknownContextProperty => "unknown label in context",
+            PresentationVerifyFailure::SubjectClaims => {
+                "subject claims/statements does not match requested claims/statements"
+            }
+            PresentationVerifyFailure::CredentialType => {
+                "credential type does not match types allowed by request"
+            }
+            PresentationVerifyFailure::CredentialIssuer => {
+                "credential issuer does not match issuers allowed by request"
+            }
+        }
+    }
+}
+
+impl Display for PresentationVerifyFailure {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 /// Result of verifying a presentation against the corresponding verification request.
@@ -94,7 +138,7 @@ pub enum PresentationVerificationResult {
     /// verified.
     Verified,
     /// Verification of the presentation failed.
-    Failed(CredentialInvalidReason),
+    Failed(PresentationVerifyFailure),
 }
 
 impl PresentationVerificationResult {
@@ -129,7 +173,7 @@ where
     B: IntoIterator<Item = &'a VerificationMaterialWithValidity> + Copy,
     B::IntoIter: ExactSizeIterator,
 {
-    if let Err(reason) = (|| {
+    if let Err(failure) = (|| {
         // Verify network
         verify_network(verification_context, verifiable_presentation)?;
 
@@ -154,7 +198,7 @@ where
 
         Ok(())
     })() {
-        PresentationVerificationResult::Failed(reason)
+        PresentationVerificationResult::Failed(failure)
     } else {
         PresentationVerificationResult::Verified
     }
@@ -163,10 +207,10 @@ where
 fn verify_network(
     verification_context: &VerificationContext,
     presentation: &VerifiablePresentationV1,
-) -> Result<(), CredentialInvalidReason> {
+) -> Result<(), PresentationVerifyFailure> {
     for metadata in presentation.metadata() {
         if metadata.network != verification_context.network {
-            return Err(CredentialInvalidReason::Network);
+            return Err(PresentationVerifyFailure::Network);
         }
     }
     Ok(())
@@ -175,7 +219,7 @@ fn verify_network(
 fn verify_credential_validity<'a>(
     verification_context: &VerificationContext,
     verification_material: impl IntoIterator<Item = &'a VerificationMaterialWithValidity>,
-) -> Result<(), CredentialInvalidReason> {
+) -> Result<(), PresentationVerifyFailure> {
     for credential_validity in verification_material {
         match &credential_validity.validity {
             CredentialValidityType::ValidityPeriod(cred_validity) => {
@@ -192,21 +236,21 @@ fn verify_credential_validity<'a>(
 fn verify_credential_validity_period(
     now: chrono::DateTime<chrono::Utc>,
     credential_validity: &types::CredentialValidity,
-) -> Result<(), CredentialInvalidReason> {
+) -> Result<(), PresentationVerifyFailure> {
     let valid_from = credential_validity
         .created_at
         .lower()
-        .ok_or(CredentialInvalidReason::CredentialNotValidYet)?;
+        .ok_or(PresentationVerifyFailure::CredentialNotValidYet)?;
 
     let valid_to = credential_validity
         .valid_to
         .upper()
-        .ok_or(CredentialInvalidReason::CredentialExpired)?;
+        .ok_or(PresentationVerifyFailure::CredentialExpired)?;
 
     if now < valid_from {
-        Err(CredentialInvalidReason::CredentialNotValidYet)
+        Err(PresentationVerifyFailure::CredentialNotValidYet)
     } else if now >= valid_to {
-        Err(CredentialInvalidReason::CredentialExpired)
+        Err(PresentationVerifyFailure::CredentialExpired)
     } else {
         Ok(())
     }
@@ -216,19 +260,19 @@ fn verify_presentation<'a>(
     global_context: &GlobalContext<ArCurve>,
     presentation: &VerifiablePresentationV1,
     verification_material: impl ExactSizeIterator<Item = &'a VerificationMaterialWithValidity>,
-) -> Result<VerifiablePresentationRequestV1, CredentialInvalidReason> {
+) -> Result<VerifiablePresentationRequestV1, PresentationVerifyFailure> {
     presentation
         .verify(
             global_context,
             verification_material.map(|vm| &vm.verification_material),
         )
-        .map_err(|_| CredentialInvalidReason::PresentationUnverifiable)
+        .map_err(|_| PresentationVerifyFailure::PresentationUnverifiable)
 }
 
 fn verify_anchor_block_hash(
     request_anchor: &VerificationRequestAnchorAndBlockHash,
     presentation: &VerifiablePresentationV1,
-) -> Result<(), CredentialInvalidReason> {
+) -> Result<(), PresentationVerifyFailure> {
     let Some(context_block_hash_parse_res) = presentation
         .presentation_context
         .requested
@@ -241,14 +285,14 @@ fn verify_anchor_block_hash(
             }
         })
     else {
-        return Err(CredentialInvalidReason::NoVraBlockHash);
+        return Err(PresentationVerifyFailure::NoVraBlockHash);
     };
 
     let context_block_hash = context_block_hash_parse_res
-        .map_err(|_| CredentialInvalidReason::InvalidContextPropertyValue)?;
+        .map_err(|_| PresentationVerifyFailure::InvalidContextPropertyValue)?;
 
     if request_anchor.block_hash != context_block_hash {
-        return Err(CredentialInvalidReason::VraBlockHash);
+        return Err(PresentationVerifyFailure::VraBlockHash);
     }
 
     Ok(())
@@ -258,14 +302,14 @@ fn verify_anchor_block_hash(
 fn verify_request_anchor(
     verification_request: &VerificationRequest,
     request_anchor: &VerificationRequestAnchorAndBlockHash,
-) -> Result<(), CredentialInvalidReason> {
+) -> Result<(), PresentationVerifyFailure> {
     let verification_request_data = VerificationRequestData {
         context: verification_request.context.clone(),
         subject_claims: verification_request.subject_claims.clone(),
     };
 
     if verification_request_data.hash() != request_anchor.verification_request_anchor.hash {
-        return Err(CredentialInvalidReason::RequestAnchor);
+        return Err(PresentationVerifyFailure::RequestAnchor);
     }
 
     Ok(())
@@ -275,7 +319,7 @@ fn verify_request_anchor(
 fn verify_request(
     request_from_presentation: &VerifiablePresentationRequestV1,
     verification_request: &VerificationRequest,
-) -> Result<(), CredentialInvalidReason> {
+) -> Result<(), PresentationVerifyFailure> {
     verify_request_context(
         &request_from_presentation.context,
         &verification_request.context,
@@ -292,10 +336,11 @@ fn verify_request(
 fn verify_request_subject_claims_list(
     presentation_claims: &[SubjectClaims<ArCurve, Web3IdAttribute>],
     request_claims: &[RequestedSubjectClaims],
-) -> Result<(), CredentialInvalidReason> {
+) -> Result<(), PresentationVerifyFailure> {
     for pair in presentation_claims.iter().zip_longest(request_claims) {
-        let (pres_claims, req_claims) =
-            pair.both().ok_or(CredentialInvalidReason::SubjectClaims)?;
+        let (pres_claims, req_claims) = pair
+            .both()
+            .ok_or(PresentationVerifyFailure::SubjectClaims)?;
 
         verify_request_subject_claims(pres_claims, req_claims)?;
     }
@@ -306,7 +351,7 @@ fn verify_request_subject_claims_list(
 fn verify_request_subject_claims(
     presentation_claims: &SubjectClaims<ArCurve, Web3IdAttribute>,
     request_claims: &RequestedSubjectClaims,
-) -> Result<(), CredentialInvalidReason> {
+) -> Result<(), PresentationVerifyFailure> {
     match request_claims {
         RequestedSubjectClaims::Identity(req_id_claims) => {
             let (pres_issuer, pres_network, pres_statements) = match presentation_claims {
@@ -315,7 +360,7 @@ fn verify_request_subject_claims(
                         .source
                         .contains(&IdentityCredentialType::AccountCredential)
                     {
-                        return Err(CredentialInvalidReason::SubjectClaimsCredentialType);
+                        return Err(PresentationVerifyFailure::CredentialType);
                     }
 
                     let stmts: Vec<_> = acc_claims
@@ -331,7 +376,7 @@ fn verify_request_subject_claims(
                         .source
                         .contains(&IdentityCredentialType::IdentityCredential)
                     {
-                        return Err(CredentialInvalidReason::SubjectClaimsCredentialType);
+                        return Err(PresentationVerifyFailure::CredentialType);
                     }
 
                     let stmts: Vec<_> = id_claims
@@ -347,11 +392,11 @@ fn verify_request_subject_claims(
             if !req_id_claims.issuers.iter().any(|issuer| {
                 issuer.identity_provider == pres_issuer && issuer.network == pres_network
             }) {
-                return Err(CredentialInvalidReason::SubjectClaimsIssuer);
+                return Err(PresentationVerifyFailure::CredentialIssuer);
             }
 
             if pres_statements != req_id_claims.statements {
-                return Err(CredentialInvalidReason::SubjectClaims);
+                return Err(PresentationVerifyFailure::SubjectClaims);
             }
 
             Ok(())
@@ -381,16 +426,16 @@ fn statement_to_requested_statement(
 fn verify_request_context(
     presentation_context: &ContextInformation,
     request_context: &UnfilledContextInformation,
-) -> Result<(), CredentialInvalidReason> {
+) -> Result<(), PresentationVerifyFailure> {
     fn map_parse_prop_err<T>(
         res: Result<T, ParseContextPropertyError>,
-    ) -> Result<T, CredentialInvalidReason> {
+    ) -> Result<T, PresentationVerifyFailure> {
         res.map_err(|err| match err {
             ParseContextPropertyError::ParseLabel(_) => {
-                CredentialInvalidReason::UnknownContextProperty
+                PresentationVerifyFailure::UnknownContextProperty
             }
             ParseContextPropertyError::ParseValue(_) => {
-                CredentialInvalidReason::InvalidContextPropertyValue
+                PresentationVerifyFailure::InvalidContextPropertyValue
             }
         })
     }
@@ -402,7 +447,7 @@ fn verify_request_context(
         .collect();
 
     if map_parse_prop_err(presentation_given_properties_parse_res)? != request_context.given {
-        return Err(CredentialInvalidReason::ContextInformation);
+        return Err(PresentationVerifyFailure::ContextInformation);
     }
 
     let presentation_requested_property_labels_parse_res: Result<Vec<_>, _> = presentation_context
@@ -416,7 +461,7 @@ fn verify_request_context(
     if map_parse_prop_err(presentation_requested_property_labels_parse_res)?
         != request_context.requested
     {
-        return Err(CredentialInvalidReason::ContextInformation);
+        return Err(PresentationVerifyFailure::ContextInformation);
     }
 
     Ok(())
@@ -655,7 +700,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::Network)
+            PresentationVerificationResult::Failed(PresentationVerifyFailure::Network)
         );
     }
 
@@ -702,7 +747,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::CredentialExpired)
+            PresentationVerificationResult::Failed(PresentationVerifyFailure::CredentialExpired)
         );
     }
 
@@ -749,7 +794,7 @@ mod tests {
                 &[material],
             ),
             PresentationVerificationResult::Failed(
-                CredentialInvalidReason::PresentationUnverifiable
+                PresentationVerifyFailure::PresentationUnverifiable
             )
         );
     }
@@ -793,7 +838,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::RequestAnchor)
+            PresentationVerificationResult::Failed(PresentationVerifyFailure::RequestAnchor)
         );
     }
 
@@ -845,7 +890,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::VraBlockHash)
+            PresentationVerificationResult::Failed(PresentationVerifyFailure::VraBlockHash)
         );
     }
 
@@ -893,7 +938,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::NoVraBlockHash)
+            PresentationVerificationResult::Failed(PresentationVerifyFailure::NoVraBlockHash)
         );
     }
 
@@ -940,7 +985,9 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::UnknownContextProperty)
+            PresentationVerificationResult::Failed(
+                PresentationVerifyFailure::UnknownContextProperty
+            )
         );
     }
 
@@ -989,7 +1036,7 @@ mod tests {
                 &[material],
             ),
             PresentationVerificationResult::Failed(
-                CredentialInvalidReason::InvalidContextPropertyValue
+                PresentationVerifyFailure::InvalidContextPropertyValue
             )
         );
     }
@@ -1039,7 +1086,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::ContextInformation)
+            PresentationVerificationResult::Failed(PresentationVerifyFailure::ContextInformation)
         );
     }
 
@@ -1083,7 +1130,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::ContextInformation)
+            PresentationVerificationResult::Failed(PresentationVerifyFailure::ContextInformation)
         );
     }
 
@@ -1133,9 +1180,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(
-                CredentialInvalidReason::SubjectClaimsCredentialType
-            )
+            PresentationVerificationResult::Failed(PresentationVerifyFailure::CredentialType)
         );
     }
 
@@ -1184,9 +1229,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(
-                CredentialInvalidReason::SubjectClaimsCredentialType
-            )
+            PresentationVerificationResult::Failed(PresentationVerifyFailure::CredentialType)
         );
     }
 
@@ -1236,7 +1279,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::SubjectClaimsIssuer)
+            PresentationVerificationResult::Failed(PresentationVerifyFailure::CredentialIssuer)
         );
     }
 
@@ -1285,7 +1328,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::SubjectClaimsIssuer)
+            PresentationVerificationResult::Failed(PresentationVerifyFailure::CredentialIssuer)
         );
     }
 
@@ -1334,7 +1377,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::SubjectClaimsIssuer)
+            PresentationVerificationResult::Failed(PresentationVerifyFailure::CredentialIssuer)
         );
     }
 
@@ -1384,7 +1427,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::SubjectClaims)
+            PresentationVerificationResult::Failed(PresentationVerifyFailure::SubjectClaims)
         );
     }
 
@@ -1431,7 +1474,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::SubjectClaims)
+            PresentationVerificationResult::Failed(PresentationVerifyFailure::SubjectClaims)
         );
     }
 
@@ -1480,7 +1523,7 @@ mod tests {
                 &anchor,
                 &[material],
             ),
-            PresentationVerificationResult::Failed(CredentialInvalidReason::SubjectClaims)
+            PresentationVerificationResult::Failed(PresentationVerifyFailure::SubjectClaims)
         );
     }
 
@@ -1516,7 +1559,7 @@ mod tests {
                     .to_utc(),
                 &validity,
             ),
-            Err(CredentialInvalidReason::CredentialNotValidYet)
+            Err(PresentationVerifyFailure::CredentialNotValidYet)
         );
         assert_eq!(
             verify_credential_validity_period(
@@ -1534,7 +1577,7 @@ mod tests {
                     .to_utc(),
                 &validity,
             ),
-            Err(CredentialInvalidReason::CredentialExpired)
+            Err(PresentationVerifyFailure::CredentialExpired)
         );
     }
 }
