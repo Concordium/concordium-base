@@ -31,7 +31,7 @@ fn bench_compute_message(c: &mut Criterion) {
     let comm2 = Commitment(G1::generate(&mut csprng));
 
     // The usual setting at the moment is 2 out of 3 anonymity revokers
-    let threshold = Threshold(2);
+    let threshold = Threshold::try_new(2).expect("threshold");
 
     // add 3 anonymity revokers
     let mut ar_list: BTreeSet<ArIdentity> = BTreeSet::new();
