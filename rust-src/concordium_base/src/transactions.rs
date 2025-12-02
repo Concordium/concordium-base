@@ -2383,22 +2383,23 @@ pub mod construct {
             sign_transaction(signer, self.header, self.encoded)
         }
 
-        /// Extend a `PreAccountTransaction` to a `PreAccountTransactionV1` by
-        /// adding the sponsor information.
-        pub fn extend(self, sponsor: AccountAddress) -> PreAccountTransactionV1 {
+        /// Extend a `PreAccountTransaction` to a `PreAccountTransactionV1`.
+        pub fn extend(self) -> PreAccountTransactionV1 {
             let header_v1 = TransactionHeaderV1 {
                 sender: self.header.sender,
                 nonce: self.header.nonce,
                 energy_amount: self.header.energy_amount,
                 payload_size: self.header.payload_size,
                 expiry: self.header.expiry,
-                sponsor: Some(sponsor),
+                sponsor: None,
             };
             let hash_to_sign = compute_transaction_sign_hash_v1(&header_v1, &self.encoded);
             PreAccountTransactionV1 {
                 payload: self.payload,
                 header: header_v1,
                 encoded: self.encoded,
+                sender_signature: None,
+                sponsor_signature: None,
                 hash_to_sign,
             }
         }
@@ -2428,9 +2429,6 @@ pub mod construct {
         }
     }
 
-    /// A transaction that is prepared to be signed.
-    /// The serde instance serializes the structured payload and skips
-    /// serializing the encoded one.
     #[derive(Debug, Clone, SerdeSerialize)]
     #[serde(rename_all = "camelCase")]
     pub struct PreAccountTransactionV1 {
@@ -2444,28 +2442,48 @@ pub mod construct {
         pub encoded: EncodedPayload,
         /// Hash of the transaction to sign.
         pub hash_to_sign: hashes::TransactionSignHash,
-        pub sender_signature: Option<AccountTransactionSignature>,
-        pub sponsor_signature: Option<AccountTransactionSignature>,
+        /// The signature of the sender.
+        pub sender_signature: Option<TransactionSignature>,
+        /// The signature of the sponsor.
+        pub sponsor_signature: Option<TransactionSignature>,
     }
 
     impl PreAccountTransactionV1 {
-        /// Sign the transaction with the provided signer. Note that this signer
-        /// must match the account address and the number of keys that
-        /// were used in construction, otherwise the transaction will be
-        /// invalid.
-        pub fn sender_sign(
-            self,
-            sender: &impl TransactionSigner,
-        ) -> AccountTransactionV1<EncodedPayload> {
+        /// Add a sponsor for the transaction.
+        pub fn add_sponsor(&mut self, sponsor: AccountAddress) -> () {
+            self.header.sponsor = Some(sponsor);
+            self.hash_to_sign = compute_transaction_sign_hash_v1(&self.header, &self.encoded)
+        }
+
+        /// Sign the transaction as sender.
+        pub fn sign(&mut self, sender: &impl TransactionSigner) -> () {
             let signature = sender.sign_transaction_hash(&self.hash_to_sign);
-            AccountTransactionV1 {
+            self.sender_signature = Some(signature)
+        }
+
+        /// Sign the transaction as sponsor.
+        pub fn sponsor(&mut self, sponsor: &impl TransactionSigner) -> Result<(), String> {
+            self.header.sponsor.ok_or(String::from(
+                "Failed to sponsor. Missing sponsor. Add sponsor account before signing!",
+            ))?;
+            let signature = sponsor.sign_transaction_hash(&self.hash_to_sign);
+            self.sponsor_signature = Some(signature);
+            Ok(())
+        }
+
+        /// Finalize the transaction. Check invariants and build the final `AccountTransactionV1`.
+        pub fn finalize(&self) -> Result<AccountTransactionV1<EncodedPayload>, String> {
+            let sender_signature = self.sender_signature.to_owned().ok_or(String::from(
+                "Failed to finalize. Missing sender signature.",
+            ))?;
+            Ok(AccountTransactionV1 {
                 signatures: TransactionSignaturesV1 {
-                    sender: signature,
-                    sponsor: None,
+                    sender: sender_signature,
+                    sponsor: self.sponsor_signature.clone(),
                 },
-                header: self.header,
-                payload: self.encoded,
-            }
+                header: self.header.clone(),
+                payload: self.encoded.clone(),
+            })
         }
     }
 
