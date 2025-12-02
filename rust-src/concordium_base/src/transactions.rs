@@ -513,25 +513,6 @@ pub struct AccountTransactionV1<PayloadType> {
     pub payload: PayloadType,
 }
 
-impl AccountTransactionV1<EncodedPayload> {
-    // Add the sponsor signature to the transaction.
-    pub fn sponsor_sign(
-        self,
-        sponsor: &impl TransactionSigner,
-    ) -> AccountTransactionV1<EncodedPayload> {
-        let hash_to_sign = compute_transaction_sign_hash_v1(&self.header, &self.payload);
-        let signature = sponsor.sign_transaction_hash(&hash_to_sign);
-        AccountTransactionV1 {
-            signatures: TransactionSignaturesV1 {
-                sender: self.signatures.sender,
-                sponsor: Some(signature),
-            },
-            header: self.header,
-            payload: self.payload,
-        }
-    }
-}
-
 impl<P: PayloadLike> Serial for AccountTransactionV1<P> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         out.put(&self.signatures);
