@@ -720,10 +720,9 @@ pub mod tests {
         }
     }
 
-    /// Test that constructing proofs for a mixed (both identity and account credentials
-    /// involved) request works in the sense that the proof verifies.
+    /// Test generate and verify presentation containing multiple credentials.
     #[test]
-    fn test_completeness_identity_and_account() {
+    fn test_completeness_multiple_credentials() {
         let challenge = challenge_fixture();
 
         let global_context = GlobalContext::generate("Test".into());
