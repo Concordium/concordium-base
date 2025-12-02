@@ -2413,6 +2413,7 @@ pub mod construct {
     #[derive(Debug, Clone, SerdeSerialize)]
     #[serde(rename_all = "camelCase")]
     pub struct PreAccountTransactionV1 {
+        /// The header v1.
         pub header: TransactionHeaderV1,
         /// The payload.
         pub payload: Payload,
