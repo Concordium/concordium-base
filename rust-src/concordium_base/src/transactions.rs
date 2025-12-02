@@ -2444,6 +2444,8 @@ pub mod construct {
         pub encoded: EncodedPayload,
         /// Hash of the transaction to sign.
         pub hash_to_sign: hashes::TransactionSignHash,
+        pub sender_signature: Option<AccountTransactionSignature>,
+        pub sponsor_signature: Option<AccountTransactionSignature>,
     }
 
     impl PreAccountTransactionV1 {
