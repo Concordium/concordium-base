@@ -7,6 +7,8 @@
   The primary types in the module are `VerificationRequest`, `VerificationRequestData`, `VerificationRequestAnchor`,
   `VerificationAuditRecord`, and `VerificationAuditRecord` and the entrypoint to verify a presentation
   together with a request anchor is `verify_presentation_with_request_anchor`.
+- Serialization derive macros `common::Serial`, `common::Deserial` and `common::Serialize` now supports
+  deriving serialization on enums. 
 
 ## 9.0.0 (2025-10-29)
 
