@@ -2369,7 +2369,8 @@ pub mod construct {
             let header_v1 = TransactionHeaderV1 {
                 sender: self.header.sender,
                 nonce: self.header.nonce,
-                energy_amount: self.header.energy_amount,
+                // 2 is the size of the bitmap for the transaction configuration options.
+                energy_amount: self.header.energy_amount + Energy::from(2),
                 payload_size: self.header.payload_size,
                 expiry: self.header.expiry,
                 sponsor: None,
@@ -2432,8 +2433,11 @@ pub mod construct {
 
     impl PreAccountTransactionV1 {
         /// Add a sponsor for the transaction.
-        pub fn add_sponsor(&mut self, sponsor: AccountAddress) -> &mut Self {
+        pub fn add_sponsor(&mut self, sponsor: AccountAddress, num_sponsor_sigs: u32) -> &mut Self {
             self.header.sponsor = Some(sponsor);
+            // Add 32 for the sponsor account address and 100 * #(sponsor signatures).
+            self.header.energy_amount =
+                self.header.energy_amount + Energy::from(32 + 100 * u64::from(num_sponsor_sigs));
             self.hash_to_sign = compute_transaction_sign_hash_v1(&self.header, &self.encoded);
             self
         }
