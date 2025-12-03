@@ -368,7 +368,9 @@ data SupplementedTransactionSummary = SupplementedTransactionSummary
       stsIndex :: !TransactionIndex,
       stsSponsorDetails :: !(Maybe SponsorDetails)
     }
-    deriving (Show)
+    deriving (Eq, Show)
+
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''SupplementedTransactionSummary)
 
 -- | Convert a `TransactionSummary'` to a `SupplementedTransactionSummary` by forgetting
 --  the `TransactionOutcomeVersion` parameter. The conditionally present
@@ -396,6 +398,19 @@ data SupplementedTransactionStatus
     | -- | Transaction has been finalized in a block
       Finalized BlockHash (Maybe SupplementedTransactionSummary)
     deriving (Show)
+
+instance ToJSON SupplementedTransactionStatus where
+    toJSON Received = object ["status" .= String "received"]
+    toJSON (Committed m) =
+        object
+            [ "status" .= String "committed",
+              "outcomes" .= m
+            ]
+    toJSON (Finalized bh outcome) =
+        object
+            [ "status" .= String "finalized",
+              "outcomes" .= Map.singleton bh outcome
+            ]
 
 -- | A pending change (if any) to a baker pool.
 --
