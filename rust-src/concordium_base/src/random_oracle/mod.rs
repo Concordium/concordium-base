@@ -3,7 +3,7 @@
 //! It plays the same role as a random oracle would play in the corresponding interactive protocol,
 //! hence the name of the present module and some of the types in the module.
 //!
-//! For background, see "9.3 Non-interactive Proofs using the Fiat-Shamir Transformation" in the blue paper.
+//! For background, see "9.3 Non-interactive Proofs using the Fiat-Shamir Transformation" in the blue paper (v2.3.3).
 //! For understanding the general concepts and the considerations put into a transcript implementation,
 //! the Merlin transcript can be studied here: <https://merlin.cool/index.html> (implemented at <https://github.com/dalek-cryptography/merlin>).
 //!

@@ -5,8 +5,8 @@
 //! be proven known ($i \in K$), be proven equal to a value in a commitment $C_i$ ($i \in C$), or proven equal to a public value ($i \in P$).
 //!
 //! The proof is done as a sigma protocol, see "9.1 Abstract Treatment of Sigma Protocols".
-//! Using the notation from "5.3.5 Proof of Knowledge of a Signature with Public Values"
-//! and "9.2.3 Proof of Knowledge of Opening of Commitment" (blue paper v2.2.0), the homomorphism used is
+//! The proof is described in "5.3.5 Proof of Knowledge of a Signature with Public Values"
+//! and "9.2.3 Proof of Knowledge of Opening of Commitment" (blue paper v2.3.3). Using the notation from those sections, the homomorphism used is
 //! $$
 //!     \varphi: \left(r', \\{ m_i \\}\_{i \in K}, \\{ m_i, r_i \\}\_{i \in C} \right) \mapsto
 //!        \left(e\left(\hat{a}, \tilde{g}^{r'} \prod\nolimits\_{i\in K \cup C} \tilde{Y}\_i^{m_i}\right), \\{ g^{m_i} h^{r_i} \\}\_{i \in C} \right)
