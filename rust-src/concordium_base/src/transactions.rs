@@ -2452,15 +2452,10 @@ pub mod construct {
         }
 
         /// Sign the transaction as sender.
-        pub fn sign(&mut self, sender: &impl TransactionSigner) -> Result<&mut Self, String> {
-            if let Some(_sig) = self.sender_signature.as_ref() {
-                return Err(String::from(
-                    "Failed to sign transaction. A sender signature is already present.",
-                ));
-            }
+        pub fn sign(&mut self, sender: &impl TransactionSigner) -> &mut Self {
             let signature = sender.sign_transaction_hash(&self.hash_to_sign);
             self.sender_signature = Some(signature);
-            Ok(self)
+            self
         }
 
         /// Sign the transaction as sponsor.
