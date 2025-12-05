@@ -735,14 +735,14 @@ signTransaction keys atrHeader atrPayload =
 
 -- | Create a transaction signature on a v1 transaction sign hash of the given header and body, using the given keypairs.
 --  The function does not sanity check whether the keys are valid, or that the
---  indices are distint.
+--  indices are distinct.
 createTransactionV1Signature :: [(CredentialIndex, [(KeyIndex, KeyPair)])] -> TransactionHeaderV1 -> EncodedPayload -> TransactionSignature
 createTransactionV1Signature keys header payload =
     createTransactionSignatureFromSignHash keys $ transactionV1SignHashFromHeaderPayload header payload
 
 -- | Sign a V1 transaction with the given header and body, using the given keypairs on behalf of the transaction sender.
 --  The function does not sanity check whether the keys are valid, or that the
---  indices are distint.
+--  indices are distinct.
 signTransactionV1 :: [(CredentialIndex, [(KeyIndex, KeyPair)])] -> TransactionHeaderV1 -> EncodedPayload -> AccountTransactionV1
 signTransactionV1 keys atrv1Header atrv1Payload =
     let atrv1SignHash = transactionV1SignHashFromHeaderPayload atrv1Header atrv1Payload
@@ -751,7 +751,7 @@ signTransactionV1 keys atrv1Header atrv1Payload =
         atrv1Signature = TransactionSignaturesV1{..}
     in  AccountTransactionV1{..}
 
--- | Sign a V1 transaction using the given keypairs on behalf of the transaction sponsor
+-- | Sign a V1 transaction using the given keypairs on behalf of the transaction sponsor.
 --  The function does not sanity check whether the keys are valid, or that the
 --  indices are distint.
 sponsorTransactionV1 :: [(CredentialIndex, [(KeyIndex, KeyPair)])] -> AccountTransactionV1 -> AccountTransactionV1
