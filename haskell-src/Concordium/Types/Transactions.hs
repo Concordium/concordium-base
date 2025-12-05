@@ -711,6 +711,16 @@ putVersionedBareBlockItemV0 bi = putVersion 0 <> putBareBlockItemV0 bi
 signTransactionSingle :: KeyPair -> TransactionHeader -> EncodedPayload -> AccountTransaction
 signTransactionSingle kp = signTransaction [(0, [(0, kp)])]
 
+-- | Create a transaction signature on the given transaction sign hash, using the given keypairs.
+--  The function does not sanity check whether the keys are valid, or that the
+--  indices are distint.
+createTransactionSignatureFromSignHash :: [(CredentialIndex, [(KeyIndex, KeyPair)])] -> TransactionSignHash -> TransactionSignature
+createTransactionSignatureFromSignHash keys signHash =
+    let bodyHash = transactionSignHashToByteString signHash
+        credSignature cKeys = Map.fromList $ map (\(idx, key) -> (idx, SigScheme.sign key bodyHash)) cKeys
+        tsSignatures = Map.fromList $ map (\(idx, cKeys) -> (idx, credSignature cKeys)) keys
+    in  TransactionSignature{..}
+
 -- | Sign a transaction with the given header and body, using the given keypairs.
 --  The function does not sanity checking that the keys are valid, or that the
 --  indices are distint.
@@ -720,11 +730,36 @@ signTransaction :: [(CredentialIndex, [(KeyIndex, KeyPair)])] -> TransactionHead
 signTransaction keys atrHeader atrPayload =
     let atrSignHash = transactionSignHashFromHeaderPayload atrHeader atrPayload
         -- only sign the hash of the transaction
-        bodyHash = transactionSignHashToByteString atrSignHash
-        credSignature cKeys = Map.fromList $ map (\(idx, key) -> (idx, SigScheme.sign key bodyHash)) cKeys
-        tsSignatures = Map.fromList $ map (\(idx, cKeys) -> (idx, credSignature cKeys)) keys
-        atrSignature = TransactionSignature{..}
+        atrSignature = createTransactionSignatureFromSignHash keys atrSignHash
     in  AccountTransaction{..}
+
+-- | Create a transaction signature on a v1 transaction sign hash of the given header and body, using the given keypairs.
+--  The function does not sanity check whether the keys are valid, or that the
+--  indices are distinct.
+createTransactionV1Signature :: [(CredentialIndex, [(KeyIndex, KeyPair)])] -> TransactionHeaderV1 -> EncodedPayload -> TransactionSignature
+createTransactionV1Signature keys header payload =
+    createTransactionSignatureFromSignHash keys $ transactionV1SignHashFromHeaderPayload header payload
+
+-- | Sign a V1 transaction with the given header and body, using the given keypairs on behalf of the transaction sender.
+--  The function does not sanity check whether the keys are valid, or that the
+--  indices are distinct.
+signTransactionV1 :: [(CredentialIndex, [(KeyIndex, KeyPair)])] -> TransactionHeaderV1 -> EncodedPayload -> AccountTransactionV1
+signTransactionV1 keys atrv1Header atrv1Payload =
+    let atrv1SignHash = transactionV1SignHashFromHeaderPayload atrv1Header atrv1Payload
+        tsv1Sender = createTransactionSignatureFromSignHash keys atrv1SignHash
+        tsv1Sponsor = Nothing
+        atrv1Signature = TransactionSignaturesV1{..}
+    in  AccountTransactionV1{..}
+
+-- | Sign a V1 transaction using the given keypairs on behalf of the transaction sponsor.
+--  The function does not sanity check whether the keys are valid, or that the
+--  indices are distint.
+sponsorTransactionV1 :: [(CredentialIndex, [(KeyIndex, KeyPair)])] -> AccountTransactionV1 -> AccountTransactionV1
+sponsorTransactionV1 keys transaction =
+    let sig = createTransactionSignatureFromSignHash keys (atrv1SignHash transaction)
+        oldSigs = atrv1Signature transaction
+        newSigs = oldSigs{tsv1Sponsor = Just sig}
+    in  transaction{atrv1Signature = newSigs}
 
 -- | Verify credential signatures. This checks
 --
