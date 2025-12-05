@@ -61,7 +61,7 @@ pub struct PsSigKnown<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 /// Commit secret used to calculate sigma protocol commitment and to calculate response later
 pub struct PsSigCommitSecret<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Commitment secret for $r'$
-    cmm_sec_r_prime: P::ScalarField,
+    cmm_sec_r_prime: Secret<P::ScalarField>,
     /// Commitment secret for each part of the message $\\{m_i\\}$
     cmm_sec_msgs: Vec<CommitSecretMsg<C>>,
 }
@@ -89,7 +89,15 @@ pub struct PsSigWitness<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 }
 
 /// Response in the protocol
-type ResponseMsg<C> = PsSigWitnessMsg<C>;
+#[derive(Debug, Eq, PartialEq, Clone, Serialize)]
+pub enum ResponseMsg<C: Curve> {
+    /// The value/message part $m_i$ is proven known and equal to a commitment to the value under the randomness $r_i$
+    EqualToCommitment(C::Scalar, C::Scalar),
+    /// The value is public
+    Public,
+    /// The value/message part $m_i$ is proven known
+    Known(C::Scalar),
+}
 
 /// Response in sigma protocol
 #[derive(Clone, Eq, PartialEq, Debug, Serialize)]
@@ -149,7 +157,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
             .count();
 
         // randomness corresponding to the r'
-        let cmm_sec_r_prime = <P::G2 as Curve>::generate_non_zero_scalar(csprng);
+        let cmm_sec_r_prime = Secret::new(<P::G2 as Curve>::generate_non_zero_scalar(csprng));
         // random elements corresponding to the message parts
         let mut cmm_sec_msgs = Vec::with_capacity(self.msgs.len());
 
@@ -169,10 +177,10 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                     let y_exp_m_i = y_tilde(i)?.mul_by_scalar(&cmm_sec_m_i);
                     cmm_msg_signature_elm = cmm_msg_signature_elm.plus_point(&y_exp_m_i);
 
-                    cmm_sec_msgs.push(PsSigWitnessMsg::EqualToCommitment(cmm_sec_m_i, cmm_sec_r_i));
+                    cmm_sec_msgs.push(CommitSecretMsg::EqualToCommitment(cmm_sec_m_i, cmm_sec_r_i));
                 }
                 PsSigMsg::Public(_) => {
-                    cmm_sec_msgs.push(PsSigWitnessMsg::Public);
+                    cmm_sec_msgs.push(CommitSecretMsg::Public);
                 }
                 PsSigMsg::Known => {
                     let cmm_sec_m_i = Value::generate_non_zero(csprng);
@@ -180,7 +188,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                     let y_exp_m_i = y_tilde(i)?.mul_by_scalar(&cmm_sec_m_i);
                     cmm_msg_signature_elm = cmm_msg_signature_elm.plus_point(&y_exp_m_i);
 
-                    cmm_sec_msgs.push(PsSigWitnessMsg::Known(cmm_sec_m_i));
+                    cmm_sec_msgs.push(CommitSecretMsg::Known(cmm_sec_m_i));
                 }
             }
         }
@@ -226,13 +234,10 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                     resp_r_i.negate();
                     resp_r_i.add_assign(cmm_sec_r_i);
 
-                    resp_msgs.push(PsSigWitnessMsg::EqualToCommitment(
-                        Value::new(resp_m_i),
-                        Randomness::new(resp_r_i),
-                    ));
+                    resp_msgs.push(ResponseMsg::EqualToCommitment(resp_m_i, resp_r_i));
                 }
                 (CommitSecretMsg::Public, PsSigWitnessMsg::Public) => {
-                    resp_msgs.push(PsSigWitnessMsg::Public);
+                    resp_msgs.push(ResponseMsg::Public);
                 }
                 (CommitSecretMsg::Known(cmm_sec_m_i), PsSigWitnessMsg::Known(m_i)) => {
                     let mut resp_m_i = *challenge;
@@ -240,7 +245,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                     resp_m_i.negate();
                     resp_m_i.add_assign(cmm_sec_m_i);
 
-                    resp_msgs.push(PsSigWitnessMsg::Known(Value::new(resp_m_i)));
+                    resp_msgs.push(ResponseMsg::Known(resp_m_i));
                 }
                 _ => return None,
             }
@@ -313,12 +318,12 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                 ) => {
                     let cmm_msg_c_i = curve_arithmetic::multiexp(
                         &[c_i.0, cmm_key.g, cmm_key.h],
-                        &[*challenge, **resp_m_i.value, **resp_r_i.randomness],
+                        &[*challenge, *resp_m_i, *resp_r_i],
                     );
                     cmm_msg_commitments.push(Commitment(cmm_msg_c_i));
 
                     cmm_msg_sig_gs.push(y_tilde(i)?);
-                    cmm_msg_sig_es.push(**resp_m_i);
+                    cmm_msg_sig_es.push(*resp_m_i);
                 }
                 (PsSigMsg::Public(m_i), ResponseMsg::Public) => {
                     cmm_msg_sig_gs.push(y_tilde(i)?);
@@ -328,7 +333,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                 }
                 (PsSigMsg::Known, ResponseMsg::Known(resp_m_i)) => {
                     cmm_msg_sig_gs.push(y_tilde(i)?);
-                    cmm_msg_sig_es.push(**resp_m_i);
+                    cmm_msg_sig_es.push(*resp_m_i);
                 }
                 _ => return None,
             }
@@ -814,8 +819,8 @@ mod tests {
         let mut csprng = rand::thread_rng();
 
         let orig_msg = ResponseMsg::<G1>::EqualToCommitment(
-            Value::generate(&mut csprng),
-            Randomness::generate(&mut csprng),
+            <G1 as Curve>::generate_non_zero_scalar(&mut csprng),
+            <G1 as Curve>::generate_non_zero_scalar(&mut csprng),
         );
         let msg = common::serialize_deserialize(&orig_msg).unwrap();
         assert_eq!(msg, orig_msg);
@@ -824,7 +829,8 @@ mod tests {
         let msg = common::serialize_deserialize(&orig_msg).unwrap();
         assert_eq!(msg, orig_msg);
 
-        let orig_msg = ResponseMsg::<G1>::Known(Value::generate(&mut csprng));
+        let orig_msg =
+            ResponseMsg::<G1>::Known(<G1 as Curve>::generate_non_zero_scalar(&mut csprng));
         let msg = common::serialize_deserialize(&orig_msg).unwrap();
         assert_eq!(msg, orig_msg);
     }
