@@ -52,14 +52,14 @@ use super::{
     common::*,
     dlog::*,
 };
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
     elgamal::ChunkSize,
     encrypted_transfers::types::CHUNK_SIZE,
     pedersen_commitment::{Randomness as PedersenRandomness, Value},
-    random_oracle::{Challenge, RandomOracle},
+    random_oracle::Challenge,
 };
 use itertools::izip;
 use std::rc::Rc;
@@ -76,10 +76,9 @@ pub struct ElgDec<C: Curve> {
 }
 
 impl<C: Curve> ElgDec<C> {
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         ro.append_message(b"public", &self.public);
-        #[allow(deprecated)]
-        ro.extend_from(b"coeff", &self.coeff)
+        ro.append_messages(b"coeff", &self.coeff)
     }
 }
 
@@ -182,10 +181,10 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
     type Response = EncTransResponse<C>;
     type SecretData = EncTransSecret<C>;
 
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         self.elg_dec.public(ro);
-        self.encexp1.iter().for_each(|p| p.public(ro));
-        self.encexp2.iter().for_each(|p| p.public(ro));
+        ro.append_each_message(&[], &self.encexp1, |ro, p| p.public(ro));
+        ro.append_each_message(&[], &self.encexp2, |ro, p| p.public(ro));
         self.dlog.public(ro)
     }
 
@@ -365,6 +364,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::random_oracle::RandomOracle;
     use crate::{
         curve_arithmetic::arkworks_instances::ArkGroup,
         elgamal::{PublicKey, Randomness, SecretKey},

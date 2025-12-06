@@ -5,11 +5,11 @@
 //! $. This is a specialization of `com_eq` protocol where we do not require
 //! commitments.
 use super::common::*;
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
-    random_oracle::{Challenge, RandomOracle},
+    random_oracle::Challenge,
 };
 use itertools::izip;
 use std::rc::Rc;
@@ -38,10 +38,9 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
     type Response = Response<C>;
     type SecretData = Vec<Rc<C::Scalar>>;
 
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         ro.append_message(b"public", &self.public);
-        #[allow(deprecated)]
-        ro.extend_from(b"coeff", &self.coeff)
+        ro.append_messages(b"coeff", &self.coeff)
     }
 
     fn compute_commit_message<R: rand::Rng>(
@@ -124,6 +123,7 @@ mod tests {
     use crate::curve_arithmetic::arkworks_instances::ArkGroup;
 
     use super::*;
+    use crate::random_oracle::RandomOracle;
     use ark_bls12_381::G1Projective;
     use rand::{thread_rng, Rng};
 

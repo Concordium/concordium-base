@@ -1,6 +1,6 @@
 //! Functionality needed by the chain to verify credential deployments.
 use super::{secret_sharing::Threshold, types::*, utils};
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     bulletproofs::range_proof::verify_less_than_or_equal,
     common::{to_bytes, types::TransactionTime},
@@ -77,6 +77,7 @@ pub fn verify_cdi<
     let gens = global_context.bulletproof_generators();
     let ip_verify_key = &ip_info.ip_verify_key;
     // Compute the challenge prefix by hashing the values.
+    #[allow(deprecated)]
     let mut ro = RandomOracle::domain("credential");
     ro.append_message(b"cred_values", &cdi.values);
     ro.append_message(b"address", &addr);

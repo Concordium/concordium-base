@@ -6,15 +6,27 @@ use crate::{
 };
 use anyhow::bail;
 use rand::*;
+use serde::de::Error;
 use serde_json::{json, Value};
 use std::convert::TryFrom;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Hash, Ord, Clone, Copy, Serial)]
 /// Revealing threshold, i.e., degree of the polynomial + 1.
 /// This value must always be at least 1.
-#[derive(SerdeSerialize, SerdeDeserialize)]
+#[derive(SerdeSerialize)]
 #[serde(transparent)]
 pub struct Threshold(pub u8);
+
+impl<'de> SerdeDeserialize<'de> for Threshold {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: SerdeDeserializer<'de>,
+    {
+        let val = u8::deserialize(deserializer)?;
+
+        Self::try_from(val).map_err(|_| D::Error::custom("threshold cannot be zero"))
+    }
+}
 
 impl Deserial for Threshold {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
@@ -346,5 +358,22 @@ mod test {
             let revealed_data_point: G1 = reveal_in_group::<_, G1>(&insufficient_sample_points);
             assert_ne!(revealed_data_point, secret_point);
         }
+    }
+
+    #[test]
+    fn test_threshold_serde_serialize_deserialize() {
+        let threshold = Threshold(2);
+        let json = serde_json::to_string(&threshold).expect("serialize");
+        assert_eq!(json, r#"2"#);
+        let threshold_deserialized: Threshold = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(threshold_deserialized, threshold);
+
+        let json = r#"0"#;
+        let err = serde_json::from_str::<Threshold>(&json).expect_err("deserial");
+        assert!(
+            err.to_string().contains("threshold cannot be zero"),
+            "message: {}",
+            err
+        );
     }
 }

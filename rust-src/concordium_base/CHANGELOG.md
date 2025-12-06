@@ -1,5 +1,20 @@
 ## Unreleased
 
+- Implemented Concordium verifiable presentations V1 in `web3id::v1` that includes account based and identity based credentials.
+  It is an updated version of the protocol implemented in `web3id` ("V0"). 
+  The primary types in the module `web3id::v1` are `PresentationV1` and `RequestV1` and the entrypoints to prove and verify are
+  `RequestV1::prove` and `PresentationV1::verify`.
+- Implemented anchor model for verifiable presentations V1 in `web3id::v1::anchor`.
+  The primary types in the module are `VerificationRequest`, `VerificationRequestData`, `VerificationRequestAnchor`,
+  `VerificationAuditRecord`, and `VerificationAuditRecord` and the entrypoint to verify a presentation
+  together with a request anchor is `verify_presentation_with_request_anchor`.
+- Serialization derive macros `common::Serial`, `common::Deserial` and `common::Serialize` now supports
+  deriving serialization on enums. 
+- Introduced the trait `TranscriptProtocol` to add and extract messages from the transcript in proof systems
+  where it replaces the direct dependency on `RandomOracle` which is the "legacy" transcript implementation.
+  The new implementation is `TranscriptV1` which among other things improves length prefixing of messages. 
+  `TranscriptV1` is used in Concordium verifiable presentations V1.
+
 ## 9.0.0 (2025-10-29)
 
 - Changed `Debug` implementation of secret keys and cleartext values to not print the key or value.
@@ -8,8 +23,6 @@
 - Made `find_authorized_keys` public for easier re-use.
 - Changed value inside `AttributeKind` to be non-public since it has a length constraint. Implemented `AttributeKind::try_new`, `AsRef<str> for AttributeKind` and `From<AttributeKind> for String`
   to allow constructing and accessing values.
-- Introduced the trait `StructuredDigest` to add data to `RandomOracle` and other hashes
-- Removed the method `RandomOracle::add` and deprecated `RandomOracle::extend_from`
 - Added `Eq` and `PartialEq` instances for
   - `UpdateKeysThreshold`
   - `InclusiveRange<T>`

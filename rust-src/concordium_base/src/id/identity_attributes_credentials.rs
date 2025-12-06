@@ -1,15 +1,15 @@
 //! Prover and verifier of identity attribute credentials based on identity credentials.
 //! The proof of identity attribute credentials together with
-//! proofs of statements about the attributes is described in "15.4.2 Identity Based Credential" (blue paper v2.2.0).
+//! proofs of statements about the attributes is described in "15.4.2 Identity Based Credential" (blue paper v2.3.3).
 //! The full proof of statements based on identity credential, which uses the proofs in the present module as a "sub-proof",
-//! is implemented in the [`web3id`](crate::web3id) module.
+//! is implemented in the [`web3id::v1`](crate::web3id::v1) module.
 //!
 //! Notice that the proof in the present file can be seen as a lightweight version of the account opening (account credentials)
 //! proof in [`account_holder`].
 
 use super::{account_holder, types::*, utils};
 use crate::pedersen_commitment::{CommitmentKey, Randomness};
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::sigma_protocols::common::{
     AndAdapter, AndResponse, ReplicateAdapter, ReplicateResponse, SigmaProof,
 };
@@ -19,9 +19,7 @@ use crate::{
     pedersen_commitment::{
         Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
     },
-    ps_sig,
-    random_oracle::RandomOracle,
-    sigma_protocols,
+    ps_sig, sigma_protocols,
     sigma_protocols::com_enc_eq,
 };
 use anyhow::Context;
@@ -53,7 +51,7 @@ pub fn prove_identity_attributes<
     id_object_use_data: &IdObjectUseData<P, C>,
     attributes_handling: &BTreeMap<AttributeTag, IdentityAttributeHandling>,
     csprng: &mut (impl Rng + CryptoRng),
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
 ) -> anyhow::Result<(
     IdentityAttributesCredentialsInfo<P, C, AttributeType>,
     IdentityAttributesCredentialsRandomness<C>,
@@ -183,9 +181,9 @@ pub fn prove_identity_attributes<
     // IdentityAttributesCommitmentValues struct.
     // This should make the proof non-reusable.
     // We should add the genesis hash also at some point
-    transcript.add_bytes(b"IdentityAttributesCredentials");
-    transcript.append_message(b"identity_attribute_values", &id_attribute_values);
-    transcript.append_message(b"global_context", &global_context);
+    transcript.append_label("IdentityAttributesCredentials");
+    transcript.append_message("IdentityAttributeValues", &id_attribute_values);
+    transcript.append_message("GlobalContext", &global_context);
 
     let proof = sigma_protocols::common::prove(transcript, &prover, witness, csprng)
         .context("cannot produce zero knowledge proof")?;
@@ -401,7 +399,7 @@ pub fn verify_identity_attributes<
     global_context: &GlobalContext<C>,
     ip_context: IpContextOnly<'_, P, C>,
     id_attr_info: &IdentityAttributesCredentialsInfo<P, C, AttributeType>,
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
 ) -> Result<(), AttributeCommitmentVerificationError> {
     if ip_context.ip_info.ip_identity != id_attr_info.values.ip_identity {
         return Err(AttributeCommitmentVerificationError::Signature);
@@ -415,9 +413,9 @@ pub fn verify_identity_attributes<
     }
 
     // Compute the challenge prefix by hashing the values.
-    transcript.add_bytes(b"IdentityAttributesCredentials");
-    transcript.append_message(b"identity_attribute_values", &id_attr_info.values);
-    transcript.append_message(b"global_context", &global_context);
+    transcript.append_label("IdentityAttributesCredentials");
+    transcript.append_message("IdentityAttributeValues", &id_attr_info.values);
+    transcript.append_message("GlobalContext", &global_context);
 
     let verifier_sig = signature_knowledge_verifier(
         &global_context.on_chain_commitment_key,
@@ -1210,19 +1208,21 @@ mod test {
     pub fn test_identity_attributes_stable() {
         let id_object_fixture = identity_object_fixture();
 
-        // Comment out to regenerate proof. We can do that as long as we have not released yet
-
+        // // Comment out to regenerate proof. We can do that as long as we have not released yet
+        //
         // let mut attributes_handling = BTreeMap::new();
         // attributes_handling.insert(TAG_0, IdentityAttributeHandling::Commit);
         // attributes_handling.insert(TAG_1, IdentityAttributeHandling::Reveal);
         //
         // let mut transcript = RandomOracle::empty();
+        // let mut csprng =  rand::thread_rng();
         // let (id_attr_info, rand) = prove_identity_attributes(
         //     &id_object_fixture.global_ctx,
         //     ip_context(&id_object_fixture),
         //     &id_object_fixture.id_object,
         //     &id_object_fixture.id_use_data,
         //     &attributes_handling,
+        //     &mut csprng,
         //     &mut transcript,
         // )
         // .expect("prove");

@@ -5,8 +5,8 @@
 //! be proven known ($i \in K$), be proven equal to a value in a commitment $C_i$ ($i \in C$), or proven equal to a public value ($i \in P$).
 //!
 //! The proof is done as a sigma protocol, see "9.1 Abstract Treatment of Sigma Protocols".
-//! Using the notation from "5.3.5 Proof of Knowledge of a Signature with Public Values"
-//! and "9.2.3 Proof of Knowledge of Opening of Commitment" (blue paper v2.2.0), the homomorphism used is
+//! The proof is described in "5.3.5 Proof of Knowledge of a Signature with Public Values"
+//! and "9.2.3 Proof of Knowledge of Opening of Commitment" (blue paper v2.3.3). Using the notation from those sections, the homomorphism used is
 //! $$
 //!     \varphi: \left(r', \\{ m_i \\}\_{i \in K}, \\{ m_i, r_i \\}\_{i \in C} \right) \mapsto
 //!        \left(e\left(\hat{a}, \tilde{g}^{r'} \prod\nolimits\_{i\in K \cup C} \tilde{Y}\_i^{m_i}\right), \\{ g^{m_i} h^{r_i} \\}\_{i \in C} \right)
@@ -20,23 +20,20 @@
 //! Notice that the input to $\varphi$ has a signature blinding component $r'$ and a component for each message part.
 //! The output has a signature component and a commitment component for each message part that is proven equal to a commitment.
 
-use crate::common::{Buffer, Deserial, Get, ParseResult, Put, Serial};
 use crate::curve_arithmetic::{Curve, Field, Pairing, Secret};
-use crate::random_oracle::StructuredDigest;
+use crate::random_oracle::TranscriptProtocol;
 use crate::sigma_protocols::common::SigmaProtocol;
 use crate::{
     curve_arithmetic,
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
     ps_sig,
     ps_sig::BlindedSignature,
-    random_oracle::RandomOracle,
 };
-use byteorder::ReadBytesExt;
 use concordium_base_derive::Serialize;
 use rand::Rng;
 
 /// How to handle a single part of the signed message
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum PsSigMsg<C: Curve> {
     /// The message is proven known and equal to the value in commitment $C_i$
     EqualToCommitment(Commitment<C>),
@@ -44,25 +41,6 @@ pub enum PsSigMsg<C: Curve> {
     Public(Value<C>),
     /// The value is proven known
     Known,
-}
-
-// Serialization used to hash into the transcript
-impl<C: Curve> Serial for PsSigMsg<C> {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        match &self {
-            Self::EqualToCommitment(cmm) => {
-                out.put(&0u8);
-                out.put(cmm);
-            }
-            Self::Public(value) => {
-                out.put(&1u8);
-                out.put(value);
-            }
-            Self::Known => {
-                out.put(&2u8);
-            }
-        }
-    }
 }
 
 /// Proof of knowledge of a PS (Pointcheval-Sanders) signature. See
@@ -83,7 +61,7 @@ pub struct PsSigKnown<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 /// Commit secret used to calculate sigma protocol commitment and to calculate response later
 pub struct PsSigCommitSecret<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Commitment secret for $r'$
-    cmm_sec_r_prime: P::ScalarField,
+    cmm_sec_r_prime: Secret<P::ScalarField>,
     /// Commitment secret for each part of the message $\\{m_i\\}$
     cmm_sec_msgs: Vec<CommitSecretMsg<C>>,
 }
@@ -92,7 +70,7 @@ pub struct PsSigCommitSecret<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 type CommitSecretMsg<C> = PsSigWitnessMsg<C>;
 
 /// How to handle a signed message
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize)]
 pub enum PsSigWitnessMsg<C: Curve> {
     /// The value/message part $m_i$ is proven known and equal to a commitment to the value under the randomness $r_i$
     EqualToCommitment(Value<C>, Randomness<C>),
@@ -100,44 +78,6 @@ pub enum PsSigWitnessMsg<C: Curve> {
     Public,
     /// The value/message part $m_i$ is proven known
     Known(Value<C>),
-}
-
-impl<C: Curve> Serial for PsSigWitnessMsg<C> {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        match self {
-            Self::EqualToCommitment(m, cmm) => {
-                out.put(&0u8);
-                out.put(m);
-                out.put(cmm);
-            }
-            Self::Public => {
-                out.put(&1u8);
-            }
-            Self::Known(m) => {
-                out.put(&2u8);
-                out.put(m);
-            }
-        }
-    }
-}
-
-impl<C: Curve> Deserial for PsSigWitnessMsg<C> {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let tag: u8 = source.get()?;
-        Ok(match tag {
-            0 => {
-                let m = source.get()?;
-                let cmm = source.get()?;
-                Self::EqualToCommitment(m, cmm)
-            }
-            1 => Self::Public,
-            2 => {
-                let m = source.get()?;
-                Self::Known(m)
-            }
-            _ => anyhow::bail!("unsupported PsSigWitnessMsg item type: {}", tag),
-        })
-    }
 }
 
 /// Witness used in proof, maps to the "statement" $\boldsymbol{y}$ under $\varphi$
@@ -149,7 +89,15 @@ pub struct PsSigWitness<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 }
 
 /// Response in the protocol
-type ResponseMsg<C> = PsSigWitnessMsg<C>;
+#[derive(Debug, Eq, PartialEq, Clone, Serialize)]
+pub enum ResponseMsg<C: Curve> {
+    /// The value/message part $m_i$ is proven known and equal to a commitment to the value under the randomness $r_i$
+    EqualToCommitment(C::Scalar, C::Scalar),
+    /// The value is public
+    Public,
+    /// The value/message part $m_i$ is proven known
+    Known(C::Scalar),
+}
 
 /// Response in sigma protocol
 #[derive(Clone, Eq, PartialEq, Debug, Serialize)]
@@ -169,8 +117,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
     type SecretData = PsSigWitness<P, C>;
 
     #[inline]
-    fn public(&self, ro: &mut RandomOracle) {
-        ro.add_bytes("PsSigKnown");
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
+        ro.append_label("PsSigKnown");
         // public input to statement:
         ro.append_message("blinded_sig", &self.blinded_sig);
         ro.append_message("messages", &self.msgs);
@@ -209,7 +157,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
             .count();
 
         // randomness corresponding to the r'
-        let cmm_sec_r_prime = <P::G2 as Curve>::generate_non_zero_scalar(csprng);
+        let cmm_sec_r_prime = Secret::new(<P::G2 as Curve>::generate_non_zero_scalar(csprng));
         // random elements corresponding to the message parts
         let mut cmm_sec_msgs = Vec::with_capacity(self.msgs.len());
 
@@ -229,10 +177,10 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                     let y_exp_m_i = y_tilde(i)?.mul_by_scalar(&cmm_sec_m_i);
                     cmm_msg_signature_elm = cmm_msg_signature_elm.plus_point(&y_exp_m_i);
 
-                    cmm_sec_msgs.push(PsSigWitnessMsg::EqualToCommitment(cmm_sec_m_i, cmm_sec_r_i));
+                    cmm_sec_msgs.push(CommitSecretMsg::EqualToCommitment(cmm_sec_m_i, cmm_sec_r_i));
                 }
                 PsSigMsg::Public(_) => {
-                    cmm_sec_msgs.push(PsSigWitnessMsg::Public);
+                    cmm_sec_msgs.push(CommitSecretMsg::Public);
                 }
                 PsSigMsg::Known => {
                     let cmm_sec_m_i = Value::generate_non_zero(csprng);
@@ -240,7 +188,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                     let y_exp_m_i = y_tilde(i)?.mul_by_scalar(&cmm_sec_m_i);
                     cmm_msg_signature_elm = cmm_msg_signature_elm.plus_point(&y_exp_m_i);
 
-                    cmm_sec_msgs.push(PsSigWitnessMsg::Known(cmm_sec_m_i));
+                    cmm_sec_msgs.push(CommitSecretMsg::Known(cmm_sec_m_i));
                 }
             }
         }
@@ -286,13 +234,10 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                     resp_r_i.negate();
                     resp_r_i.add_assign(cmm_sec_r_i);
 
-                    resp_msgs.push(PsSigWitnessMsg::EqualToCommitment(
-                        Value::new(resp_m_i),
-                        Randomness::new(resp_r_i),
-                    ));
+                    resp_msgs.push(ResponseMsg::EqualToCommitment(resp_m_i, resp_r_i));
                 }
                 (CommitSecretMsg::Public, PsSigWitnessMsg::Public) => {
-                    resp_msgs.push(PsSigWitnessMsg::Public);
+                    resp_msgs.push(ResponseMsg::Public);
                 }
                 (CommitSecretMsg::Known(cmm_sec_m_i), PsSigWitnessMsg::Known(m_i)) => {
                     let mut resp_m_i = *challenge;
@@ -300,7 +245,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                     resp_m_i.negate();
                     resp_m_i.add_assign(cmm_sec_m_i);
 
-                    resp_msgs.push(PsSigWitnessMsg::Known(Value::new(resp_m_i)));
+                    resp_msgs.push(ResponseMsg::Known(resp_m_i));
                 }
                 _ => return None,
             }
@@ -373,12 +318,12 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                 ) => {
                     let cmm_msg_c_i = curve_arithmetic::multiexp(
                         &[c_i.0, cmm_key.g, cmm_key.h],
-                        &[*challenge, **resp_m_i.value, **resp_r_i.randomness],
+                        &[*challenge, *resp_m_i, *resp_r_i],
                     );
                     cmm_msg_commitments.push(Commitment(cmm_msg_c_i));
 
                     cmm_msg_sig_gs.push(y_tilde(i)?);
-                    cmm_msg_sig_es.push(**resp_m_i);
+                    cmm_msg_sig_es.push(*resp_m_i);
                 }
                 (PsSigMsg::Public(m_i), ResponseMsg::Public) => {
                     cmm_msg_sig_gs.push(y_tilde(i)?);
@@ -388,7 +333,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
                 }
                 (PsSigMsg::Known, ResponseMsg::Known(resp_m_i)) => {
                     cmm_msg_sig_gs.push(y_tilde(i)?);
-                    cmm_msg_sig_es.push(**resp_m_i);
+                    cmm_msg_sig_es.push(*resp_m_i);
                 }
                 _ => return None,
             }
@@ -441,6 +386,7 @@ mod tests {
     type G1 = ArkGroup<G1Projective>;
     type Bls12 = ark_ec::models::bls12::Bls12<ark_bls12_381::Config>;
     use crate::ps_sig::{SigRetrievalRandomness, UnknownMessage};
+    use crate::random_oracle::RandomOracle;
     use crate::sigma_protocols::common::SigmaProof;
 
     #[derive(Debug, Clone, Copy)]
@@ -873,8 +819,8 @@ mod tests {
         let mut csprng = rand::thread_rng();
 
         let orig_msg = ResponseMsg::<G1>::EqualToCommitment(
-            Value::generate(&mut csprng),
-            Randomness::generate(&mut csprng),
+            <G1 as Curve>::generate_non_zero_scalar(&mut csprng),
+            <G1 as Curve>::generate_non_zero_scalar(&mut csprng),
         );
         let msg = common::serialize_deserialize(&orig_msg).unwrap();
         assert_eq!(msg, orig_msg);
@@ -883,7 +829,8 @@ mod tests {
         let msg = common::serialize_deserialize(&orig_msg).unwrap();
         assert_eq!(msg, orig_msg);
 
-        let orig_msg = ResponseMsg::<G1>::Known(Value::generate(&mut csprng));
+        let orig_msg =
+            ResponseMsg::<G1>::Known(<G1 as Curve>::generate_non_zero_scalar(&mut csprng));
         let msg = common::serialize_deserialize(&orig_msg).unwrap();
         assert_eq!(msg, orig_msg);
     }
