@@ -493,7 +493,7 @@ dependencies = [
 
 [[package]]
 name = "concordium_base"
-version = "9.0.0"
+version = "10.0.0-alpha.1"
 dependencies = [
  "aes",
  "anyhow",
