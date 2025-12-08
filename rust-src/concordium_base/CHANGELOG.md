@@ -1,6 +1,6 @@
 ## Unreleased
 
-## 10.0.0-alpha.1 (2025-12-08)
+## 10.0.0-alpha.0 (2025-12-08)
 
 - Introduce protocol version 10 variant `ProtocolVersion::P10`.
 - Changed value inside `Threshold` to be non-public since it has a non-zero constraint. Implemented `Threshold::try_new` and `Threshold::threshold`
