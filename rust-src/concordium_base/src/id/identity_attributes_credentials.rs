@@ -1,8 +1,8 @@
 //! Prover and verifier of identity attribute credentials based on identity credentials.
 //! The proof of identity attribute credentials together with
-//! proofs of statements about the attributes is described in "15.4.2 Identity Based Credential" (blue paper v2.2.0).
+//! proofs of statements about the attributes is described in "15.4.2 Identity Based Credential" (blue paper v2.3.3).
 //! The full proof of statements based on identity credential, which uses the proofs in the present module as a "sub-proof",
-//! is implemented in the [`web3id`](crate::web3id) module.
+//! is implemented in the [`web3id::v1`](crate::web3id::v1) module.
 //!
 //! Notice that the proof in the present file can be seen as a lightweight version of the account opening (account credentials)
 //! proof in [`account_holder`].

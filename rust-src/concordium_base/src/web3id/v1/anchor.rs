@@ -4,9 +4,7 @@
 //! The module defines a higher level verification flow that adds additional verifications
 //! to the cryptographic verification.
 
-use crate::common::{
-    cbor, Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, Serial, Serialize,
-};
+use crate::common::{cbor, Serialize};
 use crate::id::id_proof_types::{
     AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
     RevealAttributeStatement,
@@ -318,35 +316,12 @@ pub struct VerificationRequestAnchor {
 }
 
 /// The subject claims being requested proven.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Serialize)]
 #[serde(tag = "type")]
 pub enum RequestedSubjectClaims {
     /// Claims based on the Concordium ID object.
     #[serde(rename = "identity")]
     Identity(RequestedIdentitySubjectClaims),
-}
-
-impl Serial for RequestedSubjectClaims {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        match self {
-            RequestedSubjectClaims::Identity(claims) => {
-                0u8.serial(out);
-                claims.serial(out);
-            }
-        }
-    }
-}
-
-impl Deserial for RequestedSubjectClaims {
-    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        match u8::deserial(source)? {
-            0u8 => {
-                let claims = source.get()?;
-                Ok(Self::Identity(claims))
-            }
-            n => anyhow::bail!("Unrecognized RequestedSubjectClaims tag {n}"),
-        }
-    }
 }
 
 /// A subject claims request concerning the Concordium ID object (held by the credential holder
@@ -438,7 +413,7 @@ impl RequestedIdentitySubjectClaimsBuilder {
 
 /// Labels for different types of context information that can be provided in verifiable
 /// presentation requests and proofs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub enum ContextLabel {
     /// A nonce which should be at least of lenth bytes32.
     Nonce,
@@ -508,47 +483,8 @@ impl<'de> serde::Deserialize<'de> for ContextLabel {
     }
 }
 
-impl Serial for ContextLabel {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        match self {
-            ContextLabel::Nonce => {
-                0u8.serial(out);
-            }
-            ContextLabel::PaymentHash => {
-                1u8.serial(out);
-            }
-            ContextLabel::BlockHash => {
-                2u8.serial(out);
-            }
-            ContextLabel::ConnectionId => {
-                3u8.serial(out);
-            }
-            ContextLabel::ResourceId => {
-                4u8.serial(out);
-            }
-            ContextLabel::ContextString => {
-                5u8.serial(out);
-            }
-        }
-    }
-}
-
-impl Deserial for ContextLabel {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        match u8::deserial(source)? {
-            0u8 => Ok(Self::Nonce),
-            1u8 => Ok(Self::PaymentHash),
-            2u8 => Ok(Self::BlockHash),
-            3u8 => Ok(Self::ConnectionId),
-            4u8 => Ok(Self::ResourceId),
-            5u8 => Ok(Self::ContextString),
-            n => anyhow::bail!("Unknown ContextLabel tag: {}", n),
-        }
-    }
-}
-
 /// Identity based credential types.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Serialize)]
 pub enum IdentityCredentialType {
     /// The type of the credential is linked directly to the Concordium ID object
     /// hold in a wallet while no account is deployed on-chain.
@@ -560,25 +496,6 @@ pub enum IdentityCredentialType {
     /// hold in a wallet. The Concordium ID object has been signed by the identity providers (IDPs).
     #[serde(rename = "accountCredential")]
     AccountCredential,
-}
-
-impl Serial for IdentityCredentialType {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        match self {
-            IdentityCredentialType::IdentityCredential => 0u8.serial(out),
-            IdentityCredentialType::AccountCredential => 1u8.serial(out),
-        }
-    }
-}
-
-impl Deserial for IdentityCredentialType {
-    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        match u8::deserial(source)? {
-            0u8 => Ok(Self::IdentityCredential),
-            1u8 => Ok(Self::AccountCredential),
-            n => anyhow::bail!("Unrecognized CredentialType tag {n}"),
-        }
-    }
 }
 
 /// DID for a Concordium Identity Provider.
@@ -679,7 +596,7 @@ impl<'de> serde::Deserialize<'de> for Nonce {
 
 /// A statically labeled and statically typed context value. Is used
 /// in [`VerificationRequest`] context.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum LabeledContextProperty {
     /// Cryptographic nonce context which should be of length 32 bytes. Should be randomly
     /// generated, see [`Nonce`].
@@ -811,71 +728,8 @@ impl<'de> serde::Deserialize<'de> for LabeledContextProperty {
     }
 }
 
-impl Serial for LabeledContextProperty {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        match self {
-            LabeledContextProperty::Nonce(hash) => {
-                0u8.serial(out);
-                hash.serial(out);
-            }
-            LabeledContextProperty::PaymentHash(hash) => {
-                1u8.serial(out);
-                hash.serial(out);
-            }
-            LabeledContextProperty::BlockHash(hash) => {
-                2u8.serial(out);
-                hash.serial(out);
-            }
-            LabeledContextProperty::ConnectionId(connection_id) => {
-                3u8.serial(out);
-                connection_id.serial(out);
-            }
-            LabeledContextProperty::ResourceId(rescource_id) => {
-                4u8.serial(out);
-                rescource_id.serial(out);
-            }
-            LabeledContextProperty::ContextString(context_string) => {
-                5u8.serial(out);
-                context_string.serial(out);
-            }
-        }
-    }
-}
-
-impl Deserial for LabeledContextProperty {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        match u8::deserial(source)? {
-            0u8 => {
-                let hash = source.get()?;
-                Ok(Self::Nonce(hash))
-            }
-            1u8 => {
-                let hash = source.get()?;
-                Ok(Self::PaymentHash(hash))
-            }
-            2u8 => {
-                let hash = source.get()?;
-                Ok(Self::BlockHash(hash))
-            }
-            3u8 => {
-                let nonce = source.get()?;
-                Ok(Self::ConnectionId(nonce))
-            }
-            4u8 => {
-                let resource_id = source.get()?;
-                Ok(Self::ResourceId(resource_id))
-            }
-            5u8 => {
-                let context_string = source.get()?;
-                Ok(Self::ContextString(context_string))
-            }
-            n => anyhow::bail!("Unknown GivenContext tag: {}", n),
-        }
-    }
-}
-
 /// Statement that is requested to be proven.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Eq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Eq, Serialize)]
 #[serde(tag = "type")]
 pub enum RequestedStatement<TagType: Serialize> {
     /// The atomic statement stating that an attribute should be revealed.
@@ -886,53 +740,6 @@ pub enum RequestedStatement<TagType: Serialize> {
     AttributeInSet(AttributeInSetStatement<ArCurve, TagType, Web3IdAttribute>),
     /// The atomic statement stating that an attribute is not in a set.
     AttributeNotInSet(AttributeNotInSetStatement<ArCurve, TagType, Web3IdAttribute>),
-}
-
-impl<TagType: Serialize> Serial for RequestedStatement<TagType> {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        match self {
-            Self::RevealAttribute(stmt) => {
-                0u8.serial(out);
-                out.put(stmt);
-            }
-            Self::AttributeInRange(stmt) => {
-                1u8.serial(out);
-                out.put(stmt);
-            }
-            Self::AttributeInSet(stmt) => {
-                2u8.serial(out);
-                out.put(stmt);
-            }
-            Self::AttributeNotInSet(stmt) => {
-                3u8.serial(out);
-                out.put(stmt);
-            }
-        }
-    }
-}
-
-impl<TagType: Serialize> Deserial for RequestedStatement<TagType> {
-    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        Ok(match u8::deserial(source)? {
-            0u8 => {
-                let stmt = source.get()?;
-                Self::RevealAttribute(stmt)
-            }
-            1u8 => {
-                let stmt = source.get()?;
-                Self::AttributeInRange(stmt)
-            }
-            2u8 => {
-                let stmt = source.get()?;
-                Self::AttributeInSet(stmt)
-            }
-            3u8 => {
-                let stmt = source.get()?;
-                Self::AttributeNotInSet(stmt)
-            }
-            n => anyhow::bail!("Unrecognized CredentialType tag {n}"),
-        })
-    }
 }
 
 #[cfg(test)]
