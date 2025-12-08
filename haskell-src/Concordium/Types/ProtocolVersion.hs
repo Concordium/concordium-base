@@ -51,6 +51,7 @@ module Concordium.Types.ProtocolVersion (
     SomeProtocolVersion (..),
     promoteProtocolVersion,
     demoteProtocolVersion,
+    protocolVersionToWord64,
     MonadProtocolVersion (..),
 
     -- * Chain parameters version
@@ -158,6 +159,10 @@ module Concordium.Types.ProtocolVersion (
     --
     --    * 'TOV2' is used in P7 and onwards. The hash is computed similarly to 'TOV1',
     --      except the merkle trees are hashed to include the size.
+    --
+    --    * 'TOV3' is used in P10 and onwards. The hash is computed as before,
+    --      but the `TransactionSummary` contains a new `SponsorDetails` field
+    --      that is included in the hashing.
     TransactionOutcomesVersion (..),
     -- | Singleton type corresponding to 'TransactionOutcomesVersion'.
     STransactionOutcomesVersion (..),
@@ -169,6 +174,11 @@ module Concordium.Types.ProtocolVersion (
     TransactionOutcomesVersionFor,
     -- | The transaction outcomes version for a given protocol version (on singletons).
     sTransactionOutcomesVersionFor,
+    -- | Whether the `TransactionSummary` for the given transaction outcome
+    --  version contains the sponsor details field. Present since P10.
+    hasSponsorDetails,
+    sHasSponsorDetails,
+    HasSponsorDetails,
 
     -- * Delegation support
 
@@ -225,6 +235,13 @@ module Concordium.Types.ProtocolVersion (
     -- | Determine whether a specific protocol version supports protocol level tokens.
     PVSupportsPLT,
 
+    -- * Sponsored transactions support
+
+    -- | Determine whether sponsored transactions are supported.
+    SupportsSponsoredTransactions,
+    supportsSponsoredTransactions,
+    sSupportsSponsoredTransactions,
+
     -- * Block hash version
 
     -- | The version of the block hashing structure.
@@ -271,6 +288,10 @@ module Concordium.Types.ProtocolVersion (
     P8Sym0,
     P9Sym0,
     P10Sym0,
+    TOV0Sym0,
+    TOV1Sym0,
+    TOV2Sym0,
+    TOV3Sym0,
 ) where
 
 import Control.Monad.Except (ExceptT)
@@ -383,10 +404,14 @@ $( singletons
         --  exact reject reasons for failed transactions are omitted from the hash.
         --  * 'TOV2' is used in P7 and onwards. The hash is computed similarly to 'TOV1',
         --  except the merkle trees are hashed to include the size.
+        --  * 'TOV3' is used in P10 and onwards. The hash is computed as before,
+        --    but the `TransactionSummary` contains a new `SponsorDetails` field
+        --    that is included in the hashing.
         data TransactionOutcomesVersion
             = TOV0
             | TOV1
             | TOV2
+            | TOV3
 
         -- \|Projection of 'ProtocolVersion' to 'TransactionOutcomesVersion'.
         transactionOutcomesVersionFor :: ProtocolVersion -> TransactionOutcomesVersion
@@ -399,7 +424,15 @@ $( singletons
         transactionOutcomesVersionFor P7 = TOV2
         transactionOutcomesVersionFor P8 = TOV2
         transactionOutcomesVersionFor P9 = TOV2
-        transactionOutcomesVersionFor P10 = TOV2
+        transactionOutcomesVersionFor P10 = TOV3
+
+        -- \| Whether the `TransactionSummary` for the given transaction outcome
+        --  version contains the sponsor details field. Present since P10.
+        hasSponsorDetails :: TransactionOutcomesVersion -> Bool
+        hasSponsorDetails TOV0 = False
+        hasSponsorDetails TOV1 = False
+        hasSponsorDetails TOV2 = False
+        hasSponsorDetails TOV3 = True
 
         supportsDelegation :: AccountVersion -> Bool
         supportsDelegation AccountV0 = False
@@ -432,6 +465,18 @@ $( singletons
         supportsPLT AccountV3 = False
         supportsPLT AccountV4 = False
         supportsPLT AccountV5 = True
+
+        supportsSponsoredTransactions :: ProtocolVersion -> Bool
+        supportsSponsoredTransactions P1 = False
+        supportsSponsoredTransactions P2 = False
+        supportsSponsoredTransactions P3 = False
+        supportsSponsoredTransactions P4 = False
+        supportsSponsoredTransactions P5 = False
+        supportsSponsoredTransactions P6 = False
+        supportsSponsoredTransactions P7 = False
+        supportsSponsoredTransactions P8 = False
+        supportsSponsoredTransactions P9 = False
+        supportsSponsoredTransactions P10 = True
 
         -- \| A type representing the different hashing structures used for the block hash depending on
         -- the protocol version.
