@@ -1105,8 +1105,11 @@ mod tests {
             fixtures::verification_request_to_verifiable_presentation_request_identity(
                 &id_cred, &request,
             );
-        // remove property from requested context
-        presentation_request.context.requested.pop();
+        // add another property to the requested context
+        presentation_request
+            .context
+            .requested
+            .push(presentation_request.context.requested[0].clone());
 
         let presentation =
             fixtures::generate_and_prove_presentation_identity(&id_cred, presentation_request);
