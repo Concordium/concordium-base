@@ -27,7 +27,8 @@ import Concordium.Types
 import Concordium.Types.Accounts
 import qualified Concordium.Types.AnonymityRevokers as ARS
 import Concordium.Types.Block
-import Concordium.Types.Execution (SupplementedTransactionSummary)
+import Concordium.Types.Conditionally
+import Concordium.Types.Execution (SponsorDetails, SupplementedValidResult, TransactionIndex, TransactionSummary' (..), TransactionSummaryType)
 import qualified Concordium.Types.IdentityProviders as IPS
 import Concordium.Types.Parameters (
     ChainParameters',
@@ -354,6 +355,39 @@ data BlockBirkParameters = BlockBirkParameters
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BlockBirkParameters)
 
+-- | A transaction summary with supplemented result field and unconditionally
+--  present sponsor details..
+data SupplementedTransactionSummary = SupplementedTransactionSummary
+    { stsSender :: !(Maybe AccountAddress),
+      stsHash :: !TransactionHash,
+      -- | The transaction cost paid for by the sender
+      stsCost :: !Amount,
+      stsEnergyCost :: !Energy,
+      stsType :: !TransactionSummaryType,
+      stsResult :: !SupplementedValidResult,
+      stsIndex :: !TransactionIndex,
+      stsSponsorDetails :: !(Maybe SponsorDetails)
+    }
+    deriving (Eq, Show)
+
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''SupplementedTransactionSummary)
+
+-- | Convert a `TransactionSummary'` to a `SupplementedTransactionSummary` by forgetting
+--  the `TransactionOutcomeVersion` parameter. The conditionally present
+--  `SponsorDetails` are set to `Nothing` if not present.
+toSupplementedTransactionSummary :: forall tov. TransactionSummary' tov SupplementedValidResult -> SupplementedTransactionSummary
+toSupplementedTransactionSummary TransactionSummary{..} =
+    SupplementedTransactionSummary
+        { stsSender = tsSender,
+          stsHash = tsHash,
+          stsCost = tsCost,
+          stsEnergyCost = tsEnergyCost,
+          stsType = tsType,
+          stsResult = tsResult,
+          stsIndex = tsIndex,
+          stsSponsorDetails = fromCondDef tsSponsorDetails Nothing
+        }
+
 -- | The status of a transaction that is present in the transaction table or a finalized block,
 --  as returned by the @getTransactionStatus@ gRPC query.
 data SupplementedTransactionStatus
@@ -376,32 +410,6 @@ instance ToJSON SupplementedTransactionStatus where
         object
             [ "status" .= String "finalized",
               "outcomes" .= Map.singleton bh outcome
-            ]
-
--- | The status of a transaction with respect to a specified block
-data BlockTransactionStatus
-    = -- | Either the transaction is not in that block, or that block is not live
-      BTSNotInBlock
-    | -- | The transaction was received but not known to be in that block
-      BTSReceived
-    | -- | The transaction is in that (non-finalized) block
-      BTSCommitted (Maybe SupplementedTransactionSummary)
-    | -- | The transaction is in that (finalized) block
-      BTSFinalized (Maybe SupplementedTransactionSummary)
-    deriving (Show)
-
-instance ToJSON BlockTransactionStatus where
-    toJSON BTSNotInBlock = Null
-    toJSON BTSReceived = object ["status" .= String "received"]
-    toJSON (BTSCommitted outcome) =
-        object
-            [ "status" .= String "committed",
-              "result" .= outcome
-            ]
-    toJSON (BTSFinalized outcome) =
-        object
-            [ "status" .= String "finalized",
-              "result" .= outcome
             ]
 
 -- | A pending change (if any) to a baker pool.

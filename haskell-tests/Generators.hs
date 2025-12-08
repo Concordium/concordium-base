@@ -884,9 +884,18 @@ genValidResult spv =
           TxReject <$> arbitrary
         ]
 
-genTransactionSummary :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen TransactionSummary
+genSponsorDetails :: Gen SponsorDetails
+genSponsorDetails = do
+    sdSponsor <- genAccountAddress
+    sdCost <- genAmount
+    return SponsorDetails{..}
+
+genTransactionSummary :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen (TransactionSummary (TransactionOutcomesVersionFor pv))
 genTransactionSummary spv = do
     tsSender <- oneof [return Nothing, Just <$> genAccountAddress]
+    tsSponsorDetails <-
+        conditionally (sHasSponsorDetails (sTransactionOutcomesVersionFor spv))
+            <$> oneof [return Nothing, Just <$> genSponsorDetails]
     tsHash <- TransactionHashV0 . SHA256.Hash . FBS.pack <$> vector 32
     tsCost <- genAmount
     tsEnergyCost <- Energy <$> arbitrary
@@ -938,6 +947,11 @@ genAccountTransaction :: Gen AccountTransaction
 genAccountTransaction = do
     atrHeader <- genTransactionHeader
     atrPayload <- EncodedPayload <$> genShortByteStringLen (fromIntegral (thPayloadSize atrHeader))
+    atrSignature <- genTransactionSignature
+    return $! makeAccountTransaction atrSignature atrHeader atrPayload
+
+genTransactionSignature :: Gen TransactionSignature
+genTransactionSignature = do
     numCredentials <- chooseBoundedIntegral (1, 255)
     allKeys <- replicateM numCredentials $ do
         numKeys <- chooseBoundedIntegral (1, 255)
@@ -947,15 +961,26 @@ genAccountTransaction = do
             sig <- Signature <$> genShortByteStringLen sLen
             return (idx, sig)
         (,Map.fromList credentialSignatures) . CredentialIndex <$> arbitrary
+    return $ TransactionSignature (Map.fromList allKeys)
 
-    let atrSignature = TransactionSignature (Map.fromList allKeys)
-    return $! makeAccountTransaction atrSignature atrHeader atrPayload
+genTransactionSignaturesV1 :: Gen TransactionSignaturesV1
+genTransactionSignaturesV1 = do
+    tsv1Sender <- genTransactionSignature
+    tsv1Sponsor <- oneof [Just <$> genTransactionSignature, return Nothing]
+    return TransactionSignaturesV1{..}
 
-genTransaction :: Gen Transaction
-genTransaction = do
-    wmdData <- genAccountTransaction
-    wmdArrivalTime <- TransactionTime <$> arbitrary
-    return $ addMetadata NormalTransaction wmdArrivalTime wmdData
+genTransactionHeaderV1 :: Gen TransactionHeaderV1
+genTransactionHeaderV1 = do
+    thv1HeaderV0 <- genTransactionHeader
+    thv1Sponsor <- oneof [Just <$> genAccountAddress, return Nothing]
+    return TransactionHeaderV1{..}
+
+genAccountTransactionV1 :: Gen AccountTransactionV1
+genAccountTransactionV1 = do
+    atrv1Header <- genTransactionHeaderV1
+    atrv1Payload <- EncodedPayload <$> genShortByteStringLen (fromIntegral (thPayloadSize $ thv1HeaderV0 atrv1Header))
+    atrv1Signature <- genTransactionSignaturesV1
+    return $! makeAccountTransactionV1 atrv1Signature atrv1Header atrv1Payload
 
 genInitialCredentialDeploymentInformation :: Gen InitialCredentialDeploymentInfo
 genInitialCredentialDeploymentInformation = do
@@ -974,19 +999,24 @@ genAccountCredentialWithProofs =
           InitialACWP <$> genInitialCredentialDeploymentInformation
         ]
 
-genCredentialDeploymentWithMeta :: Gen CredentialDeploymentWithMeta
-genCredentialDeploymentWithMeta = do
+genAccountCreation :: Gen AccountCreation
+genAccountCreation = do
     credential <- genAccountCredentialWithProofs
     messageExpiry <- TransactionTime <$> arbitrary
-    wmdArrivalTime <- TransactionTime <$> arbitrary
-    return $ addMetadata CredentialDeployment wmdArrivalTime AccountCreation{..}
+    return AccountCreation{..}
 
 genBlockItem :: Gen BlockItem
-genBlockItem =
+genBlockItem = do
+    arrivalTime <- TransactionTime <$> arbitrary
     oneof
-        [ normalTransaction <$> genTransaction,
-          credentialDeployment <$> genCredentialDeploymentWithMeta
+        [ makeBlockItem arrivalTime <$> genAccountTransaction,
+          makeBlockItem arrivalTime <$> genAccountCreation
         ]
+
+genBlockItemTransactionExt :: Gen BlockItem
+genBlockItemTransactionExt = do
+    arrivalTime <- TransactionTime <$> arbitrary
+    makeBlockItem arrivalTime <$> genAccountTransactionV1
 
 genElectionDifficulty :: Gen ElectionDifficulty
 genElectionDifficulty = makeElectionDifficulty <$> chooseBoundedIntegral (0, 99999)
