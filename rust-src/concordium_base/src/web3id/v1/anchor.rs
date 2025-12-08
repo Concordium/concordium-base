@@ -1473,9 +1473,6 @@ mod fixtures {
                 .iter()
                 .map(|label| match label {
                     ContextLabel::BlockHash => LabeledContextProperty::BlockHash(*VRA_BLOCK_HASH),
-                    ContextLabel::ResourceId => {
-                        LabeledContextProperty::ResourceId("testresourceid".to_string())
-                    }
                     _ => panic!("unexpected label"),
                 })
                 .map(|prop| prop.to_context_property())
