@@ -264,8 +264,7 @@ impl UnfilledContextInformationBuilder {
     /// Creates a simple context with commonly used parameters for basic verification scenarios.
     ///
     /// This is a convenience function that creates a context with a nonce for freshness,
-    /// a connection ID for session tracking, a rescource ID for tracking the connected website,
-    /// and a context string for additional information.
+    /// a connection ID for session tracking, and a rescource ID for tracking the connected website.
     /// It requests BlockHash to be provided by the presenter.
     ///
     /// # Parameters
@@ -273,18 +272,11 @@ impl UnfilledContextInformationBuilder {
     /// - `nonce` Cryptographic nonce for preventing replay attacks.
     /// - `connectionId` Identifier for the verification session (e.g. wallet-connect topic).
     /// - `rescourceId` Identifier for the rescource id (e.g. website URL or TLS fingerprint).
-    /// - `contextString` Additional context information.
-    pub fn new_simple(
-        nonce: Nonce,
-        connection_id: String,
-        rescource_id: String,
-        context_string: String,
-    ) -> Self {
+    pub fn new_simple(nonce: Nonce, connection_id: String, rescource_id: String) -> Self {
         Self::new()
             .given(LabeledContextProperty::Nonce(nonce))
             .given(LabeledContextProperty::ConnectionId(connection_id))
             .given(LabeledContextProperty::ResourceId(rescource_id))
-            .given(LabeledContextProperty::ContextString(context_string))
             .requested(ContextLabel::BlockHash)
     }
 
@@ -1348,8 +1340,10 @@ mod fixtures {
             NONCE,
             "testconnection".to_string(),
             "testrescource".to_string(),
-            "testcontext".to_string(),
         )
+        .given(LabeledContextProperty::ContextString(
+            "testcontext".to_string(),
+        ))
         .build()
     }
 
