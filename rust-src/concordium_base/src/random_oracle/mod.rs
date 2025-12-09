@@ -560,6 +560,10 @@ impl TranscriptProtocolV1 {
     }
 }
 
+
+#[cfg(test)]
+const LABEL_WIDTH: usize = 35;
+const MSG_SIZE_WIDTH: usize = 5;
 #[cfg(test)]
 #[derive(Debug, Clone)]
 pub struct TranscriptProtocolTracer<P> {
@@ -570,9 +574,11 @@ pub struct TranscriptProtocolTracer<P> {
 #[cfg(test)]
 impl<P> TranscriptProtocolTracer<P> {
     pub fn new(inner: P) -> Self {
+        let lines = std::cell::RefCell::new(vec![]);
+        //lines.borrow_mut().push(format!("=== {:^LABEL_WIDTH$} ===", "Proof Transcript"));
         Self {
             inner,
-            lines: std::cell::RefCell::new(vec![]),
+            lines,
         }
     }
 }
@@ -588,17 +594,21 @@ impl<P> Drop for TranscriptProtocolTracer<P> {
 
 #[cfg(test)]
 impl<P: TranscriptProtocol> TranscriptProtocol for TranscriptProtocolTracer<P> {
+
     fn append_label(&mut self, label: impl AsRef<[u8]>) {
         self.inner.append_label(label.as_ref());
         self.lines
             .borrow_mut()
-            .push(String::from_utf8_lossy(label.as_ref()).into_owned());
+            .push(format!(
+                "-l-> {:<LABEL_WIDTH$}",
+                String::from_utf8_lossy(label.as_ref()).into_owned()
+            ));
     }
 
     fn append_message(&mut self, label: impl AsRef<[u8]>, message: &impl Serial) {
         self.inner.append_message(label.as_ref(), message);
         self.lines.borrow_mut().push(format!(
-            "{}, {} bytes",
+            "-m-> {:<LABEL_WIDTH$} {:>MSG_SIZE_WIDTH$} bytes",
             String::from_utf8_lossy(label.as_ref()).into_owned(),
             to_bytes(message).len()
         ));
@@ -614,7 +624,7 @@ impl<P: TranscriptProtocol> TranscriptProtocol for TranscriptProtocolTracer<P> {
         let messages: Vec<_> = messages.into_iter().collect();
         self.inner.append_messages(label.as_ref(), &messages);
         self.lines.borrow_mut().push(format!(
-            "{}, {} items, {} bytes total",
+            "-m-> {:<LABEL_WIDTH$} {:>MSG_SIZE_WIDTH$} items {:>MSG_SIZE_WIDTH$} bytes total (append messages)",
             String::from_utf8_lossy(label.as_ref()).into_owned(),
             messages.len(),
             messages
@@ -628,7 +638,7 @@ impl<P: TranscriptProtocol> TranscriptProtocol for TranscriptProtocolTracer<P> {
         self.inner
             .append_final_prover_message(label.as_ref(), message);
         self.lines.borrow_mut().push(format!(
-            "{}, final prover message, {} bytes",
+            "-m-> {:<LABEL_WIDTH$} {:>MSG_SIZE_WIDTH$} bytes (final prover message)",
             String::from_utf8_lossy(label.as_ref()).into_owned(),
             to_bytes(message).len()
         ));
@@ -643,8 +653,9 @@ impl<P: TranscriptProtocol> TranscriptProtocol for TranscriptProtocolTracer<P> {
         B::IntoIter: ExactSizeIterator,
     {
         let messages: Vec<_> = messages.into_iter().collect();
+        self.lines.borrow_mut().push(format!("    {:^LABEL_WIDTH$}","--- start append each message ---"));
         self.lines.borrow_mut().push(format!(
-            "{}, {} messages",
+            "-m-> {:<LABEL_WIDTH$} {:>MSG_SIZE_WIDTH$} items",
             String::from_utf8_lossy(label.as_ref()).into_owned(),
             messages.len(),
         ));
@@ -659,13 +670,15 @@ impl<P: TranscriptProtocol> TranscriptProtocol for TranscriptProtocolTracer<P> {
                 lines.extend(tracer.lines.take());
             });
         self.lines.borrow_mut().extend(lines);
+        self.lines.borrow_mut().push(format!("    {:^LABEL_WIDTH$}","--- end append each message ---"));
     }
 
     fn extract_challenge_scalar<C: Curve>(&mut self, label: impl AsRef<[u8]>) -> C::Scalar {
         let val = self.inner.extract_challenge_scalar::<C>(label.as_ref());
         self.lines.borrow_mut().push(format!(
-            "{}, extract scalar challenge",
+            "<-c- {:<LABEL_WIDTH$} {:>MSG_SIZE_WIDTH$}       (extract scalar challenge)",
             String::from_utf8_lossy(label.as_ref()).into_owned(),
+            ""
         ));
         val
     }
@@ -674,7 +687,7 @@ impl<P: TranscriptProtocol> TranscriptProtocol for TranscriptProtocolTracer<P> {
         let val = self.inner.extract_raw_challenge();
         self.lines
             .borrow_mut()
-            .push("<extract raw challenge>".to_string());
+            .push(format!("<-c- {:<LABEL_WIDTH$} {:>MSG_SIZE_WIDTH$}       (extract raw challenge)","",""));
         val
     }
 }
