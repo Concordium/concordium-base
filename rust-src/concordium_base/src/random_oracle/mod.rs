@@ -653,7 +653,7 @@ impl<P: TranscriptProtocol> TranscriptProtocol for TranscriptProtocolTracer<P> {
         B::IntoIter: ExactSizeIterator,
     {
         let messages: Vec<_> = messages.into_iter().collect();
-        self.lines.borrow_mut().push(format!("    {:^LABEL_WIDTH$}","--- start append each message ---"));
+        self.lines.borrow_mut().push(format!("     {:<LABEL_WIDTH$}","--- start append each message ---"));
         self.lines.borrow_mut().push(format!(
             "-m-> {:<LABEL_WIDTH$} {:>MSG_SIZE_WIDTH$} items",
             String::from_utf8_lossy(label.as_ref()).into_owned(),
@@ -662,15 +662,17 @@ impl<P: TranscriptProtocol> TranscriptProtocol for TranscriptProtocolTracer<P> {
         let mut lines = Vec::new();
         self.inner
             .append_each_message(label, messages, |inner, item| unsafe {
+                lines.push(format!("     {:<LABEL_WIDTH$}","- start message -"));
                 let mut tracer =
                     TranscriptProtocolTracer::new(std::mem::MaybeUninit::uninit().assume_init());
                 std::mem::swap(inner, &mut tracer.inner);
                 append_item(&mut tracer, item);
-                std::mem::swap(inner, &mut tracer.inner);
+                std::mem::swap(inner, &mut tracer.inner); 
                 lines.extend(tracer.lines.take());
+                lines.push(format!("     {:<LABEL_WIDTH$}","- end message -"));
             });
         self.lines.borrow_mut().extend(lines);
-        self.lines.borrow_mut().push(format!("    {:^LABEL_WIDTH$}","--- end append each message ---"));
+        self.lines.borrow_mut().push(format!("     {:<LABEL_WIDTH$}","--- end append each message ---"));
     }
 
     fn extract_challenge_scalar<C: Curve>(&mut self, label: impl AsRef<[u8]>) -> C::Scalar {
