@@ -144,6 +144,37 @@ instance S.Serialize TransactionSignature where
                     accumulateSigs (Map.insert idx sigmap accum) (Just idx) (count - 1)
         TransactionSignature <$> accumulateSigs Map.empty Nothing len
 
+-- | The signatures for an 'AccountTransactionV1'.
+data TransactionSignaturesV1 = TransactionSignaturesV1
+    { -- | The signatures for the sender account
+      tsv1Sender :: !TransactionSignature,
+      -- | The signatures for the sponsor account. These must be present if a sponsor
+      -- is specified for the transaction in the corresponding transaction header.
+      -- If a sponsor is not set, the signature map should be empty.
+      tsv1Sponsor :: !(Maybe TransactionSignature)
+    }
+    deriving (Show, Eq)
+
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 4} ''TransactionSignaturesV1)
+
+instance S.Serialize TransactionSignaturesV1 where
+    put TransactionSignaturesV1{..} = do
+        S.put tsv1Sender
+        case tsv1Sponsor of
+            Nothing -> S.putWord8 0
+            Just sponsorSignature -> S.put sponsorSignature
+
+    get = S.label "transaction signatures v1" $ do
+        tsv1Sender <- S.label "sender" S.get
+        tsv1Sponsor <- S.label "sponsor" (noSponsor <|> sponsor)
+        return $! TransactionSignaturesV1{..}
+      where
+        noSponsor = do
+            tag <- S.getWord8
+            guard (tag == 0)
+            return Nothing
+        sponsor = Just <$> S.get
+
 -- | An 'AccountTransaction' is a transaction that originates from
 --  a specific account (the sender), and is paid for by the sender.
 --
@@ -194,35 +225,6 @@ instance HashableTo TransactionHashV0 AccountTransaction where
 
 instance HashableTo TransactionSignHashV0 AccountTransaction where
     getHash = atrSignHash
-
--- | The signatures for an 'AccountTransactionV1'.
-data TransactionSignaturesV1 = TransactionSignaturesV1
-    { -- | The signatures for the sender account
-      tsv1Sender :: !TransactionSignature,
-      -- | The signatures for the sponsor account. These must be present if a sponsor
-      -- is specified for the transaction in the corresponding transaction header.
-      -- If a sponsor is not set, the signature map should be empty.
-      tsv1Sponsor :: !(Maybe TransactionSignature)
-    }
-    deriving (Show, Eq)
-
-instance S.Serialize TransactionSignaturesV1 where
-    put TransactionSignaturesV1{..} = do
-        S.put tsv1Sender
-        case tsv1Sponsor of
-            Nothing -> S.putWord8 0
-            Just sponsorSignature -> S.put sponsorSignature
-
-    get = S.label "transaction signatures v1" $ do
-        tsv1Sender <- S.label "sender" S.get
-        tsv1Sponsor <- S.label "sponsor" (noSponsor <|> sponsor)
-        return $! TransactionSignaturesV1{..}
-      where
-        noSponsor = do
-            tag <- S.getWord8
-            guard (tag == 0)
-            return Nothing
-        sponsor = Just <$> S.get
 
 -- | Data common to all v1 transaction types.
 data TransactionHeaderV1 = TransactionHeaderV1
