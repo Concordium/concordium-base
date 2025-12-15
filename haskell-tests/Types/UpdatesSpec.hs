@@ -143,6 +143,7 @@ tests = parallel $ do
     specify "UpdatePayload JSON in P7" $ withMaxSuccess 1000 $ testJSONUpdatePayload SP7
     specify "UpdatePayload JSON in P8" $ withMaxSuccess 1000 $ testJSONUpdatePayload SP8
     specify "UpdatePayload JSON in P9" $ withMaxSuccess 1000 $ testJSONUpdatePayload SP9
+    specify "UpdatePayload JSON in P10" $ withMaxSuccess 1000 $ testJSONUpdatePayload SP10
     versionedTests SP1
     versionedTests SP2
     versionedTests SP3
@@ -152,6 +153,7 @@ tests = parallel $ do
     versionedTests SP7
     versionedTests SP8
     versionedTests SP9
+    versionedTests SP10
   where
     versionedTests spv = describe (show $ demoteProtocolVersion spv) $ do
         specify "UpdatePayload serialization" $ withMaxSuccess 1000 $ testSerializeUpdatePayload spv

@@ -125,6 +125,7 @@ tests = parallel $ do
     specify "BlockItem serialization in P7." $ withMaxSuccess 100 $ testBlockItem SP7
     specify "BlockItem serialization in P8." $ withMaxSuccess 100 $ testBlockItem SP8
     specify "BlockItem serialization in P9." $ withMaxSuccess 100 $ testBlockItem SP9
+    specify "BlockItem serialization in P10." $ withMaxSuccess 100 $ testBlockItem SP10
 
     specify "BlockItem ExtendedTransaction serialization in P1." $ withMaxSuccess 100 $ testBlockItemExtendedTransaction SP1
     specify "BlockItem ExtendedTransaction serialization in P2." $ withMaxSuccess 100 $ testBlockItemExtendedTransaction SP2
@@ -135,6 +136,7 @@ tests = parallel $ do
     specify "BlockItem ExtendedTransaction serialization in P7." $ withMaxSuccess 100 $ testBlockItemExtendedTransaction SP7
     specify "BlockItem ExtendedTransaction serialization in P8." $ withMaxSuccess 100 $ testBlockItemExtendedTransaction SP8
     specify "BlockItem ExtendedTransaction serialization in P9." $ withMaxSuccess 100 $ testBlockItemExtendedTransaction SP9
+    specify "BlockItem ExtendedTransaction serialization in P10." $ withMaxSuccess 100 $ testBlockItemExtendedTransaction SP10
 
     specify "TransactionHeader serialization matches transactionHeaderSize." $ testAccountTransactionHeaderSize
     specify "TransactionHeader + payload serialization matches getTransactionHeaderPayloadSize" $ testGetTransactionHeaderPayloadSize
