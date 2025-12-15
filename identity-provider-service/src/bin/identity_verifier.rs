@@ -89,7 +89,8 @@ async fn main() {
         Asset::get("attribute_form_with_login.html")
     } else {
         Asset::get("attribute_form.html")
-    }.unwrap();
+    }
+    .unwrap();
 
     let attribute_form_html = std::str::from_utf8(&attribute_form.data)
         .unwrap()
@@ -161,29 +162,26 @@ async fn main() {
                     };
 
                     // grab the username
-                    let username: String = match input.get("username")  {
+                    let username: String = match input.get("username") {
                         Some(username) => username.clone(),
-                        None => String::from("notprovided")
+                        None => String::from("notprovided"),
                     };
                     input.remove("username");
 
                     // grab the password
-                    let password: String = match input.get("password")  {
+                    let password: String = match input.get("password") {
                         Some(password) => password.clone(),
-                        None => String::from("notprovided")
+                        None => String::from("notprovided"),
                     };
                     input.remove("password");
 
                     info!("username is {username} and password is {password}");
 
                     // verify credentials, rejecting if they don't match
-                    match require_login && (username != login_username || password != login_password) {
-                        true => {
-                            return Response::builder()
-                                                    .status(StatusCode::UNAUTHORIZED)
-                                                    .body("Incorrect Username or Password.".to_string())
-                        }
-                        false => (),
+                    if require_login && (username != login_username || password != login_password) {
+                        return Response::builder()
+                            .status(StatusCode::UNAUTHORIZED)
+                            .body("Incorrect Username or Password.".to_string());
                     };
 
                     let endpoint_version = match input.get("endpoint_version") {
@@ -267,7 +265,7 @@ async fn main() {
                             error!("Received invalid signature: {}", error.to_string());
                             return Response::builder().status(StatusCode::BAD_REQUEST).body(
                                 "The received request (id_cred_pub) was not correctly signed by \
-                                 the identity provider."
+                                the identity provider."
                                     .to_string(),
                             );
                         }
