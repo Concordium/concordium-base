@@ -25,8 +25,11 @@ The library covers the following areas
 
 ### Features
 
-The library has no default features and the following optional ones:
+The library has `serde_deprecated` as a default feature and optional ones:
 
+- `serde_deprecated` - Guards `serde::Serialize` and `serde::Deserialize`
+  implementations for composite data structures where these implementations will
+  eventually be deprecated. Enable the flag to use them.
 - `encryption` - additionally exposes the `common::encryption` module for
   handling the encryption format used by various Concordium tools (such as
   wallet exports). This feature is covered by semver guidelines.
