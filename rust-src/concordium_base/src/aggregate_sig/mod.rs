@@ -542,10 +542,6 @@ mod test {
         }
     }
 
-    /// Test that we can verify proof of knowledge created by previous versions of the protocol.
-    /// This test protects from changes that introduces braking changes.
-    ///
-    /// The test uses a serialization of a previously created proof.
     #[test]
     fn test_proof_of_knowledge() {
         let mut csprng = thread_rng();
@@ -588,6 +584,10 @@ mod test {
         }
     }
 
+    /// Test that we can verify proof of knowledge created by previous versions of the protocol.
+    /// This test protects from changes that introduces braking changes.
+    ///
+    /// The test uses a serialization of a previously created proof.
     #[test]
     fn test_proof_of_knowledge_stable() {
         let ro = RandomOracle::domain(b"");
