@@ -590,7 +590,7 @@ mod test {
 
     #[test]
     fn test_proof_of_knowledge_stable() {
-        let mut ro = RandomOracle::domain(b"");
+        let ro = RandomOracle::domain(b"");
         let sk = SecretKey::<Bls12>::generate(&mut seed0());
         let pk = PublicKey::<Bls12>::from_secret(&sk);
 
