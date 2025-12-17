@@ -693,7 +693,7 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
 mod test {
     use ark_bls12_381::G1Projective;
 
-    use crate::{common::{self, seed0}, curve_arithmetic::arkworks_instances::ArkGroup};
+    use crate::{common, curve_arithmetic::arkworks_instances::ArkGroup};
 
     use super::*;
 
@@ -763,11 +763,15 @@ mod test {
         )
     }
 
+    /// RNG with fixed seed to generate the stability test cases
+    fn seed0() -> rand::rngs::StdRng {
+        rand::rngs::StdRng::seed_from_u64(0)
+    }
+
     /// Test that we can verify transactions created by previous versions of the protocol.
     /// This test protects from changes that introduces braking changes.
     ///
     /// The test uses a serialization of a previously created transaction.
-    #[allow(non_snake_case)]
     #[test]
     fn test_enc_trans_stable() {
         let sk_sender: SecretKey<SomeCurve> = SecretKey::generate_all(&mut seed0());
@@ -868,7 +872,6 @@ mod test {
     /// This test protects from changes that introduces braking changes.
     ///
     /// The test uses a serialization of a previously created transaction.
-    #[allow(non_snake_case)]
     #[test]
     fn test_sec_to_pub_stable() {
         let sk: SecretKey<SomeCurve> = SecretKey::generate_all(&mut seed0());

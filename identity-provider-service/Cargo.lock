@@ -479,7 +479,7 @@ dependencies = [
 
 [[package]]
 name = "concordium_base"
-version = "8.0.0-alpha.3"
+version = "9.0.0"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -499,6 +499,7 @@ dependencies = [
  "ed25519-dalek",
  "either",
  "ff",
+ "generic-array",
  "hex",
  "itertools 0.14.0",
  "leb128",
@@ -1312,7 +1313,7 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "identity-provider-service"
-version = "0.5.8"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "chrono",
