@@ -46,21 +46,21 @@ struct Config {
         help = "Whether to require username/password on the form",
         parse(try_from_str),
         default_value = "false",
-        env = "REQUIRE_LOGIN"
+        env = "IDENTITY_PROVIDER_REQUIRE_LOGIN"
     )]
     require_login: bool,
     #[structopt(
         long = "login-username",
         help = "The username to compare when login is required and a backend is not used",
         default_value = "",
-        env = "LOGIN_USERNAME"
+        env = "IDENTITIY_PROVIDER_LOGIN_USERNAME"
     )]
     login_username: String,
     #[structopt(
         long = "login-password",
         help = "The password to compare when login is required and a backend is not used",
         default_value = "",
-        env = "LOGIN_PASSWORD"
+        env = "IDENTITIY_PROVIDER_LOGIN_PASSWORD"
     )]
     login_password: String,
 }
