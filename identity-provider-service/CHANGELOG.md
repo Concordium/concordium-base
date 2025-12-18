@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+
+- Namespace environment variable names for basic authentication.
+
 ## 0.6.0
 
 - Add optional basic authentication.
