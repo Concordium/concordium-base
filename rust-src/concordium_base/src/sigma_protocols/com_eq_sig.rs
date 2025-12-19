@@ -8,12 +8,12 @@
 //! "Proof of Knowledge of a Signature" Section 5.3.5, Bluepaper v1.2.5")
 
 use super::common::*;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::*,
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
     ps_sig::{BlindedSignature, BlindingRandomness, PublicKey as PsSigPublicKey},
-    random_oracle::RandomOracle,
 };
 use itertools::izip;
 use rand::*;
@@ -63,9 +63,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
     type SecretData = ComEqSigSecret<P, C>;
 
     #[inline]
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         ro.append_message(b"blinded_sig", &self.blinded_sig);
-        ro.extend_from(b"commitments", self.commitments.iter());
+        ro.append_messages(b"commitments", self.commitments.iter());
         ro.append_message(b"ps_pub_key", &self.ps_pub_key);
         ro.append_message(b"comm_key", &self.comm_key)
     }
@@ -299,6 +299,7 @@ mod tests {
     use ark_bls12_381::G1Projective;
 
     use super::*;
+    use crate::random_oracle::RandomOracle;
     use crate::{
         curve_arithmetic::arkworks_instances::ArkGroup,
         ps_sig::{SecretKey as PsSigSecretKey, Signature},

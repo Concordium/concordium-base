@@ -2,17 +2,43 @@ use crate::get_crate_root;
 use convert_case::{Case, Casing};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
-use syn::{Data, DataEnum, DataStruct, Expr, Fields, LitStr, Member, Type, Variant};
+use syn::{Data, DataEnum, DataStruct, Expr, ExprLit, Fields, Lit, LitStr, Member, Type, Variant};
 
 use darling::{FromDeriveInput, FromField, FromVariant};
 use syn::{punctuated::Punctuated, spanned::Spanned, token::Comma};
+
+#[derive(Debug, Clone)]
+enum CborKey {
+    Positive(Expr),
+    Text(Expr),
+}
+
+impl darling::FromMeta for CborKey {
+    fn from_expr(expr: &Expr) -> darling::Result<Self> {
+        let key = if matches!(
+            expr,
+            Expr::Lit(ExprLit {
+                lit: Lit::Str(_),
+                ..
+            })
+        ) {
+            CborKey::Text(expr.clone())
+        } else {
+            CborKey::Positive(expr.clone())
+        };
+
+        Ok(key)
+    }
+}
 
 #[derive(Debug, Default, FromField)]
 #[darling(attributes(cbor))]
 pub struct CborFieldOpts {
     /// Set key to be used for key in map. If not specified the field
     /// name in camel case is used as key as a text data item.
-    key: Option<Expr>,
+    /// Can be either an integer (e.g., key = 1) for Positive key,
+    /// or a string literal (e.g., key = "type") for Text key.
+    key: Option<CborKey>,
     /// Deserialize fields in CBOR map that is not present in the struct
     /// to the field with this attribute.
     #[darling(default)]
@@ -94,7 +120,14 @@ impl CborFields {
             .filter(|field| !field.opts.other)
             .map(|field| {
                 if let Some(key) = field.opts.key.as_ref() {
-                    quote!(#cbor_module::MapKeyRef::Positive(#key))
+                    match key {
+                        CborKey::Text(expr) => {
+                            quote!(#cbor_module::MapKeyRef::Text(#expr))
+                        }
+                        CborKey::Positive(expr) => {
+                            quote!(#cbor_module::MapKeyRef::Positive(#expr))
+                        }
+                    }
                 } else {
                     match &field.member {
                         Member::Named(ident) => {

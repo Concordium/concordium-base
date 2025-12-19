@@ -4,11 +4,11 @@
 //! the value committed to in two commitments $C_1$ and $C_2$ in (potentially)
 //! two different groups (of the same order) is the same.
 use super::common::*;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
-    random_oracle::RandomOracle,
 };
 use rand::*;
 
@@ -45,7 +45,7 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
     type SecretData = ComEqDiffGroupsSecret<C1, C2>;
 
     #[inline]
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         ro.append_message("commitment_1", &self.commitment_1);
         ro.append_message("commitment_2", &self.commitment_2);
         ro.append_message("cmm_key_1", &self.cmm_key_1);
@@ -166,6 +166,7 @@ mod tests {
     use crate::curve_arithmetic::arkworks_instances::ArkGroup;
 
     use super::*;
+    use crate::random_oracle::RandomOracle;
     use ark_bls12_381::{G1Projective, G2Projective};
 
     type G1 = ArkGroup<G1Projective>;

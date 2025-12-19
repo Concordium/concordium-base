@@ -1,5 +1,6 @@
 //! Definition of Concordium DIDs and their parser.
 
+use crate::web3id::v1::IdentityCredentialEphemeralId;
 use crate::{base::CredentialRegistrationID, common::base16_decode_string, id::types::IpIdentity};
 use concordium_contracts_common::{
     AccountAddress, ContractAddress, EntrypointName, OwnedEntrypointName, OwnedParameter,
@@ -14,7 +15,7 @@ use nom::{
 };
 
 #[derive(
-    Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, PartialOrd, Ord,
+    Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash,
 )]
 /// Supported networks for Concordium DIDs.
 pub enum Network {
@@ -73,12 +74,12 @@ impl crate::common::Deserial for Network {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 /// The supported DID identifiers on Concordium.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IdentifierType {
     /// Reference to an account via an address.
     Account { address: AccountAddress },
-    /// Reference to a specific credential via its ID.
+    /// Reference to an account credential via the account credential registration ID.
     Credential { cred_id: CredentialRegistrationID },
     /// Reference to a specific smart contract instance.
     ContractData {
@@ -90,6 +91,11 @@ pub enum IdentifierType {
     PublicKey { key: ed25519_dalek::VerifyingKey },
     /// Reference to a specific identity provider.
     Idp { idp_identity: IpIdentity },
+    /// Encrypted, ephemeral identifier for an identity credential. It is the encryption of IdCredPub.
+    /// The identifier is ephemeral since the encryption is randomized.
+    EncryptedIdentityCredentialId {
+        cred_id: IdentityCredentialEphemeralId,
+    },
 }
 
 impl IdentifierType {
@@ -133,6 +139,51 @@ pub struct Method {
     pub network: Network,
     /// The remaining identifier.
     pub ty: IdentifierType,
+}
+
+impl Method {
+    /// Construct variant [`Idp`](IdentifierType::Idp)
+    pub fn new_idp(network: Network, idp_identity: IpIdentity) -> Self {
+        Self {
+            network,
+            ty: IdentifierType::Idp { idp_identity },
+        }
+    }
+
+    /// Construct variant [`Account`](IdentifierType::Account)
+    pub fn new_account(network: Network, address: AccountAddress) -> Self {
+        Self {
+            network,
+            ty: IdentifierType::Account { address },
+        }
+    }
+
+    /// Construct variant [`AccountCredential`](IdentifierType::Credential)
+    pub fn new_account_credential(network: Network, cred_id: CredentialRegistrationID) -> Self {
+        Self {
+            network,
+            ty: IdentifierType::Credential { cred_id },
+        }
+    }
+
+    /// Construct variant [`PublicKey`](IdentifierType::PublicKey)
+    pub fn new_public_key(network: Network, key: ed25519_dalek::VerifyingKey) -> Self {
+        Self {
+            network,
+            ty: IdentifierType::PublicKey { key },
+        }
+    }
+
+    /// Construct variant [`IdentityCredential`](IdentifierType::EncryptedIdentityCredentialId)
+    pub fn new_identity_credential(
+        network: Network,
+        cred_id: IdentityCredentialEphemeralId,
+    ) -> Self {
+        Self {
+            network,
+            ty: IdentifierType::EncryptedIdentityCredentialId { cred_id },
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -205,6 +256,10 @@ impl std::fmt::Display for Method {
             IdentifierType::Idp { idp_identity } => {
                 write!(f, "did:ccd:{}:idp:{idp_identity}", self.network)
             }
+            IdentifierType::EncryptedIdentityCredentialId { cred_id } => {
+                let cred_id_hex = hex::encode(&cred_id.0);
+                write!(f, "did:ccd:{}:encidcred:{cred_id_hex}", self.network)
+            }
         }
     }
 }
@@ -250,13 +305,24 @@ fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
         })?;
         Ok((input, IdentifierType::Account { address }))
     };
-    let credential = |input: &'a str| {
+    let account_credential = |input: &'a str| {
         let (input, _) = tag("cred:")(input)?;
         let (input, data) = cut(recognize(many_m_n(96, 96, cut(anychar))))(input)?;
         let cred_id = data.parse::<CredentialRegistrationID>().map_err(|_| {
             nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify))
         })?;
         Ok((input, IdentifierType::Credential { cred_id }))
+    };
+    let identity_credential = |input: &'a str| {
+        let (input, _) = tag("encidcred:")(input)?;
+        let bytes = hex::decode(input).map_err(|_| {
+            nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify))
+        })?;
+        let cred_id = IdentityCredentialEphemeralId(bytes);
+        Ok((
+            "",
+            IdentifierType::EncryptedIdentityCredentialId { cred_id },
+        ))
     };
     let contract = |input| {
         let (input, _) = tag("sci:")(input)?;
@@ -328,7 +394,14 @@ fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
         Ok((input, IdentifierType::Idp { idp_identity }))
     };
 
-    alt((account, credential, contract, pkc, idp))(input)
+    alt((
+        account,
+        account_credential,
+        identity_credential,
+        contract,
+        pkc,
+        idp,
+    ))(input)
 }
 
 /// Parse a DID, returning either an error or the parsed method and leftover
@@ -343,6 +416,14 @@ pub fn parse_did(input: &str) -> IResult<&str, Method> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::elgamal::Cipher;
+    use crate::id::types::{ArIdentity, ChainArData};
+    use crate::web3id::fixtures;
+    use crate::web3id::v1::IdentityCredentialEphemeralIdDataRef;
+
+    use crate::id::constants::ArCurve;
+    use crate::id::secret_sharing::Threshold;
+    use std::collections::BTreeMap;
 
     #[test]
     fn test_account() -> anyhow::Result<()> {
@@ -470,8 +551,9 @@ mod tests {
         Ok(())
     }
 
+    /// On-chain account credential
     #[test]
-    fn test_id_credential() -> anyhow::Result<()> {
+    fn test_account_credential() -> anyhow::Result<()> {
         let cred_id = "a5bedc6d92d6cc8333684aa69091095c425d0b5971f554964a6ac8e297a3074748d25268f1d217234c400f3103669f90".parse()?;
         let target = Method {
             network: Network::Mainnet,
@@ -552,5 +634,70 @@ mod tests {
             .parse::<Method>()
             .is_err());
         Ok(())
+    }
+
+    /// Create an [`IdentityCredentialEphemeralId`] to use in tests
+    fn identity_cred_id_fixture() -> IdentityCredentialEphemeralId {
+        let mut ar_data = BTreeMap::new();
+        ar_data.insert(
+            ArIdentity::try_from(1).unwrap(),
+            ChainArData {
+                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed(0)),
+            },
+        );
+        ar_data.insert(
+            ArIdentity::try_from(2).unwrap(),
+            ChainArData {
+                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed(1)),
+            },
+        );
+        ar_data.insert(
+            ArIdentity::try_from(3).unwrap(),
+            ChainArData {
+                enc_id_cred_pub_share: Cipher::generate(&mut fixtures::seed(2)),
+            },
+        );
+
+        IdentityCredentialEphemeralId::from_data(IdentityCredentialEphemeralIdDataRef::<ArCurve> {
+            ar_data: &ar_data,
+            threshold: Threshold(2),
+        })
+    }
+
+    #[test]
+    fn test_identity_credential() {
+        let cred_id = identity_cred_id_fixture();
+        let cred_id_hex = hex::encode(&cred_id.0);
+
+        let target = Method {
+            network: Network::Mainnet,
+            ty: IdentifierType::EncryptedIdentityCredentialId { cred_id },
+        };
+
+        assert_eq!(
+            format!("did:ccd:encidcred:{cred_id_hex}")
+                .parse::<Method>()
+                .unwrap(),
+            target
+        );
+        assert_eq!(
+            format!("did:ccd:mainnet:encidcred:{cred_id_hex}")
+                .parse::<Method>()
+                .unwrap(),
+            target
+        );
+        let s = target.to_string();
+        assert_eq!(s, "did:ccd:mainnet:encidcred:02000300000001ac5f20234d022490c77c18f9a9ec845811a9faa539361b166ee752ddd1cc71ba2a2c37d9b0b1d43b8dd04994d9b8da04b7b14843f9c078c28c20341d435358cd150ecdebdbab7d880a1397cd68346e8dd4c347d4efaaad32979237a71969c41e0000000281da2c786ecca7be2bb2c44f2ccce6ec658497d3481d1c761b728b718258341261331a25d257df8108ef8354af3ca5fa95ec67e89275e82f068d5406e1457b6f54c79992739161437f84fc269bc62c7d26b85befab6111825a4e96e47f4f3e4f00000003af3d3fa6bdd3be106fc225ce6dcaade80c8d1d74f1f6a76d5f6492aa668e6baad87ac13af2af2822ca37b4ef8c6ad63990a190cf220735cca125fb9843eb2dd9a155fda9f8fe112885ded270de3e16814d763ea3d0ee74c9970107d2286918ce");
+        assert_eq!(s.parse::<Method>().unwrap(), target);
+        assert_eq!(
+            format!("did:ccd:testnet:encidcred:{cred_id_hex}")
+                .parse::<Method>()
+                .unwrap(),
+            Method {
+                network: Network::Testnet,
+                ..target
+            }
+        );
+        assert!("did:ccd:encidcred:asdf".parse::<Method>().is_err());
     }
 }

@@ -152,6 +152,7 @@ extern "C" fn eddsa_verify_dlog_ed25519(
             Ok(proof) => proof,
         }
     };
+    #[allow(deprecated)]
     if verify_dlog_ed25519(&mut RandomOracle::domain(challenge), &public_key, &proof) {
         1
     } else {
@@ -194,6 +195,7 @@ extern "C" fn eddsa_prove_dlog_ed25519(
     let mut csprng = thread_rng();
     let proof = prove_dlog_ed25519(
         &mut csprng,
+        #[allow(deprecated)]
         &mut RandomOracle::domain(challenge),
         &public_key,
         &secret_key,

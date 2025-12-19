@@ -1,19 +1,18 @@
 //! Implementation of range proofs along the lines of bulletproofs
+pub use super::utils::Generators;
 use super::{inner_product_proof::*, utils::*};
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field, MultiExp, PrimeField, Value},
     id::id_proof_types::ProofVersion,
     pedersen_commitment::*,
-    random_oracle::RandomOracle,
 };
 use rand::*;
 use std::iter::once;
 
-pub use super::utils::Generators;
-
 /// Bulletproof style range proof
-#[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
+#[derive(Clone, Eq, PartialEq, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
 pub struct RangeProof<C: Curve> {
     /// Commitments to the bits `a_i` of the value, and `a_i - 1`
@@ -81,7 +80,7 @@ fn two_n_vec<F: Field>(n: u8) -> Vec<F> {
 #[allow(clippy::too_many_arguments)]
 pub fn prove_given_scalars<C: Curve, T: Rng>(
     version: ProofVersion,
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     csprng: &mut T,
     n: u8,
     m: u8,
@@ -125,7 +124,7 @@ pub fn prove_given_scalars<C: Curve, T: Rng>(
 #[allow(clippy::too_many_arguments)]
 pub fn prove<C: Curve, T: Rng>(
     version: ProofVersion,
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     csprng: &mut T,
     n: u8,
     m: u8,
@@ -236,8 +235,8 @@ pub fn prove<C: Curve, T: Rng>(
 
     // Part 2: Computation of vector polynomials l(x),r(x)
     // get challenges y,z from transcript
-    let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
-    let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
+    let y: C::Scalar = transcript.extract_challenge_scalar::<C>(b"y");
+    let z: C::Scalar = transcript.extract_challenge_scalar::<C>(b"z");
 
     // y_nm = (1,y,..,y^(nm-1))
     let y_nm = z_vec(y, 0, nm);
@@ -353,7 +352,7 @@ pub fn prove<C: Curve, T: Rng>(
 
     // Part 4: Evaluate l(x), r(x), and t(x) at challenge point x
     // get challenge x from transcript
-    let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
+    let x: C::Scalar = transcript.extract_challenge_scalar::<C>(b"x");
     // println!("prover's x = {:?}", x);
     let mut x2 = x;
     x2.mul_assign(&x);
@@ -418,7 +417,7 @@ pub fn prove<C: Curve, T: Rng>(
 
     // Part 5: Inner product proof for t(x) = <l(x),r(x)>
     // get challenge w from transcript
-    let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
+    let w: C::Scalar = transcript.extract_challenge_scalar::<C>(b"w");
     // get generator q
     let Q = B.mul_by_scalar(&w);
 
@@ -490,7 +489,7 @@ pub enum VerificationError {
 #[allow(clippy::many_single_char_names)]
 pub fn verify_efficient<C: Curve>(
     version: ProofVersion,
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     n: u8,
     commitments: &[Commitment<C>],
     proof: &RangeProof<C>,
@@ -533,8 +532,8 @@ pub fn verify_efficient<C: Curve>(
     transcript.append_message(b"A", &A);
     transcript.append_message(b"S", &S);
     // get challenges y,z from transcript
-    let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
-    let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
+    let y: C::Scalar = transcript.extract_challenge_scalar::<C>(b"y");
+    let z: C::Scalar = transcript.extract_challenge_scalar::<C>(b"z");
     let mut z2 = z;
     z2.mul_assign(&z);
     let mut z3 = z2;
@@ -543,7 +542,7 @@ pub fn verify_efficient<C: Curve>(
     transcript.append_message(b"T1", &T_1);
     transcript.append_message(b"T2", &T_2);
     // get challenge x (evaluation point) from transcript
-    let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
+    let x: C::Scalar = transcript.extract_challenge_scalar::<C>(b"x");
     let mut x2 = x;
     x2.mul_assign(&x);
     // println!("verifier's x = {:?}", x);
@@ -552,7 +551,7 @@ pub fn verify_efficient<C: Curve>(
     transcript.append_message(b"tx_tilde", &tx_tilde);
     transcript.append_message(b"e_tilde", &e_tilde);
     // get challenge w from transcript
-    let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
+    let w: C::Scalar = transcript.extract_challenge_scalar::<C>(b"w");
 
     // Part 2: Check verification equation 1
     // Calculate delta(x,y) <- (z-z^2)*<1,y_nm> - <1,2_nm> * sum_j=0^m-1 z^(j+3)
@@ -677,7 +676,7 @@ pub fn verify_efficient<C: Curve>(
 /// It is assumed that a,b \in [0, 2^n)
 #[allow(clippy::too_many_arguments)]
 pub fn prove_less_than_or_equal<C: Curve, T: Rng>(
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     csprng: &mut T,
     n: u8,
     a: u64,
@@ -707,7 +706,7 @@ pub fn prove_less_than_or_equal<C: Curve, T: Rng>(
 /// but it should follow that a \in [0, 2^n) if the
 /// proof verifies.
 pub fn verify_less_than_or_equal<C: Curve>(
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     n: u8,
     commitment_a: &Commitment<C>,
     commitment_b: &Commitment<C>,
@@ -734,7 +733,7 @@ pub fn verify_less_than_or_equal<C: Curve>(
 #[allow(clippy::too_many_arguments)]
 pub fn prove_in_range<C: Curve>(
     version: ProofVersion,
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     csprng: &mut impl rand::Rng,
     gens: &Generators<C>,
     keys: &CommitmentKey<C>,
@@ -769,7 +768,7 @@ pub fn prove_in_range<C: Curve>(
 #[allow(clippy::too_many_arguments)]
 pub fn verify_in_range<C: Curve>(
     version: ProofVersion,
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     keys: &CommitmentKey<C>,
     gens: &Generators<C>,
     a: C::Scalar,
@@ -799,9 +798,9 @@ pub fn verify_in_range<C: Curve>(
 
 #[cfg(test)]
 mod tests {
-    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
-
     use super::*;
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+    use crate::random_oracle::RandomOracle;
 
     /// This function produces a proof that will satisfy the verifier's first
     /// check, even if the values are not in the interval.
@@ -823,7 +822,7 @@ mod tests {
         B: C,
         B_tilde: C,
         csprng: &mut T,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
     ) -> (Vec<Commitment<C>>, Option<RangeProof<C>>) {
         let nm = (usize::from(n)) * (usize::from(m));
         let v_copy = v_vec.clone();
@@ -843,8 +842,8 @@ mod tests {
         let S = C::zero_point();
         transcript.append_message(b"A", &A);
         transcript.append_message(b"S", &S);
-        let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
-        let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
+        let y: C::Scalar = transcript.extract_challenge_scalar::<C>(b"y");
+        let z: C::Scalar = transcript.extract_challenge_scalar::<C>(b"z");
         let z_m = z_vec(z, 0, usize::from(m));
 
         // z squared
@@ -864,7 +863,7 @@ mod tests {
         let e_tilde: C::Scalar = C::Scalar::zero();
         transcript.append_message(b"T1", &T_1);
         transcript.append_message(b"T2", &T_2);
-        let _x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
+        let _x: C::Scalar = transcript.extract_challenge_scalar::<C>(b"x");
         // println!("Cheating prover's x = {}", x);
         for j in 0..usize::from(m) {
             // tx:

@@ -3,7 +3,7 @@
 mod ffi;
 
 use crate::{
-    common::{SerdeBase16Serialize, Serialize, *},
+    common::{SerdeBase16Serialize, *},
     curve_arithmetic::{Curve, Field, Pairing, Value},
     random_oracle::RandomOracle,
     sigma_protocols::{common::*, dlog::*},
