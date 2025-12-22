@@ -28,7 +28,7 @@ pub(crate) enum InternalError {
 /// * Being given bytes with a length different to what was expected.
 ///
 /// * A problem decompressing to a scalar or group element,
-
+#[allow(dead_code)]
 #[derive(Error, Debug)]
 #[error("CommitmentError: {0}")]
 pub struct CommitmentError(pub(crate) InternalError);

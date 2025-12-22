@@ -15,6 +15,7 @@ use crate::{
 use itertools::izip;
 use std::rc::Rc;
 
+#[allow(dead_code)]
 pub struct DlogAndAggregateDlogsEqual<C: Curve> {
     pub dlog: Dlog<C>,
     pub aggregate_dlogs: Vec<AggregateDlog<C>>,

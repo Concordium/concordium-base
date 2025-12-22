@@ -223,7 +223,7 @@ impl TryFrom<String> for TokenModuleCborTypeDiscriminator {
     type Error = TypeFromStringError;
 
     fn try_from(event_type: String) -> Result<Self, Self::Error> {
-        let byte_len = event_type.as_bytes().len();
+        let byte_len = event_type.len();
         if byte_len > TYPE_MAX_BYTE_LEN {
             Err(TypeFromStringError {
                 actual_size: byte_len,

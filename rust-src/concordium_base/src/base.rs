@@ -211,7 +211,7 @@ impl TryFrom<String> for UrlText {
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         anyhow::ensure!(
-            value.as_bytes().len() <= crate::constants::MAX_URL_TEXT_LENGTH,
+            value.len() <= crate::constants::MAX_URL_TEXT_LENGTH,
             "URL length exceeds maximum allowed."
         );
         Ok(Self { url: value })

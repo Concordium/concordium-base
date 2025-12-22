@@ -285,10 +285,7 @@ impl TryFrom<Vec<u8>> for EncodedPayload {
 
     fn try_from(payload: Vec<u8>) -> Result<Self, Self::Error> {
         let actual = payload.len();
-        if actual
-            .try_into()
-            .map_or(false, |x: u32| x <= MAX_PAYLOAD_SIZE)
-        {
+        if actual.try_into().is_ok_and(|x: u32| x <= MAX_PAYLOAD_SIZE) {
             Ok(Self { payload })
         } else {
             Err(ExceedsPayloadSize {
@@ -1011,7 +1008,7 @@ impl Payload {
             Payload::Update { .. } => TransactionType::Update,
             Payload::Transfer { .. } => TransactionType::Transfer,
             Payload::AddBaker { .. } => TransactionType::AddBaker,
-            Payload::RemoveBaker { .. } => TransactionType::RemoveBaker,
+            Payload::RemoveBaker => TransactionType::RemoveBaker,
             Payload::UpdateBakerStake { .. } => TransactionType::UpdateBakerStake,
             Payload::UpdateBakerRestakeEarnings { .. } => {
                 TransactionType::UpdateBakerRestakeEarnings
@@ -1548,7 +1545,7 @@ impl ExactSizeTransactionSigner for AccountKeys {
     }
 }
 
-impl<'a, X: TransactionSigner> TransactionSigner for &'a X {
+impl<X: TransactionSigner> TransactionSigner for &X {
     fn sign_transaction_hash(
         &self,
         hash_to_sign: &hashes::TransactionSignHash,
@@ -1557,7 +1554,7 @@ impl<'a, X: TransactionSigner> TransactionSigner for &'a X {
     }
 }
 
-impl<'a, X: ExactSizeTransactionSigner> ExactSizeTransactionSigner for &'a X {
+impl<X: ExactSizeTransactionSigner> ExactSizeTransactionSigner for &X {
     fn num_keys(&self) -> u32 {
         (*self).num_keys()
     }

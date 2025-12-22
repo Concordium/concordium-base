@@ -564,10 +564,9 @@ impl KeyPair {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::{
-        distributions::{Distribution, Uniform},
-        Rng,
-    };
+    #[cfg(feature = "serde_deprecated")]
+    use rand::distributions::{Distribution, Uniform};
+    use rand::Rng;
 
     #[cfg(feature = "serde_deprecated")]
     #[test]
