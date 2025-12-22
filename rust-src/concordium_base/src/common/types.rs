@@ -384,8 +384,9 @@ impl AsRef<[u8]> for Signature {
 }
 
 /// Transaction signature structure, to match the one on the Haskell side.
-#[derive(SerdeDeserialize, SerdeSerialize, Clone, PartialEq, Eq, Debug, derive_more::AsRef)]
-#[serde(transparent)]
+#[derive(Clone, PartialEq, Eq, Debug, derive_more::AsRef)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeDeserialize, SerdeSerialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(transparent))]
 pub struct TransactionSignature {
     pub signatures: BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>>,
 }
@@ -568,6 +569,7 @@ mod tests {
         Rng,
     };
 
+    #[cfg(feature = "serde_deprecated")]
     #[test]
     fn transaction_signature_serialization() {
         let mut rng = rand::thread_rng();
