@@ -56,7 +56,7 @@ impl std::fmt::Display for Reason {
 /// * In the version 1 flow, the sigma protocol verifier is the common verifier.
 ///
 /// The function also verifies the bulletproofs range rangeproof.
-
+///
 /// Validate all the proofs in a version 0 identity object request. This is for
 /// the flow, where an initial account is created together with the identity.
 pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(

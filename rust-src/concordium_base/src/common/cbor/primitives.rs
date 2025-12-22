@@ -286,7 +286,7 @@ impl TryFrom<MapKey> for u64 {
 }
 
 impl MapKey {
-    pub fn as_ref(&self) -> MapKeyRef {
+    pub fn as_ref(&self) -> MapKeyRef<'_> {
         match self {
             MapKey::Positive(positive) => MapKeyRef::Positive(*positive),
             MapKey::Text(text) => MapKeyRef::Text(text),

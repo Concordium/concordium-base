@@ -52,8 +52,6 @@ impl Deserial for WasmVersion {
 pub type ModuleRef = ModuleReference;
 
 #[derive(
-    SerdeSerialize,
-    SerdeDeserialize,
     Serial,
     Clone,
     Debug,
@@ -64,6 +62,8 @@ pub type ModuleRef = ModuleReference;
     Ord,
     PartialEq,
     Eq,
+    SerdeSerialize,
+    SerdeDeserialize,
 )]
 #[serde(transparent)]
 /// Unparsed Wasm module source.
@@ -92,7 +92,8 @@ impl Deserial for ModuleSource {
     }
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, Serialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
 /// Unparsed module with a version indicating what operations are allowed.
 pub struct WasmModule {
     pub version: WasmVersion,
@@ -188,14 +189,18 @@ impl ContractTraceElement {
     }
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// Data generated as part of updating a single contract instance.
 /// In general a single [Update](crate::transactions::Payload::Update)
 /// transaction will generate one or more of these events, together with
 /// possibly some transfers.
 pub struct InstanceUpdatedEvent {
-    #[serde(default = "WasmVersionInt::zero_version")]
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(default = "WasmVersionInt::zero_version")
+    )]
     pub contract_version: WasmVersionInt,
     /// Address of the affected instance.
     pub address: ContractAddress,
