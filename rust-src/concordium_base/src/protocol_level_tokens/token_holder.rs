@@ -34,6 +34,15 @@ pub struct CborHolderAccount {
     pub address: AccountAddress,
 }
 
+impl From<AccountAddress> for CborHolderAccount {
+    fn from(address: AccountAddress) -> Self {
+        CborHolderAccount {
+            coin_info: Some(CoinInfo::CCD),
+            address,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CoinInfo {
