@@ -280,6 +280,15 @@ pub enum CborMemo {
     Cbor(Memo),
 }
 
+impl From<CborMemo> for Memo {
+    fn from(value: CborMemo) -> Self {
+        match value {
+            CborMemo::Raw(memo) => memo,
+            CborMemo::Cbor(memo) => memo,
+        }
+    }
+}
+
 #[cfg(test)]
 pub mod test {
     use super::*;
