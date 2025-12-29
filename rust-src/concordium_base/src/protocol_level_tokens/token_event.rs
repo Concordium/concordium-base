@@ -1,37 +1,12 @@
-use super::{cbor::RawCbor, CborHolderAccount, TokenAmount, TokenId};
-use crate::common::upward::{CborUpward, Upward};
+use super::{cbor::RawCbor, CborHolderAccount, TokenAmount};
 use crate::{
     common::cbor::{self, CborSerializationResult},
     transactions::Memo,
 };
+use anyhow::anyhow;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
-
-/// An event produced from the effect of a token transaction.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TokenEvent {
-    /// The unique symbol of the token, which produced this event.
-    pub token_id: TokenId,
-    /// The type of the event.
-    pub event: TokenEventDetails,
-}
-
-/// The type of the token event.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum TokenEventDetails {
-    /// An event emitted by the token module.
-    Module(TokenModuleEvent),
-    /// An event emitted when a transfer of tokens is performed.
-    Transfer(TokenTransferEvent),
-    /// An event emitted when the token supply is updated by minting tokens to a
-    /// token holder.
-    Mint(TokenSupplyUpdateEvent),
-    /// An event emitted when the token supply is updated by burning tokens from
-    /// the balance of a token holder.
-    Burn(TokenSupplyUpdateEvent),
-}
+use std::fmt::{Display, Formatter};
 
 /// Event produced from the effect of a token transaction.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -46,25 +21,17 @@ pub struct TokenModuleEvent {
 
 impl TokenModuleEvent {
     /// Decode token module event from CBOR
-    pub fn decode_token_module_event(
-        &self,
-    ) -> CborSerializationResult<CborUpward<TokenModuleEventType>> {
+    pub fn decode_token_module_event(&self) -> CborSerializationResult<TokenModuleEventType> {
         use TokenModuleEventType::*;
 
         Ok(match self.event_type.as_ref() {
-            "addAllowList" => {
-                Upward::Known(AddAllowList(cbor::cbor_decode(self.details.as_ref())?))
-            }
-            "removeAllowList" => {
-                Upward::Known(RemoveAllowList(cbor::cbor_decode(self.details.as_ref())?))
-            }
-            "addDenyList" => Upward::Known(AddDenyList(cbor::cbor_decode(self.details.as_ref())?)),
-            "removeDenyList" => {
-                Upward::Known(RemoveDenyList(cbor::cbor_decode(self.details.as_ref())?))
-            }
-            "pause" => Upward::Known(Pause(cbor::cbor_decode(self.details.as_ref())?)),
-            "unpause" => Upward::Known(Unpause(cbor::cbor_decode(self.details.as_ref())?)),
-            _ => Upward::Unknown(cbor::cbor_decode(self.details.as_ref())?),
+            "addAllowList" => AddAllowList(cbor::cbor_decode(self.details.as_ref())?),
+            "removeAllowList" => RemoveAllowList(cbor::cbor_decode(self.details.as_ref())?),
+            "addDenyList" => AddDenyList(cbor::cbor_decode(self.details.as_ref())?),
+            "removeDenyList" => RemoveDenyList(cbor::cbor_decode(self.details.as_ref())?),
+            "pause" => Pause(cbor::cbor_decode(self.details.as_ref())?),
+            "unpause" => Unpause(cbor::cbor_decode(self.details.as_ref())?),
+            _ => return Err(anyhow!("unknown token module event: {}", self.event_type).into()),
         })
     }
 }
@@ -193,6 +160,12 @@ impl AsRef<str> for TokenModuleCborTypeDiscriminator {
     }
 }
 
+impl Display for TokenModuleCborTypeDiscriminator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.value)
+    }
+}
+
 impl std::str::FromStr for TokenModuleCborTypeDiscriminator {
     type Err = TypeFromStringError;
 
@@ -248,7 +221,7 @@ mod test {
         let module_event_type = module_event.decode_token_module_event().unwrap();
         assert_eq!(
             module_event_type,
-            Upward::Known(TokenModuleEventType::AddAllowList(variant))
+            TokenModuleEventType::AddAllowList(variant)
         );
     }
 
@@ -270,7 +243,7 @@ mod test {
         let module_event_type = module_event.decode_token_module_event().unwrap();
         assert_eq!(
             module_event_type,
-            Upward::Known(TokenModuleEventType::RemoveAllowList(variant))
+            TokenModuleEventType::RemoveAllowList(variant)
         );
     }
 
@@ -292,7 +265,7 @@ mod test {
         let module_event_type = module_event.decode_token_module_event().unwrap();
         assert_eq!(
             module_event_type,
-            Upward::Known(TokenModuleEventType::AddDenyList(variant))
+            TokenModuleEventType::AddDenyList(variant)
         );
     }
 
@@ -314,7 +287,7 @@ mod test {
         let module_event_type = module_event.decode_token_module_event().unwrap();
         assert_eq!(
             module_event_type,
-            Upward::Known(TokenModuleEventType::RemoveDenyList(variant))
+            TokenModuleEventType::RemoveDenyList(variant)
         );
     }
 
@@ -329,10 +302,7 @@ mod test {
         };
 
         let module_event_type = module_event.decode_token_module_event().unwrap();
-        assert_eq!(
-            module_event_type,
-            Upward::Known(TokenModuleEventType::Pause(variant))
-        );
+        assert_eq!(module_event_type, TokenModuleEventType::Pause(variant));
     }
 
     #[test]
@@ -346,9 +316,6 @@ mod test {
         };
 
         let module_event_type = module_event.decode_token_module_event().unwrap();
-        assert_eq!(
-            module_event_type,
-            Upward::Known(TokenModuleEventType::Unpause(variant))
-        );
+        assert_eq!(module_event_type, TokenModuleEventType::Unpause(variant));
     }
 }

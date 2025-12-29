@@ -38,7 +38,7 @@ pub struct MetadataUrl {
 
 impl From<String> for MetadataUrl {
     fn from(url: String) -> Self {
-        Self{
+        Self {
             url,
             checksum_sha_256: None,
             additional: HashMap::new(),

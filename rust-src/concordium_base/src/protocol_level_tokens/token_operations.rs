@@ -1,4 +1,4 @@
-use crate::common::upward::CborUpward;
+use crate::common::cbor::CborMaybeKnown;
 use crate::{
     common::cbor::{self, CborSerializationResult},
     protocol_level_tokens::{CborHolderAccount, CoinInfo, RawCbor, TokenAmount, TokenId},
@@ -124,7 +124,14 @@ pub struct TokenOperationsPayload {
 
 impl TokenOperationsPayload {
     /// Decode token operations from CBOR
-    pub fn decode_operations(&self) -> CborSerializationResult<TokenOperations> {
+    pub fn decode_operations(
+        &self,
+    ) -> CborSerializationResult<Vec<CborMaybeKnown<TokenOperation>>> {
+        cbor::cbor_decode(&self.operations)
+    }
+
+    /// Decode token operations from CBOR
+    pub fn decode_operations_strict(&self) -> CborSerializationResult<TokenOperations> {
         cbor::cbor_decode(&self.operations)
     }
 }
@@ -136,19 +143,19 @@ impl TokenOperationsPayload {
 #[cbor(transparent)]
 pub struct TokenOperations {
     /// List of protocol level token operations
-    pub operations: Vec<CborUpward<TokenOperation>>,
+    pub operations: Vec<TokenOperation>,
 }
 
 impl FromIterator<TokenOperation> for TokenOperations {
     fn from_iter<T: IntoIterator<Item = TokenOperation>>(iter: T) -> Self {
         Self {
-            operations: iter.into_iter().map(CborUpward::Known).collect(),
+            operations: iter.into_iter().collect(),
         }
     }
 }
 
 impl TokenOperations {
-    pub fn new(operations: Vec<CborUpward<TokenOperation>>) -> Self {
+    pub fn new(operations: Vec<TokenOperation>) -> Self {
         Self { operations }
     }
 }
@@ -318,14 +325,14 @@ pub mod test {
     #[test]
     fn test_token_operations_cbor() {
         let operations = TokenOperations {
-            operations: vec![CborUpward::Known(TokenOperation::Transfer(TokenTransfer {
+            operations: vec![TokenOperation::Transfer(TokenTransfer {
                 amount: TokenAmount::from_raw(12300, 3),
                 recipient: CborHolderAccount {
                     address: ADDRESS,
                     coin_info: None,
                 },
                 memo: None,
-            }))],
+            })],
         };
 
         let cbor = cbor::cbor_encode(&operations).unwrap();
@@ -464,13 +471,42 @@ pub mod test {
     #[test]
     fn test_token_operation_cbor_unknown_variant() {
         let cbor = hex::decode("a172736f6d65556e6b6e6f776e56617269616e74a266616d6f756e74c4822219300c69726563697069656e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20").unwrap();
-        let operation_decoded: CborUpward<TokenOperation> = cbor::cbor_decode(&cbor).unwrap();
+        let operation_decoded: CborMaybeKnown<TokenOperation> = cbor::cbor_decode(&cbor).unwrap();
         assert_matches!(
             operation_decoded,
-            CborUpward::Unknown(value::Value::Map(v)) if matches!(
+            CborMaybeKnown::Unknown(value::Value::Map(v)) if matches!(
                 v.as_slice(),
                 [(value::Value::Text(s), _), ..] if s == "someUnknownVariant"
             )
         );
+    }
+
+    #[test]
+    fn test_token_operations_payload() {
+        let operations = TokenOperations {
+            operations: vec![TokenOperation::Transfer(TokenTransfer {
+                amount: TokenAmount::from_raw(12300, 3),
+                recipient: CborHolderAccount {
+                    address: ADDRESS,
+                    coin_info: None,
+                },
+                memo: None,
+            })],
+        };
+        let payload = TokenOperationsPayload {
+            token_id: "tk1".parse().unwrap(),
+            operations: RawCbor::from(cbor::cbor_encode(&operations).unwrap()),
+        };
+
+        let operations_decoded = payload.decode_operations_strict().unwrap();
+        assert_eq!(operations_decoded, operations);
+
+        let operations_known: Vec<_> = operations
+            .operations
+            .iter()
+            .map(|op| CborMaybeKnown::Known(op.clone()))
+            .collect();
+        let operations_decoded = payload.decode_operations().unwrap();
+        assert_eq!(operations_decoded, operations_known);
     }
 }

@@ -1,12 +1,10 @@
-use crate::common::upward::{CborUpward, Upward};
 use crate::{
     common::{cbor, cbor::CborSerializationResult},
     protocol_level_tokens::{
-        token_holder::CborHolderAccount, RawCbor, TokenAmount, TokenId,
-        TokenModuleCborTypeDiscriminator,
+        token_holder::CborHolderAccount, RawCbor, TokenAmount, TokenModuleCborTypeDiscriminator,
     },
 };
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 
 /// Details provided by the token module in the event of rejecting a
@@ -14,8 +12,6 @@ use concordium_base_derive::{CborDeserialize, CborSerialize};
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenModuleRejectReason {
-    /// The unique symbol of the token, which produced this event.
-    pub token_id: TokenId,
     /// The type of the reject reason.
     #[serde(rename = "type")]
     pub reason_type: TokenModuleCborTypeDiscriminator,
@@ -25,33 +21,33 @@ pub struct TokenModuleRejectReason {
 
 impl TokenModuleRejectReason {
     /// Decode reject reason from CBOR
-    pub fn decode_reject_reason(
-        &self,
-    ) -> CborSerializationResult<CborUpward<TokenModuleRejectReasonType>> {
+    pub fn decode_reject_reason(&self) -> CborSerializationResult<TokenModuleRejectReasonType> {
         use TokenModuleRejectReasonType::*;
 
         Ok(match self.reason_type.as_ref() {
-            "addressNotFound" => Upward::Known(AddressNotFound(cbor::cbor_decode(
-                self.details.as_ref().context("no CBOR details")?.as_ref(),
-            )?)),
-            "tokenBalanceInsufficient" => Upward::Known(TokenBalanceInsufficient(
-                cbor::cbor_decode(self.details.as_ref().context("no CBOR details")?.as_ref())?,
-            )),
-            "deserializationFailure" => Upward::Known(DeserializationFailure(cbor::cbor_decode(
-                self.details.as_ref().context("no CBOR details")?.as_ref(),
-            )?)),
-            "unsupportedOperation" => Upward::Known(UnsupportedOperation(cbor::cbor_decode(
-                self.details.as_ref().context("no CBOR details")?.as_ref(),
-            )?)),
-            "operationNotPermitted" => Upward::Known(OperationNotPermitted(cbor::cbor_decode(
-                self.details.as_ref().context("no CBOR details")?.as_ref(),
-            )?)),
-            "mintWouldOverflow" => Upward::Known(MintWouldOverflow(cbor::cbor_decode(
-                self.details.as_ref().context("no CBOR details")?.as_ref(),
-            )?)),
-            _ => Upward::Unknown(cbor::cbor_decode(
+            "addressNotFound" => AddressNotFound(cbor::cbor_decode(
                 self.details.as_ref().context("no CBOR details")?.as_ref(),
             )?),
+            "tokenBalanceInsufficient" => TokenBalanceInsufficient(cbor::cbor_decode(
+                self.details.as_ref().context("no CBOR details")?.as_ref(),
+            )?),
+            "deserializationFailure" => DeserializationFailure(cbor::cbor_decode(
+                self.details.as_ref().context("no CBOR details")?.as_ref(),
+            )?),
+            "unsupportedOperation" => UnsupportedOperation(cbor::cbor_decode(
+                self.details.as_ref().context("no CBOR details")?.as_ref(),
+            )?),
+            "operationNotPermitted" => OperationNotPermitted(cbor::cbor_decode(
+                self.details.as_ref().context("no CBOR details")?.as_ref(),
+            )?),
+            "mintWouldOverflow" => MintWouldOverflow(cbor::cbor_decode(
+                self.details.as_ref().context("no CBOR details")?.as_ref(),
+            )?),
+            _ => {
+                return Err(
+                    anyhow!("unknown token module reject reason: {}", self.reason_type).into(),
+                )
+            }
         })
     }
 }
@@ -213,7 +209,6 @@ mod test {
         common::cbor,
         protocol_level_tokens::{token_holder, CborHolderAccount},
     };
-    use std::str::FromStr;
 
     #[test]
     fn test_address_not_found_reject_reason_cbor() {
@@ -227,7 +222,6 @@ mod test {
         let cbor = cbor::cbor_encode(&variant).unwrap();
         assert_eq!(hex::encode(&cbor), "a265696e646578036761646472657373d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let reject_reason = TokenModuleRejectReason {
-            token_id: TokenId::from_str("TK1").unwrap(),
             reason_type: "addressNotFound".to_string().try_into().unwrap(),
             details: Some(cbor.into()),
         };
@@ -235,7 +229,7 @@ mod test {
         let reject_reason_type = reject_reason.decode_reject_reason().unwrap();
         assert_eq!(
             reject_reason_type,
-            CborUpward::Known(TokenModuleRejectReasonType::AddressNotFound(variant))
+            TokenModuleRejectReasonType::AddressNotFound(variant)
         );
     }
 
@@ -249,7 +243,6 @@ mod test {
         let cbor = cbor::cbor_encode(&variant).unwrap();
         assert_eq!(hex::encode(&cbor), "a365696e646578036f726571756972656442616c616e6365c4822219571c70617661696c61626c6542616c616e6365c4822219300c");
         let reject_reason = TokenModuleRejectReason {
-            token_id: TokenId::from_str("TK1").unwrap(),
             reason_type: "tokenBalanceInsufficient".to_string().try_into().unwrap(),
             details: Some(cbor.into()),
         };
@@ -257,9 +250,7 @@ mod test {
         let reject_reason_type = reject_reason.decode_reject_reason().unwrap();
         assert_eq!(
             reject_reason_type,
-            CborUpward::Known(TokenModuleRejectReasonType::TokenBalanceInsufficient(
-                variant
-            ))
+            TokenModuleRejectReasonType::TokenBalanceInsufficient(variant)
         );
     }
 
@@ -271,7 +262,6 @@ mod test {
         let cbor = cbor::cbor_encode(&variant).unwrap();
         assert_eq!(hex::encode(&cbor), "a16563617573656b746573746661696c757265");
         let reject_reason = TokenModuleRejectReason {
-            token_id: TokenId::from_str("TK1").unwrap(),
             reason_type: "deserializationFailure".to_string().try_into().unwrap(),
             details: Some(cbor.into()),
         };
@@ -279,7 +269,7 @@ mod test {
         let reject_reason_type = reject_reason.decode_reject_reason().unwrap();
         assert_eq!(
             reject_reason_type,
-            CborUpward::Known(TokenModuleRejectReasonType::DeserializationFailure(variant))
+            TokenModuleRejectReasonType::DeserializationFailure(variant)
         );
     }
 
@@ -293,7 +283,6 @@ mod test {
         let cbor = cbor::cbor_encode(&variant).unwrap();
         assert_eq!(hex::encode(&cbor), "a365696e6465780066726561736f6e6c746573746661696c747572656d6f7065726174696f6e547970656d746573746f7065726174696f6e");
         let reject_reason = TokenModuleRejectReason {
-            token_id: TokenId::from_str("TK1").unwrap(),
             reason_type: "unsupportedOperation".to_string().try_into().unwrap(),
             details: Some(cbor.into()),
         };
@@ -301,7 +290,7 @@ mod test {
         let reject_reason_type = reject_reason.decode_reject_reason().unwrap();
         assert_eq!(
             reject_reason_type,
-            CborUpward::Known(TokenModuleRejectReasonType::UnsupportedOperation(variant))
+            TokenModuleRejectReasonType::UnsupportedOperation(variant)
         );
     }
 
@@ -318,7 +307,6 @@ mod test {
         let cbor = cbor::cbor_encode(&variant).unwrap();
         assert_eq!(hex::encode(&cbor), "a365696e6465780066726561736f6e6c746573746661696c747572656761646472657373d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let reject_reason = TokenModuleRejectReason {
-            token_id: TokenId::from_str("TK1").unwrap(),
             reason_type: "operationNotPermitted".to_string().try_into().unwrap(),
             details: Some(cbor.into()),
         };
@@ -326,7 +314,7 @@ mod test {
         let reject_reason_type = reject_reason.decode_reject_reason().unwrap();
         assert_eq!(
             reject_reason_type,
-            CborUpward::Known(TokenModuleRejectReasonType::OperationNotPermitted(variant))
+            TokenModuleRejectReasonType::OperationNotPermitted(variant)
         );
     }
 
@@ -341,7 +329,6 @@ mod test {
         let cbor = cbor::cbor_encode(&variant).unwrap();
         assert_eq!(hex::encode(&cbor), "a465696e646578006d63757272656e74537570706c79c482221927106f726571756573746564416d6f756e74c48222194e20766d6178526570726573656e7461626c65416d6f756e74c48222194e20");
         let reject_reason = TokenModuleRejectReason {
-            token_id: TokenId::from_str("TK1").unwrap(),
             reason_type: "mintWouldOverflow".to_string().try_into().unwrap(),
             details: Some(cbor.into()),
         };
@@ -349,7 +336,7 @@ mod test {
         let reject_reason_type = reject_reason.decode_reject_reason().unwrap();
         assert_eq!(
             reject_reason_type,
-            CborUpward::Known(TokenModuleRejectReasonType::MintWouldOverflow(variant))
+            TokenModuleRejectReasonType::MintWouldOverflow(variant)
         );
     }
 }
