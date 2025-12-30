@@ -6,7 +6,6 @@ use crate::{
 };
 use anyhow::{anyhow, Context};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
-use crate::common::cbor::CborSerialize;
 
 /// Details provided by the token module in the event of rejecting a
 /// transaction.
@@ -56,60 +55,6 @@ impl TokenModuleRejectReason {
                     anyhow!("unknown token module reject reason: {}", self.reason_type).into(),
                 )
             }
-        })
-    }
-
-    pub fn encode_reject_reason(
-        reject_reason: TokenModuleRejectReasonType,
-    ) -> CborSerializationResult<Self> {
-        fn cbor_encode(value: &impl CborSerialize) -> CborSerializationResult<RawCbor> {
-            cbor::cbor_encode(value).map(RawCbor::from)
-        }
-
-        // todo ar
-        Ok(match reject_reason {
-            TokenModuleRejectReasonType::AddressNotFound(reason) => Self {
-                reason_type: ADDRESS_NOT_FOUND_REJECT_REASON_TYPE
-                    .to_string()
-                    .try_into()
-                    .unwrap(),
-                details: Some(cbor_encode(&reason)?),
-            },
-            TokenModuleRejectReasonType::TokenBalanceInsufficient(reason) => Self {
-                reason_type: TOKEN_BALANCE_INSUFFICIENT_REJECT_REASON_TYPE
-                    .to_string()
-                    .try_into()
-                    .unwrap(),
-                details: Some(cbor_encode(&reason)?),
-            },
-            TokenModuleRejectReasonType::DeserializationFailure(reason) => Self {
-                reason_type: DESERIALIZATION_FAILURE_REJECT_REASON_TYPE
-                    .to_string()
-                    .try_into()
-                    .unwrap(),
-                details: Some(cbor_encode(&reason)?),
-            },
-            TokenModuleRejectReasonType::UnsupportedOperation(reason) => Self {
-                reason_type: UNSUPPORTED_OPERATION_REJECT_REASON_TYPE
-                    .to_string()
-                    .try_into()
-                    .unwrap(),
-                details: Some(cbor_encode(&reason)?),
-            },
-            TokenModuleRejectReasonType::OperationNotPermitted(reason) => Self {
-                reason_type: OPERATION_NOT_PERMITTED_REJECT_REASON_TYPE
-                    .to_string()
-                    .try_into()
-                    .unwrap(),
-                details: Some(cbor_encode(&reason)?),
-            },
-            TokenModuleRejectReasonType::MintWouldOverflow(reason) => Self {
-                reason_type: MINT_WOULD_OVERFLOW_REJECT_REASON_TYPE
-                    .to_string()
-                    .try_into()
-                    .unwrap(),
-                details: Some(cbor_encode(&reason)?),
-            },
         })
     }
 }
