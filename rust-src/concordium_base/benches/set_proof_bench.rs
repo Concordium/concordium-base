@@ -69,6 +69,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("SM Prove", n), move |b| {
             b.iter(|| {
                 let rng = &mut thread_rng();
+                #[allow(deprecated)]
                 let mut transcript = RandomOracle::empty();
                 set_membership_proof::prove(
                     ProofVersion::Version1,
@@ -92,6 +93,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("SNM Prove", n), move |b| {
             b.iter(|| {
                 let rng = &mut thread_rng();
+                #[allow(deprecated)]
                 let mut transcript = RandomOracle::empty();
                 set_non_membership_proof::prove(
                     ProofVersion::Version1,
@@ -108,6 +110,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         });
 
         // Generate valid proofs for verification
+        #[allow(deprecated)]
         let mut transcript = RandomOracle::empty();
         let snm_proof = set_non_membership_proof::prove(
             ProofVersion::Version1,
@@ -121,6 +124,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         );
         assert!(snm_proof.is_ok());
         let snm_proof = snm_proof.unwrap();
+        #[allow(deprecated)]
         let mut transcript = RandomOracle::empty();
         let sm_proof = set_membership_proof::prove(
             ProofVersion::Version1,
@@ -143,6 +147,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         let sm_proof_p = sm_proof.clone();
         group.bench_function(BenchmarkId::new("SM Verify", n), move |b| {
             b.iter(|| {
+                #[allow(deprecated)]
                 let mut transcript = RandomOracle::empty();
                 set_membership_proof::verify(
                     ProofVersion::Version1,
@@ -165,6 +170,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         let snm_proof_p = snm_proof.clone();
         group.bench_function(BenchmarkId::new("SNM Verify", n), move |b| {
             b.iter(|| {
+                #[allow(deprecated)]
                 let mut transcript = RandomOracle::empty();
                 set_non_membership_proof::verify(
                     ProofVersion::Version1,

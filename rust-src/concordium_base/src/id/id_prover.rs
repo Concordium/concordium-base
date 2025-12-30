@@ -2,6 +2,12 @@
 //! accounts.
 
 use super::{id_proof_types::*, types::*};
+use crate::bulletproofs::set_membership_proof::SetMembershipProof;
+use crate::bulletproofs::set_non_membership_proof::SetNonMembershipProof;
+use crate::pedersen_commitment::Randomness;
+use crate::random_oracle::{RandomOracle, TranscriptProtocol};
+use crate::sigma_protocols::common::SigmaProof;
+use crate::sigma_protocols::dlog;
 use crate::{
     bulletproofs::{
         range_proof::{prove_in_range, RangeProof},
@@ -11,7 +17,6 @@ use crate::{
     },
     curve_arithmetic::{Curve, Value},
     pedersen_commitment::{CommitmentKey as PedersenKey, Randomness as PedersenRandomness},
-    random_oracle::RandomOracle,
     sigma_protocols::{
         common::prove as sigma_prove,
         dlog::{Dlog, DlogSecret},
@@ -39,6 +44,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
         let mut proofs: Vec<AtomicProof<C, AttributeType>> =
             Vec::with_capacity(self.statement.statements.len());
 
+        #[allow(deprecated)]
         let mut transcript = RandomOracle::domain("Concordium ID2.0 proof");
         transcript.append_message(b"ctx", &global);
         transcript.add_bytes(challenge);
@@ -65,7 +71,7 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
         &self,
         version: ProofVersion,
         global: &GlobalContext<C>,
-        transcript: &mut RandomOracle,
+        transcript: &mut impl TranscriptProtocol,
         csprng: &mut impl rand::Rng,
         attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
         attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
@@ -78,87 +84,44 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
                 let randomness = attribute_randomness
                     .get_attribute_commitment_randomness(&statement.attribute_tag)
                     .ok()?;
-                let x = attribute.to_field_element(); // This is public in the sense that the verifier should learn it
-                transcript.add_bytes(b"RevealAttributeDlogProof");
-                transcript.append_message(b"x", &x);
-                if version >= ProofVersion::Version2 {
-                    transcript.append_message(b"keys", &global.on_chain_commitment_key);
-                    let x_value: Value<C> = Value::new(x);
-                    let comm = global.on_chain_commitment_key.hide(&x_value, &randomness);
-                    transcript.append_message(b"C", &comm);
-                }
-                // This is the Dlog proof section 9.2.4 from the Bluepaper.
-                let h = global.on_chain_commitment_key.h;
-                let h_r = h.mul_by_scalar(&randomness);
-                let prover = Dlog {
-                    public: h_r, // C g^-x = h^r
-                    coeff: h,    // h
-                };
-                let secret = DlogSecret {
-                    secret: Value::new(*randomness),
-                };
-                let proof = sigma_prove(transcript, &prover, secret, csprng)?;
+                let proof = prove_value_equal_to_commitment(
+                    &attribute, randomness, version, global, transcript, csprng,
+                )?;
+
                 Some(AtomicProof::RevealAttribute { attribute, proof })
             }
             AtomicStatement::AttributeInSet { statement } => {
-                let attribute = attribute_values.get_attribute_value(&statement.attribute_tag)?;
-                let randomness = attribute_randomness
-                    .get_attribute_commitment_randomness(&statement.attribute_tag)
-                    .ok()?;
-                let attribute_scalar = attribute.to_field_element();
-                let attribute_vec: Vec<_> =
-                    statement.set.iter().map(|x| x.to_field_element()).collect();
-                let proof = prove_set_membership(
+                let proof = statement.prove(
                     version,
+                    global,
                     transcript,
                     csprng,
-                    &attribute_vec,
-                    attribute_scalar,
-                    global.bulletproof_generators(),
-                    &global.on_chain_commitment_key,
-                    &randomness,
-                )
-                .ok()?;
+                    attribute_values,
+                    attribute_randomness,
+                )?;
                 let proof = AtomicProof::AttributeInSet { proof };
                 Some(proof)
             }
             AtomicStatement::AttributeNotInSet { statement } => {
-                let attribute = attribute_values.get_attribute_value(&statement.attribute_tag)?;
-                let randomness = attribute_randomness
-                    .get_attribute_commitment_randomness(&statement.attribute_tag)
-                    .ok()?;
-                let attribute_scalar = attribute.to_field_element();
-                let attribute_vec: Vec<_> =
-                    statement.set.iter().map(|x| x.to_field_element()).collect();
-                let proof = prove_set_non_membership(
+                let proof = statement.prove(
                     version,
+                    global,
                     transcript,
                     csprng,
-                    &attribute_vec,
-                    attribute_scalar,
-                    global.bulletproof_generators(),
-                    &global.on_chain_commitment_key,
-                    &randomness,
-                )
-                .ok()?;
+                    attribute_values,
+                    attribute_randomness,
+                )?;
                 let proof = AtomicProof::AttributeNotInSet { proof };
                 Some(proof)
             }
             AtomicStatement::AttributeInRange { statement } => {
-                let attribute = attribute_values.get_attribute_value(&statement.attribute_tag)?;
-                let randomness = attribute_randomness
-                    .get_attribute_commitment_randomness(&statement.attribute_tag)
-                    .ok()?;
-                let proof = prove_attribute_in_range(
+                let proof = statement.prove(
                     version,
+                    global,
                     transcript,
                     csprng,
-                    global.bulletproof_generators(),
-                    &global.on_chain_commitment_key,
-                    attribute,
-                    &statement.lower,
-                    &statement.upper,
-                    &randomness,
+                    attribute_values,
+                    attribute_randomness,
                 )?;
                 let proof = AtomicProof::AttributeInRange { proof };
                 Some(proof)
@@ -166,6 +129,168 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
         }
     }
 }
+
+impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Scalar>>
+    AttributeInSetStatement<C, TagType, AttributeType>
+{
+    pub(crate) fn prove(
+        &self,
+        version: ProofVersion,
+        global: &GlobalContext<C>,
+        transcript: &mut impl TranscriptProtocol,
+        csprng: &mut impl rand::Rng,
+        attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
+        attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
+    ) -> Option<SetMembershipProof<C>> {
+        let attribute = attribute_values.get_attribute_value(&self.attribute_tag)?;
+        let randomness = attribute_randomness
+            .get_attribute_commitment_randomness(&self.attribute_tag)
+            .ok()?;
+        let attribute_scalar = attribute.to_field_element();
+        let attribute_vec: Vec<_> = self.set.iter().map(|x| x.to_field_element()).collect();
+        let proof = prove_set_membership(
+            version,
+            transcript,
+            csprng,
+            &attribute_vec,
+            attribute_scalar,
+            global.bulletproof_generators(),
+            &global.on_chain_commitment_key,
+            &randomness,
+        )
+        .ok()?;
+        Some(proof)
+    }
+}
+
+impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Scalar>>
+    AttributeNotInSetStatement<C, TagType, AttributeType>
+{
+    pub(crate) fn prove(
+        &self,
+        version: ProofVersion,
+        global: &GlobalContext<C>,
+        transcript: &mut impl TranscriptProtocol,
+        csprng: &mut impl rand::Rng,
+        attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
+        attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
+    ) -> Option<SetNonMembershipProof<C>> {
+        let attribute = attribute_values.get_attribute_value(&self.attribute_tag)?;
+        let randomness = attribute_randomness
+            .get_attribute_commitment_randomness(&self.attribute_tag)
+            .ok()?;
+        let attribute_scalar = attribute.to_field_element();
+        let attribute_vec: Vec<_> = self.set.iter().map(|x| x.to_field_element()).collect();
+        let proof = prove_set_non_membership(
+            version,
+            transcript,
+            csprng,
+            &attribute_vec,
+            attribute_scalar,
+            global.bulletproof_generators(),
+            &global.on_chain_commitment_key,
+            &randomness,
+        )
+        .ok()?;
+        Some(proof)
+    }
+}
+
+impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Scalar>>
+    AttributeInRangeStatement<C, TagType, AttributeType>
+{
+    pub(crate) fn prove(
+        &self,
+        version: ProofVersion,
+        global: &GlobalContext<C>,
+        transcript: &mut impl TranscriptProtocol,
+        csprng: &mut impl rand::Rng,
+        attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
+        attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
+    ) -> Option<RangeProof<C>> {
+        let attribute = attribute_values.get_attribute_value(&self.attribute_tag)?;
+        let randomness = attribute_randomness
+            .get_attribute_commitment_randomness(&self.attribute_tag)
+            .ok()?;
+        let proof = prove_attribute_in_range(
+            version,
+            transcript,
+            csprng,
+            global.bulletproof_generators(),
+            &global.on_chain_commitment_key,
+            attribute,
+            &self.lower,
+            &self.upper,
+            &randomness,
+        )?;
+        Some(proof)
+    }
+}
+
+pub(crate) fn prove_value_equal_to_commitment<C: Curve, AttributeType: Attribute<C::Scalar>>(
+    attribute_value: &AttributeType,
+    attribute_cmm_randomness: Randomness<C>,
+    version: ProofVersion,
+    global: &GlobalContext<C>,
+    transcript: &mut impl TranscriptProtocol,
+    csprng: &mut impl rand::Rng,
+) -> Option<SigmaProof<dlog::Response<C>>> {
+    let x = attribute_value.to_field_element(); // This is public in the sense that the verifier should learn it
+    transcript.append_label(b"RevealAttributeDlogProof");
+    transcript.append_message(b"x", &x);
+    if version >= ProofVersion::Version2 {
+        transcript.append_message(b"keys", &global.on_chain_commitment_key);
+        let x_value: Value<C> = Value::new(x);
+        let comm = global
+            .on_chain_commitment_key
+            .hide(&x_value, &attribute_cmm_randomness);
+        transcript.append_message(b"C", &comm);
+    }
+    // This is the Dlog proof section 9.2.4 from the Bluepaper.
+    let h = global.on_chain_commitment_key.h;
+    let h_r = h.mul_by_scalar(&attribute_cmm_randomness);
+    let prover = Dlog {
+        public: h_r, // C g^-x = h^r
+        coeff: h,    // h
+    };
+    let secret = DlogSecret {
+        secret: Value::new(*attribute_cmm_randomness),
+    };
+    let proof = sigma_prove(transcript, &prover, secret, csprng)?;
+    Some(proof)
+}
+
+impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Scalar>>
+    AttributeValueStatement<C, TagType, AttributeType>
+{
+    pub(crate) fn prove(
+        &self,
+        version: ProofVersion,
+        global: &GlobalContext<C>,
+        transcript: &mut impl TranscriptProtocol,
+        csprng: &mut impl rand::Rng,
+        attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
+    ) -> Option<AttributeValueProof<C>> {
+        let randomness = attribute_randomness
+            .get_attribute_commitment_randomness(&self.attribute_tag)
+            .ok()?;
+        let proof = prove_value_equal_to_commitment(
+            &self.attribute_value,
+            randomness,
+            version,
+            global,
+            transcript,
+            csprng,
+        )?;
+        Some(AttributeValueProof { proof })
+    }
+
+    /// Prove attribute value based on that attribute is already revealed
+    pub(crate) fn prove_for_already_revealed(&self, transcript: &mut impl TranscriptProtocol) {
+        transcript.append_message("RevealedAttribute", &self.attribute_value);
+    }
+}
+
 /// Function for proving ownership of an account. The parameters are
 /// - data - the CredentialData containing the private keys of the prover
 /// - account - the account address of the account that the prover claims to own
@@ -215,7 +340,7 @@ pub fn prove_ownership_of_account(
 #[allow(clippy::too_many_arguments)]
 pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     version: ProofVersion,
-    transcript: &mut RandomOracle,
+    transcript: &mut impl TranscriptProtocol,
     csprng: &mut impl rand::Rng,
     gens: &Generators<C>,
     keys: &PedersenKey<C>,
@@ -229,6 +354,7 @@ pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     let b = upper.to_field_element();
     match version {
         ProofVersion::Version1 => {
+            #[allow(deprecated)]
             let mut transcript_v1 = RandomOracle::domain("attribute_range_proof");
             prove_in_range(
                 ProofVersion::Version1,
@@ -243,7 +369,7 @@ pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
             )
         }
         ProofVersion::Version2 => {
-            transcript.add_bytes(b"AttributeRangeProof");
+            transcript.append_label(b"AttributeRangeProof");
             transcript.append_message(b"a", &a);
             transcript.append_message(b"b", &b);
             prove_in_range(

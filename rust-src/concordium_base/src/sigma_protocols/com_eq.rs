@@ -9,11 +9,11 @@
 //! same type for both groups.
 
 use super::common::*;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
-    random_oracle::RandomOracle,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
@@ -59,7 +59,7 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
     type Response = Response<C>;
     type SecretData = ComEqSecret<D>;
 
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         ro.append_message("commitment", &self.commitment);
         ro.append_message("y", &self.y);
         ro.append_message("cmm_key", &self.cmm_key);
@@ -157,6 +157,7 @@ mod test {
     use crate::curve_arithmetic::arkworks_instances::ArkGroup;
 
     use super::*;
+    use crate::random_oracle::RandomOracle;
     use ark_bls12_381::{G1Projective, G2Projective};
 
     type G1 = ArkGroup<G1Projective>;

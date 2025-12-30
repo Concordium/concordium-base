@@ -68,6 +68,7 @@ pub fn prove_verify_benchmarks<SomeCurve: Curve>(c: &mut Criterion) {
     let v_vec_p = v_vec.clone();
     let gens_p = gens.clone();
     let randomness_p = randomness.clone();
+    #[allow(deprecated)]
     let mut transcript = RandomOracle::empty();
     group.bench_function("Prove", move |b| {
         b.iter(|| {
@@ -86,6 +87,7 @@ pub fn prove_verify_benchmarks<SomeCurve: Curve>(c: &mut Criterion) {
     });
 
     let rng = &mut thread_rng();
+    #[allow(deprecated)]
     let mut transcript = RandomOracle::empty();
     let proof = prove(
         ProofVersion::Version1,
@@ -102,6 +104,7 @@ pub fn prove_verify_benchmarks<SomeCurve: Curve>(c: &mut Criterion) {
 
     group.bench_function("Verify Efficient", move |b| {
         b.iter(|| {
+            #[allow(deprecated)]
             let mut transcript = RandomOracle::empty();
             assert!(verify_efficient(
                 ProofVersion::Version1,
@@ -150,6 +153,7 @@ fn compare_inner_product_proof<SomeCurve: Curve>(c: &mut Criterion) {
     let mut H_prime: Vec<SomeCurve> = Vec::with_capacity(n);
     let y_inv = y.inverse().unwrap();
     let mut H_prime_scalars: Vec<<SomeCurve as Curve>::Scalar> = Vec::with_capacity(n);
+    #[allow(deprecated)]
     let mut transcript = RandomOracle::empty();
     let G_vec_p = G_vec.clone();
     let H_vec_p = H_vec.clone();
@@ -165,6 +169,7 @@ fn compare_inner_product_proof<SomeCurve: Curve>(c: &mut Criterion) {
             prove_inner_product(&mut transcript, &G_vec, &H_prime, &Q, &a_vec, &b_vec);
         })
     });
+    #[allow(deprecated)]
     let mut transcript = RandomOracle::empty();
     group.bench_function("Better inner product proof with scalars", move |b| {
         b.iter(|| {

@@ -6,10 +6,11 @@
 //! This module is currently not used, and is only here as a reference.
 //! When using the code needs to be thoroughly reviewed.
 
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
-    random_oracle::{Challenge, RandomOracle},
+    random_oracle::Challenge,
     sigma_protocols::{aggregate_dlog::*, common::*, dlog::*},
 };
 use itertools::izip;
@@ -35,8 +36,8 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
     type Response = Response<C>;
     type SecretData = (Rc<C::Scalar>, Vec<Vec<Rc<C::Scalar>>>);
 
-    fn public(&self, ro: &mut RandomOracle) {
-        self.aggregate_dlogs.iter().for_each(|p| p.public(ro));
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
+        ro.append_each_message(&[], &self.aggregate_dlogs, |ro, p| p.public(ro));
         self.dlog.public(ro)
     }
 
@@ -147,6 +148,7 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::random_oracle::RandomOracle;
     use crate::{
         curve_arithmetic::multiexp,
         id::constants::{ArCurve, BaseField},

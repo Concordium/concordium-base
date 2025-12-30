@@ -5,6 +5,7 @@
 //! Pedersen commitment.
 
 use super::common::*;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
@@ -12,7 +13,6 @@ use crate::{
         Cipher as ElGamalCipher, PublicKey as ElGamalPublicKey, Randomness as ElgamalRandomness,
     },
     pedersen_commitment::{Commitment, CommitmentKey, Randomness as PedersenRandomness, Value},
-    random_oracle::RandomOracle,
 };
 use rand::*;
 
@@ -61,7 +61,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     type SecretData = ComEncEqSecret<C>;
 
     #[inline]
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         ro.append_message("cipher", &self.cipher);
         ro.append_message("commitment", &self.commitment);
         ro.append_message("pub_key", &self.pub_key);
@@ -205,6 +205,7 @@ mod tests {
 
     use super::*;
     use crate::elgamal::{Message, SecretKey as ElgamalSecretKey};
+    use crate::random_oracle::RandomOracle;
     use ark_bls12_381::G1Projective;
 
     type G1 = ArkGroup<G1Projective>;

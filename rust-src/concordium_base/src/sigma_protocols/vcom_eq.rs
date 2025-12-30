@@ -4,11 +4,12 @@
 //! \prod_{i=1}^n g_i^{x_i}$ and $C_i = \bar{g}^{x_i} \bar{h}^{r_i}$ for $i\in
 //! I$.
 use super::common::*;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
     pedersen_commitment::{Commitment, Value},
-    random_oracle::{Challenge, RandomOracle},
+    random_oracle::Challenge,
 };
 use itertools::izip;
 use std::collections::BTreeMap;
@@ -56,10 +57,10 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
     type Response = Response<C>;
     type SecretData = (Vec<C::Scalar>, Value<C>, BTreeMap<IndexType, Value<C>>);
 
-    fn public(&self, ro: &mut RandomOracle) {
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
         ro.append_message(b"C", &self.comm);
         ro.append_message(b"Cis", &self.comms);
-        ro.extend_from(b"gis", &self.gis);
+        ro.append_messages(b"gis", &self.gis);
         ro.append_message(b"h", &self.h);
         ro.append_message("h_bar", &self.h_bar);
         ro.append_message("g_bar", &self.g_bar)
@@ -223,6 +224,7 @@ mod tests {
     use crate::curve_arithmetic::arkworks_instances::ArkGroup;
 
     use super::*;
+    use crate::random_oracle::RandomOracle;
     use ark_bls12_381::G1Projective;
     use rand::{thread_rng, Rng};
 

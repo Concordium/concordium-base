@@ -1,6 +1,7 @@
 //! Functionality needed by the identity provider. This gathers together the
 //! primitives from the rest of the library into a convenient package.
 use super::{id_proof_types::ProofVersion, secret_sharing::Threshold, types::*, utils};
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     bulletproofs::range_proof::verify_efficient,
     common::{to_bytes, types::TransactionTime},
@@ -81,6 +82,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         return Err(Reason::IncorrectProof);
     }
 
+    #[allow(deprecated)]
     let mut transcript = RandomOracle::domain("PreIdentityProof");
     // Construct the common verifier and verify the range proof
     let (verifier, response) = validate_request_common(
@@ -130,6 +132,7 @@ pub fn validate_request_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let common_fields = pre_id_obj.get_common_pio_fields();
     let poks_common = &pre_id_obj.poks;
 
+    #[allow(deprecated)]
     let mut transcript = RandomOracle::domain("PreIdentityProof");
     // Construct the common verifier and verify the range proof
     let (verifier, response) = validate_request_common(
@@ -363,11 +366,13 @@ pub fn sign_identity_object<
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_secret_key: &crate::ps_sig::SecretKey<P>,
 ) -> Result<crate::ps_sig::Signature<P>, Reason> {
+    let mut csprng = thread_rng();
     sign_identity_object_common(
         &pre_id_obj.get_common_pio_fields(),
         ip_info,
         alist,
         ip_secret_key,
+        &mut csprng,
     )
 }
 
@@ -388,11 +393,35 @@ pub fn sign_identity_object_v1<
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_secret_key: &crate::ps_sig::SecretKey<P>,
 ) -> Result<crate::ps_sig::Signature<P>, Reason> {
+    let mut csprng = thread_rng();
+    sign_identity_object_v1_with_rng(pre_id_obj, ip_info, alist, ip_secret_key, &mut csprng)
+}
+
+/// Sign the given pre-identity-object to produce a version 1 identity object.
+/// The inputs are
+/// - pre_id_obj - The version 1 pre-identity object
+/// - ip_info - Information about the identity provider, including its public
+///   keys
+/// - alist - the list of attributes to be signed
+/// - ip_secret_key - the signing key of the identity provider
+/// - csprng - cryptographically secure randomness source
+pub fn sign_identity_object_v1_with_rng<
+    P: Pairing,
+    AttributeType: Attribute<P::ScalarField>,
+    C: Curve<Scalar = P::ScalarField>,
+>(
+    pre_id_obj: &PreIdentityObjectV1<P, C>,
+    ip_info: &IpInfo<P>,
+    alist: &AttributeList<C::Scalar, AttributeType>,
+    ip_secret_key: &crate::ps_sig::SecretKey<P>,
+    csprng: &mut (impl Rng + CryptoRng),
+) -> Result<crate::ps_sig::Signature<P>, Reason> {
     sign_identity_object_common(
         &pre_id_obj.get_common_pio_fields(),
         ip_info,
         alist,
         ip_secret_key,
+        csprng,
     )
 }
 
@@ -413,6 +442,7 @@ fn sign_identity_object_common<
     ip_info: &IpInfo<P>,
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_secret_key: &crate::ps_sig::SecretKey<P>,
+    csprng: &mut (impl Rng + CryptoRng),
 ) -> Result<crate::ps_sig::Signature<P>, Reason> {
     let choice_ar_handles = common_fields.choice_ar_parameters.ar_identities.clone();
     let message: crate::ps_sig::UnknownMessage<P> = compute_message(
@@ -423,9 +453,7 @@ fn sign_identity_object_common<
         alist,
         &ip_info.ip_verify_key,
     )?;
-    let mut csprng = thread_rng();
-    // FIXME: Pass in csprng here.
-    Ok(ip_secret_key.sign_unknown_message(&message, &mut csprng))
+    Ok(ip_secret_key.sign_unknown_message(&message, csprng))
 }
 
 fn compute_prf_sharing_verifier<C: Curve>(
@@ -591,6 +619,7 @@ pub fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     // - created_at and valid_to dates of the attribute list
     // - encoding of anonymity revokers.
     // - tags of the attribute list
+    // - max accounts
     // - attribute list elements
 
     let ar_encoded = match utils::encode_ars(ar_list) {
@@ -664,6 +693,7 @@ pub fn validate_id_recovery_request<P: Pairing, C: Curve<Scalar = P::ScalarField
         public: request.id_cred_pub,
         coeff: context.on_chain_commitment_key.g,
     };
+    #[allow(deprecated)]
     let mut transcript = RandomOracle::domain("IdRecoveryProof");
     transcript.append_message(b"ctx", &context);
     transcript.append_message(b"timestamp", &request.timestamp);
@@ -796,8 +826,14 @@ mod tests {
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
 
         let id_use_data = test_create_id_use_data(&mut csprng);
-        let (context, pio, _) =
-            test_create_pio_v1(&id_use_data, &ip_info, &ars_infos, &global_ctx, num_ars);
+        let (context, pio, _) = test_create_pio_v1(
+            &id_use_data,
+            &ip_info,
+            &ars_infos,
+            &global_ctx,
+            num_ars,
+            &mut csprng,
+        );
         let attrs = test_create_attributes();
 
         // Act
