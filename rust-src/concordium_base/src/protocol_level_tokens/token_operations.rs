@@ -124,14 +124,19 @@ pub struct TokenOperationsPayload {
 
 impl TokenOperationsPayload {
     /// Decode token operations from CBOR
-    pub fn decode_operations(
-        &self,
-    ) -> CborSerializationResult<Vec<CborMaybeKnown<TokenOperation>>> {
+    pub fn decode_operations(&self) -> CborSerializationResult<TokenOperations> {
         cbor::cbor_decode(&self.operations)
     }
 
-    /// Decode token operations from CBOR
-    pub fn decode_operations_strict(&self) -> CborSerializationResult<TokenOperations> {
+    /// Decode token operations from CBOR. Unknown operations are wrapped
+    /// in [`CborMaybeKnown::Unknown`].
+    ///
+    /// Handling [`CborMaybeKnown::Unknown`] can be used to implement forwards compatability
+    /// with future token operations. Unknown token operations can e.g. be ignored, if the handler is only interested
+    /// in specific and known token operations.
+    pub fn decode_operations_maybe_known(
+        &self,
+    ) -> CborSerializationResult<Vec<CborMaybeKnown<TokenOperation>>> {
         cbor::cbor_decode(&self.operations)
     }
 }
@@ -498,7 +503,7 @@ pub mod test {
             operations: RawCbor::from(cbor::cbor_encode(&operations).unwrap()),
         };
 
-        let operations_decoded = payload.decode_operations_strict().unwrap();
+        let operations_decoded = payload.decode_operations().unwrap();
         assert_eq!(operations_decoded, operations);
 
         let operations_known: Vec<_> = operations
@@ -506,7 +511,7 @@ pub mod test {
             .iter()
             .map(|op| CborMaybeKnown::Known(op.clone()))
             .collect();
-        let operations_decoded = payload.decode_operations().unwrap();
+        let operations_decoded = payload.decode_operations_maybe_known().unwrap();
         assert_eq!(operations_decoded, operations_known);
     }
 }
