@@ -63,6 +63,20 @@ pub enum TokenModuleEventEnum {
     Unpause(UnpauseEvent),
 }
 
+impl TokenModuleEventEnum {
+    /// Token module event type
+    pub fn event_type(&self) -> TokenModuleEventType {
+        match self {
+            TokenModuleEventEnum::AddAllowList(_) => TokenModuleEventType::AddAllowList,
+            TokenModuleEventEnum::RemoveAllowList(_) => TokenModuleEventType::RemoveAllowList,
+            TokenModuleEventEnum::AddDenyList(_) => TokenModuleEventType::AddDenyList,
+            TokenModuleEventEnum::RemoveDenyList(_) => TokenModuleEventType::RemoveDenyList,
+            TokenModuleEventEnum::Pause(_) => TokenModuleEventType::Pause,
+            TokenModuleEventEnum::Unpause(_) => TokenModuleEventType::Unpause,
+        }
+    }
+}
+
 pub type AddAllowListEvent = TokenListUpdateEventDetails;
 pub type RemoveAllowListEvent = TokenListUpdateEventDetails;
 pub type AddDenyListEvent = TokenListUpdateEventDetails;
@@ -150,7 +164,7 @@ const TYPE_MAX_BYTE_LEN: usize = 255;
 /// reason type.
 ///
 /// Limited to 255 bytes in length and must be valid UTF-8.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(try_from = "String", into = "String")]
 #[repr(transparent)]
 pub struct TokenModuleCborTypeDiscriminator {

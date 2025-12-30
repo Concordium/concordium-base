@@ -60,6 +60,32 @@ pub enum TokenModuleRejectReasonEnum {
     MintWouldOverflow(MintWouldOverflowRejectReason),
 }
 
+impl TokenModuleRejectReasonEnum {
+    /// Token module reject reason type
+    pub fn reject_reason_type(&self) -> TokenModuleRejectReasonType {
+        match self {
+            TokenModuleRejectReasonEnum::AddressNotFound(_) => {
+                TokenModuleRejectReasonType::AddressNotFound
+            }
+            TokenModuleRejectReasonEnum::TokenBalanceInsufficient(_) => {
+                TokenModuleRejectReasonType::TokenBalanceInsufficient
+            }
+            TokenModuleRejectReasonEnum::DeserializationFailure(_) => {
+                TokenModuleRejectReasonType::DeserializationFailure
+            }
+            TokenModuleRejectReasonEnum::UnsupportedOperation(_) => {
+                TokenModuleRejectReasonType::UnsupportedOperation
+            }
+            TokenModuleRejectReasonEnum::OperationNotPermitted(_) => {
+                TokenModuleRejectReasonType::OperationNotPermitted
+            }
+            TokenModuleRejectReasonEnum::MintWouldOverflow(_) => {
+                TokenModuleRejectReasonType::MintWouldOverflow
+            }
+        }
+    }
+}
+
 /// A token holder address was not valid.
 #[derive(
     Debug,
