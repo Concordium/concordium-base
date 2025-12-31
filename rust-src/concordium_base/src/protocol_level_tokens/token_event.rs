@@ -24,6 +24,11 @@ pub enum TokenModuleEventType {
     Unpause,
 }
 
+/// Unknown token module reject reason
+#[derive(Debug, thiserror::Error)]
+#[error("Unknown token module reject reason type: {0}")]
+pub struct UnknownTokenModuleEventTypeError(String);
+
 impl TokenModuleEventType {
     /// String identifier for the token module event
     const fn as_str(&self) -> &'static str {
@@ -40,6 +45,25 @@ impl TokenModuleEventType {
     /// Convert to the "dynamic" representation of the token module event
     pub fn to_type_discriminator(&self) -> TokenModuleCborTypeDiscriminator {
         TokenModuleCborTypeDiscriminator::from_str(self.as_str()).expect("static length")
+    }
+
+    /// Convert from "dynamic" representation of the reject reason type to static
+    pub fn try_from_type_discriminator(
+        type_discriminator: &TokenModuleCborTypeDiscriminator,
+    ) -> Result<Self, UnknownTokenModuleEventTypeError> {
+        Ok(match type_discriminator.as_ref() {
+            "addAllowList" => TokenModuleEventType::AddAllowList,
+            "removeAllowList" => TokenModuleEventType::RemoveAllowList,
+            "addDenyList" => TokenModuleEventType::AddDenyList,
+            "removeDenyList" => TokenModuleEventType::RemoveDenyList,
+            "pause" => TokenModuleEventType::Pause,
+            "unpause" => TokenModuleEventType::Unpause,
+            _ => {
+                return Err(UnknownTokenModuleEventTypeError(
+                    type_discriminator.to_string(),
+                ))
+            }
+        })
     }
 }
 

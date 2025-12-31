@@ -22,6 +22,11 @@ pub enum TokenModuleRejectReasonType {
     MintWouldOverflow,
 }
 
+/// Unknown token module reject reason
+#[derive(Debug, thiserror::Error)]
+#[error("Unknown token module reject reason type: {0}")]
+pub struct UnknownTokenModuleRejectReasonTypeError(String);
+
 impl TokenModuleRejectReasonType {
     /// String identifier for the reject reason type
     const fn as_str(&self) -> &'static str {
@@ -38,6 +43,25 @@ impl TokenModuleRejectReasonType {
     /// Convert to the "dynamic" representation of the reject reason type
     pub fn to_type_discriminator(&self) -> TokenModuleCborTypeDiscriminator {
         TokenModuleCborTypeDiscriminator::from_str(self.as_str()).expect("static length")
+    }
+
+    /// Convert from "dynamic" representation of the reject reason type to static
+    pub fn try_from_type_discriminator(
+        type_discriminator: &TokenModuleCborTypeDiscriminator,
+    ) -> Result<Self, UnknownTokenModuleRejectReasonTypeError> {
+        Ok(match type_discriminator.as_ref() {
+            "addressNotFound" => TokenModuleRejectReasonType::AddressNotFound,
+            "tokenBalanceInsufficient" => TokenModuleRejectReasonType::TokenBalanceInsufficient,
+            "deserializationFailure" => TokenModuleRejectReasonType::DeserializationFailure,
+            "unsupportedOperation" => TokenModuleRejectReasonType::UnsupportedOperation,
+            "operationNotPermitted" => TokenModuleRejectReasonType::OperationNotPermitted,
+            "mintWouldOverflow" => TokenModuleRejectReasonType::MintWouldOverflow,
+            _ => {
+                return Err(UnknownTokenModuleRejectReasonTypeError(
+                    type_discriminator.to_string(),
+                ))
+            }
+        })
     }
 }
 
@@ -84,6 +108,8 @@ impl TokenModuleRejectReasonEnum {
             }
         }
     }
+
+    // todo ar encode+decode
 }
 
 /// A token holder address was not valid.

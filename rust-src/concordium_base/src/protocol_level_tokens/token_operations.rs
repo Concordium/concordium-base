@@ -118,7 +118,7 @@ const CBOR_TAG: u64 = 24;
 pub struct TokenOperationsPayload {
     /// Id of the token
     pub token_id: TokenId,
-    /// Token operations in the transaction
+    /// Token operations in the transaction. CBOR encoding of [`TokenOperations`]
     pub operations: RawCbor,
 }
 
