@@ -1,5 +1,6 @@
 use super::{CborHolderAccount, RawCbor, TokenAmount};
 use crate::common::cbor;
+use crate::common::cbor::CborSerializationResult;
 use crate::transactions::Memo;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
@@ -130,6 +131,31 @@ impl TokenModuleEventEnum {
                 RawCbor::from(cbor::cbor_encode(event).unwrap()),
             ),
         }
+    }
+
+    /// Decode event from CBOR encoding
+    pub fn decode_event(
+        event_type: TokenModuleEventType,
+        cbor: &RawCbor,
+    ) -> CborSerializationResult<Self> {
+        Ok(match event_type {
+            TokenModuleEventType::AddAllowList => {
+                TokenModuleEventEnum::AddAllowList(cbor::cbor_decode(cbor)?)
+            }
+            TokenModuleEventType::RemoveAllowList => {
+                TokenModuleEventEnum::RemoveAllowList(cbor::cbor_decode(cbor)?)
+            }
+            TokenModuleEventType::AddDenyList => {
+                TokenModuleEventEnum::AddDenyList(cbor::cbor_decode(cbor)?)
+            }
+            TokenModuleEventType::RemoveDenyList => {
+                TokenModuleEventEnum::RemoveDenyList(cbor::cbor_decode(cbor)?)
+            }
+            TokenModuleEventType::Pause => TokenModuleEventEnum::Pause(cbor::cbor_decode(cbor)?),
+            TokenModuleEventType::Unpause => {
+                TokenModuleEventEnum::Unpause(cbor::cbor_decode(cbor)?)
+            }
+        })
     }
 }
 

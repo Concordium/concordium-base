@@ -1,4 +1,5 @@
 use crate::common::cbor;
+use crate::common::cbor::CborSerializationResult;
 use crate::protocol_level_tokens::{
     token_holder::CborHolderAccount, RawCbor, TokenAmount, TokenModuleCborTypeDiscriminator,
 };
@@ -139,6 +140,33 @@ impl TokenModuleRejectReasonEnum {
                 RawCbor::from(cbor::cbor_encode(reject_reason).unwrap()),
             ),
         }
+    }
+
+    /// Decode reject reason from CBOR encoding
+    pub fn decode_reject_reason(
+        reject_reason_type: TokenModuleRejectReasonType,
+        cbor: &RawCbor,
+    ) -> CborSerializationResult<Self> {
+        Ok(match reject_reason_type {
+            TokenModuleRejectReasonType::AddressNotFound => {
+                TokenModuleRejectReasonEnum::AddressNotFound(cbor::cbor_decode(cbor)?)
+            }
+            TokenModuleRejectReasonType::TokenBalanceInsufficient => {
+                TokenModuleRejectReasonEnum::TokenBalanceInsufficient(cbor::cbor_decode(cbor)?)
+            }
+            TokenModuleRejectReasonType::DeserializationFailure => {
+                TokenModuleRejectReasonEnum::DeserializationFailure(cbor::cbor_decode(cbor)?)
+            }
+            TokenModuleRejectReasonType::UnsupportedOperation => {
+                TokenModuleRejectReasonEnum::UnsupportedOperation(cbor::cbor_decode(cbor)?)
+            }
+            TokenModuleRejectReasonType::OperationNotPermitted => {
+                TokenModuleRejectReasonEnum::OperationNotPermitted(cbor::cbor_decode(cbor)?)
+            }
+            TokenModuleRejectReasonType::MintWouldOverflow => {
+                TokenModuleRejectReasonEnum::MintWouldOverflow(cbor::cbor_decode(cbor)?)
+            }
+        })
     }
 }
 
