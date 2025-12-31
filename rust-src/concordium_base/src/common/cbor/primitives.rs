@@ -88,11 +88,7 @@ macro_rules! serialize_deserialize_unsigned_integer {
     ($t:ty) => {
         impl CborSerialize for $t {
             fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
-                encoder.encode_positive((*self).try_into().context(concat!(
-                    "convert from ",
-                    stringify!($t),
-                    " to u64"
-                ))?)
+                encoder.encode_positive(u64::from(*self))
             }
         }
 
@@ -127,7 +123,6 @@ serialize_deserialize_unsigned_integer!(u8);
 serialize_deserialize_unsigned_integer!(u16);
 serialize_deserialize_unsigned_integer!(u32);
 serialize_deserialize_unsigned_integer!(u64);
-serialize_deserialize_unsigned_integer!(usize);
 
 macro_rules! serialize_deserialize_signed_integer {
     ($t:ty) => {
@@ -199,7 +194,6 @@ serialize_deserialize_signed_integer!(i8);
 serialize_deserialize_signed_integer!(i16);
 serialize_deserialize_signed_integer!(i32);
 serialize_deserialize_signed_integer!(i64);
-serialize_deserialize_signed_integer!(isize);
 
 impl CborSerialize for f64 {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {

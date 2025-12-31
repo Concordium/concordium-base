@@ -89,7 +89,7 @@ pub enum TokenModuleRejectReasonType {
 #[serde(rename_all = "camelCase")]
 pub struct AddressNotFoundRejectReason {
     /// The index in the list of operations of the failing operation.
-    pub index: usize,
+    pub index: u64,
     /// The address that could not be resolved.
     pub address: CborHolderAccount,
 }
@@ -109,7 +109,7 @@ pub struct AddressNotFoundRejectReason {
 #[serde(rename_all = "camelCase")]
 pub struct TokenBalanceInsufficientRejectReason {
     /// The index in the list of operations of the failing operation.
-    pub index: usize,
+    pub index: u64,
     /// The available balance of the sender.
     pub available_balance: TokenAmount,
     /// The minimum required balance to perform the operation.
@@ -153,7 +153,7 @@ pub struct DeserializationFailureRejectReason {
 #[serde(rename_all = "camelCase")]
 pub struct UnsupportedOperationRejectReason {
     /// The index in the list of operations of the failing operation.
-    pub index: usize,
+    pub index: u64,
     /// The type of operation that was not supported.
     pub operation_type: String,
     /// The reason why the operation was not supported.
@@ -175,7 +175,7 @@ pub struct UnsupportedOperationRejectReason {
 #[serde(rename_all = "camelCase")]
 pub struct OperationNotPermittedRejectReason {
     /// The index in the list of operations of the failing operation.
-    pub index: usize,
+    pub index: u64,
     /// (Optionally) the address that does not have the necessary permissions to
     /// perform the operation.
     pub address: Option<CborHolderAccount>,
@@ -197,7 +197,7 @@ pub struct OperationNotPermittedRejectReason {
 #[serde(rename_all = "camelCase")]
 pub struct MintWouldOverflowRejectReason {
     /// The index in the list of operations of the failing operation.
-    pub index: usize,
+    pub index: u64,
     /// The requested amount to mint.
     pub requested_amount: TokenAmount,
     /// The current supply of the token.
