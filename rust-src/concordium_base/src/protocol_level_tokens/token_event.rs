@@ -1,4 +1,5 @@
-use super::{CborHolderAccount, TokenAmount};
+use super::{CborHolderAccount, RawCbor, TokenAmount};
+use crate::common::cbor;
 use crate::transactions::Memo;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
@@ -97,6 +98,37 @@ impl TokenModuleEventEnum {
             TokenModuleEventEnum::RemoveDenyList(_) => TokenModuleEventType::RemoveDenyList,
             TokenModuleEventEnum::Pause(_) => TokenModuleEventType::Pause,
             TokenModuleEventEnum::Unpause(_) => TokenModuleEventType::Unpause,
+        }
+    }
+
+    /// Encode event as CBOR. Returns the event type and its CBOR encoding.
+    pub fn encode_event(&self) -> (TokenModuleEventType, RawCbor) {
+        // todo ar unwrap
+        match self {
+            TokenModuleEventEnum::AddAllowList(event) => (
+                TokenModuleEventType::AddAllowList,
+                RawCbor::from(cbor::cbor_encode(event).unwrap()),
+            ),
+            TokenModuleEventEnum::RemoveAllowList(event) => (
+                TokenModuleEventType::RemoveAllowList,
+                RawCbor::from(cbor::cbor_encode(event).unwrap()),
+            ),
+            TokenModuleEventEnum::AddDenyList(event) => (
+                TokenModuleEventType::AddDenyList,
+                RawCbor::from(cbor::cbor_encode(event).unwrap()),
+            ),
+            TokenModuleEventEnum::RemoveDenyList(event) => (
+                TokenModuleEventType::RemoveDenyList,
+                RawCbor::from(cbor::cbor_encode(event).unwrap()),
+            ),
+            TokenModuleEventEnum::Pause(event) => (
+                TokenModuleEventType::Pause,
+                RawCbor::from(cbor::cbor_encode(event).unwrap()),
+            ),
+            TokenModuleEventEnum::Unpause(event) => (
+                TokenModuleEventType::Unpause,
+                RawCbor::from(cbor::cbor_encode(event).unwrap()),
+            ),
         }
     }
 }

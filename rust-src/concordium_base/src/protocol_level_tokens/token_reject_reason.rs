@@ -1,5 +1,6 @@
+use crate::common::cbor;
 use crate::protocol_level_tokens::{
-    token_holder::CborHolderAccount, TokenAmount, TokenModuleCborTypeDiscriminator,
+    token_holder::CborHolderAccount, RawCbor, TokenAmount, TokenModuleCborTypeDiscriminator,
 };
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use std::str::FromStr;
@@ -109,7 +110,36 @@ impl TokenModuleRejectReasonEnum {
         }
     }
 
-    // todo ar encode+decode
+    /// Encode reject reason as CBOR. Returns the reject reason type and its CBOR encoding.
+    pub fn encode_reject_reason(&self) -> (TokenModuleRejectReasonType, RawCbor) {
+        // todo ar unwrap
+        match self {
+            TokenModuleRejectReasonEnum::AddressNotFound(reject_reason) => (
+                TokenModuleRejectReasonType::AddressNotFound,
+                RawCbor::from(cbor::cbor_encode(reject_reason).unwrap()),
+            ),
+            TokenModuleRejectReasonEnum::TokenBalanceInsufficient(reject_reason) => (
+                TokenModuleRejectReasonType::TokenBalanceInsufficient,
+                RawCbor::from(cbor::cbor_encode(reject_reason).unwrap()),
+            ),
+            TokenModuleRejectReasonEnum::DeserializationFailure(reject_reason) => (
+                TokenModuleRejectReasonType::DeserializationFailure,
+                RawCbor::from(cbor::cbor_encode(reject_reason).unwrap()),
+            ),
+            TokenModuleRejectReasonEnum::UnsupportedOperation(reject_reason) => (
+                TokenModuleRejectReasonType::UnsupportedOperation,
+                RawCbor::from(cbor::cbor_encode(reject_reason).unwrap()),
+            ),
+            TokenModuleRejectReasonEnum::OperationNotPermitted(reject_reason) => (
+                TokenModuleRejectReasonType::OperationNotPermitted,
+                RawCbor::from(cbor::cbor_encode(reject_reason).unwrap()),
+            ),
+            TokenModuleRejectReasonEnum::MintWouldOverflow(reject_reason) => (
+                TokenModuleRejectReasonType::MintWouldOverflow,
+                RawCbor::from(cbor::cbor_encode(reject_reason).unwrap()),
+            ),
+        }
+    }
 }
 
 /// A token holder address was not valid.
