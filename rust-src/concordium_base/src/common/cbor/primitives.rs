@@ -128,19 +128,11 @@ macro_rules! serialize_deserialize_signed_integer {
     ($t:ty) => {
         impl CborSerialize for $t {
             fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
-                if *self >= 0 {
-                    encoder.encode_positive(u64::try_from(*self).context(concat!(
-                        "convert ",
-                        stringify!($t),
-                        " to positive"
-                    ))?)
+                let value = i64::from(*self);
+                if value >= 0 {
+                    encoder.encode_positive(value as u64)
                 } else {
-                    encoder.encode_negative(
-                        self.checked_add(1)
-                            .and_then(|val| val.checked_neg())
-                            .and_then(|val| u64::try_from(val).ok())
-                            .context(concat!("convert ", stringify!($t), " to negative"))?,
-                    )
+                    encoder.encode_negative((-(value + 1)) as u64)
                 }
             }
         }
