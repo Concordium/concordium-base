@@ -806,7 +806,7 @@ impl<T: CborSerialize> CborSerialize for Vec<T> {
     }
 }
 
-impl<T: CborSerialize> CborSerialize for &[T] {
+impl<T: CborSerialize> CborSerialize for [T] {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         let mut array_encoder = encoder.encode_array(self.len())?;
         for item in self.iter() {

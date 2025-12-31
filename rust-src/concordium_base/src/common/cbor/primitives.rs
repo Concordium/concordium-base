@@ -27,12 +27,6 @@ impl<const N: usize> CborDeserialize for [u8; N] {
     }
 }
 
-impl CborSerialize for [u8] {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
-        encoder.encode_bytes(self)
-    }
-}
-
 /// CBOR bytes data item.
 ///
 /// Notice that this serializes different from a plain `Vec<u8>` which
