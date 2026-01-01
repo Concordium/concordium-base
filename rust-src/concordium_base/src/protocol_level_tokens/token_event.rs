@@ -238,7 +238,7 @@ mod test {
                 coin_info: None,
             },
         };
-        let cbor = cbor::cbor_encode(&variant).unwrap();
+        let cbor = cbor::cbor_encode(&variant);
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let module_event = TokenModuleEvent {
             event_type: "addAllowList".to_string().try_into().unwrap(),
@@ -260,7 +260,7 @@ mod test {
                 coin_info: None,
             },
         };
-        let cbor = cbor::cbor_encode(&variant).unwrap();
+        let cbor = cbor::cbor_encode(&variant);
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let module_event = TokenModuleEvent {
             event_type: "removeAllowList".to_string().try_into().unwrap(),
@@ -282,7 +282,7 @@ mod test {
                 coin_info: None,
             },
         };
-        let cbor = cbor::cbor_encode(&variant).unwrap();
+        let cbor = cbor::cbor_encode(&variant);
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let module_event = TokenModuleEvent {
             event_type: "addDenyList".to_string().try_into().unwrap(),
@@ -304,7 +304,7 @@ mod test {
                 coin_info: None,
             },
         };
-        let cbor = cbor::cbor_encode(&variant).unwrap();
+        let cbor = cbor::cbor_encode(&variant);
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let module_event = TokenModuleEvent {
             event_type: "removeDenyList".to_string().try_into().unwrap(),
@@ -321,7 +321,7 @@ mod test {
     #[test]
     fn test_decode_pause_event_cbor() {
         let variant = TokenPauseEventDetails {};
-        let cbor = cbor::cbor_encode(&variant).unwrap();
+        let cbor = cbor::cbor_encode(&variant);
         assert_eq!(hex::encode(&cbor), "a0");
         let module_event = TokenModuleEvent {
             event_type: "pause".to_string().try_into().unwrap(),
@@ -338,7 +338,7 @@ mod test {
     #[test]
     fn test_decode_unpause_event_cbor() {
         let variant = TokenPauseEventDetails {};
-        let cbor = cbor::cbor_encode(&variant).unwrap();
+        let cbor = cbor::cbor_encode(&variant);
         assert_eq!(hex::encode(&cbor), "a0");
         let module_event = TokenModuleEvent {
             event_type: "unpause".to_string().try_into().unwrap(),

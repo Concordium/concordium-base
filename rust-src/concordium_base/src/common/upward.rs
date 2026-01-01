@@ -195,7 +195,7 @@ impl<A, R> Upward<A, R> {
 pub type CborUpward<A> = Upward<A, value::Value>;
 
 impl<T: CborSerialize> CborSerialize for CborUpward<T> {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         match self {
             Self::Unknown(value) => value.serialize(encoder),
             Self::Known(value) => value.serialize(encoder),

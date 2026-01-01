@@ -11,7 +11,7 @@ const UNSIGNED_BIGNUM_TAG: u64 = 2;
 const NEGATIVE_BIGNUM_TAG: u64 = 3;
 
 impl<const N: usize> CborSerialize for [u8; N] {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         encoder.encode_bytes(self)
     }
 }
@@ -28,7 +28,7 @@ impl<const N: usize> CborDeserialize for [u8; N] {
 }
 
 impl CborSerialize for [u8] {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         encoder.encode_bytes(self)
     }
 }
@@ -47,7 +47,7 @@ impl AsRef<[u8]> for Bytes {
 }
 
 impl CborSerialize for Bytes {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         encoder.encode_bytes(&self.0)
     }
 }
@@ -62,7 +62,7 @@ impl CborDeserialize for Bytes {
 }
 
 impl CborSerialize for bool {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         encoder.encode_simple(if *self { simple::TRUE } else { simple::FALSE })
     }
 }
@@ -87,12 +87,8 @@ impl CborDeserialize for bool {
 macro_rules! serialize_deserialize_unsigned_integer {
     ($t:ty) => {
         impl CborSerialize for $t {
-            fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
-                encoder.encode_positive((*self).try_into().context(concat!(
-                    "convert from ",
-                    stringify!($t),
-                    " to u64"
-                ))?)
+            fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
+                encoder.encode_positive(u64::from(*self))
             }
         }
 
@@ -127,25 +123,16 @@ serialize_deserialize_unsigned_integer!(u8);
 serialize_deserialize_unsigned_integer!(u16);
 serialize_deserialize_unsigned_integer!(u32);
 serialize_deserialize_unsigned_integer!(u64);
-serialize_deserialize_unsigned_integer!(usize);
 
 macro_rules! serialize_deserialize_signed_integer {
     ($t:ty) => {
         impl CborSerialize for $t {
-            fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
-                if *self >= 0 {
-                    encoder.encode_positive(u64::try_from(*self).context(concat!(
-                        "convert ",
-                        stringify!($t),
-                        " to positive"
-                    ))?)
+            fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
+                let value = i64::from(*self);
+                if value >= 0 {
+                    encoder.encode_positive(value as u64)
                 } else {
-                    encoder.encode_negative(
-                        self.checked_add(1)
-                            .and_then(|val| val.checked_neg())
-                            .and_then(|val| u64::try_from(val).ok())
-                            .context(concat!("convert ", stringify!($t), " to negative"))?,
-                    )
+                    encoder.encode_negative((-(value + 1)) as u64)
                 }
             }
         }
@@ -199,10 +186,9 @@ serialize_deserialize_signed_integer!(i8);
 serialize_deserialize_signed_integer!(i16);
 serialize_deserialize_signed_integer!(i32);
 serialize_deserialize_signed_integer!(i64);
-serialize_deserialize_signed_integer!(isize);
 
 impl CborSerialize for f64 {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         encoder.encode_float(*self)
     }
 }
@@ -217,19 +203,19 @@ impl CborDeserialize for f64 {
 }
 
 impl CborSerialize for str {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         encoder.encode_text(self)
     }
 }
 
 impl CborSerialize for &str {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         encoder.encode_text(self)
     }
 }
 
 impl CborSerialize for String {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         encoder.encode_text(self)
     }
 }
@@ -302,7 +288,7 @@ pub enum MapKeyRef<'a> {
 }
 
 impl CborSerialize for MapKeyRef<'_> {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         match self {
             Self::Positive(positive) => encoder.encode_positive(*positive),
             Self::Text(text) => encoder.encode_text(text),
@@ -330,7 +316,7 @@ impl CborDeserialize for MapKey {
 }
 
 impl CborSerialize for MapKey {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         match self {
             Self::Positive(positive) => encoder.encode_positive(*positive),
             Self::Text(text) => encoder.encode_text(text),
@@ -377,25 +363,25 @@ mod test {
     #[test]
     fn test_u64() {
         let value = 0u64;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "00");
         let value_decoded: u64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = 1u64;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "01");
         let value_decoded: u64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = 1230u64;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "1904ce");
         let value_decoded: u64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = u64::MAX;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "1bffffffffffffffff");
         let value_decoded: u64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -404,19 +390,19 @@ mod test {
     #[test]
     fn test_u8() {
         let value = 0u8;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "00");
         let value_decoded: u8 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = 1u8;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "01");
         let value_decoded: u8 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = 255u8;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "18ff");
         let value_decoded: u8 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -509,55 +495,55 @@ mod test {
     #[test]
     fn test_i64() {
         let value = 0i64;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "00");
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = 1i64;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "01");
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = 2i64;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "02");
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = -1i64;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "20");
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = -2i64;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "21");
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = 1230i64;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "1904ce");
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = -1230i64;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "3904cd");
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = i64::MAX;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "1b7fffffffffffffff");
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = i64::MIN;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "3b7fffffffffffffff");
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -566,43 +552,43 @@ mod test {
     #[test]
     fn test_i8() {
         let value = 0i8;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "00");
         let value_decoded: i8 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = 1i8;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "01");
         let value_decoded: i8 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = 2i8;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "02");
         let value_decoded: i8 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = -1i8;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "20");
         let value_decoded: i8 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = -2i8;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "21");
         let value_decoded: i8 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = 127i8;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "187f");
         let value_decoded: i8 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = -128i8;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "387f");
         let value_decoded: i8 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -707,13 +693,13 @@ mod test {
     #[test]
     fn test_bool() {
         let value = false;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "f4");
         let value_decoded: bool = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = true;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "f5");
         let value_decoded: bool = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -722,7 +708,7 @@ mod test {
     #[test]
     fn test_f64() {
         let value = 1.123f64;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "fb3ff1f7ced916872b");
         let value_decoded: f64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -732,7 +718,7 @@ mod test {
     fn test_bytes() {
         let bytes = Bytes(vec![1, 2, 3, 4, 5]);
 
-        let cbor = cbor_encode(&bytes).unwrap();
+        let cbor = cbor_encode(&bytes);
         assert_eq!(hex::encode(&cbor), "450102030405");
         let bytes_decoded: Bytes = cbor_decode(&cbor).unwrap();
         assert_eq!(bytes_decoded, bytes);
@@ -742,7 +728,7 @@ mod test {
     fn test_bytes_empty() {
         let bytes = Bytes(vec![]);
 
-        let cbor = cbor_encode(&bytes).unwrap();
+        let cbor = cbor_encode(&bytes);
         assert_eq!(hex::encode(&cbor), "40");
         let bytes_decoded: Bytes = cbor_decode(&cbor).unwrap();
         assert_eq!(bytes_decoded, bytes);
@@ -752,7 +738,7 @@ mod test {
     fn test_bytes_exact_length() {
         let bytes: [u8; 5] = [1, 2, 3, 4, 5];
 
-        let cbor = cbor_encode(&bytes).unwrap();
+        let cbor = cbor_encode(&bytes);
         assert_eq!(hex::encode(&cbor), "450102030405");
         let bytes_decoded: [u8; 5] = cbor_decode(&cbor).unwrap();
         assert_eq!(bytes_decoded, bytes);
@@ -783,7 +769,7 @@ mod test {
     fn test_string() {
         let text = "abcd";
 
-        let cbor = cbor_encode(&text).unwrap();
+        let cbor = cbor_encode(&text);
         assert_eq!(hex::encode(&cbor), "6461626364");
         let text_decoded: String = cbor_decode(&cbor).unwrap();
         assert_eq!(text_decoded, text);
@@ -793,7 +779,7 @@ mod test {
     fn test_string_empty() {
         let text = "";
 
-        let cbor = cbor_encode(&text).unwrap();
+        let cbor = cbor_encode(&text);
         assert_eq!(hex::encode(&cbor), "60");
         let text_decoded: String = cbor_decode(&cbor).unwrap();
         assert_eq!(text_decoded, text);
