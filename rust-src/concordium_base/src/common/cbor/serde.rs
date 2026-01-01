@@ -19,7 +19,7 @@ pub mod map_hex_cbor_values {
     {
         let mut hex_map = HashMap::new();
         for (key, value) in map {
-            let cbor_bytes = cbor_encode(value).map_err(serde::ser::Error::custom)?;
+            let cbor_bytes = cbor_encode(value);
             hex_map.insert(key, cbor_bytes.encode_hex::<String>());
         }
         hex_map.serialize(serializer)

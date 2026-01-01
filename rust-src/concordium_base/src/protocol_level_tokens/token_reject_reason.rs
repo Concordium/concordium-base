@@ -89,7 +89,7 @@ pub enum TokenModuleRejectReasonType {
 #[serde(rename_all = "camelCase")]
 pub struct AddressNotFoundRejectReason {
     /// The index in the list of operations of the failing operation.
-    pub index: usize,
+    pub index: u64,
     /// The address that could not be resolved.
     pub address: CborHolderAccount,
 }
@@ -109,7 +109,7 @@ pub struct AddressNotFoundRejectReason {
 #[serde(rename_all = "camelCase")]
 pub struct TokenBalanceInsufficientRejectReason {
     /// The index in the list of operations of the failing operation.
-    pub index: usize,
+    pub index: u64,
     /// The available balance of the sender.
     pub available_balance: TokenAmount,
     /// The minimum required balance to perform the operation.
@@ -153,7 +153,7 @@ pub struct DeserializationFailureRejectReason {
 #[serde(rename_all = "camelCase")]
 pub struct UnsupportedOperationRejectReason {
     /// The index in the list of operations of the failing operation.
-    pub index: usize,
+    pub index: u64,
     /// The type of operation that was not supported.
     pub operation_type: String,
     /// The reason why the operation was not supported.
@@ -175,7 +175,7 @@ pub struct UnsupportedOperationRejectReason {
 #[serde(rename_all = "camelCase")]
 pub struct OperationNotPermittedRejectReason {
     /// The index in the list of operations of the failing operation.
-    pub index: usize,
+    pub index: u64,
     /// (Optionally) the address that does not have the necessary permissions to
     /// perform the operation.
     pub address: Option<CborHolderAccount>,
@@ -197,7 +197,7 @@ pub struct OperationNotPermittedRejectReason {
 #[serde(rename_all = "camelCase")]
 pub struct MintWouldOverflowRejectReason {
     /// The index in the list of operations of the failing operation.
-    pub index: usize,
+    pub index: u64,
     /// The requested amount to mint.
     pub requested_amount: TokenAmount,
     /// The current supply of the token.
@@ -224,7 +224,7 @@ mod test {
                 coin_info: None,
             },
         };
-        let cbor = cbor::cbor_encode(&variant).unwrap();
+        let cbor = cbor::cbor_encode(&variant);
         assert_eq!(hex::encode(&cbor), "a265696e646578036761646472657373d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let reject_reason = TokenModuleRejectReason {
             token_id: TokenId::from_str("TK1").unwrap(),
@@ -246,7 +246,7 @@ mod test {
             available_balance: TokenAmount::from_raw(12300, 3),
             required_balance: TokenAmount::from_raw(22300, 3),
         };
-        let cbor = cbor::cbor_encode(&variant).unwrap();
+        let cbor = cbor::cbor_encode(&variant);
         assert_eq!(hex::encode(&cbor), "a365696e646578036f726571756972656442616c616e6365c4822219571c70617661696c61626c6542616c616e6365c4822219300c");
         let reject_reason = TokenModuleRejectReason {
             token_id: TokenId::from_str("TK1").unwrap(),
@@ -268,7 +268,7 @@ mod test {
         let variant = DeserializationFailureRejectReason {
             cause: Some("testfailure".to_string()),
         };
-        let cbor = cbor::cbor_encode(&variant).unwrap();
+        let cbor = cbor::cbor_encode(&variant);
         assert_eq!(hex::encode(&cbor), "a16563617573656b746573746661696c757265");
         let reject_reason = TokenModuleRejectReason {
             token_id: TokenId::from_str("TK1").unwrap(),
@@ -290,7 +290,7 @@ mod test {
             operation_type: "testoperation".to_string(),
             reason: Some("testfailture".to_string()),
         };
-        let cbor = cbor::cbor_encode(&variant).unwrap();
+        let cbor = cbor::cbor_encode(&variant);
         assert_eq!(hex::encode(&cbor), "a365696e6465780066726561736f6e6c746573746661696c747572656d6f7065726174696f6e547970656d746573746f7065726174696f6e");
         let reject_reason = TokenModuleRejectReason {
             token_id: TokenId::from_str("TK1").unwrap(),
@@ -315,7 +315,7 @@ mod test {
             }),
             reason: Some("testfailture".to_string()),
         };
-        let cbor = cbor::cbor_encode(&variant).unwrap();
+        let cbor = cbor::cbor_encode(&variant);
         assert_eq!(hex::encode(&cbor), "a365696e6465780066726561736f6e6c746573746661696c747572656761646472657373d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let reject_reason = TokenModuleRejectReason {
             token_id: TokenId::from_str("TK1").unwrap(),
@@ -338,7 +338,7 @@ mod test {
             current_supply: TokenAmount::from_raw(10000, 3),
             max_representable_amount: TokenAmount::from_raw(20000, 3),
         };
-        let cbor = cbor::cbor_encode(&variant).unwrap();
+        let cbor = cbor::cbor_encode(&variant);
         assert_eq!(hex::encode(&cbor), "a465696e646578006d63757272656e74537570706c79c482221927106f726571756573746564416d6f756e74c48222194e20766d6178526570726573656e7461626c65416d6f756e74c48222194e20");
         let reject_reason = TokenModuleRejectReason {
             token_id: TokenId::from_str("TK1").unwrap(),

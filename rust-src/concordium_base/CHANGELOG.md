@@ -1,5 +1,7 @@
 ## Unreleased
 
+- `cbor::cbor_encode` is now infallible and returns `Vec<u8>` instead of `CborSerializationResult<Vec<u8>>`
+
 ## 10.0.0-alpha.0 (2025-12-08)
 
 - Introduce protocol version 10 variant `ProtocolVersion::P10`.

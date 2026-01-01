@@ -34,21 +34,21 @@ pub enum Value {
 }
 
 impl CborSerialize for Value {
-    fn serialize<C: CborEncoder>(&self, mut encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, mut encoder: C) -> Result<(), C::WriteError> {
         match self {
             Value::Positive(value) => encoder.encode_positive(*value),
             Value::Negative(value) => encoder.encode_negative(*value),
             Value::Bytes(value) => encoder.encode_bytes(&value.0),
             Value::Text(value) => encoder.encode_text(value),
             Value::Array(value) => {
-                let mut array_encoder = encoder.encode_array(value.len())?;
+                let mut array_encoder = encoder.encode_array()?;
                 for element in value {
                     array_encoder.serialize_element(element)?;
                 }
                 array_encoder.end()
             }
             Value::Map(value) => {
-                let mut map_encoder = encoder.encode_map(value.len())?;
+                let mut map_encoder = encoder.encode_map()?;
                 for entry in value {
                     map_encoder.serialize_entry(&entry.0, &entry.1)?;
                 }
@@ -137,7 +137,7 @@ mod test {
     fn test_positive() {
         let value = Value::Positive(3);
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "03");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -147,7 +147,7 @@ mod test {
     fn test_negative() {
         let value = Value::Negative(3);
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "23");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -157,14 +157,14 @@ mod test {
     fn test_bool() {
         let value = Value::Bool(false);
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "f4");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = Value::Bool(true);
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "f5");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -174,7 +174,7 @@ mod test {
     fn test_text() {
         let value = Value::Text("abcd".to_string());
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "6461626364");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -184,7 +184,7 @@ mod test {
     fn test_bytes() {
         let bytes = Value::Bytes(Bytes(vec![1, 2, 3, 4, 5]));
 
-        let cbor = cbor_encode(&bytes).unwrap();
+        let cbor = cbor_encode(&bytes);
         assert_eq!(hex::encode(&cbor), "450102030405");
         let bytes_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(bytes_decoded, bytes);
@@ -194,7 +194,7 @@ mod test {
     fn test_tag() {
         let value = Value::Tag(123, Box::new(Value::Positive(3)));
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "d87b03");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -204,7 +204,7 @@ mod test {
     fn test_null() {
         let value = Value::Null;
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "f6");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -214,14 +214,14 @@ mod test {
     fn test_simple() {
         let value = Value::Simple(15);
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "ef");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = Value::Simple(65);
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "f841");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -231,7 +231,7 @@ mod test {
     fn test_float() {
         let value = Value::Float(1.123);
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "fb3ff1f7ced916872b");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -241,7 +241,7 @@ mod test {
     fn test_array() {
         let value = Value::Array(vec![Value::Positive(1), Value::Positive(3)]);
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "820103");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -254,7 +254,7 @@ mod test {
             (Value::Positive(2), Value::Positive(4)),
         ]);
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "a201030204");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);

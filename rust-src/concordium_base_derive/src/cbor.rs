@@ -714,12 +714,8 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
 
     Ok(match cbor_container {
         CborContainer::Array => {
-            let field_count = field_idents.len();
-
             quote! {
-                let mut array_encoder = #cbor_module::CborEncoder::encode_array(encoder,
-                    #field_count
-                )?;
+                let mut array_encoder = #cbor_module::CborEncoder::encode_array(encoder)?;
 
                 #(
                     #cbor_module::CborArrayEncoder::serialize_element(&mut array_encoder, &self.#field_idents)?;
@@ -735,27 +731,8 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
 
             let other_ident = cbor_fields.other_member().into_iter().map(|other| other.1);
 
-            let other_field_size = if let Some((_, other_ident)) = cbor_fields.other_member() {
-                quote! {
-                    self.#other_ident.len()
-                }
-            } else {
-                quote! { 0 }
-            };
-
-            let non_null_field_count = if field_idents.is_empty() {
-                quote! { 0 }
-            } else {
-                quote! {
-                    #(if #cbor_module::CborSerialize::is_null(&self.#field_idents) {0} else {1})+*
-                }
-            };
-
             quote! {
-                let mut map_encoder = #cbor_module::CborEncoder::encode_map(encoder,
-                    #non_null_field_count
-                      + #other_field_size
-                )?;
+                let mut map_encoder = #cbor_module::CborEncoder::encode_map(encoder)?;
 
                 #(
                     if !#cbor_module::CborSerialize::is_null(&self.#field_idents) {
@@ -805,7 +782,7 @@ fn cbor_serialize_enum_body(
         let other_ident = cbor_variants.other_ident().into_iter();
 
         quote! {
-            let mut map_encoder = encoder.encode_map(1)?;
+            let mut map_encoder = #cbor_module::CborEncoder::encode_map(encoder)?;
             match self {
                 #(
                     Self::#variant_idents(value) => {
@@ -901,7 +878,7 @@ pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
     Ok(quote! {
         impl #impl_generics #cbor_module::CborSerialize for #name #ty_generics #where_clauses {
-            fn serialize<C: #cbor_module::CborEncoder>(&self, mut encoder: C) -> #cbor_module::CborSerializationResult<()> {
+            fn serialize<C: #cbor_module::CborEncoder>(&self, mut encoder: C) -> std::result::Result<(), <C as #cbor_module::CborEncoder>::WriteError> {
                 #encode_tag
                 #serialize_body
             }
