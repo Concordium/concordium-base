@@ -104,31 +104,30 @@ impl TokenModuleEventEnum {
 
     /// Encode event as CBOR. Returns the event type and its CBOR encoding.
     pub fn encode_event(&self) -> (TokenModuleEventType, RawCbor) {
-        // todo ar unwrap
         match self {
             TokenModuleEventEnum::AddAllowList(event) => (
                 TokenModuleEventType::AddAllowList,
-                RawCbor::from(cbor::cbor_encode(event).unwrap()),
+                RawCbor::from(cbor::cbor_encode(event)),
             ),
             TokenModuleEventEnum::RemoveAllowList(event) => (
                 TokenModuleEventType::RemoveAllowList,
-                RawCbor::from(cbor::cbor_encode(event).unwrap()),
+                RawCbor::from(cbor::cbor_encode(event)),
             ),
             TokenModuleEventEnum::AddDenyList(event) => (
                 TokenModuleEventType::AddDenyList,
-                RawCbor::from(cbor::cbor_encode(event).unwrap()),
+                RawCbor::from(cbor::cbor_encode(event)),
             ),
             TokenModuleEventEnum::RemoveDenyList(event) => (
                 TokenModuleEventType::RemoveDenyList,
-                RawCbor::from(cbor::cbor_encode(event).unwrap()),
+                RawCbor::from(cbor::cbor_encode(event)),
             ),
             TokenModuleEventEnum::Pause(event) => (
                 TokenModuleEventType::Pause,
-                RawCbor::from(cbor::cbor_encode(event).unwrap()),
+                RawCbor::from(cbor::cbor_encode(event)),
             ),
             TokenModuleEventEnum::Unpause(event) => (
                 TokenModuleEventType::Unpause,
-                RawCbor::from(cbor::cbor_encode(event).unwrap()),
+                RawCbor::from(cbor::cbor_encode(event)),
             ),
         }
     }
@@ -321,7 +320,7 @@ mod test {
                 coin_info: None,
             },
         };
-        let cbor = cbor::cbor_encode(&event).unwrap();
+        let cbor = cbor::cbor_encode(&event);
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
 
         let event_decoded: TokenListUpdateEventDetails = cbor::cbor_decode(cbor).unwrap();
@@ -336,7 +335,7 @@ mod test {
                 coin_info: None,
             },
         };
-        let cbor = cbor::cbor_encode(&event).unwrap();
+        let cbor = cbor::cbor_encode(&event);
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
 
         let event_decoded: TokenListUpdateEventDetails = cbor::cbor_decode(cbor).unwrap();
@@ -351,7 +350,7 @@ mod test {
                 coin_info: None,
             },
         };
-        let cbor = cbor::cbor_encode(&event).unwrap();
+        let cbor = cbor::cbor_encode(&event);
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
 
         let event_decoded: TokenListUpdateEventDetails = cbor::cbor_decode(cbor).unwrap();
@@ -366,7 +365,7 @@ mod test {
                 coin_info: None,
             },
         };
-        let cbor = cbor::cbor_encode(&event).unwrap();
+        let cbor = cbor::cbor_encode(&event);
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
 
         let event_decoded: TokenListUpdateEventDetails = cbor::cbor_decode(cbor).unwrap();
@@ -376,7 +375,7 @@ mod test {
     #[test]
     fn test_decode_pause_event_cbor() {
         let event = TokenPauseEventDetails {};
-        let cbor = cbor::cbor_encode(&event).unwrap();
+        let cbor = cbor::cbor_encode(&event);
         assert_eq!(hex::encode(&cbor), "a0");
 
         let event_decoded: TokenPauseEventDetails = cbor::cbor_decode(cbor).unwrap();
@@ -386,7 +385,7 @@ mod test {
     #[test]
     fn test_decode_unpause_event_cbor() {
         let event = TokenPauseEventDetails {};
-        let cbor = cbor::cbor_encode(&event).unwrap();
+        let cbor = cbor::cbor_encode(&event);
         assert_eq!(hex::encode(&cbor), "a0");
 
         let event_decoded: TokenPauseEventDetails = cbor::cbor_decode(cbor).unwrap();

@@ -31,13 +31,8 @@ pub struct TokenAmount {
 }
 
 impl CborSerialize for TokenAmount {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
-        let decimal_fraction = UnsignedDecimalFraction::new(
-            i64::from(self.decimals)
-                .checked_neg()
-                .context("convert decimals to exponent")?,
-            self.value,
-        );
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
+        let decimal_fraction = UnsignedDecimalFraction::new(-i64::from(self.decimals), self.value);
 
         decimal_fraction.serialize(encoder)
     }
@@ -356,7 +351,7 @@ mod test {
     #[test]
     fn test_token_amount_cbor() {
         let token_amount = TokenAmount::from_raw(12300, 3);
-        let cbor = cbor::cbor_encode(&token_amount).unwrap();
+        let cbor = cbor::cbor_encode(&token_amount);
         assert_eq!(hex::encode(&cbor), "c4822219300c");
         let token_amount_decoded: TokenAmount = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(token_amount_decoded, token_amount);
@@ -365,7 +360,7 @@ mod test {
             value: u64::MAX,
             decimals: 3,
         };
-        let cbor = cbor::cbor_encode(&token_amount).unwrap();
+        let cbor = cbor::cbor_encode(&token_amount);
         assert_eq!(hex::encode(&cbor), "c482221bffffffffffffffff");
         let token_amount_decoded: TokenAmount = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(token_amount_decoded, token_amount);

@@ -65,7 +65,7 @@ mod test {
                 .collect(),
         };
 
-        let cbor = cbor::cbor_encode(&token_module_state).unwrap();
+        let cbor = cbor::cbor_encode(&token_module_state);
         assert_eq!(hex::encode(&cbor),
         "a9646e616d6563544b31666f74686572310266706175736564f4686275726e61626c65f56864656e794c697374f5686d65746164617461a26375726c7168747470733a2f2f746f6b656e75726c316e636865636b73756d53686132353658200101010101010101010101010101010101010101010101010101010101010101686d696e7461626c65f569616c6c6f774c697374f571676f7665726e616e63654163636f756e74d99d73a201d99d71a101190397035820ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         );
@@ -75,7 +75,7 @@ mod test {
         token_module_state.deny_list = None;
         token_module_state.burnable = None;
 
-        let cbor = cbor::cbor_encode(&token_module_state).unwrap();
+        let cbor = cbor::cbor_encode(&token_module_state);
         assert_eq!(hex::encode(&cbor),
         "a7646e616d6563544b31666f74686572310266706175736564f4686d65746164617461a26375726c7168747470733a2f2f746f6b656e75726c316e636865636b73756d53686132353658200101010101010101010101010101010101010101010101010101010101010101686d696e7461626c65f569616c6c6f774c697374f571676f7665726e616e63654163636f756e74d99d73a201d99d71a101190397035820ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         );
@@ -87,7 +87,7 @@ mod test {
         token_module_state.additional = HashMap::new();
         token_module_state.paused = None;
 
-        let cbor = cbor::cbor_encode(&token_module_state).unwrap();
+        let cbor = cbor::cbor_encode(&token_module_state);
         assert_eq!(hex::encode(&cbor),
         "a3646e616d6563544b31686d65746164617461a26375726c7168747470733a2f2f746f6b656e75726c316e636865636b73756d5368613235365820010101010101010101010101010101010101010101010101010101010101010171676f7665726e616e63654163636f756e74d99d73a201d99d71a101190397035820ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         );

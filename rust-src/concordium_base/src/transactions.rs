@@ -48,7 +48,7 @@ pub struct Memo {
 }
 
 impl CborSerialize for Memo {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         encoder.encode_bytes(&self.bytes)
     }
 }
@@ -2630,9 +2630,9 @@ pub mod construct {
         expiry: TransactionTime,
         token_id: TokenId,
         operations: TokenOperations,
-    ) -> CborSerializationResult<PreAccountTransaction> {
+    ) -> PreAccountTransaction {
         let energy = token_operations_txn_energy(&operations);
-        let operations = RawCbor::from(cbor::cbor_encode(&operations)?);
+        let operations = RawCbor::from(cbor::cbor_encode(&operations));
 
         let payload = Payload::TokenUpdate {
             payload: TokenOperationsPayload {
@@ -2640,13 +2640,13 @@ pub mod construct {
                 operations,
             },
         };
-        Ok(make_transaction(
+        make_transaction(
             sender,
             nonce,
             expiry,
             GivenEnergy::Add { num_sigs, energy },
             payload,
-        ))
+        )
     }
 
     /// Make an encrypted transfer. The payload can be constructed using
@@ -3292,16 +3292,16 @@ pub mod send {
         expiry: TransactionTime,
         token_id: TokenId,
         operations: TokenOperations,
-    ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
-        Ok(construct::token_update_operations(
+    ) -> AccountTransaction<EncodedPayload> {
+        construct::token_update_operations(
             signer.num_keys(),
             sender,
             nonce,
             expiry,
             token_id,
             operations,
-        )?
-        .sign(signer))
+        )
+        .sign(signer)
     }
 
     /// Make an encrypted transfer. The payload can be constructed using
