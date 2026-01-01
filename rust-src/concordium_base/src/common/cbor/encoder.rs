@@ -38,7 +38,7 @@ where
     <W as Write>::Error: std::error::Error,
 {
     fn encode_raw(&mut self, bytes: &[u8]) -> Result<(), <W as Write>::Error> {
-        Ok(self.inner.write_all(bytes)?)
+        self.inner.write_all(bytes)
     }
 }
 
@@ -51,15 +51,15 @@ where
     type WriteError = <W as Write>::Error;
 
     fn encode_tag(&mut self, tag: u64) -> Result<(), Self::WriteError> {
-        Ok(self.inner.push(Header::Tag(tag))?)
+        self.inner.push(Header::Tag(tag))
     }
 
     fn encode_positive(self, positive: u64) -> Result<(), Self::WriteError> {
-        Ok(self.inner.push(Header::Positive(positive))?)
+        self.inner.push(Header::Positive(positive))
     }
 
     fn encode_negative(self, negative: u64) -> Result<(), Self::WriteError> {
-        Ok(self.inner.push(Header::Negative(negative))?)
+        self.inner.push(Header::Negative(negative))
     }
 
     fn encode_map(self) -> Result<Self::MapEncoder, Self::WriteError> {
@@ -71,19 +71,19 @@ where
     }
 
     fn encode_bytes(self, bytes: &[u8]) -> Result<(), Self::WriteError> {
-        Ok(self.inner.bytes(bytes, None)?)
+        self.inner.bytes(bytes, None)
     }
 
     fn encode_text(self, text: &str) -> Result<(), Self::WriteError> {
-        Ok(self.inner.text(text, None)?)
+        self.inner.text(text, None)
     }
 
     fn encode_simple(self, value: u8) -> Result<(), Self::WriteError> {
-        Ok(self.inner.push(Header::Simple(value))?)
+        self.inner.push(Header::Simple(value))
     }
 
     fn encode_float(self, float: f64) -> Result<(), Self::WriteError> {
-        Ok(self.inner.push(Header::Float(float))?)
+        self.inner.push(Header::Float(float))
     }
 }
 
