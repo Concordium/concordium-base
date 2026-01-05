@@ -1237,8 +1237,14 @@ pub enum ProveError {
 pub enum VerifyError {
     #[error("the number of verification material inputs does not match the credentials to verify")]
     VerificationMaterialMismatch,
-    #[error("the credential was not valid (index {0})")]
-    InvalidCredential(usize),
+    #[error("subject statement not verifiable")]
+    AtomicStatement,
+    #[error("the encoding of the IdCredPub encryption is invalid")]
+    InvalidEncodingOfIdCredPubEncryption,
+    #[error("identity attribute credential not verifiable")]
+    IdentityAttributeCredential,
+    #[error("issuer specified in the credential is not the issuer of the underlying credential")]
+    IssuerNotCorrect,
 }
 
 /// The types of statements that can be used in subject claims

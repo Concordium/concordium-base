@@ -71,9 +71,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             return Err(VerifyError::VerificationMaterialMismatch);
         }
 
-        for (i, (verification_material, credential)) in verification_material
-            .zip(&self.verifiable_credentials)
-            .enumerate()
+        for (verification_material, credential) in
+            verification_material.zip(&self.verifiable_credentials)
         {
             // The proof for each credential is independent, so make a copy of the transcript so far
             let mut transcript = transcript.split();
@@ -84,9 +83,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             let claims = credential.claims();
             request.subject_claims.push(claims);
 
-            if !credential.verify(global_context, &mut transcript, verification_material) {
-                return Err(VerifyError::InvalidCredential(i));
-            }
+            credential.verify(global_context, &mut transcript, verification_material)?;
         }
 
         Ok(request)
@@ -103,7 +100,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         global: &GlobalContext<C>,
         transcript: &mut impl TranscriptProtocol,
         verification_material: &CredentialVerificationMaterial<P, C>,
-    ) -> bool {
+    ) -> Result<(), VerifyError> {
         match self {
             CredentialV1::Account(cred_proof) => {
                 cred_proof.verify(global, transcript, verification_material)
@@ -122,18 +119,18 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedCredentialV1<C, 
         global_context: &GlobalContext<C>,
         transcript: &mut impl TranscriptProtocol,
         verification_material: &CredentialVerificationMaterial<P, C>,
-    ) -> bool {
+    ) -> Result<(), VerifyError> {
         let CredentialVerificationMaterial::Account(AccountCredentialVerificationMaterial {
             issuer,
             attribute_commitments: commitments,
         }) = verification_material
         else {
             // mismatch in types
-            return false;
+            return Err(VerifyError::VerificationMaterialMismatch);
         };
 
         if self.issuer != *issuer {
-            return false;
+            return Err(VerifyError::IssuerNotCorrect);
         }
 
         transcript.append_label("ConcordiumAccountBasedCredential");
@@ -162,14 +159,14 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         global_context: &GlobalContext<C>,
         transcript: &mut impl TranscriptProtocol,
         verification_material: &CredentialVerificationMaterial<P, C>,
-    ) -> bool {
+    ) -> Result<(), VerifyError> {
         let CredentialVerificationMaterial::Identity(IdentityCredentialVerificationMaterial {
             ip_info,
             ars_infos,
         }) = verification_material
         else {
             // mismatch in types
-            return false;
+            return Err(VerifyError::VerificationMaterialMismatch);
         };
 
         transcript.append_label("ConcordiumIdBasedCredential");
@@ -178,7 +175,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         transcript.append_message("Network", &self.subject.network);
 
         let Ok(cred_id_data) = self.subject.cred_id.try_to_data() else {
-            return false;
+            return Err(VerifyError::InvalidEncodingOfIdCredPubEncryption);
         };
 
         let id_attr_cred_info = IdentityAttributesCredentialsInfo {
@@ -203,7 +200,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         )
         .is_err()
         {
-            return false;
+            return Err(VerifyError::IdentityAttributeCredential);
         }
 
         // Append values that are not part of subject claims
@@ -256,23 +253,27 @@ fn verify_statements<
     revealed_attributes: &BTreeMap<TagType, &AttributeType>,
     global_context: &GlobalContext<C>,
     transcript: &mut impl TranscriptProtocol,
-) -> bool {
+) -> Result<(), VerifyError> {
     // Notice that we already added the number of statements to the transcript
     // by adding statements to the transcript. This acts as a variable length
     // prefix of the loop over statements.
 
-    statements.iter().zip_longest(proofs).all(|elm| {
-        elm.both().map_or(false, |(statement, proof)| {
-            statement.verify(
-                ProofVersion::Version2,
-                global_context,
-                transcript,
-                cmm_attributes,
-                revealed_attributes,
-                proof,
-            )
-        })
-    })
+    for statement_and_proof in statements.iter().zip_longest(proofs) {
+        let (statement, proof) = statement_and_proof
+            .both()
+            .ok_or(VerifyError::AtomicStatement)?;
+        if !statement.verify(
+            ProofVersion::Version2,
+            global_context,
+            transcript,
+            cmm_attributes,
+            revealed_attributes,
+            proof,
+        ) {
+            return Err(VerifyError::AtomicStatement);
+        }
+    }
+    Ok(())
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> AccountBasedSubjectClaims<C, AttributeType> {
@@ -913,7 +914,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, VerifyError::InvalidCredential(0));
+        assert_eq!(err, VerifyError::AtomicStatement);
     }
 
     /// Test prove and verify presentation for identity credentials where
@@ -961,7 +962,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, VerifyError::InvalidCredential(0));
+        assert_eq!(err, VerifyError::AtomicStatement);
     }
 
     /// Test prove and verify presentation for account credentials where
@@ -1007,7 +1008,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, VerifyError::InvalidCredential(0));
+        assert_eq!(err, VerifyError::IssuerNotCorrect);
     }
 
     /// Test prove and verify presentation for account credentials where
@@ -1071,7 +1072,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, VerifyError::InvalidCredential(0));
+        assert_eq!(err, VerifyError::AtomicStatement);
     }
 
     /// Test verify fails if the credentials and credential inputs have
@@ -1119,7 +1120,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, VerifyError::InvalidCredential(0));
+        assert_eq!(err, VerifyError::VerificationMaterialMismatch);
     }
 
     /// Test verify fails if the credentials and credential inputs have
@@ -1289,7 +1290,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, VerifyError::InvalidCredential(0));
+        assert_eq!(err, VerifyError::AtomicStatement);
     }
 
     /// Test prove and verify presentation for identity credentials where
@@ -1335,7 +1336,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, VerifyError::InvalidCredential(0));
+        assert_eq!(err, VerifyError::AtomicStatement);
     }
 
     /// Test prove and verify presentation for identity credentials where
@@ -1373,7 +1374,7 @@ pub mod tests {
         let CredentialV1::Identity(IdentityBasedCredentialV1 { subject, .. }) =
             &mut proof.verifiable_credentials[0]
         else {
-            panic!("should be account proof");
+            panic!("should be identity proof");
         };
         subject.statements.push(AtomicStatementV1::AttributeInRange(
             AttributeInRangeStatement {
@@ -1398,7 +1399,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, VerifyError::InvalidCredential(0));
+        assert_eq!(err, VerifyError::IdentityAttributeCredential);
     }
 
     /// Test prove and verify presentation for identity credentials where
@@ -1471,7 +1472,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, VerifyError::InvalidCredential(0));
+        assert_eq!(err, VerifyError::IdentityAttributeCredential);
     }
 
     /// Test prove and verify presentation for identity credentials where
@@ -1517,7 +1518,7 @@ pub mod tests {
         let err = proof
             .verify(&global_context, public.iter())
             .expect_err("verify");
-        assert_eq!(err, VerifyError::InvalidCredential(0));
+        assert_eq!(err, VerifyError::InvalidEncodingOfIdCredPubEncryption);
     }
 
     /// Test that the verifier can verify previously generated proofs.
