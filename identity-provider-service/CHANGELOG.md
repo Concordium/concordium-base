@@ -1,10 +1,19 @@
 # Changelog
 
+## 0.6.1
+
+- Namespace environment variable names for basic authentication.
+
+## 0.6.0
+
+- Add optional basic authentication.
+
 ## 0.5.6
 
-- Changed the submitCredential url. 
+- Changed the submitCredential url.
 
 ## 0.5.5
+
 - Added improved error handling, so that the wallet can handle some of the errors
 
 ## 0.5.2

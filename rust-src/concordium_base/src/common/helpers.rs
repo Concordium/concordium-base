@@ -8,3 +8,10 @@ pub fn serialize_deserialize<A: super::Serialize>(x: &A) -> super::ParseResult<A
     x.serial(&mut buf);
     A::deserial(&mut Cursor::new(buf))
 }
+
+/// RNG with fixed seed to generate the stability test cases
+#[cfg(test)]
+pub fn seed0() -> rand::rngs::StdRng {
+    use rand::SeedableRng;
+    rand::rngs::StdRng::seed_from_u64(0)
+}
