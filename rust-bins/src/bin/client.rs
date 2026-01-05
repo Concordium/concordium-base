@@ -1909,22 +1909,22 @@ fn handle_start_ip(sip: StartIp) {
     }
 
     let threshold = if let Some(thr) = sip.threshold {
-        Threshold(thr)
+        Threshold::try_new(thr).expect("create threshold")
     } else if let Ok(threshold) = Select::new()
         .with_prompt("Revocation threshold")
         .items(&(1..=num_ars).collect::<Vec<usize>>())
         .default(0)
         .interact()
     {
-        Threshold((threshold + 1) as u8) // +1 because the indexing of the
-                                         // selection starts at 1
+        Threshold::try_new((threshold + 1) as u8).expect("create threshold") // +1 because the indexing of the
+                                                                             // selection starts at 1
     } else {
         let d = max(1, num_ars - 1);
         println!(
             "Selecting default value (= {}) for revocation threshold.",
             d
         );
-        Threshold(d as u8)
+        Threshold::try_new(d as u8).expect("create threshold")
     };
 
     let global_ctx = {
@@ -2094,22 +2094,22 @@ fn handle_start_ip_v1(sip: StartIpV1) {
     }
 
     let threshold = if let Some(thr) = sip.threshold {
-        Threshold(thr)
+        Threshold::try_new(thr).expect("create threshold")
     } else if let Ok(threshold) = Select::new()
         .with_prompt("Revocation threshold")
         .items(&(1..=num_ars).collect::<Vec<usize>>())
         .default(0)
         .interact()
     {
-        Threshold((threshold + 1) as u8) // +1 because the indexing of the
-                                         // selection starts at 1
+        Threshold::try_new((threshold + 1) as u8).expect("create threshold") // +1 because the indexing of the
+                                                                             // selection starts at 1
     } else {
         let d = max(1, num_ars - 1);
         println!(
             "Selecting default value (= {}) for revocation threshold.",
             d
         );
-        Threshold(d as u8)
+        Threshold::try_new(d as u8).expect("create threshold")
     };
 
     let global_ctx = {

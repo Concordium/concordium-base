@@ -15,7 +15,7 @@ use std::convert::TryFrom;
 /// This value must always be at least 1.
 #[derive(SerdeSerialize)]
 #[serde(transparent)]
-pub struct Threshold(pub u8);
+pub struct Threshold(u8);
 
 impl<'de> SerdeDeserialize<'de> for Threshold {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -24,7 +24,7 @@ impl<'de> SerdeDeserialize<'de> for Threshold {
     {
         let val = u8::deserialize(deserializer)?;
 
-        Self::try_from(val).map_err(|_| D::Error::custom("threshold cannot be zero"))
+        Self::try_new(val).map_err(D::Error::custom)
     }
 }
 
@@ -39,7 +39,26 @@ impl Deserial for Threshold {
     }
 }
 
+/// Tried to created threshold with value zero
+#[derive(Debug, thiserror::Error)]
+#[error("threshold cannot be zero")]
+pub struct ThresholdZero;
+
 impl Threshold {
+    /// Create threshold value. The value cannot be zero.
+    pub fn try_new(threshold: u8) -> Result<Self, ThresholdZero> {
+        if threshold >= 1 {
+            Ok(Threshold(threshold))
+        } else {
+            Err(ThresholdZero)
+        }
+    }
+
+    /// The threshold value
+    pub fn threshold(self) -> u8 {
+        self.0
+    }
+
     /// Curve scalars must be big enough to accommodate all 8 bit unsigned
     /// integers.
     pub fn to_scalar<C: Curve>(self) -> C::Scalar {
@@ -76,11 +95,7 @@ impl TryFrom<u8> for Threshold {
     type Error = ();
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
-        if value == 0 {
-            Err(())
-        } else {
-            Ok(Threshold(value))
-        }
+        Self::try_new(value).map_err(|_| ())
     }
 }
 
@@ -88,11 +103,9 @@ impl TryFrom<usize> for Threshold {
     type Error = ();
 
     fn try_from(value: usize) -> Result<Self, Self::Error> {
-        if value == 0 || value >= 256 {
-            Err(())
-        } else {
-            Ok(Threshold(value as u8))
-        }
+        u8::try_from(value)
+            .map_err(|_| ())
+            .and_then(|val| Self::try_from(val).map_err(|_| ()))
     }
 }
 
@@ -222,7 +235,9 @@ mod test {
     use crate::curve_arithmetic::arkworks_instances::{ArkField, ArkGroup};
 
     use super::*;
+    use crate::common;
     use ark_bls12_381::{Fr, G1Projective};
+    use nom::AsBytes;
     use rand::seq::SliceRandom;
 
     type G1 = ArkGroup<G1Projective>;
@@ -361,8 +376,57 @@ mod test {
     }
 
     #[test]
+    fn test_threshold_try_new() {
+        let threshold = Threshold::try_new(1).expect("try_new");
+        assert_eq!(threshold.threshold(), 1);
+        assert_eq!(u8::from(threshold), 1);
+        assert_eq!(usize::from(threshold), 1);
+
+        let threshold = Threshold::try_new(3).expect("try_new");
+        assert_eq!(threshold.threshold(), 3);
+
+        Threshold::try_new(0).expect_err("try_new");
+    }
+
+    #[test]
+    fn test_threshold_try_from() {
+        let threshold = Threshold::try_from(1u8).expect("try_from");
+        assert_eq!(threshold.threshold(), 1);
+        let threshold = Threshold::try_from(1usize).expect("try_from");
+        assert_eq!(threshold.threshold(), 1);
+
+        let threshold = Threshold::try_from(3u8).expect("try_from");
+        assert_eq!(threshold.threshold(), 3);
+        let threshold = Threshold::try_from(255usize).expect("try_from");
+        assert_eq!(threshold.threshold(), 255);
+
+        Threshold::try_from(0u8).expect_err("try_from");
+        Threshold::try_from(256usize).expect_err("try_from");
+    }
+
+    #[test]
+    fn test_threshold_serial_deserial() {
+        let threshold = Threshold::try_new(2).unwrap();
+        let bytes_hex = hex::encode(common::to_bytes(&threshold));
+        assert_eq!(bytes_hex, "02");
+        let threshold_deserial: Threshold =
+            common::from_bytes(&mut hex::decode(bytes_hex).unwrap().as_bytes()).expect("deserial");
+        assert_eq!(threshold_deserial, threshold);
+
+        let bytes_hex = "00";
+        let err =
+            common::from_bytes::<Threshold, _>(&mut hex::decode(bytes_hex).unwrap().as_bytes())
+                .expect_err("deserial");
+        assert!(
+            err.to_string().contains("Threshold must be at least 1"),
+            "message: {}",
+            err
+        );
+    }
+
+    #[test]
     fn test_threshold_serde_serialize_deserialize() {
-        let threshold = Threshold(2);
+        let threshold = Threshold::try_new(2).unwrap();
         let json = serde_json::to_string(&threshold).expect("serialize");
         assert_eq!(json, r#"2"#);
         let threshold_deserialized: Threshold = serde_json::from_str(&json).expect("deserialize");
@@ -375,5 +439,14 @@ mod test {
             "message: {}",
             err
         );
+    }
+
+    #[test]
+    fn test_threshold_json_value() {
+        let threshold = Threshold::from_json(&serde_json::Value::from(1u8)).unwrap();
+        assert_eq!(threshold.threshold(), 1);
+        assert_eq!(threshold.to_json(), serde_json::Value::from(1u8));
+
+        assert!(Threshold::from_json(&serde_json::Value::from(0u8)).is_none());
     }
 }
