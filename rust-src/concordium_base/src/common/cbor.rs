@@ -369,7 +369,7 @@ pub fn cbor_encode<T: CborSerialize + ?Sized>(value: &T) -> Vec<u8> {
     bytes
 }
 
-/// Assert error is not possible
+/// Assert error is not possible. Replace with `Result::into_ok` when stabilized
 fn into_ok<T>(res: Result<T, Infallible>) -> T {
     match res {
         Ok(x) => x,
@@ -505,7 +505,7 @@ pub trait CborEncoder {
     /// Associated array encoder
     type ArrayEncoder: CborArrayEncoder<WriteError = Self::WriteError>;
     /// Error type for the underlying writer
-    type WriteError: std::error::Error;
+    type WriteError;
 
     /// Encodes tag data item with given value
     fn encode_tag(&mut self, tag: u64) -> Result<(), Self::WriteError>;
@@ -541,7 +541,7 @@ pub trait CborEncoder {
 /// Encoder of CBOR map
 pub trait CborMapEncoder {
     /// Error type for the underlying writer
-    type WriteError: std::error::Error;
+    type WriteError;
 
     /// Serialize an entry consisting of a `key` and `value` and add it to the
     /// map (appended to current list of entries). The number of entries
@@ -561,7 +561,7 @@ pub trait CborMapEncoder {
 /// Encoder of CBOR array
 pub trait CborArrayEncoder {
     /// Error type for the underlying writer
-    type WriteError: std::error::Error;
+    type WriteError;
 
     /// Serialize an `element` and add it to the array (appended to the current
     /// elements in the array). The number of elements added to the array
