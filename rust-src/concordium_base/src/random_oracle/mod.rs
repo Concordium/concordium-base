@@ -151,6 +151,8 @@ impl RandomOracle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common;
+    use crate::id::constants::ArCurve;
     use rand::*;
 
     // Tests that extend_from acts in the intended way.
@@ -195,5 +197,75 @@ mod tests {
             let ref_res2: &[u8] = res2.as_ref();
             assert_eq!(ref_res1, ref_res2);
         }
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`RandomOracle::domain`]
+    #[test]
+    pub fn test_domain_stable() {
+        let ro = RandomOracle::domain("Domain1");
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "b6dbfe8bfbc515d92bcc322b1e98291a45536f81f6eca2411d8dae54766666f1"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`RandomOracle::add_bytes`]
+    #[test]
+    pub fn test_add_bytes_stable() {
+        let mut ro = RandomOracle::empty();
+        ro.add_bytes([1u8, 2, 3]);
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "fd1780a6fc9ee0dab26ceb4b3941ab03e66ccd970d1db91612c66df4515b0a0a"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`StructuredDigest::append_message`]
+    #[test]
+    pub fn test_append_message_stable() {
+        let mut ro = RandomOracle::empty();
+        ro.append_message("Label1", &vec![1u8, 2, 3]);
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "3756eec6f9241f9a1cd8b401f54679cf9be2e057365728336221b1871ff666fb"
+        );
+    }
+
+    /// Test that we don't accidentally change the scalar produced
+    /// by [`RandomOracle::challenge_scalar`]
+    #[test]
+    pub fn test_challenge_scalar_stable() {
+        let mut ro = RandomOracle::empty();
+
+        let scalar_hex = hex::encode(common::to_bytes(
+            &ro.challenge_scalar::<ArCurve, _>("Scalar1"),
+        ));
+        assert_eq!(
+            scalar_hex,
+            "08646777f9c47efc863115861aa18d95653212c3bdf36899c7db46fbdae095cd"
+        );
+    }
+
+    /// Test that we don't accidentally change the digest produced
+    /// by [`RandomOracle::extend_from`]
+    #[test]
+    pub fn test_extend_from_stable() {
+        let mut ro = RandomOracle::empty();
+        ro.extend_from("Label1", &vec![1u8, 2, 3]);
+
+        let challenge_hex = hex::encode(ro.get_challenge());
+        assert_eq!(
+            challenge_hex,
+            "6b1addb1c08e887242f5e78127c31c17851f29349c45aa415adce255f95fd292"
+        );
     }
 }
