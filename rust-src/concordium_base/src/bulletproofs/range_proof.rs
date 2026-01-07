@@ -425,10 +425,7 @@ pub fn prove<C: Curve, T: Rng>(
     // compute scalars such that c*H = H', that is H_prime_scalars = (1, y^-1,
     // \dots, y^-(nm-1))
     let mut H_prime_scalars: Vec<C::Scalar> = Vec::with_capacity(nm);
-    let y_inv = match y.inverse() {
-        Some(inv) => inv,
-        None => return None,
-    };
+    let y_inv = y.inverse()?;
     let mut y_inv_i = C::Scalar::one();
     for _i in 0..nm {
         // H_prime.push(H[i].mul_by_scalar(&y_inv_i));

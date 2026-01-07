@@ -902,7 +902,7 @@ pub struct PreIdentityObject<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> PreIdentityObject<P, C> {
-    pub fn get_common_pio_fields(&self) -> CommonPioFields<P, C> {
+    pub fn get_common_pio_fields(&self) -> CommonPioFields<'_, P, C> {
         CommonPioFields {
             ip_ar_data: &self.ip_ar_data,
             choice_ar_parameters: &self.choice_ar_parameters,
@@ -914,7 +914,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> PreIdentityObject<P, C> {
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> PreIdentityObjectV1<P, C> {
-    pub fn get_common_pio_fields(&self) -> CommonPioFields<P, C> {
+    pub fn get_common_pio_fields(&self) -> CommonPioFields<'_, P, C> {
         CommonPioFields {
             ip_ar_data: &self.ip_ar_data,
             choice_ar_parameters: &self.choice_ar_parameters,
@@ -1056,7 +1056,7 @@ pub trait HasIdentityObjectFields<
 >
 {
     /// Get the common fields of the pre-identity object.
-    fn get_common_pio_fields(&self) -> CommonPioFields<P, C>;
+    fn get_common_pio_fields(&self) -> CommonPioFields<'_, P, C>;
 
     /// Get the attribute list
     fn get_attribute_list(&self) -> &AttributeList<C::Scalar, AttributeType>;
@@ -1068,7 +1068,7 @@ pub trait HasIdentityObjectFields<
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
     HasIdentityObjectFields<P, C, AttributeType> for IdentityObject<P, C, AttributeType>
 {
-    fn get_common_pio_fields(&self) -> CommonPioFields<P, C> {
+    fn get_common_pio_fields(&self) -> CommonPioFields<'_, P, C> {
         self.pre_identity_object.get_common_pio_fields()
     }
 
@@ -1084,7 +1084,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
     HasIdentityObjectFields<P, C, AttributeType> for IdentityObjectV1<P, C, AttributeType>
 {
-    fn get_common_pio_fields(&self) -> CommonPioFields<P, C> {
+    fn get_common_pio_fields(&self) -> CommonPioFields<'_, P, C> {
         self.pre_identity_object.get_common_pio_fields()
     }
 
@@ -1201,7 +1201,6 @@ pub struct ArInfos<C: Curve> {
 /// A helper trait to access only the public key of the ArInfo structure.
 /// We use this to have functions work both on a map of public keys only, as
 /// well as on maps of ArInfos, see [super::chain::verify_cdi].
-
 pub trait HasArPublicKey<C: Curve> {
     fn get_public_key(&self) -> &ArPublicKey<C>;
 }

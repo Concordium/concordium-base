@@ -17,34 +17,38 @@ use crate::{
 };
 use derive_more::*;
 
-#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// A generic protocol update. This is essentially an announcement of the
 /// update. The details of the update will be communicated in some off-chain
 /// way, and bakers will need to update their node software to support the
 /// update.
 pub struct ProtocolUpdate {
     pub message: String,
-    #[serde(rename = "specificationURL")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "specificationURL"))]
     pub specification_url: String,
     pub specification_hash: hashes::Hash,
-    #[serde(with = "crate::internal::byte_array_hex")]
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(with = "crate::internal::byte_array_hex")
+    )]
     pub specification_auxiliary_data: Vec<u8>,
 }
 
 impl Serial for ProtocolUpdate {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        let data_len = self.message.as_bytes().len()
+        let data_len = self.message.len()
             + 8
-            + self.specification_url.as_bytes().len()
+            + self.specification_url.len()
             + 8
             + 32
             + self.specification_auxiliary_data.len();
         (data_len as u64).serial(out);
-        (self.message.as_bytes().len() as u64).serial(out);
+        (self.message.len() as u64).serial(out);
         out.write_all(self.message.as_bytes())
             .expect("Serialization to a buffer always succeeds.");
-        (self.specification_url.as_bytes().len() as u64).serial(out);
+        (self.specification_url.len() as u64).serial(out);
         out.write_all(self.specification_url.as_bytes())
             .expect("Serialization to a buffer always succeeds.");
         self.specification_hash.serial(out);
@@ -89,9 +93,13 @@ impl Deserial for ProtocolUpdate {
     }
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serial, Clone)]
-#[serde(rename_all = "camelCase")]
-#[serde(try_from = "transaction_fee_distribution::TransactionFeeDistributionUnchecked")]
+#[derive(Debug, common::Serial, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    serde(try_from = "transaction_fee_distribution::TransactionFeeDistributionUnchecked")
+)]
 /// Update the transaction fee distribution to the specified value.
 pub struct TransactionFeeDistribution {
     /// The fraction that goes to the baker of the block.
@@ -138,8 +146,9 @@ mod transaction_fee_distribution {
     }
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, common::Serialize, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// The reward fractions related to the gas account and inclusion of special
 /// transactions.
 pub struct GASRewards {
@@ -157,8 +166,9 @@ pub struct GASRewards {
     pub chain_update: AmountFraction,
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, common::Serialize, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// The reward fractions related to the gas account and inclusion of special
 /// transactions.
 /// Introduce for protocol version 6.
@@ -174,9 +184,13 @@ pub struct GASRewardsV1 {
     pub chain_update: AmountFraction,
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone)]
-#[serde(tag = "typeOfUpdate", content = "updatePayload")]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    serde(tag = "typeOfUpdate", content = "updatePayload")
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// An update with root keys of some other set of governance keys, or the root
 /// keys themselves. Each update is a separate transaction.
 pub enum RootUpdate {
@@ -243,9 +257,13 @@ impl Deserial for RootUpdate {
     }
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone)]
-#[serde(tag = "typeOfUpdate", content = "updatePayload")]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    serde(tag = "typeOfUpdate", content = "updatePayload")
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// An update with level 1 keys of either level 1 or level 2 keys. Each of the
 /// updates must be a separate transaction.
 pub enum Level1Update {
@@ -320,9 +338,10 @@ pub enum RootKeysKind {}
 /// type-level marker.
 pub enum Level1KeysKind {}
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serial, Clone, Eq, PartialEq)]
-#[serde(rename_all = "camelCase")]
-#[serde(bound = "Kind: Sized")]
+#[derive(Debug, common::Serial, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde_deprecated", serde(bound = "Kind: Sized"))]
 /// Either root, level1, or level 2 access structure. They all have the same
 /// structure, keys and a threshold. The phantom type parameter is used for
 /// added type safety to distinguish different access structures in different
@@ -331,7 +350,7 @@ pub struct HigherLevelAccessStructure<Kind> {
     #[size_length = 2]
     pub keys: Vec<UpdatePublicKey>,
     pub threshold: UpdateKeysThreshold,
-    #[serde(skip)] // use default when deserializing
+    #[cfg_attr(feature = "serde_deprecated", serde(skip))] // use default when deserializing
     pub _phantom: PhantomData<Kind>,
 }
 
@@ -352,8 +371,9 @@ impl<Kind> Deserial for HigherLevelAccessStructure<Kind> {
     }
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serial, Clone, Eq, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, common::Serial, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// And access structure for performing chain updates. The access structure is
 /// only meaningful in the context of a list of update keys to which the indices
 /// refer to.
@@ -379,8 +399,9 @@ impl Deserial for AccessStructure {
     }
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone, common::Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, common::Serialize)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// Access structures for each of the different possible chain updates, together
 /// with the context giving all the possible keys.
 pub struct AuthorizationsV0 {
@@ -395,7 +416,7 @@ pub struct AuthorizationsV0 {
     pub election_difficulty: AccessStructure,
     /// Access structure for updating the euro to energy exchange rate.
     pub euro_per_energy: AccessStructure,
-    #[serde(rename = "microGTUPerEuro")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "microGTUPerEuro"))]
     /// Access structure for updating the microccd per euro exchange rate.
     pub micro_gtu_per_euro: AccessStructure,
     /// Access structure for updating the foundation account address.
@@ -404,7 +425,7 @@ pub struct AuthorizationsV0 {
     pub mint_distribution: AccessStructure,
     /// Access structure for updating the transaction fee distribution.
     pub transaction_fee_distribution: AccessStructure,
-    #[serde(rename = "paramGASRewards")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "paramGASRewards"))]
     /// Access structure for updating the gas reward distribution parameters.
     pub param_gas_rewards: AccessStructure,
     /// Access structure for updating the pool parameters. For V0 this is only
@@ -482,12 +503,13 @@ where
     Some(signer)
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// Access structures for each of the different possible chain updates, together
 /// with the context giving all the possible keys.
 pub struct AuthorizationsV1 {
-    #[serde(flatten)]
+    #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
     pub v0: AuthorizationsV0,
     /// Keys for changing cooldown periods related to baking and delegating.
     pub cooldown_parameters: AccessStructure,
@@ -558,16 +580,18 @@ impl AuthorizationsV1 {
     }
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, common::Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
+#[derive(common::Serialize, Debug, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// Parameters related to becoming a baker that apply to protocol versions 1-3.
 pub struct BakerParameters {
     /// Minimum amount of CCD that an account must stake to become a baker.
     pub minimum_threshold_for_baking: Amount,
 }
 
-#[derive(Debug, common::Serialize, SerdeSerialize, SerdeDeserialize, Copy, Clone)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, common::Serialize, Copy, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct CooldownParameters {
     /// Number of seconds that pool owners must cooldown
     /// when reducing their equity capital or closing the pool.
@@ -579,7 +603,8 @@ pub struct CooldownParameters {
 
 /// Parameters controlling consensus timeouts for the consensus protocol version
 /// 2.
-#[derive(Debug, common::Serial, Copy, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, common::Serial, Copy, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
 pub struct TimeoutParameters {
     /// The base value for triggering a timeout.
     pub base: concordium_contracts_common::Duration,
@@ -659,11 +684,10 @@ impl Deserial for TimeoutParameters {
     Display,
     From,
     Into,
-    SerdeSerialize,
-    SerdeDeserialize,
     common::Serialize,
 )]
-#[serde(transparent)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(transparent))]
 pub struct RewardPeriodLength {
     pub(crate) reward_period_epochs: Epoch,
 }
@@ -674,8 +698,9 @@ impl RewardPeriodLength {
     }
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serialize, Copy, Clone)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, common::Serialize, Copy, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// The time parameters are introduced as of protocol version 4, and consist of
 /// the reward period length and the mint rate per payday. These are coupled as
 /// a change to either affects the overall rate of minting.
@@ -684,8 +709,9 @@ pub struct TimeParameters {
     pub mint_per_payday: MintRate,
 }
 
-#[derive(Debug, common::Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, common::Serialize, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// Parameters related to staking pools. This applies to protocol version 4 and
 /// up.
 pub struct PoolParameters {
@@ -696,7 +722,7 @@ pub struct PoolParameters {
     /// Fraction of transaction rewards charged by the L-pool.
     pub passive_transaction_commission: AmountFraction,
     /// Bounds on the commission rates that may be charged by bakers.
-    #[serde(flatten)]
+    #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
     pub commission_bounds: CommissionRanges,
     /// Minimum equity capital required for a new baker.
     pub minimum_equity_capital: Amount,
@@ -708,7 +734,8 @@ pub struct PoolParameters {
     pub leverage_bound: LeverageFactor,
 }
 
-#[derive(Debug, common::Serialize, Clone, Copy, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, common::Serialize, Clone, Copy)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
 /// Finalization committee parameters. These parameters control which bakers are
 /// in the finalization committee.
 pub struct FinalizationCommitteeParameters {
@@ -724,8 +751,9 @@ pub struct FinalizationCommitteeParameters {
     pub finalizers_relative_stake_threshold: PartsPerHundredThousands,
 }
 
-#[derive(Debug, common::Serialize, Clone, Copy, SerdeSerialize, SerdeDeserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, common::Serialize, Clone, Copy)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// Validator score parameters. These parameters control the threshold of
 /// maximal missed rounds before a validator gets suspended.
 pub struct ValidatorScoreParameters {
@@ -733,62 +761,76 @@ pub struct ValidatorScoreParameters {
     pub max_missed_rounds: u64,
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
-#[serde(tag = "updateType", content = "update")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    serde(tag = "updateType", content = "update")
+)]
 /// The type of an update payload.
 pub enum UpdatePayload {
-    #[serde(rename = "protocol")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "protocol"))]
     Protocol(ProtocolUpdate),
-    #[serde(rename = "electionDifficulty")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "electionDifficulty"))]
     ElectionDifficulty(ElectionDifficulty),
-    #[serde(rename = "euroPerEnergy")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "euroPerEnergy"))]
     EuroPerEnergy(ExchangeRate),
-    #[serde(rename = "microGTUPerEuro")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "microGTUPerEuro"))]
     MicroGTUPerEuro(ExchangeRate), // TODO: Rename to CCD when switching to gRPC v2.
-    #[serde(rename = "foundationAccount")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "foundationAccount"))]
     FoundationAccount(AccountAddress),
-    #[serde(rename = "mintDistribution")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "mintDistribution"))]
     MintDistribution(MintDistributionV0),
-    #[serde(rename = "transactionFeeDistribution")]
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(rename = "transactionFeeDistribution")
+    )]
     TransactionFeeDistribution(TransactionFeeDistribution),
-    #[serde(rename = "gASRewards")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "gASRewards"))]
     GASRewards(GASRewards),
-    #[serde(rename = "bakerStakeThreshold")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "bakerStakeThreshold"))]
     BakerStakeThreshold(BakerParameters),
-    #[serde(rename = "root")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "root"))]
     Root(RootUpdate),
-    #[serde(rename = "level1")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "level1"))]
     Level1(Level1Update),
-    #[serde(rename = "addAnonymityRevoker")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "addAnonymityRevoker"))]
     AddAnonymityRevoker(Box<crate::id::types::ArInfo<crate::id::constants::ArCurve>>),
-    #[serde(rename = "addIdentityProvider")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "addIdentityProvider"))]
     AddIdentityProvider(Box<crate::id::types::IpInfo<crate::id::constants::IpPairing>>),
-    #[serde(rename = "cooldownParametersCPV1")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "cooldownParametersCPV1"))]
     CooldownParametersCPV1(CooldownParameters),
-    #[serde(rename = "poolParametersCPV1")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "poolParametersCPV1"))]
     PoolParametersCPV1(PoolParameters),
-    #[serde(rename = "timeParametersCPV1")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "timeParametersCPV1"))]
     TimeParametersCPV1(TimeParameters),
-    #[serde(rename = "mintDistributionCPV1")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "mintDistributionCPV1"))]
     MintDistributionCPV1(MintDistributionV1),
-    #[serde(rename = "gASRewardsCPV2")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "gASRewardsCPV2"))]
     GASRewardsCPV2(GASRewardsV1),
-    #[serde(rename = "TimeoutParametersCPV2")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "TimeoutParametersCPV2"))]
     TimeoutParametersCPV2(TimeoutParameters),
-    #[serde(rename = "minBlockTimeCPV2")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "minBlockTimeCPV2"))]
     MinBlockTimeCPV2(concordium_contracts_common::Duration),
-    #[serde(rename = "blockEnergyLimitCPV2")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "blockEnergyLimitCPV2"))]
     BlockEnergyLimitCPV2(Energy),
-    #[serde(rename = "finalizationCommitteeParametersCPV2")]
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(rename = "finalizationCommitteeParametersCPV2")
+    )]
     FinalizationCommitteeParametersCPV2(FinalizationCommitteeParameters),
-    #[serde(rename = "validatorScoreParametersCPV3")]
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(rename = "validatorScoreParametersCPV3")
+    )]
     ValidatorScoreParametersCPV3(ValidatorScoreParameters),
-    #[serde(rename = "createPlt")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "createPlt"))]
     CreatePlt(CreatePlt),
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, common::Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, common::Serialize)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct CreatePlt {
     /// The symbol of the token.
     pub token_id: protocol_level_tokens::TokenId,

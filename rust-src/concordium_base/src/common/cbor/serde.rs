@@ -10,6 +10,7 @@ pub mod map_hex_cbor_values {
     use crate::common::cbor::{cbor_decode, cbor_encode, value};
 
     /// Serialize a `HashMap<String, value::Value>` as hex-encoded CBOR.
+    #[allow(dead_code)]
     pub fn serialize<S>(
         map: &HashMap<String, value::Value>,
         serializer: S,
@@ -26,6 +27,7 @@ pub mod map_hex_cbor_values {
     }
 
     /// Deserialize a `HashMap<String, value::Value>` from hex-encoded CBOR.
+    #[allow(dead_code)]
     pub fn deserialize<'de, D>(deserializer: D) -> Result<HashMap<String, value::Value>, D::Error>
     where
         D: Deserializer<'de>,

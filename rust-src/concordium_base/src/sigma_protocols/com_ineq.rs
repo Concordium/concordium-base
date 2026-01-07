@@ -36,7 +36,6 @@ pub struct Response<C: Curve> {
 /// - `value_tilde` - the randomness used to commit
 /// - `pub_value` - the public value claimed to be different from `value`
 /// - `csprng` - a cryptographically secure random number generator
-
 pub fn prove_com_ineq<R: rand::Rng, C: Curve>(
     com_key: &CommitmentKey<C>,
     value: &Value<C>,
@@ -100,7 +99,6 @@ pub fn prove_com_ineq<R: rand::Rng, C: Curve>(
 /// - `proof` - the proof
 ///
 /// The function outputs a bool, indicating whether the proof is correct or not.
-
 pub fn verify_com_ineq<C: Curve>(
     com_key: &CommitmentKey<C>,
     c: &Commitment<C>,

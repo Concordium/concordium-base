@@ -78,7 +78,9 @@ version = "1.2.0"
 path = "../concordium_base_derive"
 
 [features]
-default = []
+default = ["serde_deprecated"]
+# enables `serde` for composite data structures; see `README.md` for more information
+serde_deprecated = []
 ffi = ["rand_chacha"]
 internal-test-helpers = []
 encryption = ["cbc", "aes", "base64", "pbkdf2", "hmac"]
