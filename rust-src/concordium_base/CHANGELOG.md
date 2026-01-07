@@ -1,4 +1,4 @@
-## Unreleased
+## 10.0.0 (2026-01-07)
 
 - Implemented Concordium verifiable presentations V1 in `web3id::v1` that includes account based and identity based credentials.
   It is an updated version of the protocol implemented in `web3id` ("V0"). 
