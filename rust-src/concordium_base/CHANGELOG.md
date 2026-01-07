@@ -14,9 +14,6 @@
   where it replaces the direct dependency on `RandomOracle` which is the "legacy" transcript implementation.
   The new implementation is `TranscriptV1` which among other things improves length prefixing of messages. 
   `TranscriptV1` is used in Concordium verifiable presentations V1.
-- Move the `rescourceID` context in the data model from a requested to a given context in the V1 verifiable presentation flow.
-- Change `UnfilledContextInformationBuilder::new_simple()` to require a `rescourceID` but NOT include a `contextString` as input parameter anymore.  
-- Add `VerificationRequestDataBuilder::subject_claims` helper function.
 
 ## 9.0.0 (2025-10-29)
 
