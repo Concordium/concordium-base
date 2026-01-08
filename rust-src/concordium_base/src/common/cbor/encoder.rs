@@ -33,19 +33,13 @@ impl<W: Write> Encoder<W> {
     }
 }
 
-impl<W: Write> Encoder<W>
-where
-    <W as Write>::Error: std::error::Error,
-{
+impl<W: Write> Encoder<W> {
     fn encode_raw(&mut self, bytes: &[u8]) -> Result<(), <W as Write>::Error> {
         self.inner.write_all(bytes)
     }
 }
 
-impl<'a, W: Write> CborEncoder for &'a mut Encoder<W>
-where
-    <W as Write>::Error: std::error::Error,
-{
+impl<'a, W: Write> CborEncoder for &'a mut Encoder<W> {
     type ArrayEncoder = ArrayEncoder<'a, W>;
     type MapEncoder = MapEncoder<'a, W>;
     type WriteError = <W as Write>::Error;
@@ -107,10 +101,7 @@ impl<'a, W: Write> MapEncoder<'a, W> {
     }
 }
 
-impl<W: Write> CborMapEncoder for MapEncoder<'_, W>
-where
-    <W as Write>::Error: std::error::Error,
-{
+impl<W: Write> CborMapEncoder for MapEncoder<'_, W> {
     type WriteError = <W as Write>::Error;
 
     fn serialize_entry<K: CborSerialize + ?Sized, V: CborSerialize + ?Sized>(
@@ -160,10 +151,7 @@ impl<'a, W: Write> ArrayEncoder<'a, W> {
     }
 }
 
-impl<W: Write> CborArrayEncoder for ArrayEncoder<'_, W>
-where
-    <W as Write>::Error: std::error::Error,
-{
+impl<W: Write> CborArrayEncoder for ArrayEncoder<'_, W> {
     type WriteError = <W as Write>::Error;
 
     fn serialize_element<T: CborSerialize + ?Sized>(
