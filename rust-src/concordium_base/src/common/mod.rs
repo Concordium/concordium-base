@@ -16,6 +16,9 @@ pub use encoded::*;
 pub use self::helpers::serialize_deserialize;
 pub use self::{serialize::*, version::*};
 
+#[cfg(test)]
+pub use self::helpers::seed0;
+
 // Reexport for ease of use.
 pub use byteorder::{ReadBytesExt, WriteBytesExt};
 

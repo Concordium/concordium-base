@@ -45,6 +45,12 @@ The identity verifier can be run by using:
 cargo run --release --bin identity-verifier -- --id-provider-url url-for-identity-provider-service --identity-provider-public data/identity_provider.pub.json
 ```
 
+Optionally, a username/password combination can be included on the attribute form by running with the three options:
+* `--require-login=true`
+* `--login-username=username`
+* `--login-password=password`
+(no password hashing is used, this is not a secure implementation)
+
 or directly running the binary `identity_verifier` in `./target/release/`.
 
 ## Testing with the wallet on Staging
