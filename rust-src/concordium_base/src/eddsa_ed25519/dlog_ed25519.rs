@@ -2,6 +2,7 @@
 //! curve25519 (cf. "Proof of Knowledge of Discrete Logarithm" Section 9.2.1,
 //! Bluepaper v1.2.5) which enables one to prove knowledge of the discrete
 //! logarithm without revealing it.
+use crate::random_oracle::TranscriptProtocol;
 use crate::{common::*, random_oracle::RandomOracle};
 use anyhow::bail;
 use curve25519_dalek::{

@@ -1,5 +1,6 @@
 //! Functionality needed by the chain to verify credential deployments.
 use super::{secret_sharing::Threshold, types::*, utils};
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     bulletproofs::range_proof::verify_less_than_or_equal,
     common::{to_bytes, types::TransactionTime},
@@ -76,6 +77,7 @@ pub fn verify_cdi<
     let gens = global_context.bulletproof_generators();
     let ip_verify_key = &ip_info.ip_verify_key;
     // Compute the challenge prefix by hashing the values.
+    #[allow(deprecated)]
     let mut ro = RandomOracle::domain("credential");
     ro.append_message(b"cred_values", &cdi.values);
     ro.append_message(b"address", &addr);
@@ -507,8 +509,14 @@ mod tests {
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let id_use_data = test_create_id_use_data(&mut csprng);
-        let (context, pio, randomness) =
-            test_create_pio_v1(&id_use_data, &ip_info, &ars_infos, &global_ctx, num_ars);
+        let (context, pio, randomness) = test_create_pio_v1(
+            &id_use_data,
+            &ip_info,
+            &ars_infos,
+            &global_ctx,
+            num_ars,
+            &mut csprng,
+        );
         assert_eq!(*randomness, *(id_use_data.randomness));
         let alist = test_create_attributes();
         let ver_ok = verify_credentials_v1(&pio, context, &alist, &ip_secret_key);

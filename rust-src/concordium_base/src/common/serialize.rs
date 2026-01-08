@@ -180,6 +180,14 @@ impl Deserial for num::rational::Ratio<u64> {
     }
 }
 
+impl Deserial for chrono::DateTime<chrono::Utc> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let millis: i64 = crate::common::Deserial::deserial(source)?;
+        chrono::DateTime::from_timestamp_millis(millis)
+            .context("convert timestamp to UTC date time")
+    }
+}
+
 /// Read a vector where the first 8 bytes are taken as length in big endian.
 impl<T: Deserial> Deserial for Vec<T> {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
@@ -483,6 +491,12 @@ impl Serial for num::rational::Ratio<u64> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         self.numer().serial(out);
         self.denom().serial(out);
+    }
+}
+
+impl Serial for chrono::DateTime<chrono::Utc> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        self.timestamp_millis().serial(out);
     }
 }
 
@@ -1000,45 +1014,292 @@ pub fn base16_ignore_length_decode<'de, D: Deserializer<'de>, T: Deserial>(
     des.deserialize_str(Base16IgnoreLengthVisitor(Default::default()))
 }
 
-#[test]
-fn test_map_serialization() {
-    use rand::Rng;
-    for n in 0..1000 {
-        let mut map = BTreeMap::<u64, u32>::new();
-        for (k, v) in rand::thread_rng()
-            .sample_iter(rand::distributions::Standard)
-            .take(n)
-        {
-            map.insert(k, v);
-        }
-        let deserialized = super::serialize_deserialize(&map).expect("Deserialization succeeds.");
-        assert_eq!(map, deserialized);
-    }
+/// Reexports and types for derive macros
+#[doc(hidden)]
+pub mod __serialize_private {
+    // Reexports
+    pub use anyhow;
 }
 
-#[test]
-fn test_set_serialization() {
-    use rand::Rng;
-    for n in 0..1000 {
-        let mut set = BTreeSet::<u64>::new();
-        for k in rand::thread_rng()
-            .sample_iter(rand::distributions::Standard)
-            .take(n)
-        {
-            set.insert(k);
-        }
-        let deserialized = super::serialize_deserialize(&set).expect("Deserialization succeeds.");
-        assert_eq!(set, deserialized);
-    }
-}
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::common::{from_bytes, serialize_deserialize, to_bytes};
+    use chrono::{DateTime, Utc};
+    use concordium_base_derive::Serialize;
 
-#[test]
-fn test_string_serialization() {
-    use rand::Rng;
-    for _ in 0..1000 {
-        let n: usize = rand::thread_rng().gen_range(0..2 * MAX_PREALLOCATED_CAPACITY);
-        let s: String = String::from_utf8(vec!['a' as u8; n]).unwrap();
-        let deserialized = super::serialize_deserialize(&s).expect("Deserialization succeeds.");
-        assert_eq!(s, deserialized);
+    #[test]
+    fn test_map_serialization() {
+        use rand::Rng;
+        for n in 0..1000 {
+            let mut map = BTreeMap::<u64, u32>::new();
+            for (k, v) in rand::thread_rng()
+                .sample_iter(rand::distributions::Standard)
+                .take(n)
+            {
+                map.insert(k, v);
+            }
+            let deserialized = serialize_deserialize(&map).expect("Deserialization succeeds.");
+            assert_eq!(map, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_set_serialization() {
+        use rand::Rng;
+        for n in 0..1000 {
+            let mut set = BTreeSet::<u64>::new();
+            for k in rand::thread_rng()
+                .sample_iter(rand::distributions::Standard)
+                .take(n)
+            {
+                set.insert(k);
+            }
+            let deserialized = serialize_deserialize(&set).expect("Deserialization succeeds.");
+            assert_eq!(set, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_string_serialization() {
+        use rand::Rng;
+        for _ in 0..1000 {
+            let n: usize = rand::thread_rng().gen_range(0..2 * MAX_PREALLOCATED_CAPACITY);
+            let s: String = String::from_utf8(vec!['a' as u8; n]).unwrap();
+            let deserialized = serialize_deserialize(&s).expect("Deserialization succeeds.");
+            assert_eq!(s, deserialized);
+        }
+    }
+
+    /// Test serializing `DateTime<Utc>`
+    #[test]
+    fn test_date_time_utc_serialization() {
+        let date_time = chrono::DateTime::parse_from_rfc3339("2023-08-27T23:12:15Z")
+            .unwrap()
+            .to_utc();
+        let bytes = to_bytes(&date_time);
+        assert_eq!(hex::encode(&bytes), "0000018a3944f498");
+        let decoded: DateTime<Utc> = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, date_time);
+    }
+
+    /// Tests serializing struct with named fields with derived implementation
+    #[test]
+    fn test_named_struct_derived_serialization() {
+        #[derive(Debug, PartialEq, Serialize)]
+        struct TestStruct {
+            a: u8,
+            b: String,
+        }
+
+        let value = TestStruct {
+            a: 2,
+            b: "test".to_string(),
+        };
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "02000000000000000474657374");
+        let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    /// Tests serializing struct with named fields with derived implementation.
+    /// Tests attribute string_size_length
+    #[test]
+    fn test_named_struct_derived_serialization_string_size_length() {
+        #[derive(Debug, PartialEq, Serialize)]
+        struct TestStruct {
+            #[string_size_length = 2]
+            b: String,
+        }
+
+        let value = TestStruct {
+            b: "test".to_string(),
+        };
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "000474657374");
+        let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    /// Tests serializing struct with named fields with derived implementation.
+    /// Tests attribute size_length
+    #[test]
+    fn test_named_struct_derived_serialization_size_length() {
+        #[derive(Debug, PartialEq, Serialize)]
+        struct TestStruct {
+            #[size_length = 2]
+            a: Vec<u8>,
+        }
+
+        let value = TestStruct { a: vec![1, 2] };
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "00020102");
+        let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    /// Tests serializing struct with named fields with derived implementation.
+    /// Tests attribute map_size_length
+    #[test]
+    fn test_named_struct_derived_serialization_map_size_length() {
+        #[derive(Debug, PartialEq, Serialize)]
+        struct TestStruct {
+            #[map_size_length = 2]
+            a: BTreeMap<u8, u8>,
+        }
+
+        let value = TestStruct {
+            a: [(1, 2), (3, 4)].into_iter().collect(),
+        };
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "000201020304");
+        let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    /// Tests serializing struct with named fields with derived implementation.
+    /// Tests attribute set_size_length
+    #[test]
+    fn test_named_struct_derived_serialization_set_size_length() {
+        #[derive(Debug, PartialEq, Serialize)]
+        struct TestStruct {
+            #[set_size_length = 2]
+            a: BTreeSet<u8>,
+        }
+
+        let value = TestStruct {
+            a: [1, 2].into_iter().collect(),
+        };
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "00020102");
+        let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    /// Tests serializing tuple struct with derived implementation
+    #[test]
+    fn test_tuple_struct_derived_serialization() {
+        #[derive(Debug, PartialEq, Serialize)]
+        struct TestStruct(u8, String);
+
+        let value = TestStruct(2, "test".to_string());
+
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "02000000000000000474657374");
+        let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    /// Tests serializing tuple struct with derived implementation.
+    /// Tests attribute string_size_length
+    #[test]
+    fn test_tuple_struct_derived_serialization_string_size_length() {
+        #[derive(Debug, PartialEq, Serialize)]
+        struct TestStruct(#[string_size_length = 2] String);
+
+        let value = TestStruct("test".to_string());
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "000474657374");
+        let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    /// Tests serializing tuple struct with derived implementation.
+    /// Tests attribute size_length
+    #[test]
+    fn test_tuple_struct_derived_serialization_size_length() {
+        #[derive(Debug, PartialEq, Serialize)]
+        struct TestStruct(#[size_length = 2] Vec<u8>);
+
+        let value = TestStruct(vec![1, 2]);
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "00020102");
+        let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    /// Tests serializing tuple struct with derived implementation.
+    /// Tests attribute map_size_length
+    #[test]
+    fn test_tuple_struct_derived_serialization_map_size_length() {
+        #[derive(Debug, PartialEq, Serialize)]
+        struct TestStruct(#[map_size_length = 2] BTreeMap<u8, u8>);
+
+        let value = TestStruct([(1, 2), (3, 4)].into_iter().collect());
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "000201020304");
+        let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    /// Tests serializing tuple struct with derived implementation.
+    /// Tests attribute set_size_length
+    #[test]
+    fn test_tuple_struct_derived_serialization_set_size_length() {
+        #[derive(Debug, PartialEq, Serialize)]
+        struct TestStruct(#[set_size_length = 2] BTreeSet<u8>);
+
+        let value = TestStruct([1, 2].into_iter().collect());
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "00020102");
+        let decoded: TestStruct = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    /// Tests serializing enum with unit variants with derived implementation
+    #[test]
+    fn test_unit_enum_derived_serialization() {
+        #[derive(Debug, PartialEq, Serialize)]
+        enum TestEnum {
+            A,
+            B,
+        }
+
+        let value = TestEnum::A;
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "00");
+        let decoded: TestEnum = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+
+        let value = TestEnum::B;
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "01");
+        let decoded: TestEnum = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    /// Tests serializing enum with named fields variants with derived implementation
+    #[test]
+    fn test_named_enum_derived_serialization() {
+        #[derive(Debug, PartialEq, Serialize)]
+        enum TestEnum {
+            A { a: u8, b: String },
+            B { a: u8, b: String },
+        }
+
+        let value = TestEnum::B {
+            a: 2,
+            b: "test".to_string(),
+        };
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "0102000000000000000474657374");
+        let decoded: TestEnum = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    /// Tests serializing enum with tuple variants with derived implementation
+    #[test]
+    fn test_tuple_enum_derived_serialization() {
+        #[derive(Debug, PartialEq, Serialize)]
+        enum TestEnum {
+            A(u8, String),
+            B(u8, String),
+        }
+
+        let value = TestEnum::B(2, "test".to_string());
+        let bytes = to_bytes(&value);
+        assert_eq!(hex::encode(&bytes), "0102000000000000000474657374");
+        let decoded: TestEnum = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(decoded, value);
     }
 }
