@@ -67,7 +67,7 @@ impl TokenModuleRejectReasonType {
     }
 }
 
-/// Token module reject reason parsed from type and CBOR if possible
+/// Token module reject reason parsed from type and CBOR
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TokenModuleRejectReasonEnum {
@@ -141,7 +141,7 @@ impl TokenModuleRejectReasonEnum {
         }
     }
 
-    /// Decode reject reason from CBOR encoding
+    /// Decode reject reason from CBOR encoding assuming it is of the type given by `reject_reason_type`.
     pub fn decode_reject_reason(
         reject_reason_type: TokenModuleRejectReasonType,
         cbor: &RawCbor,

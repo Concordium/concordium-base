@@ -7,7 +7,7 @@ use concordium_contracts_common::AccountAddress;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
-/// Token module event parsed from type and CBOR
+/// Token module event type
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum TokenModuleEventType {
     /// An account was added to the allow list of a protocol level token ([`AddAllowListEvent`])
@@ -26,9 +26,9 @@ pub enum TokenModuleEventType {
     Unpause,
 }
 
-/// Unknown token module reject reason
+/// Unknown token module event
 #[derive(Debug, thiserror::Error)]
-#[error("Unknown token module reject reason type: {0}")]
+#[error("Unknown token module event type: {0}")]
 pub struct UnknownTokenModuleEventTypeError(String);
 
 impl TokenModuleEventType {
@@ -132,7 +132,7 @@ impl TokenModuleEventEnum {
         }
     }
 
-    /// Decode event from CBOR encoding
+    /// Decode event from CBOR encoding assuming type given by `event_type`.
     pub fn decode_event(
         event_type: TokenModuleEventType,
         cbor: &RawCbor,
