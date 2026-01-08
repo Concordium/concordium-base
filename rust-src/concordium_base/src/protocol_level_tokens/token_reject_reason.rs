@@ -11,7 +11,7 @@ use std::str::FromStr;
 pub enum TokenModuleRejectReasonType {
     /// Address not found: [`AddressNotFoundRejectReason`]
     AddressNotFound,
-    /// Token balance is insufficient ([`TokenBalanceInsufficient`])
+    /// Token balance is insufficient ([`TokenBalanceInsufficientRejectReason`])
     TokenBalanceInsufficient,
     /// The transaction could not be deserialized ([`DeserializationFailureRejectReason`])
     DeserializationFailure,
