@@ -84,7 +84,7 @@ internal-test-helpers = []
 encryption = ["cbc", "aes", "base64", "pbkdf2", "hmac"]
 
 [dev-dependencies]
-criterion = "0.4"
+criterion = { version = "0.5", features = ["html_reports"] }
 rand = {version = "0.8", features = ["small_rng"]}
 assert_matches = "1.5.0"
 
