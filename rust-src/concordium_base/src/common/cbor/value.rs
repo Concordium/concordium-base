@@ -1,5 +1,5 @@
 use crate::common::cbor::{
-    Bytes, CborArrayDecoder, CborArrayEncoder, CborDecoder, CborDeserialize, CborEncoder,
+    self, Bytes, CborArrayDecoder, CborArrayEncoder, CborDecoder, CborDeserialize, CborEncoder,
     CborMapDecoder, CborMapEncoder, CborSerializationResult, CborSerialize, DataItemHeader,
 };
 use anyhow::Context;
@@ -91,7 +91,9 @@ impl CborDeserialize for Value {
             ),
             DataItemHeader::Array(_) => {
                 let mut array_decoder = decoder.decode_array()?;
-                let mut vec = Vec::with_capacity(array_decoder.size().unwrap_or_default());
+                let mut vec = Vec::with_capacity(cbor::cap_capacity::<Value>(
+                    array_decoder.size().unwrap_or_default(),
+                ));
                 while let Some(element) = array_decoder.deserialize_element()? {
                     vec.push(element);
                 }
@@ -99,7 +101,10 @@ impl CborDeserialize for Value {
             }
             DataItemHeader::Map(_) => {
                 let mut map_decoder = decoder.decode_map()?;
-                let mut vec = Vec::with_capacity(map_decoder.size().unwrap_or_default());
+                let mut vec = Vec::with_capacity(cbor::cap_capacity::<Value>(
+                    map_decoder.size().unwrap_or_default(),
+                ));
+
                 while let Some(entry) = map_decoder.deserialize_entry()? {
                     vec.push(entry);
                 }
@@ -247,6 +252,29 @@ mod test {
         assert_eq!(value_decoded, value);
     }
 
+    /// Test huge array size.
+    /// Test that we don't try to allocate memory of the size.
+    #[test]
+    fn test_array_huge_length() {
+        let cbor = hex::decode("9b00ffffffffffffff0103").unwrap();
+        let err = cbor_decode::<Value>(&cbor).unwrap_err();
+        assert!(
+            err.to_string().contains("failed to fill whole buffer"),
+            "message: {}",
+            err.to_string()
+        );
+    }
+
+    /// Test large array size.
+    /// Test vector longer than allocation capacity cap.
+    #[test]
+    fn test_array_large_length() {
+        let value = Value::Array(vec![Value::Positive(1u64); 10000]);
+        let cbor = cbor_encode(&value).unwrap();
+        let value_decoded: Value = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
     #[test]
     fn test_map() {
         let value = Value::Map(vec![
@@ -256,6 +284,29 @@ mod test {
 
         let cbor = cbor_encode(&value).unwrap();
         assert_eq!(hex::encode(&cbor), "a201030204");
+        let value_decoded: Value = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    /// Test huge map size.
+    /// Test that we don't try to allocate memory of the size.
+    #[test]
+    fn test_map_huge_length() {
+        let cbor = hex::decode("bb00ffffffffffffff01030204").unwrap();
+        let err = cbor_decode::<Value>(&cbor).unwrap_err();
+        assert!(
+            err.to_string().contains("failed to fill whole buffer"),
+            "message: {}",
+            err.to_string()
+        );
+    }
+
+    /// Test large map size.
+    /// Test vector longer than allocation capacity cap.
+    #[test]
+    fn test_map_large_length() {
+        let value = Value::Map(vec![(Value::Positive(1), Value::Positive(3)); 10000]);
+        let cbor = cbor_encode(&value).unwrap();
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
