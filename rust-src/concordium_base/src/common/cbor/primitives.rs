@@ -759,7 +759,7 @@ mod test {
 
         let err = cbor_decode::<[u8; 4]>(&cbor).unwrap_err().to_string();
         assert!(
-            err.contains("fixed length byte string destination too short"),
+            err.contains("fixed size deserialization type too short"),
             "err: {}",
             err
         );
