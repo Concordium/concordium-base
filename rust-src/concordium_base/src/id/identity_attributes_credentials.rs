@@ -599,6 +599,7 @@ mod test {
         prove_identity_attributes, verify_identity_attributes,
         AttributeCommitmentVerificationError, IdentityAttributeHandling,
     };
+    use crate::id::secret_sharing::Threshold;
     use crate::id::test::ExampleAttributeList;
     use crate::id::types::{
         ArIdentity, ArInfo, Attribute, AttributeTag, GlobalContext, IdObjectUseData,
@@ -1015,7 +1016,9 @@ mod test {
         .expect("prove");
 
         // decrease ar threshold
-        id_attr_info.values.threshold.0 -= 1;
+        id_attr_info.values.threshold =
+            Threshold::try_new(id_attr_info.values.threshold.threshold() - 1)
+                .expect("Can decrease threshold");
         id_attr_info.proofs.cmm_id_cred_sec_sharing_coeff.pop();
 
         let mut transcript = RandomOracle::empty();

@@ -130,7 +130,8 @@ pub fn test_create_pio<'a>(
     let context = IpContext::new(ip_info, ars_infos, global_ctx);
 
     // Select all ARs except last one
-    let threshold = Threshold::try_from(num_ars - 1).unwrap_or(Threshold(1));
+    let threshold =
+        Threshold::try_from(num_ars - 1).unwrap_or(Threshold::try_new(1).expect("threshold"));
 
     // Create and return PIO
     let (pio, randomness) = generate_pio(&context, threshold, id_use_data, initial_account_data)
@@ -154,7 +155,8 @@ pub fn test_create_pio_v1<'a>(
     let context = IpContext::new(ip_info, ars_infos, global_ctx);
 
     // Select all ARs except last one
-    let threshold = Threshold::try_from(num_ars - 1).unwrap_or(Threshold(1));
+    let threshold =
+        Threshold::try_from(num_ars - 1).unwrap_or(Threshold::try_new(1).expect("threshold"));
 
     // Create and return PIO
     let (pio, randomness) = generate_pio_v1_with_rng(&context, threshold, id_use_data, csprng)

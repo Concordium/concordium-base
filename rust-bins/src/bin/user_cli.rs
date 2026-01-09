@@ -359,15 +359,15 @@ fn handle_start_ip(sip: StartIp) -> anyhow::Result<()> {
     }
 
     let threshold = if let Some(thr) = sip.threshold {
-        Threshold(thr)
+        Threshold::try_new(thr)?
     } else {
         let threshold = Select::new()
             .with_prompt("Revocation threshold")
             .items(&(1..=num_ars).collect::<Vec<usize>>())
             .default(if num_ars == 1 { 0 } else { num_ars - 2 })
             .interact()?;
-        Threshold((threshold + 1) as u8) // +1 because the indexing of the
-                                         // selection starts at 1
+        Threshold::try_new((threshold + 1) as u8)? // +1 because the indexing of the
+                                                   // selection starts at 1
     };
 
     let mut csprng = thread_rng();
@@ -542,15 +542,15 @@ fn handle_start_ip_v1(sip: StartIpV1) -> anyhow::Result<()> {
     }
 
     let threshold = if let Some(thr) = sip.threshold {
-        Threshold(thr)
+        Threshold::try_new(thr)?
     } else {
         let threshold = Select::new()
             .with_prompt("Revocation threshold")
             .items(&(1..=num_ars).collect::<Vec<usize>>())
             .default(if num_ars == 1 { 0 } else { num_ars - 2 })
             .interact()?;
-        Threshold((threshold + 1) as u8) // +1 because the indexing of the
-                                         // selection starts at 1
+        Threshold::try_new((threshold + 1) as u8)? // +1 because the indexing of the
+                                                   // selection starts at 1
     };
 
     let context = IpContext::new(&ip_info, &choice_ars, &global_ctx);

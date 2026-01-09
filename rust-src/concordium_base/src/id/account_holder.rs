@@ -1394,8 +1394,13 @@ mod tests {
         let value = Value::<ExampleCurve>::generate(&mut csprng);
 
         // Act
-        let (ar_datas, _comms, _rands) =
-            compute_sharing_data(&value, &ars_infos, Threshold(threshold), &ck, &mut csprng);
+        let (ar_datas, _comms, _rands) = compute_sharing_data(
+            &value,
+            &ars_infos,
+            Threshold::try_new(threshold).expect("threshold"),
+            &ck,
+            &mut csprng,
+        );
 
         // Assert ArData's are good
         for data in ar_datas.iter() {
@@ -1532,7 +1537,7 @@ mod tests {
         // Check threshold
         assert_eq!(
             cdi.values.threshold,
-            Threshold(num_ars - 1),
+            Threshold::try_new(num_ars - 1).expect("threshold"),
             "CDI threshold is invalid"
         );
 
