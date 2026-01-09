@@ -1,4 +1,5 @@
 use crate::common;
+use std::fmt::{Display, Formatter};
 
 /// The limit for the length of the byte encoding of a Token ID.
 pub const TOKEN_ID_MIN_BYTE_LEN: usize = 1;
@@ -29,6 +30,12 @@ pub enum TokenIdFromStringError {
 impl AsRef<str> for TokenId {
     fn as_ref(&self) -> &str {
         self.value.as_str()
+    }
+}
+
+impl Display for TokenId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.value)
     }
 }
 
