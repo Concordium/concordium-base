@@ -1,13 +1,28 @@
-## Unreleased
-
+## 10.0.0 (2026-01-09)
 - `cbor::cbor_encode` is now infallible and returns `Vec<u8>` instead of `CborSerializationResult<Vec<u8>>`
 
-## 10.0.0-alpha.0 (2025-12-08)
 
 - Introduce protocol version 10 variant `ProtocolVersion::P10`.
 - Changed value inside `Threshold` to be non-public since it has a non-zero constraint. Implemented `Threshold::try_new` and `Threshold::threshold`
   to allow constructing and accessing values.
 - Introduced `AccountTransactionV1` and related types to support sponsored transactions.
+
+## 9.1.0 (2026-01-07)
+
+- Implemented Concordium verifiable presentations V1 in `web3id::v1` that includes account based and identity based credentials.
+  It is an updated version of the protocol implemented in `web3id` ("V0"). 
+  The primary types in the module `web3id::v1` are `PresentationV1` and `RequestV1` and the entrypoints to prove and verify are
+  `RequestV1::prove` and `PresentationV1::verify`.
+- Implemented anchor model for verifiable presentations V1 in `web3id::v1::anchor`.
+  The primary types in the module are `VerificationRequest`, `VerificationRequestData`, `VerificationRequestAnchor`,
+  `VerificationAuditRecord`, and `VerificationAuditRecord` and the entrypoint to verify a presentation
+  together with a request anchor is `verify_presentation_with_request_anchor`.
+- Serialization derive macros `common::Serial`, `common::Deserial` and `common::Serialize` now supports
+  deriving serialization on enums. 
+- Introduced the trait `TranscriptProtocol` to add and extract messages from the transcript in proof systems
+  where it replaces the direct dependency on `RandomOracle` which is the "legacy" transcript implementation.
+  The new implementation is `TranscriptV1` which among other things improves length prefixing of messages. 
+  `TranscriptV1` is used in Concordium verifiable presentations V1.
 
 ## 9.0.0 (2025-10-29)
 

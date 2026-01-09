@@ -2986,7 +2986,7 @@ instance AE.FromJSON RejectReason
 
 -- | Reasons for the execution of a transaction to fail on the current block state.
 data FailureKind
-    = -- | The sender account's amount is not sufficient to cover the
+    = -- | The sender/sponsor account's amount is not sufficient to cover the
       --  amount corresponding to the deposited energy.
       InsufficientFunds
     | -- | Signature check failed.
