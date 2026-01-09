@@ -358,14 +358,24 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower}
 -- | A transaction summary with supplemented result field and unconditionally
 --  present sponsor details..
 data SupplementedTransactionSummary = SupplementedTransactionSummary
-    { stsSender :: !(Maybe AccountAddress),
+    { -- | The transaction sender account address, in the case of account transactions.
+      -- This is 'Nothing' for chain updates and credential deployments.
+      stsSender :: !(Maybe AccountAddress),
+      -- | The transaction hash.
       stsHash :: !TransactionHash,
-      -- | The transaction cost paid for by the sender
+      -- | The transaction cost paid for by the sender.
+      --  This is 0 for a sponsored transaction.
       stsCost :: !Amount,
+      -- | The energy cost of the transaction (in energy units).
       stsEnergyCost :: !Energy,
+      -- | The type of the transaction: account transaction, credential deployment or chain update.
       stsType :: !TransactionSummaryType,
+      -- | The result of the transaction: success (with events), or reject (with reject reason).
       stsResult :: !SupplementedValidResult,
+      -- | The index of the transaction within the block.
       stsIndex :: !TransactionIndex,
+      -- | The sponsor account address and cost to the sponsor in the case of a sponsored
+      -- transaction.
       stsSponsorDetails :: !(Maybe SponsorDetails)
     }
     deriving (Eq, Show)
