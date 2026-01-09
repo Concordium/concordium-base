@@ -215,6 +215,7 @@ pub(crate) mod serde;
 pub mod value;
 
 pub use composites::*;
+use core::mem::size_of;
 pub use decoder::*;
 pub use encoder::*;
 pub use primitives::*;
