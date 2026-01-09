@@ -224,6 +224,7 @@ use anyhow::anyhow;
 
 use ciborium_ll::{simple, Header};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
+use std::convert::Infallible;
 use std::{
     fmt::{Debug, Display},
     hash::Hash,
@@ -342,11 +343,11 @@ impl CborSerializationError {
 /// Result of serialization or deserialization
 pub type CborSerializationResult<T> = Result<T, CborSerializationError>;
 
-impl<T> From<ciborium_ll::Error<T>> for CborSerializationError
+impl<E> From<ciborium_ll::Error<E>> for CborSerializationError
 where
-    T: Display,
+    E: std::error::Error,
 {
-    fn from(err: ciborium_ll::Error<T>) -> Self {
+    fn from(err: ciborium_ll::Error<E>) -> Self {
         match err {
             ciborium_ll::Error::Io(err) => anyhow!("IO error: {}", err).into(),
             ciborium_ll::Error::Syntax(offset) => anyhow!("CBOR syntax error at {}", offset).into(),
@@ -361,11 +362,19 @@ impl From<std::io::Error> for CborSerializationError {
 }
 
 /// Encodes the given value as CBOR
-pub fn cbor_encode<T: CborSerialize + ?Sized>(value: &T) -> CborSerializationResult<Vec<u8>> {
+pub fn cbor_encode<T: CborSerialize + ?Sized>(value: &T) -> Vec<u8> {
     let mut bytes = Vec::new();
-    let mut encoder = Encoder::new(&mut bytes);
-    value.serialize(&mut encoder)?;
-    Ok(bytes)
+    let mut encoder = Encoder::new(VecWrite(&mut bytes));
+    into_ok(value.serialize(&mut encoder));
+    bytes
+}
+
+/// Assert error is not possible. Replace with `Result::into_ok` when stabilized
+fn into_ok<T>(res: Result<T, Infallible>) -> T {
+    match res {
+        Ok(x) => x,
+        Err(e) => match e {},
+    }
 }
 
 /// Decodes value from the given CBOR. If all input is not parsed,
@@ -392,7 +401,7 @@ pub fn cbor_decode_with_options<T: CborDeserialize>(
 /// Type that can be CBOR serialized
 pub trait CborSerialize {
     /// Serialize value to CBOR
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()>;
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError>;
 
     /// Whether the value corresponds to `null`
     fn is_null(&self) -> bool {
@@ -401,7 +410,7 @@ pub trait CborSerialize {
 }
 
 impl<T: CborSerialize> CborSerialize for Option<T> {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         match self {
             None => encoder.encode_simple(simple::NULL),
             Some(value) => value.serialize(encoder),
@@ -472,7 +481,7 @@ impl<T: CborDeserialize> CborDeserialize for Option<T> {
 }
 
 impl<T: CborSerialize> CborSerialize for CborMaybeKnown<T> {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         match self {
             CborMaybeKnown::Unknown(value) => value.serialize(encoder),
             CborMaybeKnown::Known(value) => value.serialize(encoder),
@@ -492,43 +501,48 @@ impl<T: CborDeserialize> CborDeserialize for CborMaybeKnown<T> {
 /// Encoder of CBOR. See <https://www.rfc-editor.org/rfc/rfc8949.html#section-3>
 pub trait CborEncoder {
     /// Associated map encoder
-    type MapEncoder: CborMapEncoder;
+    type MapEncoder: CborMapEncoder<WriteError = Self::WriteError>;
     /// Associated array encoder
-    type ArrayEncoder: CborArrayEncoder;
+    type ArrayEncoder: CborArrayEncoder<WriteError = Self::WriteError>;
+    /// Error type for the underlying writer
+    type WriteError;
 
     /// Encodes tag data item with given value
-    fn encode_tag(&mut self, tag: u64) -> CborSerializationResult<()>;
+    fn encode_tag(&mut self, tag: u64) -> Result<(), Self::WriteError>;
 
     /// Encodes positive integer data item with given value
-    fn encode_positive(self, positive: u64) -> CborSerializationResult<()>;
+    fn encode_positive(self, positive: u64) -> Result<(), Self::WriteError>;
 
     /// Encodes negative integer data item with given value. Notice that the
     /// value of the data item is -(`negative` + 1)
-    fn encode_negative(self, negative: u64) -> CborSerializationResult<()>;
+    fn encode_negative(self, negative: u64) -> Result<(), Self::WriteError>;
 
-    /// Encodes map with given number of entries (key-value pairs). Returns a
+    /// Starts encoding of a map of entries (key-value pairs). Returns a
     /// map encoder that must be used to encode the map.
-    fn encode_map(self, size: usize) -> CborSerializationResult<Self::MapEncoder>;
+    fn encode_map(self) -> Result<Self::MapEncoder, Self::WriteError>;
 
-    /// Encodes array with given number of elements. Returns an array encoder
+    /// Starts encoding of an array of elements. Returns an array encoder
     /// that must be used to encode the array.
-    fn encode_array(self, size: usize) -> CborSerializationResult<Self::ArrayEncoder>;
+    fn encode_array(self) -> Result<Self::ArrayEncoder, Self::WriteError>;
 
     /// Encodes bytes data item
-    fn encode_bytes(self, bytes: &[u8]) -> CborSerializationResult<()>;
+    fn encode_bytes(self, bytes: &[u8]) -> Result<(), Self::WriteError>;
 
     /// Encodes text data item
-    fn encode_text(self, text: &str) -> CborSerializationResult<()>;
+    fn encode_text(self, text: &str) -> Result<(), Self::WriteError>;
 
     /// Encodes simple value, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
-    fn encode_simple(self, simple: u8) -> CborSerializationResult<()>;
+    fn encode_simple(self, simple: u8) -> Result<(), Self::WriteError>;
 
     /// Encodes float value, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
-    fn encode_float(self, float: f64) -> CborSerializationResult<()>;
+    fn encode_float(self, float: f64) -> Result<(), Self::WriteError>;
 }
 
 /// Encoder of CBOR map
 pub trait CborMapEncoder {
+    /// Error type for the underlying writer
+    type WriteError;
+
     /// Serialize an entry consisting of a `key` and `value` and add it to the
     /// map (appended to current list of entries). The number of entries
     /// added to the map must equal the size given to
@@ -538,14 +552,17 @@ pub trait CborMapEncoder {
         &mut self,
         key: &K,
         value: &V,
-    ) -> CborSerializationResult<()>;
+    ) -> Result<(), Self::WriteError>;
 
     /// End map serialization.
-    fn end(self) -> CborSerializationResult<()>;
+    fn end(self) -> Result<(), Self::WriteError>;
 }
 
 /// Encoder of CBOR array
 pub trait CborArrayEncoder {
+    /// Error type for the underlying writer
+    type WriteError;
+
     /// Serialize an `element` and add it to the array (appended to the current
     /// elements in the array). The number of elements added to the array
     /// must equal the size given to [`CborEncoder::encode_array`]
@@ -553,10 +570,10 @@ pub trait CborArrayEncoder {
     fn serialize_element<T: CborSerialize + ?Sized>(
         &mut self,
         element: &T,
-    ) -> CborSerializationResult<()>;
+    ) -> Result<(), Self::WriteError>;
 
     /// End array serialization.
-    fn end(self) -> CborSerializationResult<()>;
+    fn end(self) -> Result<(), Self::WriteError>;
 }
 
 /// Decoder of CBOR. See <https://www.rfc-editor.org/rfc/rfc8949.html#section-3>
@@ -699,13 +716,13 @@ pub trait CborArrayDecoder {
 }
 
 impl<T: CborSerialize> CborSerialize for &T {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         CborSerialize::serialize(*self, encoder)
     }
 }
 
 impl<T: CborSerialize> CborSerialize for &mut T {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         CborSerialize::serialize(*self, encoder)
     }
 }
@@ -796,8 +813,8 @@ impl DataItemHeader {
 }
 
 impl<T: CborSerialize> CborSerialize for Vec<T> {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
-        let mut array_encoder = encoder.encode_array(self.len())?;
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
+        let mut array_encoder = encoder.encode_array()?;
         for item in self {
             array_encoder.serialize_element(item)?
         }
@@ -807,8 +824,8 @@ impl<T: CborSerialize> CborSerialize for Vec<T> {
 }
 
 impl<T: CborSerialize> CborSerialize for &[T] {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
-        let mut array_encoder = encoder.encode_array(self.len())?;
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
+        let mut array_encoder = encoder.encode_array()?;
         for item in self.iter() {
             array_encoder.serialize_element(item)?
         }
@@ -833,8 +850,8 @@ impl<T: CborDeserialize> CborDeserialize for Vec<T> {
 }
 
 impl<K: CborSerialize, V: CborSerialize> CborSerialize for HashMap<K, V> {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
-        let mut map_encoder = encoder.encode_map(self.len())?;
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
+        let mut map_encoder = encoder.encode_map()?;
         for (key, value) in self.iter() {
             map_encoder.serialize_entry(key, value)?
         }
@@ -881,7 +898,7 @@ mod test {
             field2: "abcd".to_string(),
         };
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(
             hex::encode(&cbor),
             "a2666669656c643103666669656c64326461626364"
@@ -899,7 +916,7 @@ mod test {
 
         let value = TestStruct { field_name: 3 };
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "a1696669656c644e616d6503");
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -922,7 +939,7 @@ mod test {
             field2: "abcd".to_string(),
         };
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "a20103026461626364");
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -941,7 +958,7 @@ mod test {
             field2: "abcd".to_string(),
         };
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(
             hex::encode(&cbor),
             "a2666669656c643103666669656c64326461626364"
@@ -954,7 +971,7 @@ mod test {
             field2: "abcd".to_string(),
         };
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "a1666669656c64326461626364");
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -978,7 +995,7 @@ mod test {
             field2: "abcd".to_string(),
         };
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
 
         let value_decoded: TestStruct2 = cbor_decode_with_options(
             &cbor,
@@ -1018,7 +1035,7 @@ mod test {
             field2: "abcd".to_string(),
             field3: 5,
         };
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         let value_decoded: TestStruct2 = cbor_decode(&cbor).unwrap();
         let value_unknown = TestStruct2 {
             field1: 3,
@@ -1034,7 +1051,7 @@ mod test {
         };
         assert_eq!(value_decoded, value_unknown);
 
-        let cbor = cbor_encode(&value_unknown).unwrap();
+        let cbor = cbor_encode(&value_unknown);
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
@@ -1046,7 +1063,7 @@ mod test {
 
         let value = TestStruct {};
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "a0");
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -1059,7 +1076,7 @@ mod test {
 
         let value = TestStruct(3, "abcd".to_string());
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "82036461626364");
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -1072,7 +1089,7 @@ mod test {
 
         let value = TestStruct();
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "80");
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -1088,7 +1105,7 @@ mod test {
 
         let value = TestStruct(3, "abcd".to_string());
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         let err = cbor_decode::<TestStruct2>(&cbor).unwrap_err().to_string();
         assert!(err.contains("expected array length 1"), "err: {}", err);
     }
@@ -1106,7 +1123,7 @@ mod test {
 
         let value = TestStructWrapper(TestStruct { field1: 3 });
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "a1666669656c643103");
         let value_decoded: TestStructWrapper = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -1129,7 +1146,7 @@ mod test {
             field1: TestStruct { field1: 3 },
         };
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "a1666669656c643103");
         let value_decoded: TestStructWrapper = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -1153,7 +1170,7 @@ mod test {
 
         let value = TestStruct { field1: 3 };
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "d99c3fa1666669656c643103");
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -1179,7 +1196,7 @@ mod test {
 
         let value = TestStructWrapper(TestStruct { field1: 3 });
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "d99c3fa1666669656c643103");
         let value_decoded: TestStructWrapper = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -1200,13 +1217,13 @@ mod test {
         }
 
         let value = TestEnum::Var1(3);
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "a1647661723103");
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = TestEnum::Var2("abcd".to_string());
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "a164766172326461626364");
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -1228,7 +1245,7 @@ mod test {
         }
 
         let value = TestEnum::Var2("abcd".to_string());
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         let err = cbor_decode::<TestEnum2>(&cbor).unwrap_err().to_string();
         assert!(
             err.contains("unknown map key") && err.contains("var2"),
@@ -1255,7 +1272,7 @@ mod test {
         }
 
         let value = TestEnum::Var2("abcd".to_string());
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         let value_decoded: TestEnum2 = cbor_decode(&cbor).unwrap();
         let value_unknown = TestEnum2::Unknown(
             MapKey::Text("var2".to_string()),
@@ -1263,7 +1280,7 @@ mod test {
         );
         assert_eq!(value_decoded, value_unknown);
 
-        let cbor = cbor_encode(&value_unknown).unwrap();
+        let cbor = cbor_encode(&value_unknown);
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
@@ -1278,7 +1295,7 @@ mod test {
         }
 
         let value = CborMaybeKnown::Known(TestEnum::Var1(3));
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "a1647661723103");
         let value_decoded: CborMaybeKnown<TestEnum> = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -1301,7 +1318,7 @@ mod test {
 
         // test decode unknown variant
         let value = CborMaybeKnown::Known(TestEnum::Var2("abcd".to_string()));
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         let value_decoded: CborMaybeKnown<TestEnum2> = cbor_decode(&cbor).unwrap();
         let value_unknown = CborMaybeKnown::Unknown(Value::Map(vec![(
             Value::Text("var2".to_string()),
@@ -1310,7 +1327,7 @@ mod test {
         assert_eq!(value_decoded, value_unknown);
 
         // test encode unknown variant and decode it in a type where it is known
-        let cbor = cbor_encode(&value_unknown).unwrap();
+        let cbor = cbor_encode(&value_unknown);
         let value_decoded: CborMaybeKnown<TestEnum> = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
@@ -1327,13 +1344,13 @@ mod test {
         }
 
         let value = TestEnum::Var1(3);
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "d99c3703");
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = TestEnum::Var2("abcd".to_string());
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "d99c386461626364");
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -1350,13 +1367,13 @@ mod test {
         }
 
         let value = TestEnum::Var1(3);
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "d99c3703");
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = TestEnum::Var2("abcd".to_string());
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "6461626364");
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -1385,12 +1402,12 @@ mod test {
         }
 
         let value = TestEnum::Var2("abcd".to_string());
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         let value_decoded: TestEnum2 = cbor_decode(&cbor).unwrap();
         let value_unknown = TestEnum2::Unknown(39992, value::Value::Text("abcd".to_string()));
         assert_eq!(value_decoded, value_unknown);
 
-        let cbor = cbor_encode(&value_unknown).unwrap();
+        let cbor = cbor_encode(&value_unknown);
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
@@ -1416,7 +1433,7 @@ mod test {
         }
 
         let value = TestEnum::Var2("abcd".to_string());
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         let err = cbor_decode::<TestEnum2>(&cbor).unwrap_err().to_string();
         assert!(
             err.contains("not among declared variants") && err.contains("39992"),
@@ -1437,7 +1454,7 @@ mod test {
         }
 
         let value = CborMaybeKnown::Known(TestEnum::Var1(3));
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "d99c3703");
         let value_decoded: CborMaybeKnown<TestEnum> = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -1463,14 +1480,14 @@ mod test {
 
         // test decode unknown variant
         let value = CborMaybeKnown::Known(TestEnum::Var2("abcd".to_string()));
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         let value_decoded: CborMaybeKnown<TestEnum2> = cbor_decode(&cbor).unwrap();
         let value_unknown =
             CborMaybeKnown::Unknown(Value::Tag(39992, Box::new(Value::Text("abcd".to_string()))));
         assert_eq!(value_decoded, value_unknown);
 
         // test encode unknown variant and decode it in a type where it is known
-        let cbor = cbor_encode(&value_unknown).unwrap();
+        let cbor = cbor_encode(&value_unknown);
         let value_decoded: CborMaybeKnown<TestEnum> = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
@@ -1492,13 +1509,13 @@ mod test {
         struct TaggedStruct(String);
 
         let value = TestEnum::Var1(3);
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "d99c3703");
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = TestEnum::Var2(TaggedStruct("abcd".to_string()));
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "d99c386461626364");
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -1508,7 +1525,7 @@ mod test {
     fn test_vec() {
         let vec = vec![1, 2, 3, 4, 5];
 
-        let cbor = cbor_encode(&vec).unwrap();
+        let cbor = cbor_encode(&vec);
         assert_eq!(hex::encode(&cbor), "850102030405");
         let bytes_decoded: Vec<u64> = cbor_decode(&cbor).unwrap();
         assert_eq!(bytes_decoded, vec);
@@ -1518,7 +1535,7 @@ mod test {
     fn test_vec_empty() {
         let vec: Vec<u64> = vec![];
 
-        let cbor = cbor_encode(&vec).unwrap();
+        let cbor = cbor_encode(&vec);
         assert_eq!(hex::encode(&cbor), "80");
         let bytes_decoded: Vec<u64> = cbor_decode(&cbor).unwrap();
         assert_eq!(bytes_decoded, vec);
@@ -1537,7 +1554,7 @@ mod test {
     fn test_map() {
         let map: HashMap<u64, u64> = [(1, 2), (3, 4)].into_iter().collect();
 
-        let cbor = cbor_encode(&map).unwrap();
+        let cbor = cbor_encode(&map);
         assert_eq!(hex::encode(&cbor), "a201020304");
         let bytes_decoded: HashMap<u64, u64> = cbor_decode(&cbor).unwrap();
         assert_eq!(bytes_decoded, map);
@@ -1547,7 +1564,7 @@ mod test {
     fn test_map_empty() {
         let map: HashMap<u64, u64> = [].into_iter().collect();
 
-        let cbor = cbor_encode(&map).unwrap();
+        let cbor = cbor_encode(&map);
         assert_eq!(hex::encode(&cbor), "a0");
         let bytes_decoded: HashMap<u64, u64> = cbor_decode(&cbor).unwrap();
         assert_eq!(bytes_decoded, map);
@@ -1565,13 +1582,13 @@ mod test {
     #[test]
     fn test_option() {
         let value = Some(3u64);
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "03");
         let value_decoded: Option<u64> = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = None;
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "f6");
         let value_decoded: Option<u64> = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
