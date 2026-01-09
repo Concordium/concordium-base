@@ -1,6 +1,7 @@
-## 10.0.0 (2026-01-09)
+## Unreleased
 - `cbor::cbor_encode` is now infallible and returns `Vec<u8>` instead of `CborSerializationResult<Vec<u8>>`
 
+## 10.0.0 (2026-01-09)
 
 - Introduce protocol version 10 variant `ProtocolVersion::P10`.
 - Changed value inside `Threshold` to be non-public since it has a non-zero constraint. Implemented `Threshold::try_new` and `Threshold::threshold`
