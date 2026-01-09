@@ -1,3 +1,7 @@
+## Unreleased
+
+- Memory pre allocation is capped to `MAX_PRE_ALLOCATED_SIZE=4096` when cbor decoding vectors and maps.
+
 ## 9.1.0 (2026-01-07)
 
 - Implemented Concordium verifiable presentations V1 in `web3id::v1` that includes account based and identity based credentials.
