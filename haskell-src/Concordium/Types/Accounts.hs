@@ -495,7 +495,7 @@ accountStakeNoneHashV4 :: AccountStakeHash 'AccountV4
 {-# NOINLINE accountStakeNoneHashV4 #-}
 accountStakeNoneHashV4 = AccountStakeHash $ Hash.hash "A4NoStake"
 
--- | Hash of 'AccountStakeNone' in 'AccountV4'.
+-- | Hash of 'AccountStakeNone' in 'AccountV5'.
 accountStakeNoneHashV5 :: AccountStakeHash 'AccountV5
 {-# NOINLINE accountStakeNoneHashV5 #-}
 accountStakeNoneHashV5 = AccountStakeHash $ Hash.hash "A5NoStake"

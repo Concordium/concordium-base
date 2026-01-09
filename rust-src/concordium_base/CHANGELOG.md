@@ -1,3 +1,10 @@
+## 10.0.0 (2026-01-09)
+
+- Introduce protocol version 10 variant `ProtocolVersion::P10`.
+- Changed value inside `Threshold` to be non-public since it has a non-zero constraint. Implemented `Threshold::try_new` and `Threshold::threshold`
+  to allow constructing and accessing values.
+- Introduced `AccountTransactionV1` and related types to support sponsored transactions.
+
 ## 9.1.0 (2026-01-07)
 
 - Implemented Concordium verifiable presentations V1 in `web3id::v1` that includes account based and identity based credentials.

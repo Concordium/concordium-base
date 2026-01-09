@@ -1335,7 +1335,7 @@ mod tests {
 
         IdentityCredentialEphemeralId::from_data(IdentityCredentialEphemeralIdDataRef::<ArCurve> {
             ar_data: &ar_data,
-            threshold: Threshold(2),
+            threshold: Threshold::try_new(2).expect("Threshold of 2 will never fail"),
         })
     }
 
