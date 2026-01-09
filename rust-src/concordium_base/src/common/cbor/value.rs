@@ -265,6 +265,16 @@ mod test {
         );
     }
 
+    /// Test large array size.
+    /// Test vector longer than allocation capacity cap.
+    #[test]
+    fn test_array_large_length() {
+        let value = Value::Array(vec![Value::Positive(1u64); 10000]);
+        let cbor = cbor_encode(&value).unwrap();
+        let value_decoded: Value = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
     #[test]
     fn test_map() {
         let value = Value::Map(vec![
@@ -289,5 +299,15 @@ mod test {
             "message: {}",
             err.to_string()
         );
+    }
+
+    /// Test large map size.
+    /// Test vector longer than allocation capacity cap.
+    #[test]
+    fn test_map_large_length() {
+        let value = Value::Map(vec![(Value::Positive(1), Value::Positive(3)); 10000]);
+        let cbor = cbor_encode(&value).unwrap();
+        let value_decoded: Value = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
     }
 }

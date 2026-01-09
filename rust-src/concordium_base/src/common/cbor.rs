@@ -230,6 +230,8 @@ use std::{
     hash::Hash,
 };
 
+/// Maximum number of bytes to pre-allocate when decoding or deserializing CBOR vectors and maps.
+/// This cap helps prevent excessive memory usage for large or untrusted inputs.
 const MAX_PRE_ALLOCATED_SIZE: usize = 4096;
 
 /// Cap the allocated length to a fixed byte size (4kb currently)
@@ -1629,7 +1631,7 @@ mod test {
     fn test_cap_capacity() {
         assert_eq!(cap_capacity::<u32>(0), 0);
         assert_eq!(cap_capacity::<u32>(100), 100);
-        /// `u32` has size 4 as such `cap_capacity` will return: 4096 / 4 = 1024
+        // `u32` has size 4 as such `cap_capacity` will return: 4096 / 4 = 1024
         assert_eq!(cap_capacity::<u32>(5000), 1024);
         assert_eq!(cap_capacity::<()>(10), 10);
     }
