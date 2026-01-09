@@ -5,10 +5,10 @@
 mod cbor;
 
 use proc_macro::TokenStream;
-use proc_macro2::{Ident, Span};
+use proc_macro2::{Ident, Literal, Span};
 use proc_macro_crate::FoundCrate;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, spanned::Spanned};
+use syn::{parse_macro_input, spanned::Spanned, Field, Fields};
 
 fn get_crate_root() -> syn::Result<proc_macro2::TokenStream> {
     let found_crate = proc_macro_crate::crate_name("concordium_base").map_err(|err| {
@@ -165,11 +165,12 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
 
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
     let root = get_crate_root().expect("concordium_base root");
+    let source = format_ident!("source");
 
     if let syn::Data::Struct(ref data) = ast.data {
         let mut tokens = proc_macro2::TokenStream::new();
         let mut names = proc_macro2::TokenStream::new();
-        let source = format_ident!("source");
+
         let mut pusher = |f: &syn::Field, ident| {
             if let Some(l) = find_length_attribute(&f.attrs, "size_length") {
                 let id = format_ident!("u{}", 8 * l);
@@ -248,8 +249,69 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
             _ => panic!("#[derive(Deserial)] not implemented for empty structs."),
         };
         gen.into()
+    } else if let syn::Data::Enum(ref data) = ast.data {
+        let mut arms = proc_macro2::TokenStream::new();
+        for (variant_index, variant) in data.variants.iter().enumerate() {
+            let mut fields_deserialize = proc_macro2::TokenStream::new();
+            let fields_constructor = match &variant.fields {
+                Fields::Named(fields) => {
+                    let mut field_idents = Vec::new();
+                    for f in fields.named.iter() {
+                        check_no_length_size_attribute(f);
+                        let ident = f.ident.clone().expect("named field ident");
+
+                        fields_deserialize.extend(quote! {
+                            let #ident = #root::common::Deserial::deserial(#source)?;
+                        });
+                        field_idents.push(ident);
+                    }
+                    quote!({ #( #field_idents ),* })
+                }
+                Fields::Unnamed(fields) => {
+                    let mut field_idents = Vec::new();
+                    for (i, f) in fields.unnamed.iter().enumerate() {
+                        check_no_length_size_attribute(f);
+                        let ident = format_ident!("x_{}", i);
+
+                        fields_deserialize.extend(quote! {
+                            let #ident = #root::common::Deserial::deserial(#source)?;
+                        });
+                        field_idents.push(ident);
+                    }
+                    quote!(( #( #field_idents ),* ))
+                }
+                Fields::Unit => {
+                    // no fields to deserialize
+                    Default::default()
+                }
+            };
+
+            let variant_index_tk =
+                Literal::u8_suffixed(variant_index.try_into().expect("variant index to u8"));
+            let variant_ident = &variant.ident;
+            arms.extend(quote! {
+                #variant_index_tk => {
+                    #fields_deserialize
+                    Self::#variant_ident #fields_constructor
+                }
+            });
+        }
+
+        quote! {
+            #[automatically_derived]
+            impl #impl_generics #root::common::Deserial for #name #ty_generics #where_clauses {
+                fn deserial<#ident: #root::common::ReadBytesExt>(#source: &mut #ident) -> #root::common::ParseResult<Self> {
+                    let tag: u8 = #root::common::Deserial::deserial(#source)?;
+                    let value = match tag {
+                        #arms
+                        _ => #root::common::__serialize_private::anyhow::bail!(concat!("unsupported ", stringify!(#name), " variant: {}"), tag),
+                    };
+                    Ok(value)
+                }
+            }
+        }.into()
     } else {
-        panic!("#[derive(Deserial)] only implemented for structs.")
+        panic!("#[derive(Deserial)] only implemented for structs and enums.")
     }
 }
 
@@ -348,7 +410,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         body.extend(quote! {
                             let #len_ident: #id = #ident.len() as #id;
                             #len_ident.serial(#out);
-                            serial_map_no_length(&self.#ident, #out);
+                            serial_map_no_length(#ident, #out);
                         })
                     } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
                         let id = format_ident!("u{}", 8 * l);
@@ -356,7 +418,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         body.extend(quote! {
                             let #len_ident: #id = #ident.len() as #id;
                             #len_ident.serial(#out);
-                            serial_set_no_length(&self.#ident, #out);
+                            serial_set_no_length(#ident, #out);
                         })
                     } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
                         let id = format_ident!("u{}", 8 * l);
@@ -364,7 +426,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         body.extend(quote! {
                             let #len_ident: #id = #ident.len() as #id;
                             #len_ident.serial(#out);
-                            serial_string(self.#ident.as_str(), #out);
+                            serial_string(#ident.as_str(), #out);
                         })
                     } else {
                         body.extend(quote!(#ident.serial(#out);));
@@ -373,7 +435,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                 }
                 quote! {
                     #[automatically_derived]
-                    impl #impl_generics Serial for #name #ty_generics #where_clauses {
+                    impl #impl_generics #root::common::Serial for #name #ty_generics #where_clauses {
                         fn serial<#ident: #root::common::Buffer>(&self, #out: &mut #ident) {
                             let #name( #names ) = self;
                             #body
@@ -384,8 +446,77 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
             _ => panic!("#[derive(Serial)] not implemented for empty structs."),
         };
         gen.into()
+    } else if let syn::Data::Enum(ref data) = ast.data {
+        let mut arms = proc_macro2::TokenStream::new();
+        for (variant_index, variant) in data.variants.iter().enumerate() {
+            let mut fields_serialize = proc_macro2::TokenStream::new();
+            let fields_pattern = match &variant.fields {
+                Fields::Named(fields) => {
+                    let mut field_idents = Vec::new();
+                    for f in fields.named.iter() {
+                        check_no_length_size_attribute(f);
+                        let ident = f.ident.clone().expect("named field ident");
+
+                        fields_serialize.extend(quote! {
+                            #root::common::Serial::serial(#ident, #out);
+                        });
+                        field_idents.push(ident);
+                    }
+                    quote!({ #( #field_idents ),* })
+                }
+                Fields::Unnamed(fields) => {
+                    let mut field_idents = Vec::new();
+                    for (i, f) in fields.unnamed.iter().enumerate() {
+                        check_no_length_size_attribute(f);
+                        let ident = format_ident!("x_{}", i);
+
+                        fields_serialize.extend(quote! {
+                            #root::common::Serial::serial(#ident, #out);
+                        });
+                        field_idents.push(ident);
+                    }
+                    quote!(( #( #field_idents ),* ))
+                }
+                Fields::Unit => {
+                    // no fields to serialize
+                    Default::default()
+                }
+            };
+
+            let variant_index_tk =
+                Literal::u8_suffixed(variant_index.try_into().expect("variant index to u8"));
+            let variant_ident = &variant.ident;
+            arms.extend(quote! {
+                Self::#variant_ident #fields_pattern => {
+                    #root::common::Serial::serial(&#variant_index_tk, #out);
+                    #fields_serialize
+                }
+            });
+        }
+
+        quote! {
+            #[automatically_derived]
+            impl #impl_generics #root::common::Serial for #name #ty_generics #where_clauses {
+                fn serial<#ident: #root::common::Buffer>(&self, #out: &mut #ident) {
+                    match self {
+                        #arms
+                    }
+                }
+            }
+        }
+        .into()
     } else {
-        panic!("#[derive(Serial)] only implemented for structs.")
+        panic!("#[derive(Serial)] only implemented for structs and enums.")
+    }
+}
+
+fn check_no_length_size_attribute(f: &Field) {
+    if find_length_attribute(&f.attrs, "size_length").is_some()
+        || find_length_attribute(&f.attrs, "map_size_length").is_some()
+        || find_length_attribute(&f.attrs, "set_size_length").is_some()
+        || find_length_attribute(&f.attrs, "string_size_length").is_some()
+    {
+        panic!("size length attribute not supported in the context where used")
     }
 }
 

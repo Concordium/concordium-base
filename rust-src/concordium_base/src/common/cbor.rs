@@ -932,15 +932,21 @@ mod test {
             field1: u64,
             #[cbor(key = KEY)]
             field2: String,
+            #[cbor(key = "testkey1")]
+            field3: String,
         }
 
         let value = TestStruct {
             field1: 3,
             field2: "abcd".to_string(),
+            field3: "abcd".to_string(),
         };
 
         let cbor = cbor_encode(&value);
-        assert_eq!(hex::encode(&cbor), "a20103026461626364");
+        assert_eq!(
+            hex::encode(&cbor),
+            "a3010302646162636468746573746b6579316461626364"
+        );
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
