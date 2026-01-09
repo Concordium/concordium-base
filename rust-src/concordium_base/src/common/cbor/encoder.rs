@@ -4,6 +4,7 @@ use ciborium_io::Write;
 use ciborium_ll::Header;
 use std::ops::{Index, Range};
 
+/// Writer that is infallible. I used to serialize to `Vec<u8>`
 #[derive(Debug)]
 pub struct VecWrite<'a>(pub &'a mut Vec<u8>);
 
@@ -109,10 +110,12 @@ impl<W: Write> CborMapEncoder for MapEncoder<'_, W> {
         key: &K,
         value: &V,
     ) -> Result<(), Self::WriteError> {
+        // start of entry
         let index_start = self.buffer.len();
         let mut tmp_encoder = Encoder::new(VecWrite(&mut self.buffer));
         cbor::into_ok(key.serialize(&mut tmp_encoder));
         cbor::into_ok(value.serialize(&mut tmp_encoder));
+        // the buffer haw now been extended, so buffer.len() is where the entry ends
         self.entries_indexes.push(index_start..self.buffer.len());
         Ok(())
     }
