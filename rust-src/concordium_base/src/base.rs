@@ -460,6 +460,10 @@ pub enum ProtocolVersion {
     /// Protocol `P10` introduces protocol-level sponsored transactions and
     /// additional PLT functionality.
     P10,
+    #[display(fmt = "P11")]
+    /// Protocol `P11` introduces protocol-level sponsored transactions and
+    /// additional PLT functionality.
+    P11,
 }
 
 #[derive(Debug, Error, Display)]
@@ -485,6 +489,7 @@ impl TryFrom<u64> for ProtocolVersion {
             8 => Ok(ProtocolVersion::P8),
             9 => Ok(ProtocolVersion::P9),
             10 => Ok(ProtocolVersion::P10),
+            11 => Ok(ProtocolVersion::P11),
             version => Err(UnknownProtocolVersion { version }),
         }
     }
@@ -503,6 +508,7 @@ impl From<ProtocolVersion> for u64 {
             ProtocolVersion::P8 => 8,
             ProtocolVersion::P9 => 9,
             ProtocolVersion::P10 => 10,
+            ProtocolVersion::P11 => 11,
         }
     }
 }
