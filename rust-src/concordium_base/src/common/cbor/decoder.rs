@@ -1,6 +1,7 @@
 use crate::common::cbor::{
-    CborArrayDecoder, CborDecoder, CborDeserialize, CborMapDecoder, CborSerializationError,
+    self, CborArrayDecoder, CborDecoder, CborDeserialize, CborMapDecoder, CborSerializationError,
     CborSerializationResult, DataItemHeader, DataItemType, SerializationOptions,
+    MAX_PRE_ALLOCATED_SIZE,
 };
 use anyhow::anyhow;
 use ciborium_ll::Header;
@@ -111,7 +112,7 @@ where
             }
         };
 
-        let bytes = Vec::with_capacity(size.unwrap_or_default());
+        let bytes = Vec::with_capacity(cbor::cap_capacity::<u8>(size.unwrap_or_default()));
         let mut cursor = Cursor::new(bytes);
         self.decode_bytes_impl(&mut cursor, size)?;
         Ok(cursor.into_inner())
@@ -128,7 +129,7 @@ where
             }
         };
 
-        let mut bytes = Vec::with_capacity(size.unwrap_or_default());
+        let mut bytes = Vec::with_capacity(cbor::cap_capacity::<u8>(size.unwrap_or_default()));
         self.decode_text_impl(&mut bytes, size)?;
         Ok(bytes)
     }
@@ -221,12 +222,14 @@ where
 }
 
 trait CursorExt {
-    /// Advance the position of the cursor by `len`, or as many positions
-    /// as possible, and return the slice covering the advanced positions.  
+    /// Request to advance the position of the cursor by `len`,
+    /// and return the slice covering the advanced positions.
     /// Cursors backed by dynamically sized collections like `Vec`
-    /// will append to the collection as needed and will always advance
-    /// the requested `len`. Cursors that cannot append will advance as far
-    /// as possible only.
+    /// will always be able to advance but may advance less than the requested `len`
+    /// (to avoid large allocations in one go).
+    /// Cursors backed by a data structure that cannot be extended will advance as far
+    /// as possible only. If the cursor cannot advance
+    /// any further, an empty slice is returned..
     fn advance(&mut self, len: usize) -> &mut [u8];
 }
 
@@ -246,6 +249,8 @@ fn advance_vec<T: AsRef<Vec<u8>> + AsMut<Vec<u8>>>(
     cursor: &mut Cursor<T>,
     len: usize,
 ) -> &mut [u8] {
+    // cap pre allocation
+    let len = len.min(MAX_PRE_ALLOCATED_SIZE);
     let old_position = cursor.position() as usize;
     let new_position = old_position + len;
     let old_len = cursor.get_ref().as_ref().len();
@@ -286,16 +291,17 @@ impl<R: Read> Decoder<R> {
     {
         let mut segments = self.inner.bytes(size);
         while let Some(mut segment) = segments.pull()? {
-            let left = segment.left();
-            if left == 0 {
-                continue;
+            loop {
+                let left = segment.left();
+                if left == 0 {
+                    break;
+                }
+                let advanced = dest.advance(left);
+                if advanced.is_empty() {
+                    return Err(anyhow!("fixed size deserialization type too short").into());
+                }
+                segment.pull(advanced)?;
             }
-            let advanced = dest.advance(left);
-            if advanced.len() != left {
-                return Err(anyhow!("fixed length byte string destination too short").into());
-            }
-            let read = segment.pull(advanced)?;
-            debug_assert_eq!(read.map(|bytes| bytes.len()), Some(left));
         }
 
         Ok(())
@@ -313,15 +319,16 @@ impl<R: Read> Decoder<R> {
         let mut dest = Cursor::new(dest);
         let mut segments = self.inner.text(size);
         while let Some(mut segment) = segments.pull()? {
-            let left = segment.left();
-            if left == 0 {
-                continue;
-            }
-            let advanced = dest.advance(left);
-            debug_assert_eq!(advanced.len(), left);
-            segment.pull(advanced)?;
-            if segment.left() != 0 {
-                return Err(anyhow!("invalid UTF-8 in byte string").into());
+            loop {
+                let left = segment.left();
+                if left == 0 {
+                    break;
+                }
+                let advanced = dest.advance(left);
+                if advanced.is_empty() {
+                    return Err(anyhow!("fixed size deserialization type too short").into());
+                }
+                segment.pull(advanced)?;
             }
         }
 
@@ -623,7 +630,7 @@ mod test {
         assert!(
             error
                 .to_string()
-                .contains("byte string destination too short"),
+                .contains("fixed size deserialization type too short"),
             "message: {}",
             error.to_string()
         );
@@ -701,6 +708,30 @@ mod test {
         );
     }
 
+    /// Test byte string is longer than CBOR content and of huge size. Test
+    /// that we don't try to allocate memory of the length.
+    #[test]
+    fn test_bytes_length_invalid_huge() {
+        let cbor = hex::decode("5b00ffffffffffffff0102030405").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let err = decoder.decode_bytes().unwrap_err();
+        assert!(
+            err.to_string().contains("failed to fill whole buffer"),
+            "message: {}",
+            err.to_string()
+        );
+    }
+
+    /// Test byte string longer than allocation capacity cap.
+    #[test]
+    fn test_bytes_length_above_allocation_capacity() {
+        let mut cbor = hex::decode("5a0000ffff").unwrap();
+        cbor.extend(iter::repeat_n(0, 0xffff));
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let bytes = decoder.decode_bytes().unwrap();
+        assert_eq!(bytes.len(), 0xffff);
+    }
+
     /// Test text string is longer than CBOR content
     #[test]
     fn test_text_length_invalid() {
@@ -712,6 +743,30 @@ mod test {
             "message: {}",
             error.to_string()
         );
+    }
+
+    /// Test text string is longer than CBOR content. Test
+    /// that we don't try to allocate memory of the length.
+    #[test]
+    fn test_text_length_invalid_huge() {
+        let cbor = hex::decode("7b00ffffffffffffff61626364").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let err = decoder.decode_text().unwrap_err();
+        assert!(
+            err.to_string().contains("failed to fill whole buffer"),
+            "message: {}",
+            err.to_string()
+        );
+    }
+
+    /// Test text string longer than allocation capacity cap.
+    #[test]
+    fn test_text_length_above_allocation_capacity() {
+        let mut cbor = hex::decode("7a0000ffff").unwrap();
+        cbor.extend(iter::repeat_n(0, 0xffff));
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let bytes = decoder.decode_text().unwrap();
+        assert_eq!(bytes.len(), 0xffff);
     }
 
     /// Test decode UTF-8 two byte code point c2bd
@@ -730,7 +785,7 @@ mod test {
         let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
         let error = decoder.decode_text().unwrap_err();
         assert!(
-            error.to_string().contains("invalid UTF-8"),
+            error.to_string().contains("CBOR syntax error"),
             "message: {}",
             error.to_string()
         );
@@ -743,7 +798,7 @@ mod test {
         let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
         let error = decoder.decode_text().unwrap_err();
         assert!(
-            error.to_string().contains("invalid UTF-8"),
+            error.to_string().contains("CBOR syntax error"),
             "message: {}",
             error.to_string()
         );

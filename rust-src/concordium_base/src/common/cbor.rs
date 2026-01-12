@@ -215,6 +215,7 @@ pub(crate) mod serde;
 pub mod value;
 
 pub use composites::*;
+use core::mem::size_of;
 pub use decoder::*;
 pub use encoder::*;
 pub use primitives::*;
@@ -228,6 +229,19 @@ use std::{
     fmt::{Debug, Display},
     hash::Hash,
 };
+
+/// Maximum number of bytes to pre-allocate when decoding or deserializing CBOR vectors and maps.
+/// This cap helps prevent excessive memory usage for large or untrusted inputs.
+const MAX_PRE_ALLOCATED_SIZE: usize = 4096;
+
+/// Cap the allocated length to a fixed byte size (4kb currently)
+fn cap_capacity<T>(length: usize) -> usize {
+    length.min(
+        MAX_PRE_ALLOCATED_SIZE
+            .checked_div(size_of::<T>())
+            .unwrap_or(MAX_PRE_ALLOCATED_SIZE),
+    )
+}
 
 /// Reexports and types for derive macros
 #[doc(hidden)]
@@ -823,7 +837,8 @@ impl<T: CborDeserialize> CborDeserialize for Vec<T> {
         Self: Sized,
     {
         let mut array_decoder = decoder.decode_array()?;
-        let mut vec = Vec::with_capacity(array_decoder.size().unwrap_or_default());
+        let mut vec =
+            Vec::with_capacity(cap_capacity::<T>(array_decoder.size().unwrap_or_default()));
         while let Some(element) = array_decoder.deserialize_element()? {
             vec.push(element);
         }
@@ -849,7 +864,9 @@ impl<K: CborDeserialize + Eq + Hash, V: CborDeserialize> CborDeserialize for Has
         Self: Sized,
     {
         let mut map_decoder = decoder.decode_map()?;
-        let mut map = HashMap::with_capacity(map_decoder.size().unwrap_or_default());
+        let mut map = HashMap::with_capacity(cap_capacity::<(K, V)>(
+            map_decoder.size().unwrap_or_default(),
+        ));
         while let Some((key, value)) = map_decoder.deserialize_entry()? {
             map.insert(key, value);
         }
@@ -1539,6 +1556,19 @@ mod test {
         assert_eq!(bytes_decoded, vec);
     }
 
+    /// Test huge array size.
+    /// Test that we don't try to allocate memory of the size.
+    #[test]
+    fn test_vec_huge_length() {
+        let cbor = hex::decode("9b00ffffffffffffff0102").unwrap();
+        let err = cbor_decode::<Vec<u64>>(&cbor).unwrap_err();
+        assert!(
+            err.to_string().contains("failed to fill whole buffer"),
+            "message: {}",
+            err.to_string()
+        );
+    }
+
     #[test]
     fn test_map() {
         let map: HashMap<u64, u64> = [(1, 2), (3, 4)].into_iter().collect();
@@ -1547,6 +1577,19 @@ mod test {
         assert_eq!(hex::encode(&cbor), "a201020304");
         let bytes_decoded: HashMap<u64, u64> = cbor_decode(&cbor).unwrap();
         assert_eq!(bytes_decoded, map);
+    }
+
+    /// Test huge map size.
+    /// Test that we don't try to allocate memory of the size.
+    #[test]
+    fn test_map_huge_length() {
+        let cbor = hex::decode("bb00ffffffffffffff01020304").unwrap();
+        let err = cbor_decode::<HashMap<u64, u64>>(&cbor).unwrap_err();
+        assert!(
+            err.to_string().contains("failed to fill whole buffer"),
+            "message: {}",
+            err.to_string()
+        );
     }
 
     #[test]
@@ -1581,6 +1624,16 @@ mod test {
         assert_eq!(hex::encode(&cbor), "f6");
         let value_decoded: Option<u64> = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
+    }
+
+    /// Test `cap_capacity`
+    #[test]
+    fn test_cap_capacity() {
+        assert_eq!(cap_capacity::<u32>(0), 0);
+        assert_eq!(cap_capacity::<u32>(100), 100);
+        // `u32` has size 4 as such `cap_capacity` will return: 4096 / 4 = 1024
+        assert_eq!(cap_capacity::<u32>(5000), 1024);
+        assert_eq!(cap_capacity::<()>(10), 10);
     }
 
     /// Test that `cbor_decode` fails if there is remaining data

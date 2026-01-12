@@ -1,3 +1,7 @@
+## Unreleased
+
+- Memory pre allocation is capped to `MAX_PRE_ALLOCATED_SIZE=4096` when cbor decoding vectors and maps.
+
 ## 10.0.0 (2026-01-09)
 
 - Introduce protocol version 10 variant `ProtocolVersion::P10`.
