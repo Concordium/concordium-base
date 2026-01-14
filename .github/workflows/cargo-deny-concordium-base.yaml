@@ -41,7 +41,7 @@ jobs:
           SLACK_COLOR: ${{ job.status }}
           SLACK_TITLE: "Cargo Deny Audit Failed!"
           SLACK_MESSAGE: |
-            The license or security audit for *concordium-node* has failed. 
+            The license or security audit for *concordium-base* has failed. 
             Please check the GitHub Actions logs.
             *View Logs:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Click here to open the Summary page>
           SLACK_USERNAME: CargoDenyBot
