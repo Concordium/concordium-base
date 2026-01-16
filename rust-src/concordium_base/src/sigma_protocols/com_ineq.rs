@@ -14,6 +14,7 @@ use super::{
     com_mult::{ComMult, ComMultSecret, Response as ComMultResponse},
     common::{prove as sigma_prove, verify as sigma_verify, SigmaProof},
 };
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{Curve, Field},
@@ -42,6 +43,7 @@ pub fn prove_com_ineq<R: rand::Rng, C: Curve>(
     pub_value: C::Scalar,
     csprng: &mut R,
 ) -> Option<Response<C>> {
+    #[allow(deprecated)]
     let mut transcript = RandomOracle::domain(b"InequalityProof");
 
     let c = com_key.hide(&value, value_tilde);
@@ -107,6 +109,7 @@ pub fn verify_com_ineq<C: Curve>(
         com_mult_response,
         aux_com,
     } = proof;
+    #[allow(deprecated)]
     let mut transcript = RandomOracle::domain(b"InequalityProof");
     transcript.append_message(b"commitmentKey", &com_key);
     transcript.append_message(b"public commitment", &c);

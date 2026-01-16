@@ -264,7 +264,82 @@ pub struct TransactionHeader {
     pub expiry: TransactionTime,
 }
 
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize, Into, AsRef)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+/// Header V1 of an account transaction. Same as TransactionHeader but contains
+/// an additional optional sponsor address.
+pub struct TransactionHeaderV1 {
+    /// Sender account of the transaction.
+    pub sender: AccountAddress,
+    /// Sequence number of the transaction.
+    pub nonce: Nonce,
+    /// Maximum amount of energy the transaction can take to execute.
+    pub energy_amount: Energy,
+    /// Size of the transaction payload. This is used to deserialize the
+    /// payload.
+    pub payload_size: PayloadSize,
+    /// Latest time the transaction can be included in a block.
+    pub expiry: TransactionTime,
+    /// Optional transaction sponsor.
+    pub sponsor: Option<AccountAddress>,
+}
+
+// Bitmask for all defined features in a transaction header. This is the bitwise
+// `or` of all following feature masks below.
+const DEFINED_FEATURES_MASK: u16 = SPONSOR_MASK;
+// Bitmask constant to indicate the presence of a sponsor in the transaction header.
+const SPONSOR_MASK: u16 = 1 << 0;
+
+impl Serial for TransactionHeaderV1 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        let bitmap: u16 = if self.sponsor.is_some() {
+            SPONSOR_MASK
+        } else {
+            0
+        };
+        let header_v0 = TransactionHeader {
+            sender: self.sender,
+            nonce: self.nonce,
+            energy_amount: self.energy_amount,
+            payload_size: self.payload_size,
+            expiry: self.expiry,
+        };
+        bitmap.serial(out);
+        header_v0.serial(out);
+        if let Some(sponsor) = self.sponsor {
+            sponsor.serial(out);
+        }
+    }
+}
+
+impl Deserial for TransactionHeaderV1 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let bitmap: u16 = source.get()?;
+        anyhow::ensure!(
+            (bitmap & !DEFINED_FEATURES_MASK) == 0,
+            "Unknown feature bits set in transaction header: {:b}",
+            bitmap
+        );
+        let header_v0: TransactionHeader = source.get()?;
+        let sponsor = if (bitmap & SPONSOR_MASK) != 0 {
+            Some(source.get()?)
+        } else {
+            None
+        };
+
+        Ok(TransactionHeaderV1 {
+            sender: header_v0.sender,
+            nonce: header_v0.nonce,
+            energy_amount: header_v0.energy_amount,
+            payload_size: header_v0.payload_size,
+            expiry: header_v0.expiry,
+            sponsor,
+        })
+    }
+}
+
+#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize, Into, PartialEq, Eq, AsRef)]
 #[serde(transparent)]
 /// An account transaction payload that has not yet been deserialized.
 /// This is a simple wrapper around [`Vec<u8>`](Vec) with bespoke serialization.
@@ -421,6 +496,82 @@ impl<P: PayloadLike> AccountTransaction<P> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+/// An account transaction v1 signed and paid for by a sender or sponsor
+/// account. The payload type is a generic parameter to support two kinds of
+/// payloads, a fully deserialized [Payload] type, and an [EncodedPayload].
+/// The latter is useful since deserialization of some types of payloads is
+/// expensive. It is thus useful to delay deserialization until after we have
+/// checked signatures and the sender account information.
+pub struct AccountTransactionV1<PayloadType> {
+    // Signatures by the sender and optionally the sponsor.
+    pub signatures: TransactionSignaturesV1,
+    // Transaction header containing the optional sponsor address.
+    pub header: TransactionHeaderV1,
+    // The transaction payload.
+    pub payload: PayloadType,
+}
+
+impl<P: PayloadLike> Serial for AccountTransactionV1<P> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.put(&self.signatures);
+        out.put(&self.header);
+        self.payload.encode_to_buffer(out)
+    }
+}
+
+impl Deserial for AccountTransactionV1<EncodedPayload> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let signatures = source.get()?;
+        let header: TransactionHeaderV1 = source.get()?;
+        let payload = get_encoded_payload(source, header.payload_size)?;
+        Ok(AccountTransactionV1 {
+            signatures,
+            header,
+            payload,
+        })
+    }
+}
+
+impl Deserial for AccountTransactionV1<Payload> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let signatures: TransactionSignaturesV1 = source.get()?;
+        let header: TransactionHeaderV1 = source.get()?;
+        let payload_len = u64::from(u32::from(header.payload_size));
+        let mut limited = <&mut R as std::io::Read>::take(source, payload_len);
+        let payload = limited.get()?;
+        // ensure payload length matches the stated size.
+        anyhow::ensure!(
+            limited.limit() == 0,
+            "Payload length information is inaccurate: {} bytes of input remaining.",
+            limited.limit()
+        );
+        Ok(AccountTransactionV1 {
+            signatures,
+            header,
+            payload,
+        })
+    }
+}
+
+impl<P: PayloadLike> AccountTransactionV1<P> {
+    /// Verify signature on the transaction given the public keys.
+    pub fn verify_transaction_signature(
+        &self,
+        sender_keys: &impl HasAccountAccessStructure,
+        sponsor_keys: &impl HasAccountAccessStructure,
+    ) -> bool {
+        let hash = compute_transaction_sign_hash_v1(&self.header, &self.payload);
+        verify_signature_transaction_sign_hash_v1(
+            sender_keys,
+            sponsor_keys,
+            &hash,
+            &self.signatures,
+        )
+    }
+}
 /// Marker for `BakerKeysPayload` indicating the proofs contained in
 /// `BakerKeysPayload` have been generated for an `AddBaker` transaction.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -1459,6 +1610,22 @@ pub fn compute_transaction_sign_hash(
     hashes::HashBytes::new(hasher.result())
 }
 
+// The transaction header prefix for v1.
+const TRANSACTION_HEADER_PREFIX_V1: [u8; 32] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+];
+/// Compute the transaction sign hash from an encoded payload and header for a v1 transaction.
+pub fn compute_transaction_sign_hash_v1(
+    header: &TransactionHeaderV1,
+    payload: &impl PayloadLike,
+) -> hashes::TransactionSignHash {
+    let mut hasher = sha2::Sha256::new();
+    hasher.put(&TRANSACTION_HEADER_PREFIX_V1);
+    hasher.put(header);
+    payload.encode_to_buffer(&mut hasher);
+    hashes::HashBytes::new(hasher.result())
+}
+
 /// Abstraction of private keys.
 pub trait TransactionSigner {
     /// Sign the specified transaction hash, allocating and returning the
@@ -1749,6 +1916,21 @@ pub fn verify_signature_transaction_sign_hash(
     verify_data_signature(keys, hash, &signature.signatures)
 }
 
+/// Verify a signature on the transaction v1 sign hash. This is a low-level
+/// operation that is useful to avoid recomputing the transaction hash.
+pub fn verify_signature_transaction_sign_hash_v1(
+    sender_keys: &impl HasAccountAccessStructure,
+    sponsor_keys: &impl HasAccountAccessStructure,
+    hash: &hashes::TransactionSignHash,
+    signatures: &TransactionSignaturesV1,
+) -> bool {
+    let sender_sig_ok = verify_data_signature(sender_keys, hash, &signatures.sender.signatures);
+    let sponsor_sig_ok = signatures.sponsor.as_ref().map_or(true, |sig| {
+        verify_data_signature(sponsor_keys, hash, &sig.signatures)
+    });
+    sender_sig_ok && sponsor_sig_ok
+}
+
 /// Verify a signature on the provided data with respect to the account access
 /// structure.
 ///
@@ -1806,6 +1988,9 @@ pub enum BlockItem<PayloadType> {
         >,
     ),
     UpdateInstruction(updates::UpdateInstruction),
+    // Account transactions v1 are messages which are signed and paid for by
+    // either the sender account or a sponsor account.
+    AccountTransactionV1(AccountTransactionV1<PayloadType>),
 }
 
 impl<PayloadType> From<AccountTransaction<PayloadType>> for BlockItem<PayloadType> {
@@ -1967,6 +2152,10 @@ impl<P: PayloadLike> Serial for BlockItem<P> {
             BlockItem::UpdateInstruction(ui) => {
                 out.put(&2u8);
                 out.put(ui);
+            }
+            BlockItem::AccountTransactionV1(atv1) => {
+                out.put(&3u8);
+                out.put(atv1);
             }
         }
     }
@@ -2183,6 +2372,28 @@ pub mod construct {
         pub fn sign(self, signer: &impl TransactionSigner) -> AccountTransaction<EncodedPayload> {
             sign_transaction(signer, self.header, self.encoded)
         }
+
+        /// Extend a `PreAccountTransaction` to a `PreAccountTransactionV1`.
+        pub fn extend(self) -> PreAccountTransactionV1 {
+            let header_v1 = TransactionHeaderV1 {
+                sender: self.header.sender,
+                nonce: self.header.nonce,
+                // 2 is the size of the bitmap for the transaction configuration options.
+                energy_amount: self.header.energy_amount + Energy::from(2),
+                payload_size: self.header.payload_size,
+                expiry: self.header.expiry,
+                sponsor: None,
+            };
+            let hash_to_sign = compute_transaction_sign_hash_v1(&header_v1, &self.encoded);
+            PreAccountTransactionV1 {
+                payload: self.payload,
+                header: header_v1,
+                encoded: self.encoded,
+                sender_signature: None,
+                sponsor_signature: None,
+                hash_to_sign,
+            }
+        }
     }
 
     /// Serialize only the header and payload, so that this can be deserialized
@@ -2205,6 +2416,81 @@ pub mod construct {
                 payload,
                 encoded,
                 hash_to_sign,
+            })
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    #[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize))]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+    pub struct PreAccountTransactionV1 {
+        /// The header v1.
+        pub header: TransactionHeaderV1,
+        /// The payload.
+        pub payload: Payload,
+        /// The encoded payload. This is already serialized payload that is
+        /// constructed during construction of the prepared transaction
+        /// since we need it to compute the cost.
+        #[cfg_attr(feature = "serde_deprecated", serde(skip_serializing))]
+        pub encoded: EncodedPayload,
+        /// Hash of the transaction to sign.
+        pub hash_to_sign: hashes::TransactionSignHash,
+        /// The signature of the sender.
+        pub sender_signature: Option<TransactionSignature>,
+        /// The signature of the sponsor.
+        pub sponsor_signature: Option<TransactionSignature>,
+    }
+
+    impl PreAccountTransactionV1 {
+        /// Add a sponsor for the transaction.
+        pub fn add_sponsor(
+            &mut self,
+            sponsor: AccountAddress,
+            num_sponsor_sigs: u32,
+        ) -> Result<&mut Self, String> {
+            if let Some(_sponsor) = self.header.sponsor {
+                return Err(String::from(
+                    "Failed to add sponsor. A sponsor is already present.",
+                ));
+            }
+            self.header.sponsor = Some(sponsor);
+            // Add 32 for the sponsor account address and 100 * #(sponsor signatures).
+            self.header.energy_amount = self.header.energy_amount
+                + Energy::from(32 + cost::A * u64::from(num_sponsor_sigs));
+            self.hash_to_sign = compute_transaction_sign_hash_v1(&self.header, &self.encoded);
+            Ok(self)
+        }
+
+        /// Sign the transaction as sender.
+        pub fn sign(&mut self, sender: &impl TransactionSigner) -> &mut Self {
+            let signature = sender.sign_transaction_hash(&self.hash_to_sign);
+            self.sender_signature = Some(signature);
+            self
+        }
+
+        /// Sign the transaction as sponsor.
+        pub fn sponsor(&mut self, sponsor: &impl TransactionSigner) -> Result<&mut Self, String> {
+            self.header.sponsor.ok_or(String::from(
+                "Failed to sponsor. Missing sponsor. Add sponsor account before signing!",
+            ))?;
+            let signature = sponsor.sign_transaction_hash(&self.hash_to_sign);
+            self.sponsor_signature = Some(signature);
+            Ok(self)
+        }
+
+        /// Finalize the transaction. Check that the transaction contains a
+        /// sender signature and build the final `AccountTransactionV1`.
+        pub fn finalize(&self) -> Result<AccountTransactionV1<EncodedPayload>, String> {
+            let sender_signature = self.sender_signature.to_owned().ok_or(String::from(
+                "Failed to finalize. Missing sender signature.",
+            ))?;
+            Ok(AccountTransactionV1 {
+                signatures: TransactionSignaturesV1 {
+                    sender: sender_signature,
+                    sponsor: self.sponsor_signature.clone(),
+                },
+                header: self.header.clone(),
+                payload: self.encoded.clone(),
             })
         }
     }
@@ -3474,13 +3760,31 @@ mod tests {
         hashes::TransactionSignHash,
         id::types::{SignatureThreshold, VerifyKey},
     };
-    use rand::Rng;
+    use rand::{rngs::ThreadRng, Rng};
     use std::convert::TryFrom;
 
     use super::*;
-    #[test]
-    fn test_transaction_signature_check() {
-        let mut rng = rand::thread_rng();
+
+    // Create a dummy TransactionHeaderV1 structure.
+    const fn dummy_header_v1() -> TransactionHeaderV1 {
+        TransactionHeaderV1 {
+            sender: AccountAddress([42u8; ACCOUNT_ADDRESS_SIZE]),
+            nonce: Nonce { nonce: 1u64 },
+            energy_amount: Energy {
+                energy: 18446744073709551615u64,
+            },
+            payload_size: PayloadSize {
+                size: MAX_PAYLOAD_SIZE,
+            },
+            expiry: TransactionTime {
+                seconds: 18446744073709551615u64,
+            },
+            sponsor: Some(AccountAddress([43u8; ACCOUNT_ADDRESS_SIZE])),
+        }
+    }
+
+    // Create random keys given a random number generator.
+    fn create_keys(rng: &mut ThreadRng) -> BTreeMap<CredentialIndex, BTreeMap<KeyIndex, KeyPair>> {
         let mut keys = BTreeMap::<CredentialIndex, BTreeMap<KeyIndex, KeyPair>>::new();
         let bound: usize = rng.gen_range(1..20);
         for _ in 0..bound {
@@ -3490,11 +3794,75 @@ mod tests {
                 let mut cred_keys = BTreeMap::new();
                 for _ in 0..inner_bound {
                     let k_idx = KeyIndex::from(rng.gen::<u8>());
-                    cred_keys.insert(k_idx, KeyPair::generate(&mut rng));
+                    cred_keys.insert(k_idx, KeyPair::generate(rng));
                 }
                 keys.insert(c_idx, cred_keys);
             }
         }
+        keys
+    }
+
+    #[test]
+    fn test_transaction_header_v1_serialization() {
+        let header0 = dummy_header_v1();
+        let mut buf = Vec::<u8>::new();
+        // The fixed serialization we expect.
+        let buf0: Vec<u8> = [
+            0, 1, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42,
+            42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 0, 0, 0, 0, 0, 0, 0, 1, 255, 255, 255,
+            255, 255, 255, 255, 255, 0, 8, 0, 9, 255, 255, 255, 255, 255, 255, 255, 255, 43, 43,
+            43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43,
+            43, 43, 43, 43, 43, 43, 43, 43,
+        ]
+        .to_vec();
+        header0.serial(&mut buf);
+
+        assert_eq!(
+            buf0, buf,
+            "The serialization of TransactionHeaderV1 is not equal to the expected one."
+        );
+
+        let binary_result = crate::common::serialize_deserialize(&header0)
+            .expect("Binary transaction header v1 serialization is not invertible.");
+        assert_eq!(
+            binary_result, header0,
+            "Binary transaction header v1 parses incorrectly."
+        );
+    }
+
+    #[test]
+    fn test_account_transaction_v1_serialization() {
+        let mut rng = rand::thread_rng();
+        let hash = TransactionSignHash::new(rng.gen());
+        let sender_keys = create_keys(&mut rng);
+        let sponsor_keys = create_keys(&mut rng);
+        let sender_sig = sender_keys.sign_transaction_hash(&hash);
+        let sponsor_sig = sponsor_keys.sign_transaction_hash(&hash);
+        let sigs = TransactionSignaturesV1 {
+            sender: sender_sig,
+            sponsor: Some(sponsor_sig),
+        };
+        const HEADER: TransactionHeaderV1 = dummy_header_v1();
+        const PAYLOAD_SIZE: usize = HEADER.payload_size.size as usize;
+        let at = AccountTransactionV1 {
+            signatures: sigs.clone(),
+            header: HEADER,
+            payload: EncodedPayload {
+                payload: [0; PAYLOAD_SIZE].to_vec(),
+            },
+        };
+        let binary_result = crate::common::serialize_deserialize(&at)
+            .expect("Binary account transaction v1 serialization is not invertible.");
+        assert_eq!(
+            binary_result, at,
+            "Binary account tranasction v1 parses incorrectly."
+        );
+    }
+
+    #[test]
+    fn test_transaction_signature_check() {
+        let mut rng = rand::thread_rng();
+        let keys = create_keys(&mut rng);
         let hash = TransactionSignHash::new(rng.gen());
         let sig = keys.sign_transaction_hash(&hash);
         let threshold =
@@ -3525,6 +3893,91 @@ mod tests {
         assert!(
             !verify_signature_transaction_sign_hash(&access_structure, &hash, &sig),
             "Transaction signature must not validate with invalid threshold."
+        );
+    }
+
+    #[test]
+    fn test_sponsored_transaction_signature_check() {
+        let mut rng = rand::thread_rng();
+        let sender_keys = create_keys(&mut rng);
+        let sponsor_keys = create_keys(&mut rng);
+        let hash = TransactionSignHash::new(rng.gen());
+        let sender_sig = sender_keys.sign_transaction_hash(&hash);
+        let sender_and_sponsor_sigs = TransactionSignaturesV1 {
+            sender: sender_sig.clone(),
+            sponsor: Some(sponsor_keys.sign_transaction_hash(&hash)),
+        };
+        let sender_threshold =
+            AccountThreshold::try_from(rng.gen_range(1..(sender_keys.len() + 1) as u8)).unwrap();
+        let sender_pub_keys = sender_keys
+            .iter()
+            .map(|(&ci, keys)| {
+                let threshold =
+                    SignatureThreshold::try_from(rng.gen_range(1..keys.len() + 1) as u8).unwrap();
+                let keys = keys
+                    .iter()
+                    .map(|(&ki, kp)| (ki, VerifyKey::from(kp)))
+                    .collect();
+                (ci, CredentialPublicKeys { keys, threshold })
+            })
+            .collect::<BTreeMap<_, _>>();
+        let sponsor_threshold =
+            AccountThreshold::try_from(rng.gen_range(1..(sponsor_keys.len() + 1) as u8)).unwrap();
+        let sponsor_pub_keys = sponsor_keys
+            .iter()
+            .map(|(&ci, keys)| {
+                let threshold =
+                    SignatureThreshold::try_from(rng.gen_range(1..keys.len() + 1) as u8).unwrap();
+                let keys = keys
+                    .iter()
+                    .map(|(&ki, kp)| (ki, VerifyKey::from(kp)))
+                    .collect();
+                (ci, CredentialPublicKeys { keys, threshold })
+            })
+            .collect::<BTreeMap<_, _>>();
+        let mut sender_access_structure = AccountAccessStructure {
+            threshold: sender_threshold,
+            keys: sender_pub_keys,
+        };
+        let mut sponsor_access_structure = AccountAccessStructure {
+            threshold: sponsor_threshold,
+            keys: sponsor_pub_keys,
+        };
+        assert!(
+            verify_signature_transaction_sign_hash_v1(
+                &sender_access_structure,
+                &sponsor_access_structure,
+                &hash,
+                &sender_and_sponsor_sigs
+            ),
+            "Sponsored transaction signature must validate."
+        );
+
+        sponsor_access_structure.threshold =
+            AccountThreshold::try_from((sponsor_keys.len() + 1) as u8).unwrap();
+        assert!(
+            !verify_signature_transaction_sign_hash_v1(
+                &sender_access_structure,
+                &sponsor_access_structure,
+                &hash,
+                &sender_and_sponsor_sigs
+            ),
+            "Sponsored transaction signature must not validate with invalid sponsor threshold."
+        );
+
+        // reset sponsor signature threshold
+        sponsor_access_structure.threshold =
+            AccountThreshold::try_from((sponsor_keys.len()) as u8).unwrap();
+        sender_access_structure.threshold =
+            AccountThreshold::try_from((sender_keys.len() + 1) as u8).unwrap();
+        assert!(
+            !verify_signature_transaction_sign_hash_v1(
+                &sender_access_structure,
+                &sponsor_access_structure,
+                &hash,
+                &sender_and_sponsor_sigs
+            ),
+            "Sponsored transaction signature must not validate with invalid sender threshold."
         );
     }
 }

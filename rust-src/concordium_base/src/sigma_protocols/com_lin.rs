@@ -5,11 +5,12 @@
 //! The r's are randomness in commitments to s_i's and s'.
 
 use super::common::*;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
-    random_oracle::{Challenge, RandomOracle},
+    random_oracle::Challenge,
 };
 use itertools::izip;
 
@@ -55,9 +56,9 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
     type Response = Response<C>;
     type SecretData = ComLinSecret<C>;
 
-    fn public(&self, ro: &mut RandomOracle) {
-        ro.extend_from(b"us", self.us.iter());
-        ro.extend_from(b"cmms", self.cmms.iter());
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
+        ro.append_messages(b"us", self.us.iter());
+        ro.append_messages(b"cmms", self.cmms.iter());
         ro.append_message(b"cmm", &self.cmm);
         ro.append_message(b"cmm_key", &self.cmm_key)
     }
@@ -221,6 +222,7 @@ mod tests {
 
     use super::*;
     use crate::curve_arithmetic::PrimeField;
+    use crate::random_oracle::RandomOracle;
     use rand::thread_rng;
     use std::str::FromStr;
 

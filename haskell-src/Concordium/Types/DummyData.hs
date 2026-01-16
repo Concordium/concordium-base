@@ -69,7 +69,7 @@ bakerAggregationKey n = fst (randomBlsSecretKey (mkStdGen n))
 -- NB: The cost needs to be in-line with that defined in the scheduler.
 makeTransferTransaction :: (Sig.KeyPair, AccountAddress) -> AccountAddress -> Amount -> Nonce -> BlockItem
 makeTransferTransaction (fromKP, fromAddress) toAddress amount n =
-    normalTransaction . fromAccountTransaction (TransactionTime maxBound) . signTransactionSingle fromKP header $ payload
+    makeBlockItem (TransactionTime maxBound) . signTransactionSingle fromKP header $ payload
   where
     header =
         TransactionHeader

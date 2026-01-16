@@ -4,11 +4,12 @@
 //! committed values is equal to the third committed value, without revealing
 //! the values themselves.
 use super::common::*;
+use crate::random_oracle::TranscriptProtocol;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve, Field},
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
-    random_oracle::{Challenge, RandomOracle},
+    random_oracle::Challenge,
 };
 use itertools::izip;
 
@@ -45,8 +46,8 @@ impl<C: Curve> SigmaProtocol for ComMult<C> {
     type SecretData = ComMultSecret<C>;
 
     #[inline]
-    fn public(&self, ro: &mut RandomOracle) {
-        ro.extend_from(b"cmms", self.cmms.iter());
+    fn public(&self, ro: &mut impl TranscriptProtocol) {
+        ro.append_messages(b"cmms", self.cmms.iter());
         ro.append_message(b"cmm_key", &self.cmm_key)
     }
 
@@ -175,6 +176,7 @@ mod tests {
     use crate::curve_arithmetic::arkworks_instances::ArkGroup;
 
     use super::*;
+    use crate::random_oracle::RandomOracle;
     use ark_bls12_381::G1Projective;
     use rand::thread_rng;
 

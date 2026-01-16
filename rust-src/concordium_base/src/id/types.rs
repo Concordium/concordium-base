@@ -2,6 +2,7 @@
 //! implementations.
 use super::secret_sharing::Threshold;
 pub use crate::common::types::{AccountAddress, ACCOUNT_ADDRESS_SIZE};
+use crate::sigma_protocols::ps_sig_known;
 use crate::{
     bulletproofs::{range_proof::RangeProof, utils::Generators},
     common::{
@@ -24,7 +25,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail};
 use byteorder::ReadBytesExt;
-use chrono::TimeZone;
+use chrono::{TimeDelta, TimeZone};
 use concordium_contracts_common as concordium_std;
 pub use concordium_contracts_common::SignatureThreshold;
 use concordium_contracts_common::{AccountPublicKeys, AccountThreshold, ZeroSignatureThreshold};
@@ -34,11 +35,13 @@ use ed25519_dalek as ed25519;
 use ed25519_dalek::Verifier;
 use either::Either;
 use hex::{decode, encode};
+use serde::de::Error;
 use serde::{
-    de, de::Visitor, ser::SerializeMap, Deserialize as SerdeDeserialize, Deserializer,
+    de, de::Visitor, ser::SerializeMap, Deserialize as SerdeDeserialize, Deserialize, Deserializer,
     Serialize as SerdeSerialize, Serializer,
 };
 use sha2::{Digest, Sha256};
+use std::borrow::Cow;
 use std::{
     cmp::Ordering,
     collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet},
@@ -177,23 +180,36 @@ impl fmt::Display for IpIdentity {
     }
 }
 
-#[derive(
-    Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Clone,
-    Copy,
-    Hash,
-    Serial,
-    SerdeSerialize,
-    SerdeDeserialize,
-)]
-#[serde(into = "u32", try_from = "u32")]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serial, SerdeSerialize)]
+#[serde(into = "u32")]
 /// Identity of the anonymity revoker on the chain. This defines their
 /// evaluation point for secret sharing, and thus it cannot be 0.
 pub struct ArIdentity(u32);
+
+impl<'de> Deserialize<'de> for ArIdentity {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        #[serde(untagged)]
+        enum RawArIdentity<'a> {
+            Number(u32),
+            String(Cow<'a, str>),
+        }
+
+        let raw = RawArIdentity::deserialize(deserializer)?;
+
+        match raw {
+            RawArIdentity::Number(val) => {
+                ArIdentity::try_from(val).map_err(|err| D::Error::custom(err.to_string()))
+            }
+            RawArIdentity::String(str) => {
+                ArIdentity::from_str(&str).map_err(|err| D::Error::custom(err.to_string()))
+            }
+        }
+    }
+}
 
 impl Deserial for ArIdentity {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
@@ -406,7 +422,7 @@ pub trait Attribute<F: Field>:
 /// The year is in Gregorian calendar and months are numbered from 1, i.e.,
 /// 1 is January, ..., 12 is December.
 /// Year must be a 4 digit year, i.e., between 1000 and 9999.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct YearMonth {
     pub year: u16,
     pub month: u8,
@@ -429,6 +445,18 @@ impl YearMonth {
         let time = chrono::NaiveTime::from_hms_opt(0, 0, 0)?;
         let date = date.checked_add_months(chrono::Months::new(1))?;
         let dt = date.and_time(time);
+        Some(chrono::Utc.from_utc_datetime(&dt))
+    }
+
+    /// Return the time at the last second of the month. This is typically
+    /// used as the inclusive upper bound of a validity of a credential.
+    pub fn upper_inclusive(self) -> Option<chrono::DateTime<chrono::Utc>> {
+        let date = chrono::NaiveDate::from_ymd_opt(self.year.into(), self.month.into(), 1)?;
+        let time = chrono::NaiveTime::from_hms_opt(0, 0, 0)?;
+        let date = date.checked_add_months(chrono::Months::new(1))?;
+        let dt = date
+            .and_time(time)
+            .checked_add_signed(TimeDelta::seconds(-1))?;
         Some(chrono::Utc.from_utc_datetime(&dt))
     }
 }
@@ -587,7 +615,7 @@ impl From<YearMonth> for u32 {
     }
 }
 
-#[derive(Clone, Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "F: Field, AttributeType: Attribute<F> + SerdeSerialize",
     deserialize = "F: Field, AttributeType: Attribute<F> + SerdeDeserialize<'de>"
@@ -625,12 +653,11 @@ impl<F: Field, AttributeType: Attribute<F>> HasAttributeValues<F, AttributeTag, 
     }
 }
 
-#[derive(Debug, Serialize)]
 /// In our case C: will be G1 and T will be G1 for now A secret credential is
 /// a scalar raising a generator to this scalar gives a public credentials. If
 /// two groups have the same scalar field we can have two different public
 /// credentials from the same secret credentials.
-#[derive(SerdeBase16Serialize, From, Into)]
+#[derive(Debug, Serialize, Eq, PartialEq, SerdeBase16Serialize, From, Into)]
 pub struct IdCredentials<C: Curve> {
     /// Secret id credentials.
     /// Since the use of this value is quite complex, we allocate
@@ -651,7 +678,7 @@ impl<C: Curve> IdCredentials<C> {
 /// Private credential holder information. A user maintaints these
 /// through many different interactions with the identity provider and
 /// the chain.
-#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Eq, PartialEq, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct CredentialHolderInfo<C: Curve> {
     /// Public and private keys of the credential holder. NB: These are distinct
@@ -663,7 +690,7 @@ pub struct CredentialHolderInfo<C: Curve> {
 /// Private and public data chosen by the credential holder before the
 /// interaction with the identity provider. The credential holder chooses a prf
 /// key and an attribute list.
-#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Eq, PartialEq, Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct AccCredentialInfo<C: Curve> {
     #[serde(rename = "credentialHolderInformation")]
@@ -676,7 +703,7 @@ pub struct AccCredentialInfo<C: Curve> {
 /// The data relating to a single anonymity revoker
 /// sent by the account holder to the identity provider.
 /// Typically the account holder will send a vector of these.
-#[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IpArData<C: Curve> {
     /// Encryption in chunks (in little endian) of the PRF key share
@@ -741,7 +768,7 @@ pub struct ChainArDecryptedData<C: Curve> {
 // will keep it for now for compatibility.
 // We need to remove it in the future.
 /// Choice of anonymity revocation parameters
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, SerdeSerialize, SerdeDeserialize, Serialize)]
 pub struct ChoiceArParameters {
     #[serde(rename = "arIdentities")]
     #[set_size_length = 2]
@@ -800,7 +827,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for PreIdentityProo
 
 /// Common proof for both identity creation flows that the data sent to the
 /// identity provider is well-formed.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize)]
 pub struct CommonPioProofFields<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Challenge for the combined proof. This includes the three proofs below,
     /// and additionally also the proofs in IpArData.
@@ -902,7 +929,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> PreIdentityObjectV1<P, C> {
 /// This includes only the cryptographic parts, the attribute list is
 /// in a different object below. This is for the flow, where no initial account
 /// is involved.
-#[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>",
     deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>"
@@ -995,7 +1022,7 @@ pub struct IdentityObject<
 }
 
 /// The data we get back from the identity provider in the version 1 flow.
-#[derive(SerdeSerialize, SerdeDeserialize)]
+#[derive(Eq, PartialEq, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>, AttributeType: Attribute<C::Scalar> \
                  + SerdeSerialize",
@@ -1114,7 +1141,7 @@ pub fn mk_dummy_description(name: String) -> Description {
 }
 
 /// Public information about an identity provider.
-#[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "P: Pairing", deserialize = "P: Pairing"))]
 pub struct IpInfo<P: Pairing> {
     /// Unique identifier of the identity provider.
@@ -1164,7 +1191,7 @@ pub struct ArInfo<C: Curve> {
 }
 
 /// Collection of anonymity revokers.
-#[derive(Debug, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 #[serde(transparent)]
 pub struct ArInfos<C: Curve> {
@@ -1913,7 +1940,7 @@ pub struct PublicInformationForIp<C: Curve> {
 /// This context is derived from the public information of the identity
 /// provider, as well as some other global parameters which can be found in the
 /// struct 'GlobalContext'.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct IpContext<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Public information on the chosen identity provider.
     pub ip_info: &'a IpInfo<P>,
@@ -2048,6 +2075,23 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> IpContext<'a, P, C> {
         }
     }
 }
+
+/// Context needed to generate create identity attributes and verify them.
+/// It includes identity provider public keys and privacy guardian (anonymity revokers)
+/// public keys. Compared to [`IpContext`], this type does not include
+/// the global context.
+#[derive(Debug, Clone)]
+pub struct IpContextOnly<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    /// Public information on the chosen identity provider.
+    pub ip_info: &'a IpInfo<P>,
+    /// Public information on the __supported__ anonymity revokers.
+    /// This is used by the identity provider and the chain to
+    /// validate the identity object requests, to validate credentials,
+    /// as well as by the account holder to create a credential.
+    pub ars_infos: &'a BTreeMap<ArIdentity, ArInfo<C>>,
+}
+
+impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IpContextOnly<'a, P, C> {}
 
 /// A helper trait to access the public parts of the InitialAccountData
 /// structure. We use this to allow implementations that do not give or have
@@ -2472,7 +2516,7 @@ pub struct ArData<C: Curve> {
 }
 
 /// Data needed to use the retrieved identity object to generate credentials.
-#[derive(SerdeSerialize, SerdeDeserialize)]
+#[derive(Eq, PartialEq, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>",
     deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>"
@@ -2702,6 +2746,139 @@ impl<C: Curve> HasAttributeRandomness<C> for SystemAttributeRandomness {
     }
 }
 
+/// Randomness that is generated when we commit to the identity attributes as part of
+/// proving identity attribute credentials.
+/// This randomness is needed later to prove a property of the value.
+pub struct IdentityAttributesCredentialsRandomness<C: Curve> {
+    /// Randomness, if any, used to commit to user-chosen attributes, such as
+    /// country of nationality.
+    pub attributes_rand: BTreeMap<AttributeTag, PedersenRandomness<C>>,
+}
+
+/// This structure contains all proofs, which are required to prove identity attributes credentials created
+/// from identity credential.
+#[derive(Debug, Eq, PartialEq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>",
+    deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>"
+))]
+pub struct IdentityAttributesCredentialsProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    /// (Blinded) Signature derived from the signature on the pre-identity
+    /// object by the IP
+    #[serde(
+        rename = "signature",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub signature: crate::ps_sig::BlindedSignature<P>,
+    /// Commitments to the coefficients of the polynomial
+    /// used to share id_cred_sec
+    /// S + b1 X + b2 X^2...
+    /// where S is id_cred_sec
+    #[serde(
+        rename = "cmmIdCredSecSharingCoeff",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub cmm_id_cred_sec_sharing_coeff: Vec<PedersenCommitment<C>>,
+    /// Challenge used for all the proofs
+    #[serde(
+        rename = "challenge",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub challenge: Challenge,
+    /// Proof (response part), for each privacy guardian (anonymity revoker) that the commitment to
+    /// the IdCredSec share contains the same value as the encryption. The commitment to the share
+    /// is calculated from the commitments to the coefficients in the sharing polynomial.
+    #[serde(rename = "proofIdCredPub")]
+    #[map_size_length = 4]
+    pub proof_id_cred_pub: BTreeMap<ArIdentity, com_enc_eq::Response<C>>,
+    /// Proof of knowledge of signature of identity provider
+    #[serde(
+        rename = "proofIpSignature",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub proof_ip_signature: ps_sig_known::Response<P, C>,
+}
+
+/// Describes the time period for which a credential is valid
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, SerdeSerialize, SerdeDeserialize)]
+pub struct CredentialValidity {
+    /// When credential is valid until
+    #[serde(rename = "validTo")]
+    pub valid_to: YearMonth,
+    /// When the credential was created
+    #[serde(rename = "createdAt")]
+    pub created_at: YearMonth,
+}
+
+/// Attribute value as represented in the identity attribute credential values. An attribute value has either been committed to,
+/// revealed, or just proven known.
+#[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone, Serialize)]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
+#[serde(rename_all = "camelCase", tag = "repr", content = "value")]
+pub enum IdentityAttribute<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// The attribute value is committed to and the value is proven equal to the value in the commitment
+    Committed(PedersenCommitment<C>),
+    /// The attribute value is revealed
+    Revealed(AttributeType),
+    /// The attribute value is proven known
+    Known,
+}
+
+/// Values (as opposed to proofs) in identity attribute credentials created from identity credential.
+#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
+pub struct IdentityAttributesCredentialsValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// Identity of the identity provider who signed the identity object from
+    /// which this credential is derived.
+    #[serde(rename = "ipIdentity")]
+    pub ip_identity: IpIdentity,
+    /// Anonymity revocation threshold. Must be <= length of ar_data.
+    #[serde(rename = "revocationThreshold")]
+    pub threshold: Threshold,
+    /// Anonymity revocation data. List of anonymity revokers which can revoke
+    /// identity. NB: The order is important since it is the same order as that
+    /// signed by the identity provider, and permuting the list will invalidate
+    /// the signature from the identity provider.
+    #[map_size_length = 2]
+    #[serde(rename = "arData", deserialize_with = "deserialize_ar_data")]
+    pub ar_data: BTreeMap<ArIdentity, ChainArData<C>>,
+    /// The attributes that are part of the identity credentials
+    #[map_size_length = 2]
+    #[serde(rename = "attributes")]
+    pub attributes: BTreeMap<AttributeTag, IdentityAttribute<C, AttributeType>>,
+    /// Temporal validity of the credentials
+    #[serde(rename = "validity")]
+    pub validity: CredentialValidity,
+}
+
+/// Identity attributes credentials created from identity credential, and proofs that it is
+/// well-formed.
+#[derive(Debug, Eq, PartialEq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
+pub struct IdentityAttributesCredentialsInfo<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    #[serde(flatten)]
+    pub values: IdentityAttributesCredentialsValues<C, AttributeType>,
+    #[serde(rename = "proofs")]
+    pub proofs: IdentityAttributesCredentialsProofs<P, C>,
+}
+
 /// A request for recovering an identity
 #[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
@@ -2724,6 +2901,7 @@ pub struct IdRecoveryRequest<C: Curve> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::NaiveTime;
     use ed25519::Signer;
 
     #[test]
@@ -2829,10 +3007,14 @@ mod tests {
                     continue;
                 }
                 let ym = YearMonth::new(year, month).unwrap();
+
                 let lower = ym.lower().unwrap();
-                let upper = ym.upper().unwrap();
                 assert_eq!(lower.year(), year as i32);
                 assert_eq!(lower.month(), month as u32);
+                assert_eq!(lower.day(), 1);
+                assert_eq!(lower.time(), NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+
+                let upper = ym.upper().unwrap();
                 assert_eq!(
                     upper.year(),
                     if month == 12 { year + 1 } else { year } as i32
@@ -2841,10 +3023,33 @@ mod tests {
                     upper.month(),
                     if month == 12 { 1 } else { (month + 1) as u32 }
                 );
+                assert_eq!(upper.day(), 1);
+                assert_eq!(upper.time(), NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+
+                let upper_inclusive = ym.upper_inclusive().unwrap();
+                assert_eq!(upper_inclusive.year(), year as i32);
+                assert_eq!(upper_inclusive.month(), month as u32);
+                assert!(upper_inclusive.day() <= 31 && upper_inclusive.day() >= 28);
+                assert_eq!(
+                    upper_inclusive.time(),
+                    NaiveTime::from_hms_opt(23, 59, 59).unwrap()
+                );
 
                 let lower_from_ts = YearMonth::from_timestamp(lower.timestamp()).unwrap();
                 assert_eq!(ym, lower_from_ts);
+                let upper_inclusive_from_ts =
+                    YearMonth::from_timestamp(upper_inclusive.timestamp()).unwrap();
+                assert_eq!(ym, upper_inclusive_from_ts);
             }
         }
+    }
+
+    /// Test that `ArIdentity` can be deserialized from both number and string
+    #[test]
+    fn test_ar_identity_deserialize() {
+        let ar_identity: ArIdentity = serde_json::from_str("123").unwrap();
+        assert_eq!(ar_identity, ArIdentity::try_from(123).unwrap());
+        let ar_identity: ArIdentity = serde_json::from_str("\"123\"").unwrap();
+        assert_eq!(ar_identity, ArIdentity::try_from(123).unwrap());
     }
 }

@@ -164,6 +164,7 @@ pub fn make_transfer_data<C: Curve, R: Rng>(
     csprng: &mut R,
 ) -> Option<EncryptedAmountTransferData<C>> {
     let sender_pk = &PublicKey::from(sender_sk);
+    #[allow(deprecated)]
     let mut ro = RandomOracle::domain("EncryptedTransfer");
     ro.append_message(b"ctx", &ctx);
     ro.append_message(b"receiver_pk", &receiver_pk);
@@ -204,6 +205,7 @@ pub fn verify_transfer_data<C: Curve>(
     transfer_data: &EncryptedAmountTransferData<C>,
 ) -> bool {
     // Fixme: Put context into the random oracle.
+    #[allow(deprecated)]
     let mut ro = RandomOracle::domain("EncryptedTransfer");
     ro.append_message(b"ctx", &ctx);
     ro.append_message(b"receiver_pk", &receiver_pk);
@@ -244,6 +246,7 @@ pub fn make_sec_to_pub_transfer_data<C: Curve, R: Rng>(
 ) -> Option<SecToPubAmountTransferData<C>> {
     let pk = &PublicKey::from(sk);
     // FIXME: Put context into random oracle
+    #[allow(deprecated)]
     let mut ro = RandomOracle::domain("SecToPubTransfer");
     ro.append_message(b"ctx", &ctx);
     ro.append_message(b"pk", &pk);
@@ -283,6 +286,7 @@ pub fn verify_sec_to_pub_transfer_data<C: Curve>(
     transfer_data: &SecToPubAmountTransferData<C>,
 ) -> bool {
     // Fixme: Put context into the random oracle.
+    #[allow(deprecated)]
     let mut ro = RandomOracle::domain("SecToPubTransfer");
     ro.append_message(b"ctx", &ctx);
     ro.append_message(b"pk", &pk);

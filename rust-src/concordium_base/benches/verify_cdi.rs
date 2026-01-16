@@ -12,10 +12,12 @@ use concordium_base::{
         anonymity_revoker::*,
         chain::*,
         constants::{ArCurve, BaseField, *},
+        identity_attributes_credentials::*,
         identity_provider::*,
         secret_sharing::Threshold,
         types::*,
     },
+    random_oracle::RandomOracle,
 };
 use criterion::*;
 use ed25519_dalek as ed25519;
@@ -139,8 +141,13 @@ fn bench_parts(c: &mut Criterion) {
         threshold: SignatureThreshold::TWO,
     };
 
-    let (pio, _) = generate_pio(&context, Threshold(2), &id_use_data, &initial_acc_data)
-        .expect("Generating the pre-identity object succeed.");
+    let (pio, _) = generate_pio(
+        &context,
+        Threshold::try_new(2).expect("threshold"),
+        &id_use_data,
+        &initial_acc_data,
+    )
+    .expect("Generating the pre-identity object succeed.");
     let pio_ser = to_bytes(&pio);
     let ip_info_ser = to_bytes(&ip_info);
     let pio_des = from_bytes(&mut Cursor::new(&pio_ser)).unwrap();
@@ -211,8 +218,9 @@ fn bench_parts(c: &mut Criterion) {
         ar4_secret_key.decrypt(&fourth_ar.enc_id_cred_pub_share),
     );
 
-    let bench_pio =
-        move |b: &mut Bencher, x: &(_, _, _)| b.iter(|| generate_pio(x.0, Threshold(2), x.1, x.2));
+    let bench_pio = move |b: &mut Bencher, x: &(_, _, _)| {
+        b.iter(|| generate_pio(x.0, Threshold::try_new(2).expect("threshold"), x.1, x.2))
+    };
     c.bench_with_input(
         BenchmarkId::new("Generate ID request", ""),
         &(&context, &id_use_data, &initial_acc_data),
@@ -259,12 +267,12 @@ fn bench_parts(c: &mut Criterion) {
     );
     let share_vec = vec![decrypted_share_ar2, decrypted_share_ar4];
     let bench_reveal_id_cred_pub = move |b: &mut Bencher| b.iter(|| reveal_id_cred_pub(&share_vec));
-    let bench_verify_ip = move |b: &mut Bencher| {
+    let bench_verify_ip = move |b: &mut Bencher, x: &(_, _)| {
         b.iter(|| {
             verify_credentials(
-                &id_object.pre_identity_object,
+                x.0,
                 context,
-                &id_object.alist,
+                x.1,
                 EXPIRY,
                 &ip_secret_key,
                 &keypair.to_bytes(),
@@ -273,8 +281,64 @@ fn bench_parts(c: &mut Criterion) {
         })
     };
 
-    c.bench_function("IP verify credentials", bench_verify_ip);
+    c.bench_with_input(
+        BenchmarkId::new("IP verify credentials", ""),
+        &(&id_object.pre_identity_object, &id_object.alist),
+        bench_verify_ip,
+    );
     c.bench_function("Reveal IdCredPub", bench_reveal_id_cred_pub);
+
+    let ip_context = IpContextOnly {
+        ip_info: &ip_info,
+        ars_infos: &ars_infos,
+    };
+    let attributes_handling = id_object
+        .alist
+        .alist
+        .iter()
+        .map(|(&x, _)| (x.clone(), IdentityAttributeHandling::Commit))
+        .collect();
+    let mut transcript = RandomOracle::empty();
+    let (id_attr_info, _) = prove_identity_attributes(
+        &global_context,
+        ip_context.clone(),
+        &id_object,
+        &id_use_data,
+        &attributes_handling,
+        &mut csprng,
+        &mut transcript,
+    )
+    .unwrap();
+
+    let bench_id_cred_attr_prover = move |b: &mut Bencher, x: &&_| {
+        b.iter(|| {
+            prove_identity_attributes(
+                x,
+                ip_context.clone(),
+                &id_object,
+                &id_use_data,
+                &attributes_handling,
+                &mut csprng,
+                &mut transcript,
+            )
+            .unwrap()
+        })
+    };
+    let mut transcript = RandomOracle::empty();
+    let bench_id_cred_attr_verifier = move |b: &mut Bencher, x: &&_| {
+        b.iter(|| verify_identity_attributes(x, ip_context, &id_attr_info, &mut transcript))
+    };
+
+    c.bench_with_input(
+        BenchmarkId::new("Bench identity prover from identity credential", ""),
+        &(&global_context),
+        bench_id_cred_attr_prover,
+    );
+    c.bench_with_input(
+        BenchmarkId::new("Bench identity verifier from identity credential", ""),
+        &(&global_context),
+        bench_id_cred_attr_verifier,
+    );
 }
 
 criterion_group! {

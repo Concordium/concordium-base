@@ -15,7 +15,7 @@ pub use concordium_contracts_common::{
 };
 use derive_more::{Display, From, FromStr, Into};
 use ed25519_dalek::Signer;
-use std::{collections::BTreeMap, num::ParseIntError, str::FromStr};
+use std::{collections::BTreeMap, io::Read, num::ParseIntError, str::FromStr};
 /// Index of an account key that is to be used.
 #[derive(
     Debug,
@@ -438,6 +438,47 @@ impl Deserial for TransactionSignature {
     }
 }
 
+/// Transaction signatures v1 structure, to match the one on the Haskell side.
+#[derive(Clone, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+pub struct TransactionSignaturesV1 {
+    // The signature of the sender of the transaction.
+    pub sender: TransactionSignature,
+    // The optional signature of the sponsor of the transaction.
+    pub sponsor: Option<TransactionSignature>,
+}
+
+// Custom serial implementation for TransactionSignaturesV1. The serialization
+// of the sponsor field encodes the None case as zero byte.
+impl Serial for TransactionSignaturesV1 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        self.sender.serial(out);
+        match self.sponsor.as_ref() {
+            Some(s) => s.serial(out),
+            None => 0u8.serial(out),
+        }
+    }
+}
+
+impl Deserial for TransactionSignaturesV1 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let sender = TransactionSignature::deserial(source)?;
+
+        let sponsor_sig_count = source.read_u8()?;
+        if sponsor_sig_count == 0u8 {
+            return Ok(TransactionSignaturesV1 {
+                sender,
+                sponsor: None,
+            });
+        }
+        let sponsor = TransactionSignature::deserial(&mut [sponsor_sig_count].chain(source))?;
+        Ok(TransactionSignaturesV1 {
+            sender,
+            sponsor: Some(sponsor),
+        })
+    }
+}
+
 /// Datatype used to indicate transaction expiry.
 #[derive(
     SerdeDeserialize, SerdeSerialize, PartialEq, Eq, Debug, Serialize, Clone, Copy, PartialOrd, Ord,
@@ -564,33 +605,42 @@ impl KeyPair {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "serde_deprecated")]
-    use rand::distributions::{Distribution, Uniform};
     use rand::Rng;
+    #[cfg(feature = "serde_deprecated")]
+    use rand::{
+        distributions::{Distribution, Uniform},
+        rngs::ThreadRng,
+    };
+
+    // Create a random transasction signature given a random generator.
+    #[cfg(feature = "serde_deprecated")]
+    fn create_signature(rng: &mut ThreadRng) -> TransactionSignature {
+        let num_creds = rng.gen_range(1..30);
+        let mut signatures = BTreeMap::new();
+        for _ in 0..num_creds {
+            let num_keys = rng.gen_range(1..20);
+            let mut cred_sigs = BTreeMap::new();
+            for _ in 0..num_keys {
+                let num_elems = rng.gen_range(0..200);
+                let sig = Signature {
+                    sig: Uniform::new_inclusive(0, 255u8)
+                        .sample_iter(rng.clone())
+                        .take(num_elems)
+                        .collect(),
+                };
+                cred_sigs.insert(KeyIndex(rng.gen()), sig);
+            }
+            signatures.insert(CredentialIndex { index: rng.gen() }, cred_sigs);
+        }
+        TransactionSignature { signatures }
+    }
 
     #[cfg(feature = "serde_deprecated")]
     #[test]
     fn transaction_signature_serialization() {
         let mut rng = rand::thread_rng();
         for _ in 0..100 {
-            let num_creds = rng.gen_range(1..30);
-            let mut signatures = BTreeMap::new();
-            for _ in 0..num_creds {
-                let num_keys = rng.gen_range(1..20);
-                let mut cred_sigs = BTreeMap::new();
-                for _ in 0..num_keys {
-                    let num_elems = rng.gen_range(0..200);
-                    let sig = Signature {
-                        sig: Uniform::new_inclusive(0, 255u8)
-                            .sample_iter(rng.clone())
-                            .take(num_elems)
-                            .collect(),
-                    };
-                    cred_sigs.insert(KeyIndex(rng.gen()), sig);
-                }
-                signatures.insert(CredentialIndex { index: rng.gen() }, cred_sigs);
-            }
-            let signatures = TransactionSignature { signatures };
+            let signatures = create_signature(&mut rng);
             let js = serde_json::to_string(&signatures).expect("Serialization should succeed.");
             match serde_json::from_str::<TransactionSignature>(&js) {
                 Ok(s) => assert_eq!(s, signatures, "Deserialized incorrect value."),
@@ -603,6 +653,29 @@ mod tests {
                 binary_result, signatures,
                 "Binary signature parses incorrectly."
             );
+        }
+    }
+
+    #[cfg(feature = "serde_deprecated")]
+    #[test]
+    fn test_transaction_signature_v1_serialization() {
+        let mut rng = rand::thread_rng();
+        for _ in 0..100 {
+            let sender_sig = create_signature(&mut rng);
+            let sponsor_sig = create_signature(&mut rng);
+            let sigs = TransactionSignaturesV1 {
+                sender: sender_sig.clone(),
+                sponsor: Some(sponsor_sig),
+            };
+            let js = serde_json::to_string(&sigs).expect("Serialization should succeed.");
+            match serde_json::from_str::<TransactionSignaturesV1>(&js) {
+                Ok(s) => assert_eq!(s, sigs, "Deserialized incorrect value."),
+                Err(e) => panic!("{}", e),
+            }
+
+            let binary_result = crate::common::serialize_deserialize(&sigs)
+                .expect("Binary signature serialization is not invertible.");
+            assert_eq!(binary_result, sigs, "Binary signature parses incorrectly.");
         }
     }
 
