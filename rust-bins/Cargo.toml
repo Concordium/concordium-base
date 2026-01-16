@@ -34,7 +34,7 @@ base64 = "0.21"
 pbkdf2 = "0.11"
 rpassword = "6.0"
 bitvec = "1"
-crossterm = "0.22"
+crossterm = "0.24"
 anyhow = "1.0"
 
 [dependencies.ed25519_hd_key_derivation]
