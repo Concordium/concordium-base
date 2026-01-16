@@ -40,7 +40,7 @@ jobs:
     strategy:
       matrix:
         plan:
-        - rust: 1.82
+        - rust: 1.83
         crates:
         - rust-src
         - rust-bins
