@@ -8,8 +8,12 @@ use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
 
 /// An event produced from the effect of a token transaction.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct TokenEvent {
     /// The unique symbol of the token, which produced this event.
     pub token_id: TokenId,
@@ -18,8 +22,12 @@ pub struct TokenEvent {
 }
 
 /// The type of the token event.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub enum TokenEventDetails {
     /// An event emitted by the token module.
     Module(TokenModuleEvent),
@@ -34,11 +42,15 @@ pub enum TokenEventDetails {
 }
 
 /// Event produced from the effect of a token transaction.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct TokenModuleEvent {
     /// The type of event produced.
-    #[serde(rename = "type")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "type"))]
     pub event_type: TokenModuleCborTypeDiscriminator,
     /// The details of the event produced, in the raw byte encoded form.
     pub details: RawCbor,
@@ -70,8 +82,12 @@ impl TokenModuleEvent {
 }
 
 /// Token module event parsed from type and CBOR
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub enum TokenModuleEventType {
     /// An account was added to the allow list of a protocol level token
     AddAllowList(TokenListUpdateEventDetails),
@@ -91,34 +107,24 @@ pub enum TokenModuleEventType {
 
 /// Details of an event updating the allow or deny list of a protocol level
 /// token
-#[derive(
-    Debug,
-    Clone,
-    Eq,
-    PartialEq,
-    serde::Serialize,
-    serde::Deserialize,
-    CborSerialize,
-    CborDeserialize,
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
 )]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct TokenListUpdateEventDetails {
     /// The account that was added or removed from an allow or deny list
     pub target: CborHolderAccount,
 }
 
 /// An event emitted when the token is paused or unpaused.
-#[derive(
-    Debug,
-    Clone,
-    Eq,
-    PartialEq,
-    CborSerialize,
-    CborDeserialize,
-    serde::Serialize,
-    serde::Deserialize,
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
 )]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct TokenPauseEventDetails {}
 
 /// An entity that can hold PLTs (protocol level tokens).
@@ -128,16 +134,24 @@ pub struct TokenPauseEventDetails {}
 /// This type shouldn't be confused with the `CborHolderAccount` type that in
 /// contrast is used in the transaction payload, in reject reasons, and in the
 /// `TokenModuleEvent`.
-#[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Eq, PartialEq, Clone)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(tag = "type"))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub enum TokenHolder {
     Account { address: AccountAddress },
 }
 
 /// An event emitted when a transfer of tokens from `from` to `to` is performed.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct TokenTransferEvent {
     /// The token holder from which the tokens are transferred.
     pub from: TokenHolder,
@@ -152,8 +166,12 @@ pub struct TokenTransferEvent {
 
 /// An event emitted when the token supply is updated, i.e. by minting/burning
 /// tokens to/from the balance of the `target`.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct TokenSupplyUpdateEvent {
     /// The token holder the balance update is performed on.
     pub target: TokenHolder,
@@ -205,7 +223,7 @@ impl TryFrom<String> for TokenModuleCborTypeDiscriminator {
     type Error = TypeFromStringError;
 
     fn try_from(event_type: String) -> Result<Self, Self::Error> {
-        let byte_len = event_type.as_bytes().len();
+        let byte_len = event_type.len();
         if byte_len > TYPE_MAX_BYTE_LEN {
             Err(TypeFromStringError {
                 actual_size: byte_len,

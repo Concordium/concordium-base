@@ -384,8 +384,9 @@ impl AsRef<[u8]> for Signature {
 }
 
 /// Transaction signature structure, to match the one on the Haskell side.
-#[derive(SerdeDeserialize, SerdeSerialize, Clone, PartialEq, Eq, Debug, derive_more::AsRef)]
-#[serde(transparent)]
+#[derive(Clone, PartialEq, Eq, Debug, derive_more::AsRef)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeDeserialize, SerdeSerialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(transparent))]
 pub struct TransactionSignature {
     pub signatures: BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>>,
 }
@@ -438,7 +439,8 @@ impl Deserial for TransactionSignature {
 }
 
 /// Transaction signatures v1 structure, to match the one on the Haskell side.
-#[derive(SerdeDeserialize, SerdeSerialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
 pub struct TransactionSignaturesV1 {
     // The signature of the sender of the transaction.
     pub sender: TransactionSignature,
@@ -603,13 +605,15 @@ impl KeyPair {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::Rng;
+    #[cfg(feature = "serde_deprecated")]
     use rand::{
         distributions::{Distribution, Uniform},
         rngs::ThreadRng,
-        Rng,
     };
 
     // Create a random transasction signature given a random generator.
+    #[cfg(feature = "serde_deprecated")]
     fn create_signature(rng: &mut ThreadRng) -> TransactionSignature {
         let num_creds = rng.gen_range(1..30);
         let mut signatures = BTreeMap::new();
@@ -631,6 +635,7 @@ mod tests {
         TransactionSignature { signatures }
     }
 
+    #[cfg(feature = "serde_deprecated")]
     #[test]
     fn transaction_signature_serialization() {
         let mut rng = rand::thread_rng();
@@ -651,6 +656,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "serde_deprecated")]
     #[test]
     fn test_transaction_signature_v1_serialization() {
         let mut rng = rand::thread_rng();

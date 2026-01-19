@@ -245,8 +245,9 @@ impl Deserial for PayloadSize {
     }
 }
 
-#[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// Header of an account transaction that contains basic data to check whether
 /// the sender and the transaction is valid.
 pub struct TransactionHeader {
@@ -263,8 +264,9 @@ pub struct TransactionHeader {
     pub expiry: TransactionTime,
 }
 
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// Header V1 of an account transaction. Same as TransactionHeader but contains
 /// an additional optional sponsor address.
 pub struct TransactionHeaderV1 {
@@ -358,10 +360,7 @@ impl TryFrom<Vec<u8>> for EncodedPayload {
 
     fn try_from(payload: Vec<u8>) -> Result<Self, Self::Error> {
         let actual = payload.len();
-        if actual
-            .try_into()
-            .map_or(false, |x: u32| x <= MAX_PAYLOAD_SIZE)
-        {
+        if actual.try_into().is_ok_and(|x: u32| x <= MAX_PAYLOAD_SIZE) {
             Ok(Self { payload })
         } else {
             Err(ExceedsPayloadSize {
@@ -432,8 +431,9 @@ impl PayloadLike for EncodedPayload {
     }
 }
 
-#[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// An account transaction signed and paid for by a sender account.
 /// The payload type is a generic parameter to support two kinds of payloads,
 /// a fully deserialized [Payload] type, and an [EncodedPayload]. The latter is
@@ -496,8 +496,9 @@ impl<P: PayloadLike> AccountTransaction<P> {
     }
 }
 
-#[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// An account transaction v1 signed and paid for by a sender or sponsor
 /// account. The payload type is a generic parameter to support two kinds of
 /// payloads, a fully deserialized [Payload] type, and an [EncodedPayload].
@@ -586,8 +587,9 @@ pub enum UpdateBakerKeysMarker {}
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ConfigureBakerKeysMarker {}
 
-#[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// Auxiliary type that contains public keys and proof of ownership of those
 /// keys. This is used in the `AddBaker` and `UpdateBakerKeys` transaction
 /// types.
@@ -595,7 +597,7 @@ pub enum ConfigureBakerKeysMarker {}
 /// the generic `V` is used as a marker to distinguish this in the type. See the
 /// markers: `AddBakerKeysMarker` and `UpdateBakerKeysMarker`.
 pub struct BakerKeysPayload<V> {
-    #[serde(skip)] // use default when deserializing
+    #[cfg_attr(feature = "serde_deprecated", serde(skip))] // use default when deserializing
     phantom: PhantomData<V>,
     /// New public key for participating in the election lottery.
     pub election_verify_key: BakerElectionVerifyKey,
@@ -700,13 +702,14 @@ impl ConfigureBakerKeysPayload {
     }
 }
 
-#[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// Payload of the `AddBaker` transaction. This transaction registers the
 /// account as a baker.
 pub struct AddBakerPayload {
     /// The keys with which the baker registered.
-    #[serde(flatten)]
+    #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
     pub keys: BakerAddKeysPayload,
     /// Initial baking stake.
     pub baking_stake: Amount,
@@ -714,8 +717,9 @@ pub struct AddBakerPayload {
     pub restake_earnings: bool,
 }
 
-#[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// Data needed to initialize a smart contract.
 pub struct InitContractPayload {
     /// Deposit this amount of CCD.
@@ -740,8 +744,9 @@ impl InitContractPayload {
     }
 }
 
-#[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// Data needed to update a smart contract instance.
 pub struct UpdateContractPayload {
     /// Send the given amount of CCD together with the message to the
@@ -767,8 +772,9 @@ impl UpdateContractPayload {
     }
 }
 
-#[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// Payload for configuring a baker. The different constructors cover
 /// the different common cases.
 /// The [Default] implementation produces an empty configure that will have no
@@ -878,8 +884,9 @@ impl ConfigureBakerPayload {
     }
 }
 
-#[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// Payload for configuring delegation. The [Default] implementation produces an
 /// empty configuration that will not change anything.
 pub struct ConfigureDelegationPayload {
@@ -989,23 +996,24 @@ pub type AccountCredentialsMap = BTreeMap<
     >,
 >;
 
-#[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// Payload of an account transaction.
 pub enum Payload {
     /// Deploy a Wasm module with the given source.
     DeployModule {
-        #[serde(rename = "mod")]
+        #[cfg_attr(feature = "serde_deprecated", serde(rename = "mod"))]
         module: smart_contracts::WasmModule,
     },
     /// Initialize a new smart contract instance.
     InitContract {
-        #[serde(flatten)]
+        #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
         payload: InitContractPayload,
     },
     /// Update a smart contract instance by invoking a specific function.
     Update {
-        #[serde(flatten)]
+        #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
         payload: UpdateContractPayload,
     },
     /// Transfer CCD to an account.
@@ -1017,7 +1025,7 @@ pub enum Payload {
     },
     /// Register the sender account as a baker.
     AddBaker {
-        #[serde(flatten)]
+        #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
         payload: Box<AddBakerPayload>,
     },
     /// Deregister the account as a baker.
@@ -1034,7 +1042,7 @@ pub enum Payload {
     },
     /// Update the baker's keys.
     UpdateBakerKeys {
-        #[serde(flatten)]
+        #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
         payload: Box<BakerUpdateKeysPayload>,
     },
     /// Update signing keys of a specific credential.
@@ -1068,7 +1076,7 @@ pub enum Payload {
     /// Transfer an amount from encrypted to the public balance of the account.
     TransferToPublic {
         /// The amount to transfer and proof of correctness of accounting.
-        #[serde(flatten)]
+        #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
         data: Box<SecToPubAmountTransferData<EncryptedAmountsCurve>>,
     },
     /// Transfer an amount with schedule.
@@ -1126,17 +1134,17 @@ pub enum Payload {
     },
     /// Configure a baker on an account.
     ConfigureBaker {
-        #[serde(flatten)]
+        #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
         data: Box<ConfigureBakerPayload>,
     },
     ///  Configure an account's stake delegation.
     ConfigureDelegation {
-        #[serde(flatten)]
+        #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
         data: ConfigureDelegationPayload,
     },
     /// Token update operations
     TokenUpdate {
-        #[serde(flatten)]
+        #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
         payload: TokenOperationsPayload,
     },
 }
@@ -1151,7 +1159,7 @@ impl Payload {
             Payload::Update { .. } => TransactionType::Update,
             Payload::Transfer { .. } => TransactionType::Transfer,
             Payload::AddBaker { .. } => TransactionType::AddBaker,
-            Payload::RemoveBaker { .. } => TransactionType::RemoveBaker,
+            Payload::RemoveBaker => TransactionType::RemoveBaker,
             Payload::UpdateBakerStake { .. } => TransactionType::UpdateBakerStake,
             Payload::UpdateBakerRestakeEarnings { .. } => {
                 TransactionType::UpdateBakerRestakeEarnings
@@ -1704,7 +1712,7 @@ impl ExactSizeTransactionSigner for AccountKeys {
     }
 }
 
-impl<'a, X: TransactionSigner> TransactionSigner for &'a X {
+impl<X: TransactionSigner> TransactionSigner for &X {
     fn sign_transaction_hash(
         &self,
         hash_to_sign: &hashes::TransactionSignHash,
@@ -1713,7 +1721,7 @@ impl<'a, X: TransactionSigner> TransactionSigner for &'a X {
     }
 }
 
-impl<'a, X: ExactSizeTransactionSigner> ExactSizeTransactionSigner for &'a X {
+impl<X: ExactSizeTransactionSigner> ExactSizeTransactionSigner for &X {
     fn num_keys(&self) -> u32 {
         (*self).num_keys()
     }
@@ -2340,8 +2348,9 @@ pub mod construct {
     /// A transaction that is prepared to be signed.
     /// The serde instance serializes the structured payload and skips
     /// serializing the encoded one.
-    #[derive(Debug, Clone, SerdeSerialize)]
-    #[serde(rename_all = "camelCase")]
+    #[derive(Debug, Clone)]
+    #[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize))]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
     pub struct PreAccountTransaction {
         pub header: TransactionHeader,
         /// The payload.
@@ -2349,7 +2358,7 @@ pub mod construct {
         /// The encoded payload. This is already serialized payload that is
         /// constructed during construction of the prepared transaction
         /// since we need it to compute the cost.
-        #[serde(skip_serializing)]
+        #[cfg_attr(feature = "serde_deprecated", serde(skip_serializing))]
         pub encoded: EncodedPayload,
         /// Hash of the transaction to sign.
         pub hash_to_sign: hashes::TransactionSignHash,
@@ -2411,8 +2420,9 @@ pub mod construct {
         }
     }
 
-    #[derive(Debug, Clone, SerdeSerialize)]
-    #[serde(rename_all = "camelCase")]
+    #[derive(Debug, Clone)]
+    #[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize))]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
     pub struct PreAccountTransactionV1 {
         /// The header v1.
         pub header: TransactionHeaderV1,
@@ -2421,7 +2431,7 @@ pub mod construct {
         /// The encoded payload. This is already serialized payload that is
         /// constructed during construction of the prepared transaction
         /// since we need it to compute the cost.
-        #[serde(skip_serializing)]
+        #[cfg_attr(feature = "serde_deprecated", serde(skip_serializing))]
         pub encoded: EncodedPayload,
         /// Hash of the transaction to sign.
         pub hash_to_sign: hashes::TransactionSignHash,
