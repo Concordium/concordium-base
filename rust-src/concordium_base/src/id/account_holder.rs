@@ -75,7 +75,6 @@ pub fn build_pub_info_for_ip<C: Curve>(
 /// * In the version 1 flow, the sigma protocol prover is the common prover
 /// The `generate_pio_common` function also produces the bulletproofs rangeproof
 /// used in both flows. The version 0 flow is kept for backwards compatibility.
-/// 
 /// Generate a version 0 PreIdentityObject out of the account holder
 /// information, the chosen anonymity revoker information, and the necessary
 /// contextual information (group generators, shared commitment keys, etc).
