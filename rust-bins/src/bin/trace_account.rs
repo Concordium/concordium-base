@@ -361,8 +361,7 @@ fn trace_single_account(
         } else {
             let response: Option<AccBalanceResponse> = response.json().ok();
             let does_account_exist = response
-                .is_none_or(|abr| { abr.current_balance.is_none() && abr.finalized_balance.is_none()
-            });
+                .is_none_or(|abr| abr.current_balance.is_none() && abr.finalized_balance.is_none());
             if does_account_exist {
                 writeln!(
                     writer,
