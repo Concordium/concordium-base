@@ -73,7 +73,6 @@ pub fn build_pub_info_for_ip<C: Curve>(
 /// * In the version 0 flow, the common prover is AND'ed with a prover showing
 ///   that RegID = PRF(key_PRF, 0)
 /// * In the version 1 flow, the sigma protocol prover is the common prover
-///
 /// The `generate_pio_common` function also produces the bulletproofs rangeproof
 /// used in both flows. The version 0 flow is kept for backwards compatibility.
 /// 
