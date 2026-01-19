@@ -28,19 +28,23 @@
   - `protocol_level_tokens::token_event::TokenTransferEvent`
   - `protocol_level_tokens::token_event::TokenSupplyUpdateEvent`
   - `protocol_level_tokens::token_holder::CborHolderAccount`
+  - `common::types::TransactionHeaderV1`
+  - `common::types::TransactionSignaturesV1`
   - `common::types::TransactionSignature`
   - `smart_contracts::WasmModule`
   - `smart_contracts::InstanceUpdatedEvent`
-  - `transaction::TransactionHeader`
-  - `transaction::AccountTransaction`
-  - `transaction::BakerKeysPayload`
-  - `transaction::AddBakerPayload`
-  - `transaction::InitContractPayload`
-  - `transaction::UpdateContractPayload`
-  - `transaction::ConfigureBakerPayload`
-  - `transaction::ConfigureDelegationPayload`
-  - `transaction::Payload`
-  - `transaction::PreAccountTransaction`
+  - `transactions::AccountTransactionV1`
+  - `transactions::construct::PreAccountTransactionV1`
+  - `transactions::AccountTransaction`
+  - `transactions::TransactionHeader`
+  - `transactions::BakerKeysPayload`
+  - `transactions::AddBakerPayload`
+  - `transactions::InitContractPayload`
+  - `transactions::UpdateContractPayload`
+  - `transactions::ConfigureBakerPayload`
+  - `transactions::ConfigureDelegationPayload`
+  - `transactions::Payload`
+  - `transactions::PreAccountTransaction`
   - `base::DelegationTarget`
   - `base::CommissionRates`
   - `base::CommissionRanges`
