@@ -635,7 +635,7 @@ mod tests {
         TransactionSignature { signatures }
     }
 
-    #[cfg(feature = "serde_deprecated")]
+    // #[cfg(feature = "serde_deprecated")]
     #[test]
     fn transaction_signature_serialization() {
         let mut rng = rand::thread_rng();
