@@ -488,7 +488,7 @@ impl<'de> SerdeDeserialize<'de> for YearMonth {
 
 struct YearMonthVisitor;
 
-impl<'de> Visitor<'de> for YearMonthVisitor {
+impl Visitor<'_> for YearMonthVisitor {
     type Value = YearMonth;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -1201,7 +1201,6 @@ pub struct ArInfos<C: Curve> {
 /// A helper trait to access only the public key of the ArInfo structure.
 /// We use this to have functions work both on a map of public keys only, as
 /// well as on maps of ArInfos, see [super::chain::verify_cdi].
-
 pub trait HasArPublicKey<C: Curve> {
     fn get_public_key(&self) -> &ArPublicKey<C>;
 }
@@ -1953,7 +1952,7 @@ pub struct IpContext<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub global_context: &'a GlobalContext<C>,
 }
 
-impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IpContext<'a, P, C> {}
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IpContext<'_, P, C> {}
 
 #[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
@@ -2092,7 +2091,7 @@ pub struct IpContextOnly<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub ars_infos: &'a BTreeMap<ArIdentity, ArInfo<C>>,
 }
 
-impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IpContextOnly<'a, P, C> {}
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IpContextOnly<'_, P, C> {}
 
 /// A helper trait to access the public parts of the InitialAccountData
 /// structure. We use this to allow implementations that do not give or have

@@ -1704,7 +1704,7 @@ impl ExactSizeTransactionSigner for AccountKeys {
     }
 }
 
-impl<'a, X: TransactionSigner> TransactionSigner for &'a X {
+impl<X: TransactionSigner> TransactionSigner for &X {
     fn sign_transaction_hash(
         &self,
         hash_to_sign: &hashes::TransactionSignHash,
@@ -1713,7 +1713,7 @@ impl<'a, X: TransactionSigner> TransactionSigner for &'a X {
     }
 }
 
-impl<'a, X: ExactSizeTransactionSigner> ExactSizeTransactionSigner for &'a X {
+impl<X: ExactSizeTransactionSigner> ExactSizeTransactionSigner for &X {
     fn num_keys(&self) -> u32 {
         (*self).num_keys()
     }

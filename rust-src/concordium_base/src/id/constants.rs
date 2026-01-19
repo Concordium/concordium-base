@@ -65,7 +65,7 @@ impl<'de> SerdeDeserialize<'de> for AttributeKind {
     fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
         struct AttributeKindVisitor;
 
-        impl<'de> Visitor<'de> for AttributeKindVisitor {
+        impl Visitor<'_> for AttributeKindVisitor {
             type Value = AttributeKind;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
