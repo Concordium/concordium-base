@@ -1,7 +1,6 @@
 //! Implementation of elgamal public key encryption and decryption over a Curve.
 
 mod cipher;
-mod errors;
 mod message;
 mod public;
 mod secret;
