@@ -1,42 +1,54 @@
 use std::collections::HashMap;
 
+#[cfg(feature = "serde_deprecated")]
+use crate::common::cbor::serde::map_hex_cbor_values;
+use crate::common::cbor::value;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::hashes::Hash;
+#[cfg(feature = "serde_deprecated")]
 use hex::{FromHex, ToHex};
+#[cfg(feature = "serde_deprecated")]
 use serde::{Deserialize, Deserializer, Serializer};
 
-use crate::common::cbor::{serde::map_hex_cbor_values, value};
-
 /// Metadata for a specific protocol level token
-#[derive(
-    Debug, Clone, PartialEq, CborSerialize, CborDeserialize, serde::Serialize, serde::Deserialize,
+#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
 )]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct MetadataUrl {
     /// A string field representing the URL
     pub url: String,
 
     /// An optional sha256 checksum value tied to the content of the URL
-    #[serde(
-        serialize_with = "serialize_hex_bytes",
-        deserialize_with = "deserialize_hex_bytes",
-        skip_serializing_if = "Option::is_none"
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(
+            serialize_with = "serialize_hex_bytes",
+            deserialize_with = "deserialize_hex_bytes",
+            skip_serializing_if = "Option::is_none"
+        )
     )]
     pub checksum_sha_256: Option<Hash>,
 
     /// Additional fields may be included for future extensibility, e.g. another
     /// hash algorithm.
     #[cbor(other)]
-    #[serde(
-        with = "map_hex_cbor_values",
-        default,
-        skip_serializing_if = "HashMap::is_empty"
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(
+            with = "map_hex_cbor_values",
+            default,
+            skip_serializing_if = "HashMap::is_empty"
+        )
     )]
-    #[serde(rename = "_additional")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "_additional"))]
     pub additional: HashMap<String, value::Value>,
 }
 
 /// Serialize `Bytes` as a hex string.
+#[cfg(feature = "serde_deprecated")]
 fn serialize_hex_bytes<S>(bytes: &Option<Hash>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -49,6 +61,7 @@ where
 }
 
 /// Deserialize `Bytes` from a hex string.
+#[cfg(feature = "serde_deprecated")]
 fn deserialize_hex_bytes<'de, D>(deserializer: D) -> Result<Option<Hash>, D::Error>
 where
     D: Deserializer<'de>,
@@ -69,11 +82,13 @@ mod tests {
 
     use super::*;
     use hex::FromHex;
+    #[cfg(feature = "serde_deprecated")]
     use serde_json;
     use std::collections::HashMap;
 
     const TEST_HASH: [u8; 32] = [1; 32];
 
+    #[cfg(feature = "serde_deprecated")]
     #[test]
     fn test_metadata_url_json() {
         let checksum = Hash::from(TEST_HASH);

@@ -13,20 +13,18 @@ const COIN_INFO_TAG: u64 = 40305;
 const CONCORDIUM_SLIP_0044_CODE: u64 = 919;
 
 /// Account address that holds protocol level tokens
-#[derive(
-    Debug,
-    Eq,
-    PartialEq,
-    Clone,
-    serde::Serialize,
-    serde::Deserialize,
-    CborSerialize,
-    CborDeserialize,
+#[derive(Debug, Eq, PartialEq, Clone, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
 )]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 #[cbor(tag = ACCOUNT_HOLDER_TAG)]
 pub struct CborHolderAccount {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(skip_serializing_if = "Option::is_none")
+    )]
     #[cbor(key = 1)]
     pub coin_info: Option<CoinInfo>,
     /// Concordium address

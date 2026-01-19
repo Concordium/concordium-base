@@ -21,8 +21,15 @@ use std::str::FromStr;
 /// make `TokenAmount` self-contained with regard to the numerical value
 /// represented. This enables additional validation, both programmatic and at
 /// user level.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, serde::Deserialize, serde::Serialize)]
-#[serde(try_from = "TokenAmountJson", into = "TokenAmountJson")]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    serde(try_from = "TokenAmountJson", into = "TokenAmountJson")
+)]
 pub struct TokenAmount {
     /// The amount of tokens as an unscaled integer value.
     value: u64,
@@ -216,7 +223,10 @@ impl PartialOrd for TokenAmount {
 /// JSON representation of the token amount.
 /// The purpose of this type is to derive the JSON representation matching other
 /// SDKs.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
 struct TokenAmountJson {
     value: String,
     decimals: u8,
