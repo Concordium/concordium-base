@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 
-use concordium_base_derive::{CborDeserialize, CborSerialize};
-use concordium_contracts_common::hashes::Hash;
-use hex::{FromHex, ToHex};
-use serde::{Deserialize, Deserializer, Serializer};
-
 #[cfg(feature = "serde_deprecated")]
 use crate::common::cbor::serde::map_hex_cbor_values;
 use crate::common::cbor::value;
+use concordium_base_derive::{CborDeserialize, CborSerialize};
+use concordium_contracts_common::hashes::Hash;
+#[cfg(feature = "serde_deprecated")]
+use hex::{FromHex, ToHex};
+#[cfg(feature = "serde_deprecated")]
+use serde::{Deserialize, Deserializer, Serializer};
 
 /// Metadata for a specific protocol level token
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
@@ -47,7 +48,7 @@ pub struct MetadataUrl {
 }
 
 /// Serialize `Bytes` as a hex string.
-#[allow(dead_code)]
+#[cfg(feature = "serde_deprecated")]
 fn serialize_hex_bytes<S>(bytes: &Option<Hash>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -60,7 +61,7 @@ where
 }
 
 /// Deserialize `Bytes` from a hex string.
-#[allow(dead_code)]
+#[cfg(feature = "serde_deprecated")]
 fn deserialize_hex_bytes<'de, D>(deserializer: D) -> Result<Option<Hash>, D::Error>
 where
     D: Deserializer<'de>,

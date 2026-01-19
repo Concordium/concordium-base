@@ -25,7 +25,6 @@ pub(crate) enum InternalError {
 /// * A problem decoding to a scalar,
 ///
 /// * A problem  decoding to a group element
-#[allow(dead_code)]
 #[derive(Error, Debug)]
 #[error("{0}")]
 pub struct ElgamalError(pub(crate) InternalError);
