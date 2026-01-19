@@ -921,7 +921,7 @@ impl InstanceStateIteratorResultOption {
     #[inline]
     pub fn new_ok_some(gen: InstanceCounter, idx: usize) -> Self {
         Self {
-            index: u64::from(gen) << 32 | idx as u64,
+            index: (u64::from(gen) << 32) | idx as u64,
         }
     }
 

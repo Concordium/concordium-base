@@ -435,7 +435,7 @@ unsafe extern "C" fn validate_and_process_v1(
             let num_exports = artifact.export.len(); // this can be at most MAX_NUM_EXPORTS
             out_buf.extend_from_slice(&(num_exports as u16).to_be_bytes());
             for name in artifact.export.keys() {
-                let len = name.as_ref().as_bytes().len();
+                let len = name.as_ref().len();
                 out_buf.extend_from_slice(&(len as u16).to_be_bytes());
                 out_buf.extend_from_slice(name.as_ref().as_bytes());
             }
