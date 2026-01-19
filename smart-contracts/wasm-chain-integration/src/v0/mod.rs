@@ -345,7 +345,7 @@ pub trait HasInitContext {
 /// HasInitContext. This allows using InitContext as well as &InitContext in the
 /// init host, depending on whether we want to transfer ownership of the context
 /// or not.
-impl<'a, X: HasInitContext> HasInitContext for &'a X {
+impl<X: HasInitContext> HasInitContext for &X {
     type MetadataType = X::MetadataType;
 
     fn metadata(&self) -> &Self::MetadataType {
@@ -403,7 +403,7 @@ pub trait HasReceiveContext {
 /// HasReceiveContext. This allows using ReceiveContext as well as
 /// &ReceiveContext in the receive host, depending on whether we want to
 /// transfer ownership of the context or not.
-impl<'a, X: HasReceiveContext> HasReceiveContext for &'a X {
+impl<X: HasReceiveContext> HasReceiveContext for &X {
     type MetadataType = X::MetadataType;
 
     fn metadata(&self) -> &Self::MetadataType {

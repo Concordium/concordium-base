@@ -597,7 +597,7 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
     /// we additionally ensure that they contain only alphanumeric and
     /// punctuation characters.
     fn validate_export_function(&self, item_name: &Name, ty: &FunctionType) -> bool {
-        let valid_name = item_name.as_ref().as_bytes().len() <= MAX_EXPORT_NAME_LEN
+        let valid_name = item_name.as_ref().len() <= MAX_EXPORT_NAME_LEN
             && item_name
                 .as_ref()
                 .chars()
