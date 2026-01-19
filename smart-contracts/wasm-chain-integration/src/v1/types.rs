@@ -816,7 +816,7 @@ impl InstanceStateEntry {
     /// This assumes both value are small enough.
     pub fn new(gen: InstanceCounter, idx: usize) -> Self {
         Self {
-            index: u64::from(gen) << 32 | idx as u64,
+            index: (u64::from(gen) << 32) | idx as u64,
         }
     }
 }

@@ -89,7 +89,7 @@ impl Output for UnparsedSection<'_> {
     }
 }
 
-impl<'a, A: Output> Output for &'a [A] {
+impl<A: Output> Output for &[A] {
     fn output(&self, out: &mut impl Write) -> OutResult<()> {
         let len: u32 = self.len().try_into()?;
         len.output(out)?;
