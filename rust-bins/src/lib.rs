@@ -479,7 +479,7 @@ pub fn bytes_to_bip39(bytes: &[u8], bip_word_list: &[&str]) -> Result<Vec<String
     let mut vec = Vec::<String>::new();
     let random_iter = random_bits.chunks(11);
     for chunk in random_iter {
-        let idx = chunk.iter().fold(0, |acc, b| acc << 1 | *b as usize); // convert chunk to integer
+        let idx = chunk.iter().fold(0, |acc, b| (acc << 1) | *b as usize); // convert chunk to integer
         vec.push(bip_word_list[idx].to_string());
     }
 
