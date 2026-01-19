@@ -154,7 +154,7 @@ impl Curve for RistrettoPoint {
             fr[i] = u64::from_le_bytes(v);
         }
         // unset four topmost bits in the last u64 limb.
-        fr[3] &= !(1u64 << 63 | 1u64 << 62 | 1u64 << 61 | 1u64 << 60);
+        fr[3] &= !((1u64 << 63) | (1u64 << 62) | (1u64 << 61) | (1u64 << 60));
         <Self::Scalar as PrimeField>::from_repr(&fr)
             .expect("The scalar with top two bits erased should be valid.")
     }

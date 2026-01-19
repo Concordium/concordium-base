@@ -34,17 +34,17 @@ pub struct ProtocolUpdate {
 
 impl Serial for ProtocolUpdate {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        let data_len = self.message.as_bytes().len()
+        let data_len = self.message.len()
             + 8
-            + self.specification_url.as_bytes().len()
+            + self.specification_url.len()
             + 8
             + 32
             + self.specification_auxiliary_data.len();
         (data_len as u64).serial(out);
-        (self.message.as_bytes().len() as u64).serial(out);
+        (self.message.len() as u64).serial(out);
         out.write_all(self.message.as_bytes())
             .expect("Serialization to a buffer always succeeds.");
-        (self.specification_url.as_bytes().len() as u64).serial(out);
+        (self.specification_url.len() as u64).serial(out);
         out.write_all(self.specification_url.as_bytes())
             .expect("Serialization to a buffer always succeeds.");
         self.specification_hash.serial(out);

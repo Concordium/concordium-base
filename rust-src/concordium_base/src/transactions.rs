@@ -360,7 +360,7 @@ impl TryFrom<Vec<u8>> for EncodedPayload {
         let actual = payload.len();
         if actual
             .try_into()
-            .map_or(false, |x: u32| x <= MAX_PAYLOAD_SIZE)
+            .is_ok_and(|x: u32| x <= MAX_PAYLOAD_SIZE)
         {
             Ok(Self { payload })
         } else {
