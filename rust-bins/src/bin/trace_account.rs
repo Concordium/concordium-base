@@ -419,7 +419,7 @@ fn trace_single_account(
         match rq {
             Ok(response) => {
                 for tx in response.transactions.iter() {
-                    if (tx.details.outcome.as_ref() == Some(&Outcome::Reject)) {
+                    if tx.details.outcome.as_ref() == Some(&Outcome::Reject) {
                         continue;
                     }
                     match &tx.details.additional_details {
