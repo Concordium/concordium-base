@@ -2667,7 +2667,7 @@ mod policy_json {
                         if let Ok(tag) = AttributeTag::try_from(s) {
                             match v {
                                 serde_json::Value::String(value_string)
-                                    if value_string.as_bytes().len() <= 31 =>
+                                    if value_string.len() <= 31 =>
                                 {
                                     let value =
                                         AttributeValue::new(&value_string.into_bytes()).unwrap(); // Safe as we know the length is valid.
@@ -3025,7 +3025,7 @@ mod serde_impl {
         /// Deserialize (via Serde)
         pub fn deserialize<'de, D: serde::Deserializer<'de>>(des: D) -> Result<Vec<u8>, D::Error> {
             struct HexVisitor;
-            impl<'de> serde::de::Visitor<'de> for HexVisitor {
+            impl serde::de::Visitor<'_> for HexVisitor {
                 type Value = Vec<u8>;
 
                 fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -3143,7 +3143,7 @@ mod serde_impl {
 
     struct Base58Visitor;
 
-    impl<'de> Visitor<'de> for Base58Visitor {
+    impl Visitor<'_> for Base58Visitor {
         type Value = AccountAddress;
 
         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
