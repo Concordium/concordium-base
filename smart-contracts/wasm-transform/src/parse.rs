@@ -86,7 +86,7 @@ pub struct Skeleton<'a> {
     pub custom: Vec<UnparsedSection<'a>>,
 }
 
-impl<'a> Skeleton<'a> {
+impl Skeleton<'_> {
     /// Get the total size of all custom sections.
     pub fn custom_sections_size(&self) -> u64 {
         // Since this is on a parsed skeleton, it is not possible
@@ -132,7 +132,7 @@ pub trait GetParseable<A, Ctx> {
 }
 
 /// A generic implementation for a cursor.
-impl<'a, 'b, Ctx, A: Parseable<'a, Ctx>> GetParseable<A, Ctx> for &'b mut Cursor<&'a [u8]> {
+impl<'a, Ctx, A: Parseable<'a, Ctx>> GetParseable<A, Ctx> for &mut Cursor<&'a [u8]> {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn next(self, ctx: Ctx) -> ParseResult<A> {
         A::parse(ctx, self)
@@ -1156,7 +1156,7 @@ impl<'a> OpCodeIterator<'a> {
     }
 }
 
-impl<'a> Iterator for OpCodeIterator<'a> {
+impl Iterator for OpCodeIterator<'_> {
     type Item = ParseResult<OpCode>;
 
     fn next(&mut self) -> Option<Self::Item> {
