@@ -358,8 +358,7 @@ impl TryFrom<Vec<u8>> for EncodedPayload {
 
     fn try_from(payload: Vec<u8>) -> Result<Self, Self::Error> {
         let actual = payload.len();
-        if actual.try_into().is_ok_and(|x: u32| x <= MAX_PAYLOAD_SIZE)
-        {
+        if actual.try_into().is_ok_and(|x: u32| x <= MAX_PAYLOAD_SIZE){
             Ok(Self { payload })
         } else {
             Err(ExceedsPayloadSize {
