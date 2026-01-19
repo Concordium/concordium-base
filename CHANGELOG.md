@@ -9,3 +9,4 @@
     - Advisory update: rust-bins, idna v0.5.0 - RUSTSEC-2024-0421 (url updated from 2.1.1 to 2.5.4 or higher)
     - Advisory update: identity-provider-service, openssl v0.10.68 - RUSTSEC-2025-0022
     - Advisory update: identity-provider-service, openssl v0.10.68 - RUSTSEC-2025-0004
+    - Advisory update: smart-contracts/wasm-chain-integration, hashbrown v0.15.0 - RUSTSEC-2024-0402
