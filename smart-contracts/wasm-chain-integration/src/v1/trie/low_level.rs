@@ -399,7 +399,7 @@ pub enum MaybeOwned<'a, V, R: ?Sized = V> {
     Owned(V),
 }
 
-impl<'a, V: Clone> MaybeOwned<'a, V> {
+impl<V: Clone> MaybeOwned<'_, V> {
     /// Extract an owned value, cloning the contained reference if necessary.
     pub(crate) fn make_owned(self) -> V {
         match self {
@@ -409,7 +409,7 @@ impl<'a, V: Clone> MaybeOwned<'a, V> {
     }
 }
 
-impl<'a> Deref for MaybeOwned<'a, Box<[u8]>, [u8]> {
+impl Deref for MaybeOwned<'_, Box<[u8]>, [u8]> {
     type Target = [u8];
 
     #[inline(always)]
@@ -421,7 +421,7 @@ impl<'a> Deref for MaybeOwned<'a, Box<[u8]>, [u8]> {
     }
 }
 
-impl<'a, V> Deref for MaybeOwned<'a, V> {
+impl<V> Deref for MaybeOwned<'_, V> {
     type Target = V;
 
     #[inline(always)]
@@ -879,7 +879,7 @@ impl<'a> StemIter<'a> {
             let mut data = Vec::with_capacity(new_len + 1);
             let mut left = (self.data[pos / 2] & 0x0f) << 4;
             for &byte in &self.data[pos / 2 + 1..] {
-                data.push(left | (byte & 0xf0) >> 4);
+                data.push(left | ((byte & 0xf0) >> 4));
                 left = (byte & 0x0f) << 4;
             }
             if new_len % 2 == 1 {
@@ -1377,7 +1377,7 @@ impl<const N: usize> KeyIndexPair<N> {
 
     #[inline(always)]
     pub fn new(key: Chunk<N>, index: usize) -> Self {
-        let pair = usize::from(key.value) << (64 - N) | index;
+        let pair = (usize::from(key.value) << (64 - N)) | index;
         Self { pair }
     }
 }
@@ -2069,7 +2069,7 @@ impl MutableTrie {
 
     /// Check whether the current generation is an empty tree.
     pub fn is_empty(&self) -> bool {
-        self.generations.last().map_or(false, |x| x.root.is_none())
+        self.generations.last().is_some_and(|x| x.root.is_none())
     }
 }
 
@@ -2399,7 +2399,7 @@ impl MutableTrie {
                     values.get(entry_idx).map(|b| f(&b[..]))
                 }
             }
-            Entry::Mutable { entry_idx } => return values.get(entry_idx).map(|b| f(&b[..])),
+            Entry::Mutable { entry_idx } => values.get(entry_idx).map(|b| f(&b[..])),
             Entry::Deleted => None,
         }
     }

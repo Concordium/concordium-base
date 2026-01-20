@@ -73,15 +73,13 @@ pub fn build_pub_info_for_ip<C: Curve>(
 /// * In the version 0 flow, the common prover is AND'ed with a prover showing
 ///   that RegID = PRF(key_PRF, 0)
 /// * In the version 1 flow, the sigma protocol prover is the common prover
-///
-/// The `generate_pio_common` function also produces the bulletproofs rangeproof
-/// used in both flows. The version 0 flow is kept for backwards compatibility.
-///
-/// Generate a version 0 PreIdentityObject out of the account holder
-/// information, the chosen anonymity revoker information, and the necessary
-/// contextual information (group generators, shared commitment keys, etc).
-/// NB: In this method we assume that all the anonymity revokers in context
-/// are to be used.
+///   The `generate_pio_common` function also produces the bulletproofs rangeproof
+///   used in both flows. The version 0 flow is kept for backwards compatibility.
+///   Generate a version 0 PreIdentityObject out of the account holder
+///   information, the chosen anonymity revoker information, and the necessary
+///   contextual information (group generators, shared commitment keys, etc).
+///   NB: In this method we assume that all the anonymity revokers in context
+///   are to be used.
 pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     context: &IpContext<P, C>,
     threshold: Threshold,

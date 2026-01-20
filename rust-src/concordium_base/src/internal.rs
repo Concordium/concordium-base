@@ -7,7 +7,7 @@ pub(crate) mod byte_array_hex {
     /// Deserialize (via Serde)
     pub fn deserialize<'de, D: serde::Deserializer<'de>>(des: D) -> Result<Vec<u8>, D::Error> {
         struct HexVisitor;
-        impl<'de> serde::de::Visitor<'de> for HexVisitor {
+        impl serde::de::Visitor<'_> for HexVisitor {
             type Value = Vec<u8>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

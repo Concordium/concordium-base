@@ -189,7 +189,7 @@ fn to_field_element<C: Curve>(m: String) -> Option<Value<C>> {
         return None;
     }
     let mut buf = [0u8; 32];
-    let len = m.as_bytes().len();
+    let len = m.len();
     if len > 31 {
         return None;
     }
@@ -309,7 +309,7 @@ fn handle_generate_test_enc(test_enc: SingleKeyTestEnc) -> anyhow::Result<()> {
                 }
             });
             anyhow::ensure!(
-                msg.as_bytes().len() <= 31,
+                msg.len() <= 31,
                 "Message is too long. It must be at most 31 bytes."
             );
             msg

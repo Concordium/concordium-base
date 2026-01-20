@@ -1002,7 +1002,7 @@ struct ModuleContext<'a> {
     funcs: &'a [TypeIndex],
 }
 
-impl<'a> HasTransformationContext for ModuleContext<'a> {
+impl HasTransformationContext for ModuleContext<'_> {
     fn get_type_len(&self, idx: TypeIndex) -> TransformationResult<(usize, usize)> {
         self.types
             .get(idx as usize)
