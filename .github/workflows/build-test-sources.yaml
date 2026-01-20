@@ -40,7 +40,7 @@ jobs:
     strategy:
       matrix:
         plan:
-        - rust: 1.85
+        - rust: 1.83
         crates:
         - rust-src
         - rust-bins
@@ -67,7 +67,7 @@ jobs:
     strategy:
       matrix:
         plan:
-        - rust: 1.85
+        - rust: 1.83
         crates:
         - rust-src
         - rust-bins
@@ -143,7 +143,7 @@ jobs:
       matrix:
         plan:
         - ghc: 9.10.2 # used as cache key only; stack uses the one specified in stack.yaml
-          rust: 1.85
+          rust: 1.83
 
     steps:
     - name: Checkout
