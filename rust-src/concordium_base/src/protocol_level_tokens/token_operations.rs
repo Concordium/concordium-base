@@ -6,6 +6,7 @@ use crate::{
 };
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
+use derive_more::Display;
 
 /// Module that implements easy construction of protocol level token operations.
 ///
@@ -169,32 +170,41 @@ impl TokenOperations {
 /// level token transaction via [`TokenOperations`] and
 /// [`TokenOperationsPayload`]. The operation is CBOR encoded in the transaction
 /// payload.
-#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
+#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize, Display)]
 #[cbor(map)]
 pub enum TokenOperation {
     /// Protocol level token transfer operation
+    #[display(fmt = "transfer")]
     Transfer(TokenTransfer),
     /// Protocol level token mint operation
+    #[display(fmt = "mint")]
     Mint(TokenSupplyUpdateDetails),
     /// Protocol level token burn operation
+    #[display(fmt = "burn")]
     Burn(TokenSupplyUpdateDetails),
     /// Operation that adds an account to the allow list of a protocol level
     /// token
+    #[display(fmt = "add-allow-list")]
     AddAllowList(TokenListUpdateDetails),
     /// Operation that removes an account from the allow list of a protocol
     /// level token
+    #[display(fmt = "remove-allow-list")]
     RemoveAllowList(TokenListUpdateDetails),
     /// Operation that adds an account to the deny list of a protocol level
     /// token
+    #[display(fmt = "add-deny-list")]
     AddDenyList(TokenListUpdateDetails),
     /// Operation that removes an account from the deny list of a protocol level
     /// token
+    #[display(fmt = "remove-deny-list")]
     RemoveDenyList(TokenListUpdateDetails),
     /// Operation that pauses execution of any balance changing operations for a
     /// protocol level token
+    #[display(fmt = "pause")]
     Pause(TokenPauseDetails),
     /// Operation that unpauses execution of any balance changing operations for
     /// a protocol level token
+    #[display(fmt = "unpause")]
     Unpause(TokenPauseDetails),
 }
 
