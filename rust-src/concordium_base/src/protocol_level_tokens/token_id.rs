@@ -152,4 +152,15 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_token_id_serialize() {
+        let token_id: TokenId = "tokenid1".parse().unwrap();
+
+        let bytes = common::to_bytes(&token_id);
+        assert_eq!(hex::encode(&bytes), "08746f6b656e696431");
+
+        let deserialized: TokenId = common::from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(deserialized, token_id);
+    }
 }

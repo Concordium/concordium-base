@@ -78,3 +78,19 @@ impl common::Deserial for RawCbor {
         Ok(buf.into())
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_raw_cbor_serialize() {
+        let raw_cbor = RawCbor::from(vec![1, 2, 3, 4]);
+
+        let bytes = common::to_bytes(&raw_cbor);
+        assert_eq!(hex::encode(&bytes), "0000000401020304");
+
+        let deserialized: RawCbor = common::from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(deserialized, raw_cbor);
+    }
+}

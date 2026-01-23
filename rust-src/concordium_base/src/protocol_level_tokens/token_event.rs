@@ -1,6 +1,6 @@
 use super::{CborHolderAccount, RawCbor, TokenAmount};
-use crate::common::cbor;
 use crate::common::cbor::CborSerializationResult;
+use crate::common::{cbor, Buffer, Deserial, ParseResult, Serial};
 use crate::transactions::Memo;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
@@ -252,6 +252,32 @@ pub struct TokenModuleCborTypeDiscriminator {
     value: String,
 }
 
+/// Serial implementation matching the serialization of `TokenEventType`
+/// in the Haskell module `Concordium.Types.Tokens`.
+impl Serial for TokenModuleCborTypeDiscriminator {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        let bytes = self.value.as_bytes();
+        u8::try_from(bytes.len())
+            // This error will never occur due to length being at most 255
+            .expect("Invariant violation for byte length of TokenModuleCborTypeDiscriminator")
+            .serial(out);
+        out.write_all(bytes)
+            .expect("Writing TokenModuleCborTypeDiscriminator bytes to buffer should not fail");
+    }
+}
+
+/// Deserial implementation matching the serialization of `TokenEventType`
+/// in the Haskell module `Concordium.Types.Tokens`.
+impl Deserial for TokenModuleCborTypeDiscriminator {
+    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let len = source.read_u8()?;
+        let mut buf = vec![0u8; len as usize];
+        source.read_exact(&mut buf)?;
+        let value = String::from_utf8(buf)?;
+        Ok(value.try_into()?)
+    }
+}
+
 /// Error from converting a string into a [`TokenModuleCborTypeDiscriminator`].
 #[derive(Debug, thiserror::Error)]
 #[error(
@@ -308,6 +334,7 @@ impl From<TokenModuleCborTypeDiscriminator> for String {
 mod test {
     use super::*;
     use crate::{
+        common,
         common::cbor,
         protocol_level_tokens::{token_holder, CborHolderAccount},
     };
@@ -390,5 +417,17 @@ mod test {
 
         let event_decoded: TokenPauseEventDetails = cbor::cbor_decode(cbor).unwrap();
         assert_eq!(event_decoded, event);
+    }
+
+    #[test]
+    fn test_token_module_cbor_type_discriminator_serialize() {
+        let discr: TokenModuleCborTypeDiscriminator = "discr1".parse().unwrap();
+
+        let bytes = common::to_bytes(&discr);
+        assert_eq!(hex::encode(&bytes), "06646973637231");
+
+        let deserialized: TokenModuleCborTypeDiscriminator =
+            common::from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(deserialized, discr);
     }
 }

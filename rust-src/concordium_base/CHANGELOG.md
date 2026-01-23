@@ -17,7 +17,8 @@
     `TokenModuleRejectReasonEnum::encode_reject_reason` and `TokenModuleRejectReasonEnum::decode_reject_reason` allows CBOR encoding from and CBOR decoding
     to `TokenModuleRejectReasonEnum`. The new methods `TokenModuleRejectReasonType::to_type_discriminator` and
     `TokenModuleRejectReasonType::try_from_type_discriminator` allows converting between `TokenModuleRejectReasonType`
-    and `TokenModuleCborTypeDiscriminator`. 
+    and `TokenModuleCborTypeDiscriminator`.
+  - Implemented `concordium_base::common::Serialize` for `TokenModuleCborTypeDiscriminator`.
 
 ## 10.0.0 (2026-01-09)
 
