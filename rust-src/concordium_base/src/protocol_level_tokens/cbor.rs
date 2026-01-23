@@ -60,6 +60,8 @@ impl From<RawCbor> for String {
     }
 }
 
+/// Serial implementation matching the serialization of `TokenParameter`
+/// in the Haskell module `Concordium.Types`.
 impl common::Serial for RawCbor {
     fn serial<B: common::Buffer>(&self, out: &mut B) {
         u32::try_from(self.bytes.len())
@@ -70,6 +72,8 @@ impl common::Serial for RawCbor {
     }
 }
 
+/// Deserial implementation matching the serialization of `TokenParameter`
+/// in the Haskell module `Concordium.Types`.
 impl common::Deserial for RawCbor {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> common::ParseResult<Self> {
         let len = source.read_u32::<byteorder::BE>()?;

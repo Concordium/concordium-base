@@ -76,6 +76,8 @@ impl From<TokenId> for String {
     }
 }
 
+/// Serial implementation matching the serialization of `TokenId`
+/// in the Haskell module `Concordium.Types.Token`.
 impl common::Serial for TokenId {
     fn serial<B: common::Buffer>(&self, out: &mut B) {
         let bytes = self.value.as_bytes();
@@ -87,6 +89,8 @@ impl common::Serial for TokenId {
     }
 }
 
+/// Deserial implementation matching the serialization of `TokenId`
+/// in the Haskell module `Concordium.Types.Token`.
 impl common::Deserial for TokenId {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> common::ParseResult<Self> {
         let len = source.read_u8()?;
