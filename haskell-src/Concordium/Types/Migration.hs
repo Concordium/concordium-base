@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Concordium.Types.Migration where
@@ -13,6 +14,58 @@ import Concordium.Types
 import Concordium.Types.Accounts
 import Concordium.Types.Parameters
 import Concordium.Types.Updates
+
+-- | A witness for the migration of 'ChainParametersVersion's between two protocol versions.
+--  This is used to select the correct migration for types parametrised by 'ChainParametersVersion'
+--  (or its derivatives), without having to case on the 'StateMigrationParameters' directly.
+data ChainParametersMigration (cpvOld :: ChainParametersVersion) (cpvNew :: ChainParametersVersion) where
+    ChainParametersMigrationTrivial :: ChainParametersMigration cpv cpv
+    ChainParametersMigrationCPV0toCPV1 :: ChainParametersMigration 'ChainParametersV0 'ChainParametersV1
+    ChainParametersMigrationCPV1toCPV2 :: ChainParametersMigration 'ChainParametersV1 'ChainParametersV2
+    ChainParametersMigrationCPV2toCPV3 :: ChainParametersMigration 'ChainParametersV2 'ChainParametersV3
+
+-- | Get a 'ChainParametersMigration' witness from 'StateMigrationParameters'.
+chainParametersMigrationFor ::
+    StateMigrationParameters oldpv pv ->
+    ChainParametersMigration (ChainParametersVersionFor oldpv) (ChainParametersVersionFor pv)
+chainParametersMigrationFor StateMigrationParametersTrivial = ChainParametersMigrationTrivial
+chainParametersMigrationFor StateMigrationParametersP1P2{} = ChainParametersMigrationTrivial
+chainParametersMigrationFor StateMigrationParametersP2P3{} = ChainParametersMigrationTrivial
+chainParametersMigrationFor StateMigrationParametersP3ToP4{} = ChainParametersMigrationCPV0toCPV1
+chainParametersMigrationFor StateMigrationParametersP4ToP5{} = ChainParametersMigrationTrivial
+chainParametersMigrationFor StateMigrationParametersP5ToP6{} = ChainParametersMigrationCPV1toCPV2
+chainParametersMigrationFor StateMigrationParametersP6ToP7{} = ChainParametersMigrationTrivial
+chainParametersMigrationFor StateMigrationParametersP7ToP8{} = ChainParametersMigrationCPV2toCPV3
+chainParametersMigrationFor StateMigrationParametersP8ToP9{} = ChainParametersMigrationTrivial
+chainParametersMigrationFor StateMigrationParametersP9ToP10{} = ChainParametersMigrationTrivial
+chainParametersMigrationFor StateMigrationParametersP10ToP11{} = ChainParametersMigrationTrivial
+
+-- | A witness for the migration of 'AccountVersion's between two protocol versions.
+--  This is used to select the correct migration for types parametrised by 'AccountVersion',
+--  without having to case on the 'StateMigrationParameters' directly.
+data AccountTypeMigration (avOld :: AccountVersion) (avNew :: AccountVersion) where
+    AccountMigrationTrivial :: AccountTypeMigration av av
+    AccountMigrationV0ToV1 :: AccountTypeMigration 'AccountV0 'AccountV1
+    AccountMigrationV1ToV2 :: AccountTypeMigration 'AccountV1 'AccountV2
+    AccountMigrationV2ToV3 :: AccountTypeMigration 'AccountV2 'AccountV3
+    AccountMigrationV3ToV4 :: AccountTypeMigration 'AccountV3 'AccountV4
+    AccountMigrationV4ToV5 :: AccountTypeMigration 'AccountV4 'AccountV5
+
+-- | Get an 'AccountTypeMigration' witness from 'StateMigrationParameters'.
+accountTypeMigrationFor ::
+    StateMigrationParameters oldpv pv ->
+    AccountTypeMigration (AccountVersionFor oldpv) (AccountVersionFor pv)
+accountTypeMigrationFor StateMigrationParametersTrivial = AccountMigrationTrivial
+accountTypeMigrationFor StateMigrationParametersP1P2{} = AccountMigrationTrivial
+accountTypeMigrationFor StateMigrationParametersP2P3{} = AccountMigrationTrivial
+accountTypeMigrationFor StateMigrationParametersP3ToP4{} = AccountMigrationV0ToV1
+accountTypeMigrationFor StateMigrationParametersP4ToP5{} = AccountMigrationV1ToV2
+accountTypeMigrationFor StateMigrationParametersP5ToP6{} = AccountMigrationTrivial
+accountTypeMigrationFor StateMigrationParametersP6ToP7{} = AccountMigrationV2ToV3
+accountTypeMigrationFor StateMigrationParametersP7ToP8{} = AccountMigrationV3ToV4
+accountTypeMigrationFor StateMigrationParametersP8ToP9{} = AccountMigrationV4ToV5
+accountTypeMigrationFor StateMigrationParametersP9ToP10{} = AccountMigrationTrivial
+accountTypeMigrationFor StateMigrationParametersP10ToP11{} = AccountMigrationTrivial
 
 -- | Apply a state migration to an 'Authorizations' structure.
 --
@@ -47,6 +100,7 @@ migrateAuthorizations (StateMigrationParametersP8ToP9 migration) Authorizations{
   where
     P9.ProtocolUpdateData{..} = P9.migrationProtocolUpdateData migration
 migrateAuthorizations StateMigrationParametersP9ToP10{} auths = auths
+migrateAuthorizations StateMigrationParametersP10ToP11{} auths = auths
 
 -- | Apply a state migration to an 'UpdateKeysCollection' structure.
 --
@@ -67,17 +121,12 @@ migrateMintDistribution ::
     StateMigrationParameters oldpv pv ->
     MintDistribution (MintDistributionVersionFor (ChainParametersVersionFor oldpv)) ->
     MintDistribution (MintDistributionVersionFor (ChainParametersVersionFor pv))
-migrateMintDistribution StateMigrationParametersTrivial mint = mint
-migrateMintDistribution StateMigrationParametersP1P2 mint = mint
-migrateMintDistribution StateMigrationParametersP2P3 mint = mint
-migrateMintDistribution StateMigrationParametersP3ToP4{} MintDistribution{..} =
-    MintDistribution{_mdMintPerSlot = CFalse, ..}
-migrateMintDistribution StateMigrationParametersP4ToP5 mint = mint
-migrateMintDistribution StateMigrationParametersP5ToP6{} mint = mint
-migrateMintDistribution StateMigrationParametersP6ToP7{} mint = mint
-migrateMintDistribution StateMigrationParametersP7ToP8{} mint = mint
-migrateMintDistribution StateMigrationParametersP8ToP9{} mint = mint
-migrateMintDistribution StateMigrationParametersP9ToP10{} mint = mint
+migrateMintDistribution migration = case chainParametersMigrationFor migration of
+    ChainParametersMigrationTrivial -> id
+    ChainParametersMigrationCPV0toCPV1 -> \MintDistribution{..} ->
+        MintDistribution{_mdMintPerSlot = CFalse, ..}
+    ChainParametersMigrationCPV1toCPV2 -> id
+    ChainParametersMigrationCPV2toCPV3 -> id
 
 -- | Apply a state migration to a 'PoolParameters' structure.
 --
@@ -87,17 +136,13 @@ migratePoolParameters ::
     StateMigrationParameters oldpv pv ->
     PoolParameters (ChainParametersVersionFor oldpv) ->
     PoolParameters (ChainParametersVersionFor pv)
-migratePoolParameters StateMigrationParametersTrivial poolParams = poolParams
-migratePoolParameters StateMigrationParametersP1P2 poolParams = poolParams
-migratePoolParameters StateMigrationParametersP2P3 poolParams = poolParams
-migratePoolParameters (StateMigrationParametersP3ToP4 migration) _ =
-    P4.updatePoolParameters (P4.migrationProtocolUpdateData migration)
-migratePoolParameters StateMigrationParametersP4ToP5 poolParams = poolParams
-migratePoolParameters StateMigrationParametersP5ToP6{} poolParams = poolParams
-migratePoolParameters StateMigrationParametersP6ToP7{} poolParams = poolParams
-migratePoolParameters StateMigrationParametersP7ToP8{} poolParams = poolParams
-migratePoolParameters StateMigrationParametersP8ToP9{} poolParams = poolParams
-migratePoolParameters StateMigrationParametersP9ToP10{} poolParams = poolParams
+migratePoolParameters migration = case chainParametersMigrationFor migration of
+    ChainParametersMigrationTrivial -> id
+    ChainParametersMigrationCPV0toCPV1 -> case migration of
+        StateMigrationParametersP3ToP4 migrationData ->
+            \_ -> P4.updatePoolParameters (P4.migrationProtocolUpdateData migrationData)
+    ChainParametersMigrationCPV1toCPV2 -> id
+    ChainParametersMigrationCPV2toCPV3 -> id
 
 -- | Apply a state migration to a 'GASRewards' structure.
 --
@@ -108,16 +153,13 @@ migrateGASRewards ::
     StateMigrationParameters oldpv pv ->
     GASRewards (GasRewardsVersionFor (ChainParametersVersionFor oldpv)) ->
     GASRewards (GasRewardsVersionFor (ChainParametersVersionFor pv))
-migrateGASRewards StateMigrationParametersTrivial gr = gr
-migrateGASRewards StateMigrationParametersP1P2 gr = gr
-migrateGASRewards StateMigrationParametersP2P3 gr = gr
-migrateGASRewards StateMigrationParametersP3ToP4{} gr = gr
-migrateGASRewards StateMigrationParametersP4ToP5 gr = gr
-migrateGASRewards StateMigrationParametersP5ToP6{} GASRewards{..} = GASRewards{_gasFinalizationProof = CFalse, ..}
-migrateGASRewards StateMigrationParametersP6ToP7{} gr = gr
-migrateGASRewards StateMigrationParametersP7ToP8{} gr = gr
-migrateGASRewards StateMigrationParametersP8ToP9{} gr = gr
-migrateGASRewards StateMigrationParametersP9ToP10{} gr = gr
+migrateGASRewards migration = case chainParametersMigrationFor migration of
+    ChainParametersMigrationTrivial -> id
+    ChainParametersMigrationCPV0toCPV1 -> id
+    ChainParametersMigrationCPV1toCPV2 -> case migration of
+        StateMigrationParametersP5ToP6{} ->
+            \GASRewards{..} -> GASRewards{_gasFinalizationProof = CFalse, ..}
+    ChainParametersMigrationCPV2toCPV3 -> id
 
 -- | Apply a state migration to a 'ChainParameters' structure.
 --
@@ -126,81 +168,73 @@ migrateGASRewards StateMigrationParametersP9ToP10{} gr = gr
 --
 --  [P5 to P6]: the new consensus, finalization committee parameters are given by the migration parameters;
 --    the GAS finalization proof reward is removed.
+--
+--  [P7 to P8]: the new validator score parameters are given by the migration parameters.
 migrateChainParameters ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
     ChainParameters oldpv ->
     ChainParameters pv
-migrateChainParameters StateMigrationParametersTrivial cps = cps
-migrateChainParameters StateMigrationParametersP1P2 cps = cps
-migrateChainParameters StateMigrationParametersP2P3 cps = cps
-migrateChainParameters m@(StateMigrationParametersP3ToP4 migration) ChainParameters{..} =
-    ChainParameters
-        { _cpCooldownParameters = updateCooldownParameters,
-          _cpTimeParameters = SomeParam updateTimeParameters,
-          _cpRewardParameters =
-            RewardParameters
-                { _rpMintDistribution = migrateMintDistribution m _rpMintDistribution,
-                  _rpGASRewards = migrateGASRewards m _rpGASRewards,
+migrateChainParameters m = case chainParametersMigrationFor m of
+    ChainParametersMigrationTrivial -> id
+    ChainParametersMigrationCPV0toCPV1 -> \ChainParameters{..} -> case m of
+        StateMigrationParametersP3ToP4 migrationData ->
+            ChainParameters
+                { _cpCooldownParameters = updateCooldownParameters,
+                  _cpTimeParameters = SomeParam updateTimeParameters,
+                  _cpRewardParameters =
+                    RewardParameters
+                        { _rpMintDistribution = migrateMintDistribution m _rpMintDistribution,
+                          _rpGASRewards = migrateGASRewards m _rpGASRewards,
+                          ..
+                        },
+                  _cpPoolParameters = migratePoolParameters m _cpPoolParameters,
+                  _cpFinalizationCommitteeParameters = NoParam,
+                  _cpValidatorScoreParameters = NoParam,
                   ..
-                },
-          _cpPoolParameters = migratePoolParameters m _cpPoolParameters,
-          _cpFinalizationCommitteeParameters = NoParam,
-          _cpValidatorScoreParameters = NoParam,
-          ..
-        }
-  where
-    RewardParameters{..} = _cpRewardParameters
-    P4.ProtocolUpdateData{..} = P4.migrationProtocolUpdateData migration
-migrateChainParameters StateMigrationParametersP4ToP5 cps = cps
-migrateChainParameters m@(StateMigrationParametersP5ToP6 migration) ChainParameters{..} =
-    ChainParameters
-        { _cpConsensusParameters = P6.updateConsensusParameters $ P6.migrationProtocolUpdateData migration,
-          _cpRewardParameters =
-            RewardParameters
-                { _rpMintDistribution = migrateMintDistribution m _rpMintDistribution,
-                  _rpGASRewards = migrateGASRewards m _rpGASRewards,
+                }
+          where
+            RewardParameters{..} = _cpRewardParameters
+            P4.ProtocolUpdateData{..} = P4.migrationProtocolUpdateData migrationData
+    ChainParametersMigrationCPV1toCPV2 -> \ChainParameters{..} -> case m of
+        StateMigrationParametersP5ToP6 migrationData ->
+            ChainParameters
+                { _cpConsensusParameters = updateConsensusParameters,
+                  _cpRewardParameters =
+                    RewardParameters
+                        { _rpMintDistribution = migrateMintDistribution m _rpMintDistribution,
+                          _rpGASRewards = migrateGASRewards m _rpGASRewards,
+                          ..
+                        },
+                  _cpPoolParameters = migratePoolParameters m _cpPoolParameters,
+                  _cpFinalizationCommitteeParameters = SomeParam updateFinalizationCommitteeParameters,
+                  -- We unwrap and wrap here in order to associate the correct cpv
+                  -- with the time parameters.
+                  _cpTimeParameters = SomeParam $ unOParam _cpTimeParameters,
+                  _cpValidatorScoreParameters = NoParam,
                   ..
-                },
-          _cpPoolParameters = migratePoolParameters m _cpPoolParameters,
-          _cpFinalizationCommitteeParameters = SomeParam finalizationCommitteeParameters,
-          -- We unwrap and wrap here in order to associate the correct cpv
-          -- with the time parameters.
-          _cpTimeParameters = SomeParam $ unOParam _cpTimeParameters,
-          _cpValidatorScoreParameters = NoParam,
-          ..
-        }
-  where
-    RewardParameters{..} = _cpRewardParameters
-    finalizationCommitteeParameters = P6.updateFinalizationCommitteeParameters $ P6.migrationProtocolUpdateData migration
-migrateChainParameters StateMigrationParametersP6ToP7{} cps = cps
-migrateChainParameters m@(StateMigrationParametersP7ToP8 migration) ChainParameters{..} =
-    ChainParameters
-        { _cpValidatorScoreParameters = SomeParam $ P8.updateValidatorScoreParameters $ P8.migrationProtocolUpdateData migration,
-          _cpTimeParameters = SomeParam $ unOParam _cpTimeParameters,
-          _cpFinalizationCommitteeParameters = SomeParam $ unOParam _cpFinalizationCommitteeParameters,
-          _cpPoolParameters = migratePoolParameters m _cpPoolParameters,
-          _cpRewardParameters =
-            RewardParameters
-                { _rpMintDistribution = migrateMintDistribution m _rpMintDistribution,
-                  _rpGASRewards = migrateGASRewards m _rpGASRewards,
+                }
+          where
+            P6.ProtocolUpdateData{..} = P6.migrationProtocolUpdateData migrationData
+            RewardParameters{..} = _cpRewardParameters
+    ChainParametersMigrationCPV2toCPV3 -> \ChainParameters{..} -> case m of
+        StateMigrationParametersP7ToP8 migrationData ->
+            ChainParameters
+                { _cpValidatorScoreParameters = SomeParam updateValidatorScoreParameters,
+                  _cpTimeParameters = SomeParam $ unOParam _cpTimeParameters,
+                  _cpFinalizationCommitteeParameters = SomeParam $ unOParam _cpFinalizationCommitteeParameters,
+                  _cpPoolParameters = migratePoolParameters m _cpPoolParameters,
+                  _cpRewardParameters =
+                    RewardParameters
+                        { _rpMintDistribution = migrateMintDistribution m _rpMintDistribution,
+                          _rpGASRewards = migrateGASRewards m _rpGASRewards,
+                          ..
+                        },
                   ..
-                },
-          ..
-        }
-  where
-    RewardParameters{..} = _cpRewardParameters
-migrateChainParameters StateMigrationParametersP8ToP9{} ChainParameters{..} =
-    ChainParameters
-        { _cpValidatorScoreParameters = SomeParam $ unOParam _cpValidatorScoreParameters,
-          _cpTimeParameters = SomeParam $ unOParam _cpTimeParameters,
-          _cpFinalizationCommitteeParameters = SomeParam $ unOParam _cpFinalizationCommitteeParameters,
-          _cpRewardParameters = RewardParameters{..},
-          ..
-        }
-  where
-    RewardParameters{..} = _cpRewardParameters
-migrateChainParameters StateMigrationParametersP9ToP10{} cps = cps
+                }
+          where
+            P8.ProtocolUpdateData{..} = P8.migrationProtocolUpdateData migrationData
+            RewardParameters{..} = _cpRewardParameters
 
 -- | Migrate time of the effective change from V0 to V1 accounts. Currently this
 --  translates times relative to genesis to times relative to the unix epoch.
@@ -219,16 +253,14 @@ migrateStakePendingChange ::
     StateMigrationParameters oldpv pv ->
     StakePendingChange (AccountVersionFor oldpv) ->
     StakePendingChange (AccountVersionFor pv)
-migrateStakePendingChange StateMigrationParametersTrivial = id
-migrateStakePendingChange StateMigrationParametersP1P2 = id
-migrateStakePendingChange StateMigrationParametersP2P3 = id
-migrateStakePendingChange (StateMigrationParametersP3ToP4 migration) = \case
-    NoChange -> NoChange
-    ReduceStake amnt eff -> ReduceStake amnt (migratePendingChangeEffective migration eff)
-    RemoveStake eff -> RemoveStake (migratePendingChangeEffective migration eff)
-migrateStakePendingChange StateMigrationParametersP4ToP5 = fmap coercePendingChangeEffectiveV1
-migrateStakePendingChange StateMigrationParametersP5ToP6{} = id
-migrateStakePendingChange StateMigrationParametersP6ToP7{} = const NoChange
-migrateStakePendingChange StateMigrationParametersP7ToP8{} = const NoChange
-migrateStakePendingChange StateMigrationParametersP8ToP9{} = const NoChange
-migrateStakePendingChange StateMigrationParametersP9ToP10{} = const NoChange
+migrateStakePendingChange migration = case accountTypeMigrationFor migration of
+    AccountMigrationTrivial -> id
+    AccountMigrationV0ToV1 -> case migration of
+        StateMigrationParametersP3ToP4 migrationData -> \case
+            NoChange -> NoChange
+            ReduceStake amnt eff -> ReduceStake amnt (migratePendingChangeEffective migrationData eff)
+            RemoveStake eff -> RemoveStake (migratePendingChangeEffective migrationData eff)
+    AccountMigrationV1ToV2 -> fmap coercePendingChangeEffectiveV1
+    AccountMigrationV2ToV3 -> const NoChange
+    AccountMigrationV3ToV4 -> \NoChange -> NoChange
+    AccountMigrationV4ToV5 -> \NoChange -> NoChange
