@@ -33,3 +33,35 @@ impl CborDeserialize for Hash {
         Ok(Hash::from(bytes))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::common::cbor::{cbor_decode, cbor_encode};
+
+    #[test]
+    fn test_hash() {
+        let hash = Hash::from([1; 32]);
+
+        let cbor = cbor_encode(&hash);
+        assert_eq!(
+            hex::encode(&cbor),
+            "58200101010101010101010101010101010101010101010101010101010101010101"
+        );
+        let hash_decoded: Hash = cbor_decode(&cbor).unwrap();
+        assert_eq!(hash_decoded, hash);
+    }
+
+    #[test]
+    fn test_account_address() {
+        let address = AccountAddress([1; 32]);
+
+        let cbor = cbor_encode(&address);
+        assert_eq!(
+            hex::encode(&cbor),
+            "58200101010101010101010101010101010101010101010101010101010101010101"
+        );
+        let hash_decoded: AccountAddress = cbor_decode(&cbor).unwrap();
+        assert_eq!(hash_decoded, address);
+    }
+}
