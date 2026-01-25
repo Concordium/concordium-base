@@ -826,10 +826,13 @@ impl DataItemHeader {
     }
 }
 
-impl<T: CborSerialize> CborSerialize for Vec<T> {
+/// Wrapper for serializing slices as arrays.
+pub struct ArraySlice<'a, T>(pub &'a [T]);
+
+impl<T: CborSerialize> CborSerialize for ArraySlice<'_, T> {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         let mut array_encoder = encoder.encode_array()?;
-        for item in self {
+        for item in self.0 {
             array_encoder.serialize_element(item)?
         }
         array_encoder.end()?;
@@ -837,10 +840,10 @@ impl<T: CborSerialize> CborSerialize for Vec<T> {
     }
 }
 
-impl<T: CborSerialize> CborSerialize for [T] {
+impl<T: CborSerialize> CborSerialize for Vec<T> {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         let mut array_encoder = encoder.encode_array()?;
-        for item in self.iter() {
+        for item in self {
             array_encoder.serialize_element(item)?
         }
         array_encoder.end()?;
@@ -1544,13 +1547,12 @@ mod test {
         assert_eq!(value_decoded, value);
     }
 
-    /// Test that slices are always serialized as arrays to avoid ambiguity
-    /// with byte string serialization.
+    /// Test serializing slice as array using [`ArraySlice`].
     #[test]
-    fn test_u8_slice() {
-        let vec = vec![1u8, 2u8];
+    fn ddtest_array_slice() {
+        let array_slice = ArraySlice(&[1u8, 2u8]);
 
-        let cbor = cbor_encode(vec.as_slice());
+        let cbor = cbor_encode(&array_slice);
         assert_eq!(hex::encode(&cbor), "820102");
     }
 

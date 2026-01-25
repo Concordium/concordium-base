@@ -1,5 +1,5 @@
 use crate::common::cbor::{
-    ByteSlice, CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize,
+    CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize,
 };
 use concordium_contracts_common::{constants::SHA256, hashes::Hash, AccountAddress};
 
@@ -20,7 +20,7 @@ impl CborDeserialize for AccountAddress {
 
 impl CborSerialize for Hash {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
-        ByteSlice(self.as_ref()).serialize(encoder)
+        self.as_ref().serialize(encoder)
     }
 }
 

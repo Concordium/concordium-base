@@ -27,16 +27,9 @@ impl<const N: usize> CborDeserialize for [u8; N] {
     }
 }
 
-/// CBOR bytes borrowed data item (encoding only).
-///
-/// Notice that this serializes different from a plain `&[u8]` which
-/// serializes to an array data item.
-#[derive(Debug, Eq, PartialEq, Hash)]
-pub struct ByteSlice<'a>(pub &'a [u8]);
-
-impl CborSerialize for ByteSlice<'_> {
+impl CborSerialize for [u8] {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
-        encoder.encode_bytes(&self.0)
+        encoder.encode_bytes(self)
     }
 }
 
@@ -721,11 +714,12 @@ mod test {
         assert_eq!(value_decoded, value);
     }
 
+    /// Test slice is serialized as bytes (and not as array)
     #[test]
     fn test_byte_slice() {
-        let bytes = ByteSlice(&[1u8, 2u8]);
+        let byte_slice = &[1u8, 2u8];
 
-        let cbor = cbor_encode(&bytes);
+        let cbor = cbor_encode(byte_slice);
         assert_eq!(hex::encode(&cbor), "420102");
     }
 
