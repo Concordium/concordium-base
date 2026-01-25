@@ -262,7 +262,7 @@ fn verify_statements<
     // prefix of the loop over statements.
 
     statements.iter().zip_longest(proofs).all(|elm| {
-        elm.both().map_or(false, |(statement, proof)| {
+        elm.both().is_some_and(|(statement, proof)| {
             statement.verify(
                 ProofVersion::Version2,
                 global_context,

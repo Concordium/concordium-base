@@ -46,7 +46,6 @@ migrateAuthorizations (StateMigrationParametersP8ToP9 migration) Authorizations{
         }
   where
     P9.ProtocolUpdateData{..} = P9.migrationProtocolUpdateData migration
--- TODO (COR-2012) update when authorization structures are added in P10
 migrateAuthorizations StateMigrationParametersP9ToP10{} auths = auths
 
 -- | Apply a state migration to an 'UpdateKeysCollection' structure.

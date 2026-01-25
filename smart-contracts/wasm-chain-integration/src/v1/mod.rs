@@ -161,7 +161,7 @@ impl Interrupt {
                 out.write_all(&(parameter.len() as u16).to_be_bytes())?;
                 out.write_all(parameter)?;
                 let name_str: &str = name.as_entrypoint_name().into();
-                out.write_all(&(name_str.as_bytes().len() as u16).to_be_bytes())?;
+                out.write_all(&(name_str.len() as u16).to_be_bytes())?;
                 out.write_all(name_str.as_bytes())?;
                 out.write_all(&amount.micro_ccd.to_be_bytes())?;
                 Ok(())
@@ -1288,12 +1288,11 @@ pub(crate) mod host {
 // The use of Vec<u8> is ugly, and we really should have [u8] there, but FFI
 // prevents us doing that without ugly hacks.
 impl<
-        'a,
         BackingStore: BackingStoreLoad,
         ParamType: AsRef<[u8]>,
         Ctx: v0::HasInitContext,
         A: DebugInfo,
-    > machine::Host<ProcessedImports> for InitHost<'a, BackingStore, ParamType, Ctx, A>
+    > machine::Host<ProcessedImports> for InitHost<'_, BackingStore, ParamType, Ctx, A>
 {
     type Interrupt = NoInterrupt;
 
@@ -1468,7 +1467,7 @@ impl<X: AsRef<[u8]>> HasReceiveContext for ReceiveContext<X> {
     }
 }
 
-impl<'a, X: HasReceiveContext> HasReceiveContext for &'a X {
+impl<X: HasReceiveContext> HasReceiveContext for &X {
     #[inline(always)]
     fn entrypoint(&self) -> ExecResult<EntrypointName> {
         (*self).entrypoint()
@@ -1476,12 +1475,11 @@ impl<'a, X: HasReceiveContext> HasReceiveContext for &'a X {
 }
 
 impl<
-        'a,
         BackingStore: BackingStoreLoad,
         ParamType: AsRef<[u8]>,
         Ctx: HasReceiveContext,
         A: DebugInfo,
-    > machine::Host<ProcessedImports> for ReceiveHost<'a, BackingStore, ParamType, Ctx, A>
+    > machine::Host<ProcessedImports> for ReceiveHost<'_, BackingStore, ParamType, Ctx, A>
 {
     type Interrupt = Interrupt;
 
@@ -1804,7 +1802,7 @@ impl InvokeFailure {
                     return Err(ResumeError::TooManyInterrupts);
                 }
                 parameters.push(data);
-                (len as u64) << 40 | (code as u32 as u64)
+                ((len as u64) << 40) | (code as u32 as u64)
             }
             InvokeFailure::InsufficientAmount => 0x01_0000_0000,
             InvokeFailure::NonExistentAccount => 0x02_0000_0000,

@@ -70,8 +70,12 @@ impl TokenModuleEventType {
 }
 
 /// Token module event parsed from type and CBOR
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub enum TokenModuleEventEnum {
     /// An account was added to the allow list of a protocol level token
     AddAllowList(AddAllowListEvent),
@@ -167,34 +171,24 @@ pub type UnpauseEvent = TokenPauseEventDetails;
 
 /// Details of an event updating the allow or deny list of a protocol level
 /// token
-#[derive(
-    Debug,
-    Clone,
-    Eq,
-    PartialEq,
-    serde::Serialize,
-    serde::Deserialize,
-    CborSerialize,
-    CborDeserialize,
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
 )]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct TokenListUpdateEventDetails {
     /// The account that was added or removed from an allow or deny list
     pub target: CborHolderAccount,
 }
 
 /// An event emitted when the token is paused or unpaused.
-#[derive(
-    Debug,
-    Clone,
-    Eq,
-    PartialEq,
-    CborSerialize,
-    CborDeserialize,
-    serde::Serialize,
-    serde::Deserialize,
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
 )]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct TokenPauseEventDetails {}
 
 /// An entity that can hold PLTs (protocol level tokens).
@@ -204,16 +198,24 @@ pub struct TokenPauseEventDetails {}
 /// This type shouldn't be confused with the `CborHolderAccount` type that in
 /// contrast is used in the transaction payload, in reject reasons, and in the
 /// `TokenModuleEvent`.
-#[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Eq, PartialEq, Clone)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(tag = "type"))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub enum TokenHolder {
     Account { address: AccountAddress },
 }
 
 /// An event emitted when a transfer of tokens from `from` to `to` is performed.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct TokenTransferEvent {
     /// The token holder from which the tokens are transferred.
     pub from: TokenHolder,
@@ -228,8 +230,12 @@ pub struct TokenTransferEvent {
 
 /// An event emitted when the token supply is updated, i.e. by minting/burning
 /// tokens to/from the balance of the `target`.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct TokenSupplyUpdateEvent {
     /// The token holder the balance update is performed on.
     pub target: TokenHolder,

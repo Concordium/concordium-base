@@ -1,6 +1,7 @@
 /// This module provides serialization and deserialization functions for hash
 /// maps with string keys and CBOR values, where the values are represented as
 /// hex strings of the CBOR encoding.
+#[cfg(feature = "serde_deprecated")]
 pub mod map_hex_cbor_values {
     use std::collections::HashMap;
 

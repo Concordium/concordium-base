@@ -65,7 +65,7 @@ impl<'de> SerdeDeserialize<'de> for AttributeKind {
     fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
         struct AttributeKindVisitor;
 
-        impl<'de> Visitor<'de> for AttributeKindVisitor {
+        impl Visitor<'_> for AttributeKindVisitor {
             type Value = AttributeKind;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -96,7 +96,7 @@ impl Deserial for AttributeKind {
 
 impl Serial for AttributeKind {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        out.put(&(self.0.as_bytes().len() as u8));
+        out.put(&(self.0.len() as u8));
         out.write_all(self.0.as_bytes())
             .expect("Writing to buffer should succeed.");
     }
@@ -144,7 +144,7 @@ impl From<u64> for AttributeKind {
 impl Attribute<<ArkGroup<G1Projective> as Curve>::Scalar> for AttributeKind {
     fn to_field_element(&self) -> <ArkGroup<G1Projective> as Curve>::Scalar {
         let mut buf = [0u8; 32];
-        let len = self.0.as_bytes().len();
+        let len = self.0.len();
         buf[1 + (31 - len)..].copy_from_slice(self.0.as_bytes());
         buf[0] = len as u8; // this should be valid because len <= 31 so the first two bits will be unset
         <<ArkGroup<G1Projective> as Curve>::Scalar as Deserial>::deserial(&mut Cursor::new(&buf))

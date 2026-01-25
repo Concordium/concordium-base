@@ -388,7 +388,7 @@ pub trait HasValidationContext {
     fn return_type(&self) -> BlockType;
 }
 
-impl<'a> HasValidationContext for FunctionContext<'a> {
+impl HasValidationContext for FunctionContext<'_> {
     fn get_local(&self, idx: LocalIndex) -> ValidateResult<ValueType> {
         let res = self.locals.binary_search_by(|locals| {
             if locals.end <= idx {
@@ -1249,7 +1249,7 @@ pub fn validate_module(
                     .limits
                     .min
                     .checked_mul(PAGE_SIZE)
-                    .map_or(false, |l| end <= l),
+                    .is_some_and(|l| end <= l),
                 "Initialization expression for the data segment exceeds initial memory size {} > \
                  {}.",
                 end,

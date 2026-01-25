@@ -327,7 +327,7 @@ pub struct PersistentStateIterator<'a, L> {
     loader: &'a mut L,
 }
 
-impl<'a, L: BackingStoreLoad> Iterator for PersistentStateIterator<'a, L> {
+impl<L: BackingStoreLoad> Iterator for PersistentStateIterator<'_, L> {
     type Item = (Vec<u8>, Vec<u8>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -347,7 +347,7 @@ impl<'a, L: BackingStoreLoad> Iterator for PersistentStateIterator<'a, L> {
 /// This marker instance informs the compiler, and the users, that once the
 /// iterator returns [`None`] it will always return [`None`], which could be
 /// used to optimize usage.
-impl<'a, L: BackingStoreLoad> FusedIterator for PersistentStateIterator<'a, L> {}
+impl<L: BackingStoreLoad> FusedIterator for PersistentStateIterator<'_, L> {}
 
 #[derive(Debug, Clone)]
 /// This type is a technical device to support lazy conversion of

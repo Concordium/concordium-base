@@ -212,7 +212,7 @@ pub fn encode_public_credential_values<F: PrimeField>(
     let mut f = F::zero().into_repr();
     let ca: u32 = created_at.into();
     let vt: u32 = valid_to.into();
-    let s = u64::from(vt) << 32 | u64::from(ca);
+    let s = (u64::from(vt) << 32) | (u64::from(ca));
     f[0] = s; // limbs are little endian.
     let threshold: u8 = threshold.into();
     f[1] = u64::from(threshold);

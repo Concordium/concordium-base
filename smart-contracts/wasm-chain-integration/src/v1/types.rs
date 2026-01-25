@@ -664,7 +664,7 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
     /// we additionally ensure that they contain only alphanumeric and
     /// punctuation characters.
     fn validate_export_function(&self, item_name: &Name, ty: &FunctionType) -> bool {
-        let valid_name = item_name.as_ref().as_bytes().len() <= MAX_EXPORT_NAME_LEN
+        let valid_name = item_name.as_ref().len() <= MAX_EXPORT_NAME_LEN
             && item_name
                 .as_ref()
                 .chars()
@@ -816,7 +816,7 @@ impl InstanceStateEntry {
     /// This assumes both value are small enough.
     pub fn new(gen: InstanceCounter, idx: usize) -> Self {
         Self {
-            index: u64::from(gen) << 32 | idx as u64,
+            index: (u64::from(gen) << 32) | idx as u64,
         }
     }
 }
@@ -838,7 +838,7 @@ impl InstanceStateEntryOption {
     /// This assumes both value are small enough.
     pub fn new_some(gen: InstanceCounter, idx: usize) -> Self {
         Self {
-            index: u64::from(gen) << 32 | idx as u64,
+            index: (u64::from(gen) << 32) | idx as u64,
         }
     }
 
@@ -877,7 +877,7 @@ impl InstanceStateEntryResultOption {
     #[inline]
     pub fn new_ok_some(gen: InstanceCounter, idx: usize) -> Self {
         Self {
-            index: u64::from(gen) << 32 | idx as u64,
+            index: (u64::from(gen) << 32) | idx as u64,
         }
     }
 }
@@ -921,7 +921,7 @@ impl InstanceStateIteratorResultOption {
     #[inline]
     pub fn new_ok_some(gen: InstanceCounter, idx: usize) -> Self {
         Self {
-            index: u64::from(gen) << 32 | idx as u64,
+            index: (u64::from(gen) << 32) | idx as u64,
         }
     }
 
@@ -1387,7 +1387,7 @@ struct ResizeAllocateCounter<'a> {
     energy: &'a mut InterpreterEnergy,
 }
 
-impl<'a> trie::AllocCounter<trie::Value> for ResizeAllocateCounter<'a> {
+impl trie::AllocCounter<trie::Value> for ResizeAllocateCounter<'_> {
     type Err = anyhow::Error;
 
     #[inline]

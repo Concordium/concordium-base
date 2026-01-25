@@ -190,7 +190,7 @@ impl<'de, Purpose> serde::Deserialize<'de> for HashBytes<Purpose> {
             _phantom: PhantomData<Purpose>,
         }
 
-        impl<'de, Purpose> serde::de::Visitor<'de> for HashBytesVisitor<Purpose> {
+        impl<Purpose> serde::de::Visitor<'_> for HashBytesVisitor<Purpose> {
             type Value = HashBytes<Purpose>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

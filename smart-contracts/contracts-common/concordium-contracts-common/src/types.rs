@@ -1347,14 +1347,14 @@ impl Ord for Address {
 #[derive(Eq, PartialEq, Copy, Clone, Debug, Hash)]
 pub struct ContractName<'a>(&'a str);
 
-impl<'a> fmt::Display for ContractName<'a> {
+impl fmt::Display for ContractName<'_> {
     #[inline(always)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }
 }
 
-impl<'a> PartialEq<str> for ContractName<'a> {
+impl PartialEq<str> for ContractName<'_> {
     fn eq(&self, other: &str) -> bool {
         self.0 == other
     }
@@ -1538,14 +1538,14 @@ impl convert::TryFrom<String> for OwnedContractName {
 #[repr(transparent)]
 pub struct ReceiveName<'a>(&'a str);
 
-impl<'a> fmt::Display for ReceiveName<'a> {
+impl fmt::Display for ReceiveName<'_> {
     #[inline(always)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }
 }
 
-impl<'a> PartialEq<str> for ReceiveName<'a> {
+impl PartialEq<str> for ReceiveName<'_> {
     fn eq(&self, other: &str) -> bool {
         self.0 == other
     }
@@ -1726,7 +1726,7 @@ pub struct EntrypointName<'a>(pub(crate) &'a str);
 impl<'a> EntrypointName<'a> {
     /// Size of the name in bytes.
     pub fn size(&self) -> u32 {
-        self.0.as_bytes().len() as u32
+        self.0.len() as u32
     }
 
     /// Create a new name and check the format. See [is_valid_entrypoint_name]
@@ -1751,7 +1751,7 @@ impl<'a> EntrypointName<'a> {
     }
 }
 
-impl<'a> fmt::Display for EntrypointName<'a> {
+impl fmt::Display for EntrypointName<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.0)
     }
@@ -1769,7 +1769,7 @@ impl<'a> From<EntrypointName<'a>> for OwnedEntrypointName {
     }
 }
 
-impl<'a> PartialEq<str> for EntrypointName<'a> {
+impl PartialEq<str> for EntrypointName<'_> {
     fn eq(&self, other: &str) -> bool {
         self.0 == other
     }
@@ -1850,7 +1850,7 @@ impl OwnedEntrypointName {
 #[derive(Eq, PartialEq, Clone, Copy, Hash, Default)]
 pub struct Parameter<'a>(pub(crate) &'a [u8]);
 
-impl<'a> fmt::Debug for Parameter<'a> {
+impl fmt::Debug for Parameter<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if f.alternate() {
             self.0.fmt(f)
@@ -1863,7 +1863,7 @@ impl<'a> fmt::Debug for Parameter<'a> {
     }
 }
 
-impl<'a> AsRef<[u8]> for Parameter<'a> {
+impl AsRef<[u8]> for Parameter<'_> {
     #[inline(always)]
     fn as_ref(&self) -> &[u8] {
         self.0
@@ -2035,7 +2035,7 @@ impl OwnedParameter {
 ///
 /// [m]: ./constants/constant.MAX_FUNC_NAME_SIZE.html
 pub fn is_valid_entrypoint_name(name: &str) -> Result<(), NewReceiveNameError> {
-    if name.as_bytes().len() >= constants::MAX_FUNC_NAME_SIZE {
+    if name.len() >= constants::MAX_FUNC_NAME_SIZE {
         return Err(NewReceiveNameError::TooLong);
     }
     if !name
@@ -2667,7 +2667,7 @@ mod policy_json {
                         if let Ok(tag) = AttributeTag::try_from(s) {
                             match v {
                                 serde_json::Value::String(value_string)
-                                    if value_string.as_bytes().len() <= 31 =>
+                                    if value_string.len() <= 31 =>
                                 {
                                     let value =
                                         AttributeValue::new(&value_string.into_bytes()).unwrap(); // Safe as we know the length is valid.
@@ -3025,7 +3025,7 @@ mod serde_impl {
         /// Deserialize (via Serde)
         pub fn deserialize<'de, D: serde::Deserializer<'de>>(des: D) -> Result<Vec<u8>, D::Error> {
             struct HexVisitor;
-            impl<'de> serde::de::Visitor<'de> for HexVisitor {
+            impl serde::de::Visitor<'_> for HexVisitor {
                 type Value = Vec<u8>;
 
                 fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -3143,7 +3143,7 @@ mod serde_impl {
 
     struct Base58Visitor;
 
-    impl<'de> Visitor<'de> for Base58Visitor {
+    impl Visitor<'_> for Base58Visitor {
         type Value = AccountAddress;
 
         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

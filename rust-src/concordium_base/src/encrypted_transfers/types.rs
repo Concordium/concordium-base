@@ -65,9 +65,13 @@ pub struct EncryptedAmountRandomness<C: Curve> {
 }
 
 /// An encrypted amount that we know the index of.
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
-#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
-#[serde(rename_all = "camelCase")]
+#[derive(Serialize)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct IndexedEncryptedAmount<C: Curve> {
     /// The actual encrypted amount.
     pub encrypted_chunks: EncryptedAmount<C>,
@@ -79,9 +83,13 @@ pub struct IndexedEncryptedAmount<C: Curve> {
 pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 
 /// Data that will go onto an encrypted amount transfer.
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize, Clone, Debug)]
-#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
-#[serde(rename_all = "camelCase")]
+#[derive(Serialize, Clone, Debug)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct EncryptedAmountTransferData<C: Curve> {
     /// Encryption of the remaining amount.
     pub remaining_amount: EncryptedAmount<C>,
@@ -97,9 +105,13 @@ pub struct EncryptedAmountTransferData<C: Curve> {
 }
 
 /// Data that will go onto a secret to public amount transfer.
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize, Debug, Clone)]
-#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
-#[serde(rename_all = "camelCase")]
+#[derive(Serialize, Debug, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct SecToPubAmountTransferData<C: Curve> {
     /// Encryption of the remaining amount.
     pub remaining_amount: EncryptedAmount<C>,
@@ -117,9 +129,13 @@ pub struct SecToPubAmountTransferData<C: Curve> {
 /// An aggregated encrypted amount with a decrypted plaintext, collecting
 /// encrypted amounts with decryption. The only real difference from the above
 /// is the meaning of the index field.
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
-#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
-#[serde(rename_all = "camelCase")]
+#[derive(Serialize)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct AggregatedDecryptedAmount<C: Curve> {
     /// The aggregated encrypted amount.
     pub agg_encrypted_amount: EncryptedAmount<C>,
@@ -127,7 +143,7 @@ pub struct AggregatedDecryptedAmount<C: Curve> {
     pub agg_amount: Amount,
     /// Index such that the `agg_amount` is the sum of all encrypted amounts
     /// on an account with indices strictly below `agg_index`.
-    #[serde(default)]
+    #[cfg_attr(feature = "serde_deprecated", serde(default))]
     pub agg_index: EncryptedAmountAggIndex,
 }
 

@@ -272,7 +272,7 @@ impl TryFrom<MapKey> for u64 {
 }
 
 impl MapKey {
-    pub fn as_ref(&self) -> MapKeyRef {
+    pub fn as_ref(&self) -> MapKeyRef<'_> {
         match self {
             MapKey::Positive(positive) => MapKeyRef::Positive(*positive),
             MapKey::Text(text) => MapKeyRef::Text(text),
@@ -745,7 +745,7 @@ mod test {
 
         let err = cbor_decode::<[u8; 4]>(&cbor).unwrap_err().to_string();
         assert!(
-            err.contains("fixed length byte string destination too short"),
+            err.contains("fixed size deserialization type too short"),
             "err: {}",
             err
         );

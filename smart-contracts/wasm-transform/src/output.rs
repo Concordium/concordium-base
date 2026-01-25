@@ -79,7 +79,7 @@ impl Output for FunctionType {
     }
 }
 
-impl<'a> Output for UnparsedSection<'a> {
+impl Output for UnparsedSection<'_> {
     fn output(&self, out: &mut impl Write) -> OutResult<()> {
         out.write_all(&[self.section_id as u8])?;
         let len = u32::try_from(self.bytes.len())?;
@@ -89,7 +89,7 @@ impl<'a> Output for UnparsedSection<'a> {
     }
 }
 
-impl<'a, A: Output> Output for &'a [A] {
+impl<A: Output> Output for &[A] {
     fn output(&self, out: &mut impl Write) -> OutResult<()> {
         let len: u32 = self.len().try_into()?;
         len.output(out)?;
@@ -143,7 +143,7 @@ impl Output for Name {
 
 /// Write out the skeleton. All the custom sections are written at the end.
 /// This makes it possible to output additional ones incrementally.
-impl<'a> Output for Skeleton<'a> {
+impl Output for Skeleton<'_> {
     fn output(&self, out: &mut impl Write) -> OutResult<()> {
         out.write_all(&MAGIC_HASH)?;
         out.write_all(&VERSION)?;
@@ -192,7 +192,7 @@ impl<'a> Output for Skeleton<'a> {
 /// always be appended, and it will result in another valid Wasm module.
 pub fn write_custom_section(out: &mut impl Write, cs: &CustomSection) -> OutResult<()> {
     out.write_all(&[SectionId::Custom as u8])?;
-    let name_len = cs.name.name.as_bytes().len();
+    let name_len = cs.name.name.len();
     // temporary buffer for writing length of the name so we can retrieve how many
     // bytes are needed.
     let mut tmp_out = Vec::with_capacity(5);
