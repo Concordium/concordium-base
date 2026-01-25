@@ -76,7 +76,7 @@ impl TokenModuleEventType {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
-pub enum TokenModuleEventEnum {
+pub enum TokenModuleEvent {
     /// An account was added to the allow list of a protocol level token
     AddAllowList(AddAllowListEvent),
     /// An account was removed from the allow list of a protocol level token
@@ -93,43 +93,43 @@ pub enum TokenModuleEventEnum {
     Unpause(UnpauseEvent),
 }
 
-impl TokenModuleEventEnum {
+impl TokenModuleEvent {
     /// Token module event type
     pub fn event_type(&self) -> TokenModuleEventType {
         match self {
-            TokenModuleEventEnum::AddAllowList(_) => TokenModuleEventType::AddAllowList,
-            TokenModuleEventEnum::RemoveAllowList(_) => TokenModuleEventType::RemoveAllowList,
-            TokenModuleEventEnum::AddDenyList(_) => TokenModuleEventType::AddDenyList,
-            TokenModuleEventEnum::RemoveDenyList(_) => TokenModuleEventType::RemoveDenyList,
-            TokenModuleEventEnum::Pause(_) => TokenModuleEventType::Pause,
-            TokenModuleEventEnum::Unpause(_) => TokenModuleEventType::Unpause,
+            TokenModuleEvent::AddAllowList(_) => TokenModuleEventType::AddAllowList,
+            TokenModuleEvent::RemoveAllowList(_) => TokenModuleEventType::RemoveAllowList,
+            TokenModuleEvent::AddDenyList(_) => TokenModuleEventType::AddDenyList,
+            TokenModuleEvent::RemoveDenyList(_) => TokenModuleEventType::RemoveDenyList,
+            TokenModuleEvent::Pause(_) => TokenModuleEventType::Pause,
+            TokenModuleEvent::Unpause(_) => TokenModuleEventType::Unpause,
         }
     }
 
     /// Encode event as CBOR. Returns the event type and its CBOR encoding.
     pub fn encode_event(&self) -> (TokenModuleEventType, RawCbor) {
         match self {
-            TokenModuleEventEnum::AddAllowList(event) => (
+            TokenModuleEvent::AddAllowList(event) => (
                 TokenModuleEventType::AddAllowList,
                 RawCbor::from(cbor::cbor_encode(event)),
             ),
-            TokenModuleEventEnum::RemoveAllowList(event) => (
+            TokenModuleEvent::RemoveAllowList(event) => (
                 TokenModuleEventType::RemoveAllowList,
                 RawCbor::from(cbor::cbor_encode(event)),
             ),
-            TokenModuleEventEnum::AddDenyList(event) => (
+            TokenModuleEvent::AddDenyList(event) => (
                 TokenModuleEventType::AddDenyList,
                 RawCbor::from(cbor::cbor_encode(event)),
             ),
-            TokenModuleEventEnum::RemoveDenyList(event) => (
+            TokenModuleEvent::RemoveDenyList(event) => (
                 TokenModuleEventType::RemoveDenyList,
                 RawCbor::from(cbor::cbor_encode(event)),
             ),
-            TokenModuleEventEnum::Pause(event) => (
+            TokenModuleEvent::Pause(event) => (
                 TokenModuleEventType::Pause,
                 RawCbor::from(cbor::cbor_encode(event)),
             ),
-            TokenModuleEventEnum::Unpause(event) => (
+            TokenModuleEvent::Unpause(event) => (
                 TokenModuleEventType::Unpause,
                 RawCbor::from(cbor::cbor_encode(event)),
             ),
@@ -143,21 +143,19 @@ impl TokenModuleEventEnum {
     ) -> CborSerializationResult<Self> {
         Ok(match event_type {
             TokenModuleEventType::AddAllowList => {
-                TokenModuleEventEnum::AddAllowList(cbor::cbor_decode(cbor)?)
+                TokenModuleEvent::AddAllowList(cbor::cbor_decode(cbor)?)
             }
             TokenModuleEventType::RemoveAllowList => {
-                TokenModuleEventEnum::RemoveAllowList(cbor::cbor_decode(cbor)?)
+                TokenModuleEvent::RemoveAllowList(cbor::cbor_decode(cbor)?)
             }
             TokenModuleEventType::AddDenyList => {
-                TokenModuleEventEnum::AddDenyList(cbor::cbor_decode(cbor)?)
+                TokenModuleEvent::AddDenyList(cbor::cbor_decode(cbor)?)
             }
             TokenModuleEventType::RemoveDenyList => {
-                TokenModuleEventEnum::RemoveDenyList(cbor::cbor_decode(cbor)?)
+                TokenModuleEvent::RemoveDenyList(cbor::cbor_decode(cbor)?)
             }
-            TokenModuleEventType::Pause => TokenModuleEventEnum::Pause(cbor::cbor_decode(cbor)?),
-            TokenModuleEventType::Unpause => {
-                TokenModuleEventEnum::Unpause(cbor::cbor_decode(cbor)?)
-            }
+            TokenModuleEventType::Pause => TokenModuleEvent::Pause(cbor::cbor_decode(cbor)?),
+            TokenModuleEventType::Unpause => TokenModuleEvent::Unpause(cbor::cbor_decode(cbor)?),
         })
     }
 }
@@ -293,7 +291,7 @@ impl TryFrom<String> for TokenModuleCborTypeDiscriminator {
     type Error = TypeFromStringError;
 
     fn try_from(event_type: String) -> Result<Self, Self::Error> {
-        let byte_len = event_type.as_bytes().len();
+        let byte_len = event_type.len();
         if byte_len > TYPE_MAX_BYTE_LEN {
             Err(TypeFromStringError {
                 actual_size: byte_len,
