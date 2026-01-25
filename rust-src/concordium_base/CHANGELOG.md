@@ -2,7 +2,7 @@
 - `cbor::cbor_encode` is now infallible and returns `Vec<u8>` instead of `CborSerializationResult<Vec<u8>>`
 - `&[T]` no longer implements `CborSerialize` in order to avoid ambiguity with `CborSerialize` implementation for `[u8]`. 
   To serialize a slice as a CBOR array, wrap it in `ArraySlice`.
-  Notice that `[u8]` still implements `CborSerialize` and serializes as a CBOR bytestring.
+  `[u8]` still implements `CborSerialize` and serializes as a CBOR bytestring.
 - Removed the module `upward`. This will be added to Rust SDK crate instead. 
 - Changes to `protocol_level_tokens` module:
   - Removed the usage of `Upward` in `TokenOperations` type. To CBOR decode and allow unknown variants,
