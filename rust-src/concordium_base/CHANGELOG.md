@@ -5,17 +5,18 @@
   - Removed the usage of `Upward` in `TokenOperations` type. To CBOR decode and allow unknown variants,
     the new function `TokenOperationsPayload::decode_operations_maybe_known` can be used instead.
   - Removed the types `TokenModuleRejectReason`, `TokenEvent`, `TokenEventDetails`, `TokenModuleEvent`. These types 
-    will be moved to the Rust SDK crate.
-  - Renamed the existing type `TokenModuleEventType` that contains full token module events to `TokenModuleEventEnum` and
+    will be moved to the Rust SDK crate. (`TokenModuleRejectReason` under the name `EncodedTokenModuleRejectReason`
+    and `TokenModuleEvent` under the name `EncodedTokenModuleEvent`).
+  - Renamed the existing type `TokenModuleEventType` that contains full token module events to `TokenModuleEvent` and
     created a new `TokenModuleEventType` that is only the type of event. The new methods
-    `TokenModuleEventEnum::encode_event` and `TokenModuleEventEnum::decode_event` allows CBOR encoding from and CBOR decoding
-    to `TokenModuleEventEnum`. The new methods `TokenModuleEventType::to_type_discriminator` and
+    `TokenModuleEvent::encode_event` and `TokenModuleEvent::decode_event` allows CBOR encoding from and CBOR decoding
+    to `TokenModuleEvent`. The new methods `TokenModuleEventType::to_type_discriminator` and
     `TokenModuleEventType::try_from_type_discriminator` allows converting between `TokenModuleEventType`
     and `TokenModuleCborTypeDiscriminator`.
-  - Renamed the existing type `TokenModuleRejectReasonType` that contains full token module reject reasons to `TokenModuleRejectReasonEnum` and
+  - Renamed the existing type `TokenModuleRejectReasonType` that contains full token module reject reasons to `TokenModuleRejectReason` and
     created a new `TokenModuleRejectReasonType` that is only the type of reject reason. The new methods
-    `TokenModuleRejectReasonEnum::encode_reject_reason` and `TokenModuleRejectReasonEnum::decode_reject_reason` allows CBOR encoding from and CBOR decoding
-    to `TokenModuleRejectReasonEnum`. The new methods `TokenModuleRejectReasonType::to_type_discriminator` and
+    `TokenModuleRejectReason::encode_reject_reason` and `TokenModuleRejectReason::decode_reject_reason` allows CBOR encoding from and CBOR decoding
+    to `TokenModuleRejectReason`. The new methods `TokenModuleRejectReasonType::to_type_discriminator` and
     `TokenModuleRejectReasonType::try_from_type_discriminator` allows converting between `TokenModuleRejectReasonType`
     and `TokenModuleCborTypeDiscriminator`. 
 

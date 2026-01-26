@@ -74,7 +74,7 @@ impl TokenModuleRejectReasonType {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
-pub enum TokenModuleRejectReasonEnum {
+pub enum TokenModuleRejectReason {
     /// Address not found
     AddressNotFound(AddressNotFoundRejectReason),
     /// Token balance is insufficient
@@ -90,26 +90,26 @@ pub enum TokenModuleRejectReasonEnum {
     MintWouldOverflow(MintWouldOverflowRejectReason),
 }
 
-impl TokenModuleRejectReasonEnum {
+impl TokenModuleRejectReason {
     /// Token module reject reason type
     pub fn reject_reason_type(&self) -> TokenModuleRejectReasonType {
         match self {
-            TokenModuleRejectReasonEnum::AddressNotFound(_) => {
+            TokenModuleRejectReason::AddressNotFound(_) => {
                 TokenModuleRejectReasonType::AddressNotFound
             }
-            TokenModuleRejectReasonEnum::TokenBalanceInsufficient(_) => {
+            TokenModuleRejectReason::TokenBalanceInsufficient(_) => {
                 TokenModuleRejectReasonType::TokenBalanceInsufficient
             }
-            TokenModuleRejectReasonEnum::DeserializationFailure(_) => {
+            TokenModuleRejectReason::DeserializationFailure(_) => {
                 TokenModuleRejectReasonType::DeserializationFailure
             }
-            TokenModuleRejectReasonEnum::UnsupportedOperation(_) => {
+            TokenModuleRejectReason::UnsupportedOperation(_) => {
                 TokenModuleRejectReasonType::UnsupportedOperation
             }
-            TokenModuleRejectReasonEnum::OperationNotPermitted(_) => {
+            TokenModuleRejectReason::OperationNotPermitted(_) => {
                 TokenModuleRejectReasonType::OperationNotPermitted
             }
-            TokenModuleRejectReasonEnum::MintWouldOverflow(_) => {
+            TokenModuleRejectReason::MintWouldOverflow(_) => {
                 TokenModuleRejectReasonType::MintWouldOverflow
             }
         }
@@ -118,27 +118,27 @@ impl TokenModuleRejectReasonEnum {
     /// Encode reject reason as CBOR. Returns the reject reason type and its CBOR encoding.
     pub fn encode_reject_reason(&self) -> (TokenModuleRejectReasonType, RawCbor) {
         match self {
-            TokenModuleRejectReasonEnum::AddressNotFound(reject_reason) => (
+            TokenModuleRejectReason::AddressNotFound(reject_reason) => (
                 TokenModuleRejectReasonType::AddressNotFound,
                 RawCbor::from(cbor::cbor_encode(reject_reason)),
             ),
-            TokenModuleRejectReasonEnum::TokenBalanceInsufficient(reject_reason) => (
+            TokenModuleRejectReason::TokenBalanceInsufficient(reject_reason) => (
                 TokenModuleRejectReasonType::TokenBalanceInsufficient,
                 RawCbor::from(cbor::cbor_encode(reject_reason)),
             ),
-            TokenModuleRejectReasonEnum::DeserializationFailure(reject_reason) => (
+            TokenModuleRejectReason::DeserializationFailure(reject_reason) => (
                 TokenModuleRejectReasonType::DeserializationFailure,
                 RawCbor::from(cbor::cbor_encode(reject_reason)),
             ),
-            TokenModuleRejectReasonEnum::UnsupportedOperation(reject_reason) => (
+            TokenModuleRejectReason::UnsupportedOperation(reject_reason) => (
                 TokenModuleRejectReasonType::UnsupportedOperation,
                 RawCbor::from(cbor::cbor_encode(reject_reason)),
             ),
-            TokenModuleRejectReasonEnum::OperationNotPermitted(reject_reason) => (
+            TokenModuleRejectReason::OperationNotPermitted(reject_reason) => (
                 TokenModuleRejectReasonType::OperationNotPermitted,
                 RawCbor::from(cbor::cbor_encode(reject_reason)),
             ),
-            TokenModuleRejectReasonEnum::MintWouldOverflow(reject_reason) => (
+            TokenModuleRejectReason::MintWouldOverflow(reject_reason) => (
                 TokenModuleRejectReasonType::MintWouldOverflow,
                 RawCbor::from(cbor::cbor_encode(reject_reason)),
             ),
@@ -152,22 +152,22 @@ impl TokenModuleRejectReasonEnum {
     ) -> CborSerializationResult<Self> {
         Ok(match reject_reason_type {
             TokenModuleRejectReasonType::AddressNotFound => {
-                TokenModuleRejectReasonEnum::AddressNotFound(cbor::cbor_decode(cbor)?)
+                TokenModuleRejectReason::AddressNotFound(cbor::cbor_decode(cbor)?)
             }
             TokenModuleRejectReasonType::TokenBalanceInsufficient => {
-                TokenModuleRejectReasonEnum::TokenBalanceInsufficient(cbor::cbor_decode(cbor)?)
+                TokenModuleRejectReason::TokenBalanceInsufficient(cbor::cbor_decode(cbor)?)
             }
             TokenModuleRejectReasonType::DeserializationFailure => {
-                TokenModuleRejectReasonEnum::DeserializationFailure(cbor::cbor_decode(cbor)?)
+                TokenModuleRejectReason::DeserializationFailure(cbor::cbor_decode(cbor)?)
             }
             TokenModuleRejectReasonType::UnsupportedOperation => {
-                TokenModuleRejectReasonEnum::UnsupportedOperation(cbor::cbor_decode(cbor)?)
+                TokenModuleRejectReason::UnsupportedOperation(cbor::cbor_decode(cbor)?)
             }
             TokenModuleRejectReasonType::OperationNotPermitted => {
-                TokenModuleRejectReasonEnum::OperationNotPermitted(cbor::cbor_decode(cbor)?)
+                TokenModuleRejectReason::OperationNotPermitted(cbor::cbor_decode(cbor)?)
             }
             TokenModuleRejectReasonType::MintWouldOverflow => {
-                TokenModuleRejectReasonEnum::MintWouldOverflow(cbor::cbor_decode(cbor)?)
+                TokenModuleRejectReason::MintWouldOverflow(cbor::cbor_decode(cbor)?)
             }
         })
     }
