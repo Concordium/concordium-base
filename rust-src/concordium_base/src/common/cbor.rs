@@ -837,10 +837,13 @@ impl<T: CborSerialize> CborSerialize for Vec<T> {
     }
 }
 
-impl<T: CborSerialize> CborSerialize for &[T] {
+/// Wrapper for serializing slices as arrays.
+pub struct ArraySlice<'a, T>(pub &'a [T]);
+
+impl<T: CborSerialize> CborSerialize for ArraySlice<'_, T> {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         let mut array_encoder = encoder.encode_array()?;
-        for item in self.iter() {
+        for item in self.0 {
             array_encoder.serialize_element(item)?
         }
         array_encoder.end()?;
@@ -1542,6 +1545,15 @@ mod test {
         assert_eq!(hex::encode(&cbor), "d99c386461626364");
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
+    }
+
+    /// Test serializing slice as array using [`ArraySlice`].
+    #[test]
+    fn test_array_slice() {
+        let array_slice = ArraySlice(&[1u8, 2u8]);
+
+        let cbor = cbor_encode(&array_slice);
+        assert_eq!(hex::encode(&cbor), "820102");
     }
 
     #[test]
