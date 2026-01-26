@@ -68,9 +68,13 @@ impl TokenModuleRejectReasonType {
 }
 
 /// Token module reject reason parsed from type and CBOR
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum TokenModuleRejectReasonEnum {
+#[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+pub enum TokenModuleRejectReason {
     /// Address not found
     AddressNotFound(AddressNotFoundRejectReason),
     /// Token balance is insufficient
@@ -86,26 +90,26 @@ pub enum TokenModuleRejectReasonEnum {
     MintWouldOverflow(MintWouldOverflowRejectReason),
 }
 
-impl TokenModuleRejectReasonEnum {
+impl TokenModuleRejectReason {
     /// Token module reject reason type
     pub fn reject_reason_type(&self) -> TokenModuleRejectReasonType {
         match self {
-            TokenModuleRejectReasonEnum::AddressNotFound(_) => {
+            TokenModuleRejectReason::AddressNotFound(_) => {
                 TokenModuleRejectReasonType::AddressNotFound
             }
-            TokenModuleRejectReasonEnum::TokenBalanceInsufficient(_) => {
+            TokenModuleRejectReason::TokenBalanceInsufficient(_) => {
                 TokenModuleRejectReasonType::TokenBalanceInsufficient
             }
-            TokenModuleRejectReasonEnum::DeserializationFailure(_) => {
+            TokenModuleRejectReason::DeserializationFailure(_) => {
                 TokenModuleRejectReasonType::DeserializationFailure
             }
-            TokenModuleRejectReasonEnum::UnsupportedOperation(_) => {
+            TokenModuleRejectReason::UnsupportedOperation(_) => {
                 TokenModuleRejectReasonType::UnsupportedOperation
             }
-            TokenModuleRejectReasonEnum::OperationNotPermitted(_) => {
+            TokenModuleRejectReason::OperationNotPermitted(_) => {
                 TokenModuleRejectReasonType::OperationNotPermitted
             }
-            TokenModuleRejectReasonEnum::MintWouldOverflow(_) => {
+            TokenModuleRejectReason::MintWouldOverflow(_) => {
                 TokenModuleRejectReasonType::MintWouldOverflow
             }
         }
@@ -114,27 +118,27 @@ impl TokenModuleRejectReasonEnum {
     /// Encode reject reason as CBOR. Returns the reject reason type and its CBOR encoding.
     pub fn encode_reject_reason(&self) -> (TokenModuleRejectReasonType, RawCbor) {
         match self {
-            TokenModuleRejectReasonEnum::AddressNotFound(reject_reason) => (
+            TokenModuleRejectReason::AddressNotFound(reject_reason) => (
                 TokenModuleRejectReasonType::AddressNotFound,
                 RawCbor::from(cbor::cbor_encode(reject_reason)),
             ),
-            TokenModuleRejectReasonEnum::TokenBalanceInsufficient(reject_reason) => (
+            TokenModuleRejectReason::TokenBalanceInsufficient(reject_reason) => (
                 TokenModuleRejectReasonType::TokenBalanceInsufficient,
                 RawCbor::from(cbor::cbor_encode(reject_reason)),
             ),
-            TokenModuleRejectReasonEnum::DeserializationFailure(reject_reason) => (
+            TokenModuleRejectReason::DeserializationFailure(reject_reason) => (
                 TokenModuleRejectReasonType::DeserializationFailure,
                 RawCbor::from(cbor::cbor_encode(reject_reason)),
             ),
-            TokenModuleRejectReasonEnum::UnsupportedOperation(reject_reason) => (
+            TokenModuleRejectReason::UnsupportedOperation(reject_reason) => (
                 TokenModuleRejectReasonType::UnsupportedOperation,
                 RawCbor::from(cbor::cbor_encode(reject_reason)),
             ),
-            TokenModuleRejectReasonEnum::OperationNotPermitted(reject_reason) => (
+            TokenModuleRejectReason::OperationNotPermitted(reject_reason) => (
                 TokenModuleRejectReasonType::OperationNotPermitted,
                 RawCbor::from(cbor::cbor_encode(reject_reason)),
             ),
-            TokenModuleRejectReasonEnum::MintWouldOverflow(reject_reason) => (
+            TokenModuleRejectReason::MintWouldOverflow(reject_reason) => (
                 TokenModuleRejectReasonType::MintWouldOverflow,
                 RawCbor::from(cbor::cbor_encode(reject_reason)),
             ),
@@ -148,39 +152,34 @@ impl TokenModuleRejectReasonEnum {
     ) -> CborSerializationResult<Self> {
         Ok(match reject_reason_type {
             TokenModuleRejectReasonType::AddressNotFound => {
-                TokenModuleRejectReasonEnum::AddressNotFound(cbor::cbor_decode(cbor)?)
+                TokenModuleRejectReason::AddressNotFound(cbor::cbor_decode(cbor)?)
             }
             TokenModuleRejectReasonType::TokenBalanceInsufficient => {
-                TokenModuleRejectReasonEnum::TokenBalanceInsufficient(cbor::cbor_decode(cbor)?)
+                TokenModuleRejectReason::TokenBalanceInsufficient(cbor::cbor_decode(cbor)?)
             }
             TokenModuleRejectReasonType::DeserializationFailure => {
-                TokenModuleRejectReasonEnum::DeserializationFailure(cbor::cbor_decode(cbor)?)
+                TokenModuleRejectReason::DeserializationFailure(cbor::cbor_decode(cbor)?)
             }
             TokenModuleRejectReasonType::UnsupportedOperation => {
-                TokenModuleRejectReasonEnum::UnsupportedOperation(cbor::cbor_decode(cbor)?)
+                TokenModuleRejectReason::UnsupportedOperation(cbor::cbor_decode(cbor)?)
             }
             TokenModuleRejectReasonType::OperationNotPermitted => {
-                TokenModuleRejectReasonEnum::OperationNotPermitted(cbor::cbor_decode(cbor)?)
+                TokenModuleRejectReason::OperationNotPermitted(cbor::cbor_decode(cbor)?)
             }
             TokenModuleRejectReasonType::MintWouldOverflow => {
-                TokenModuleRejectReasonEnum::MintWouldOverflow(cbor::cbor_decode(cbor)?)
+                TokenModuleRejectReason::MintWouldOverflow(cbor::cbor_decode(cbor)?)
             }
         })
     }
 }
 
 /// A token holder address was not valid.
-#[derive(
-    Debug,
-    Clone,
-    Eq,
-    PartialEq,
-    serde::Serialize,
-    serde::Deserialize,
-    CborSerialize,
-    CborDeserialize,
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
 )]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct AddressNotFoundRejectReason {
     /// The index in the list of operations of the failing operation.
     pub index: u64,
@@ -190,17 +189,12 @@ pub struct AddressNotFoundRejectReason {
 
 /// The balance of tokens on the sender account is insufficient
 /// to perform the operation.
-#[derive(
-    Debug,
-    Clone,
-    Eq,
-    PartialEq,
-    serde::Serialize,
-    serde::Deserialize,
-    CborSerialize,
-    CborDeserialize,
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
 )]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct TokenBalanceInsufficientRejectReason {
     /// The index in the list of operations of the failing operation.
     pub index: u64,
@@ -211,17 +205,12 @@ pub struct TokenBalanceInsufficientRejectReason {
 }
 
 /// The transaction could not be deserialized.
-#[derive(
-    Debug,
-    Clone,
-    Eq,
-    PartialEq,
-    serde::Serialize,
-    serde::Deserialize,
-    CborSerialize,
-    CborDeserialize,
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
 )]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct DeserializationFailureRejectReason {
     /// Text description of the failure mode.
     pub cause: Option<String>,
@@ -234,17 +223,12 @@ pub struct DeserializationFailureRejectReason {
 /// operation is not authorized (i.e. the particular participants do not have
 /// the authority to perform the operation) then the reject reason is
 /// [`OperationNotPermittedRejectReason`] instead.
-#[derive(
-    Debug,
-    Clone,
-    Eq,
-    PartialEq,
-    serde::Serialize,
-    serde::Deserialize,
-    CborSerialize,
-    CborDeserialize,
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
 )]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct UnsupportedOperationRejectReason {
     /// The index in the list of operations of the failing operation.
     pub index: u64,
@@ -256,17 +240,12 @@ pub struct UnsupportedOperationRejectReason {
 
 /// The operation requires that a participating account has a certain
 /// permission, but the account does not have that permission.
-#[derive(
-    Debug,
-    Clone,
-    Eq,
-    PartialEq,
-    serde::Serialize,
-    serde::Deserialize,
-    CborSerialize,
-    CborDeserialize,
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
 )]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct OperationNotPermittedRejectReason {
     /// The index in the list of operations of the failing operation.
     pub index: u64,
@@ -278,17 +257,12 @@ pub struct OperationNotPermittedRejectReason {
 }
 
 /// Minting the requested amount would overflow the representable token amount.
-#[derive(
-    Debug,
-    Clone,
-    Eq,
-    PartialEq,
-    serde::Serialize,
-    serde::Deserialize,
-    CborSerialize,
-    CborDeserialize,
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
 )]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct MintWouldOverflowRejectReason {
     /// The index in the list of operations of the failing operation.
     pub index: u64,

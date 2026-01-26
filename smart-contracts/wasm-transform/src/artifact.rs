@@ -305,7 +305,7 @@ impl<'a> LocalsIterator<'a> {
     }
 }
 
-impl<'a> Iterator for LocalsIterator<'a> {
+impl Iterator for LocalsIterator<'_> {
     type Item = ValueType;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -329,7 +329,7 @@ impl<'a> Iterator for LocalsIterator<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for LocalsIterator<'a> {
+impl ExactSizeIterator for LocalsIterator<'_> {
     fn len(&self) -> usize {
         self.remaining_items as usize
     }
@@ -412,7 +412,7 @@ impl RunnableCode for CompiledFunction {
     }
 }
 
-impl<'a> RunnableCode for CompiledFunctionBytes<'a> {
+impl RunnableCode for CompiledFunctionBytes<'_> {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn num_params(&self) -> u32 {
         self.params.len() as u32
@@ -1893,7 +1893,7 @@ struct ModuleContext<'a> {
     code: &'a Code,
 }
 
-impl<'a> HasValidationContext for ModuleContext<'a> {
+impl HasValidationContext for ModuleContext<'_> {
     fn get_local(&self, idx: u32) -> CompileResult<ValueType> {
         let res = self.locals.binary_search_by(|locals| {
             if locals.end <= idx {

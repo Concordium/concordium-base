@@ -40,7 +40,7 @@ jobs:
     strategy:
       matrix:
         plan:
-        - rust: 1.82
+        - rust: 1.85
         crates:
         - rust-src
         - rust-bins
@@ -67,7 +67,7 @@ jobs:
     strategy:
       matrix:
         plan:
-        - rust: 1.82
+        - rust: 1.85
         crates:
         - rust-src
         - rust-bins
@@ -143,7 +143,7 @@ jobs:
       matrix:
         plan:
         - ghc: 9.10.2 # used as cache key only; stack uses the one specified in stack.yaml
-          rust: 1.82
+          rust: 1.85
 
     steps:
     - name: Checkout
@@ -266,5 +266,9 @@ jobs:
     - name: Test Rust crates
       run: |
         cargo test --manifest-path rust-src/Cargo.toml --all --verbose --release
+        # Verify that the `concordium_base` crate and its tests compile correctly
+        # with the `serde_deprecated` feature disabled (no default features enabled).
+        # We do not run the tests here because the full test suite is already executed above.
+        cargo test --manifest-path rust-src/Cargo.toml -p concordium_base --no-default-features --no-run
         cargo test --manifest-path identity-provider-service/Cargo.toml --features=vendored-ssl --all --verbose --release
         cargo bench --manifest-path rust-src/Cargo.toml --features concordium_base/internal-test-helpers --no-run

@@ -20,7 +20,7 @@ on:
 name: Clippy & fmt
 
 env:
-  RUST_VERSION: "1.82"
+  RUST_VERSION: "1.85"
 
 defaults:
   run:

@@ -687,7 +687,7 @@ impl Deserial for Address {
     }
 }
 
-impl<'a> Serial for ContractName<'a> {
+impl Serial for ContractName<'_> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let name = self.get_chain_name();
         let len = name.len() as u16;
@@ -713,7 +713,7 @@ impl Deserial for OwnedContractName {
     }
 }
 
-impl<'a> Serial for ReceiveName<'a> {
+impl Serial for ReceiveName<'_> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let name = self.get_chain_name();
         let len = name.len() as u16;
@@ -738,7 +738,7 @@ impl Deserial for OwnedReceiveName {
     }
 }
 
-impl<'a> Serial for EntrypointName<'a> {
+impl Serial for EntrypointName<'_> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let len = self.0.len() as u16;
         len.serial(out)?;
@@ -762,7 +762,7 @@ impl Deserial for OwnedEntrypointName {
     }
 }
 
-impl<'a> Serial for Parameter<'a> {
+impl Serial for Parameter<'_> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let len = self.0.len() as u16;
         len.serial(out)?;
@@ -1431,7 +1431,7 @@ impl<T: AsRef<[u8]>> Read for Cursor<T> {
 
 // This implementation deviates from [`std::io::Chain`](https://doc.rust-lang.org/std/io/struct.Chain.html#impl-Read-for-Chain%3CT,+U%3E)
 // since the usecase where we need this only have a mutable reference available.
-impl<'a, 'b, T: Read, U: Read> Read for Chain<&'a mut T, &'b mut U> {
+impl<T: Read, U: Read> Read for Chain<&mut T, &mut U> {
     fn read(&mut self, buf: &mut [u8]) -> ParseResult<usize> {
         if !self.done_first {
             match self.first.read(buf)? {

@@ -13,7 +13,7 @@ impl<'de> SerdeDeserialize<'de> for types::KeyIndex {
 
 struct KeyIndexVisitor;
 
-impl<'de> Visitor<'de> for KeyIndexVisitor {
+impl Visitor<'_> for KeyIndexVisitor {
     type Value = types::KeyIndex;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

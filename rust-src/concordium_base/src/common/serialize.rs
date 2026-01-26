@@ -911,7 +911,7 @@ pub fn base16_encode<S: Serializer, T: Serial>(v: &T, ser: S) -> Result<S::Ok, S
 pub fn base16_decode<'de, D: Deserializer<'de>, T: Deserial>(des: D) -> Result<T, D::Error> {
     struct Base16Visitor<D>(std::marker::PhantomData<D>);
 
-    impl<'de, D: Deserial> Visitor<'de> for Base16Visitor<D> {
+    impl<D: Deserial> Visitor<'_> for Base16Visitor<D> {
         type Value = D;
 
         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -944,7 +944,7 @@ pub(crate) fn base16_decode_array<'de, D: Deserializer<'de>, const N: usize>(
 ) -> Result<[u8; N], D::Error> {
     struct Base16Visitor<const N: usize>(std::marker::PhantomData<[u8; N]>);
 
-    impl<'de, const N: usize> Visitor<'de> for Base16Visitor<N> {
+    impl<const N: usize> Visitor<'_> for Base16Visitor<N> {
         type Value = [u8; N];
 
         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -996,7 +996,7 @@ pub fn base16_ignore_length_decode<'de, D: Deserializer<'de>, T: Deserial>(
     // self-describing and we always know the length of input.
     struct Base16IgnoreLengthVisitor<D>(std::marker::PhantomData<D>);
 
-    impl<'de, D: Deserial> Visitor<'de> for Base16IgnoreLengthVisitor<D> {
+    impl<D: Deserial> Visitor<'_> for Base16IgnoreLengthVisitor<D> {
         type Value = D;
 
         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

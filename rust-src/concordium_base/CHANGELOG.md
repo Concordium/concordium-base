@@ -5,20 +5,99 @@
   - Removed the usage of `Upward` in `TokenOperations` type. To CBOR decode and allow unknown variants,
     the new function `TokenOperationsPayload::decode_operations_maybe_known` can be used instead.
   - Removed the types `TokenModuleRejectReason`, `TokenEvent`, `TokenEventDetails`, `TokenModuleEvent`. These types 
-    will be moved to the Rust SDK crate.
-  - Renamed the existing type `TokenModuleEventType` that contains full token module events to `TokenModuleEventEnum` and
+    will be moved to the Rust SDK crate. (`TokenModuleRejectReason` under the name `EncodedTokenModuleRejectReason`
+    and `TokenModuleEvent` under the name `EncodedTokenModuleEvent`).
+  - Renamed the existing type `TokenModuleEventType` that contains full token module events to `TokenModuleEvent` and
     created a new `TokenModuleEventType` that is only the type of event. The new methods
-    `TokenModuleEventEnum::encode_event` and `TokenModuleEventEnum::decode_event` allows CBOR encoding from and CBOR decoding
-    to `TokenModuleEventEnum`. The new methods `TokenModuleEventType::to_type_discriminator` and
+    `TokenModuleEvent::encode_event` and `TokenModuleEvent::decode_event` allows CBOR encoding from and CBOR decoding
+    to `TokenModuleEvent`. The new methods `TokenModuleEventType::to_type_discriminator` and
     `TokenModuleEventType::try_from_type_discriminator` allows converting between `TokenModuleEventType`
     and `TokenModuleCborTypeDiscriminator`.
-  - Renamed the existing type `TokenModuleRejectReasonType` that contains full token module reject reasons to `TokenModuleRejectReasonEnum` and
+  - Renamed the existing type `TokenModuleRejectReasonType` that contains full token module reject reasons to `TokenModuleRejectReason` and
     created a new `TokenModuleRejectReasonType` that is only the type of reject reason. The new methods
-    `TokenModuleRejectReasonEnum::encode_reject_reason` and `TokenModuleRejectReasonEnum::decode_reject_reason` allows CBOR encoding from and CBOR decoding
-    to `TokenModuleRejectReasonEnum`. The new methods `TokenModuleRejectReasonType::to_type_discriminator` and
+    `TokenModuleRejectReason::encode_reject_reason` and `TokenModuleRejectReason::decode_reject_reason` allows CBOR encoding from and CBOR decoding
+    to `TokenModuleRejectReason`. The new methods `TokenModuleRejectReasonType::to_type_discriminator` and
     `TokenModuleRejectReasonType::try_from_type_discriminator` allows converting between `TokenModuleRejectReasonType`
     and `TokenModuleCborTypeDiscriminator`.
   - Implemented `concordium_base::common::Serialize` for `TokenModuleCborTypeDiscriminator`.
+
+
+- The flag `serde_deprecated` now guards `serde::Serialize` and `serde::Deserialize` implemetations on the following types. The implementations will eventually be removed.
+  - `protocol_level_tokens::token_metadata_url::MetadataUrl`
+  - `protocol_level_tokens::token_amount::TokenAmount`
+  - `protocol_level_tokens::token_amount::TokenAmountJson`
+  - `protocol_level_tokens::token_reject_reason::TokenModuleRejectReason`
+  - `protocol_level_tokens::token_reject_reason::TokenModuleRejectReasonType`
+  - `protocol_level_tokens::token_reject_reason::AddressNotFoundRejectReason`
+  - `protocol_level_tokens::token_reject_reason::TokenBalanceInsufficientRejectReason`
+  - `protocol_level_tokens::token_reject_reason::DeserializationFailureRejectReason`
+  - `protocol_level_tokens::token_reject_reason::UnsupportedOperationRejectReason`
+  - `protocol_level_tokens::token_reject_reason::OperationNotPermittedRejectReason`
+  - `protocol_level_tokens::token_reject_reason::MintWouldOverflowRejectReason`
+  - `protocol_level_tokens::token_operations::TokenOperationsPayload`
+  - `protocol_level_tokens::token_operations::TokenSupplyUpdateDetails`
+  - `protocol_level_tokens::token_operations::TokenPauseDetails`
+  - `protocol_level_tokens::token_operations::TokenListUpdateDetails`
+  - `protocol_level_tokens::token_operations::TokenTransfer`
+  - `protocol_level_tokens::token_operations::CborMemo`
+  - `protocol_level_tokens::token_event::TokenEvent`
+  - `protocol_level_tokens::token_event::TokenEventDetails`
+  - `protocol_level_tokens::token_event::TokenModuleEvent`
+  - `protocol_level_tokens::token_event::TokenModuleEventType`
+  - `protocol_level_tokens::token_event::TokenListUpdateEventDetails`
+  - `protocol_level_tokens::token_event::TokenPauseEventDetails`
+  - `protocol_level_tokens::token_event::TokenHolder`
+  - `protocol_level_tokens::token_event::TokenTransferEvent`
+  - `protocol_level_tokens::token_event::TokenSupplyUpdateEvent`
+  - `protocol_level_tokens::token_holder::CborHolderAccount`
+  - `common::types::TransactionHeaderV1`
+  - `common::types::TransactionSignaturesV1`
+  - `common::types::TransactionSignature`
+  - `smart_contracts::WasmModule`
+  - `smart_contracts::InstanceUpdatedEvent`
+  - `transactions::AccountTransactionV1`
+  - `transactions::construct::PreAccountTransactionV1`
+  - `transactions::AccountTransaction`
+  - `transactions::TransactionHeader`
+  - `transactions::BakerKeysPayload`
+  - `transactions::AddBakerPayload`
+  - `transactions::InitContractPayload`
+  - `transactions::UpdateContractPayload`
+  - `transactions::ConfigureBakerPayload`
+  - `transactions::ConfigureDelegationPayload`
+  - `transactions::Payload`
+  - `transactions::PreAccountTransaction`
+  - `base::DelegationTarget`
+  - `base::CommissionRates`
+  - `base::CommissionRanges`
+  - `base::InclusiveRange`
+  - `base::MintDistributionV0`
+  - `base::MintDistributionV1`
+  - `update::ProtocolUpdate`
+  - `update::TransactionFeeDistribution`
+  - `update::GASRewards`
+  - `update::GASRewardsV1`
+  - `update::RootUpdate`
+  - `update::Level1Update`
+  - `update::HigherLevelAccessStructure`
+  - `update::AccessStructure`
+  - `update::AuthorizationsV0`
+  - `update::AuthorizationsV1`
+  - `update::BakerParameters`
+  - `update::CooldownParameters`
+  - `update::TimeoutParameters`
+  - `update::RewardPeriodLength`
+  - `update::TimeParameters`
+  - `update::PoolParameters`
+  - `update::FinalizationCommitteeParameters`
+  - `update::ValidatorScoreParameters`
+  - `update::UpdatePayload`
+  - `update::CreatePlt`
+  - `encrypted_transfers::types::IndexedEncryptedAmount`
+  - `encrypted_transfers::types::EncryptedAmountTransferData`
+  - `encrypted_transfers::types::SecToPubAmountTransferData`
+  - `encrypted_transfers::types::AggregatedDecryptedAmount`
+- Memory pre allocation is capped to `MAX_PRE_ALLOCATED_SIZE=4096` when cbor decoding vectors and maps.
 
 ## 10.0.0 (2026-01-09)
 

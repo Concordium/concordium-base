@@ -360,9 +360,8 @@ fn trace_single_account(
             return;
         } else {
             let response: Option<AccBalanceResponse> = response.json().ok();
-            let does_account_exist = response.map_or(true, |abr| {
-                abr.current_balance.is_none() && abr.finalized_balance.is_none()
-            });
+            let does_account_exist = response
+                .is_none_or(|abr| abr.current_balance.is_none() && abr.finalized_balance.is_none());
             if does_account_exist {
                 writeln!(
                     writer,
@@ -420,12 +419,7 @@ fn trace_single_account(
         match rq {
             Ok(response) => {
                 for tx in response.transactions.iter() {
-                    if tx
-                        .details
-                        .outcome
-                        .as_ref()
-                        .map_or(false, |x| x == &Outcome::Reject)
-                    {
+                    if tx.details.outcome.as_ref() == Some(&Outcome::Reject) {
                         continue;
                     }
                     match &tx.details.additional_details {

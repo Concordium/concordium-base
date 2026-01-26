@@ -211,7 +211,7 @@ impl TryFrom<String> for UrlText {
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         anyhow::ensure!(
-            value.as_bytes().len() <= crate::constants::MAX_URL_TEXT_LENGTH,
+            value.len() <= crate::constants::MAX_URL_TEXT_LENGTH,
             "URL length exceeds maximum allowed."
         );
         Ok(Self { url: value })
@@ -249,17 +249,21 @@ impl Deserial for OpenStatus {
     }
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, PartialEq, Eq, Debug, Clone)]
-#[serde(rename_all = "camelCase", tag = "delegateType")]
+#[derive(PartialEq, Eq, Debug, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    serde(rename_all = "camelCase", tag = "delegateType")
+)]
 /// Target of delegation.
 pub enum DelegationTarget {
-    #[serde(rename = "Passive")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "Passive"))]
     /// Delegate passively, i.e., to no specific baker.
     Passive,
-    #[serde(rename = "Baker")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "Baker"))]
     /// Delegate to a specific baker.
     Baker {
-        #[serde(rename = "bakerId")]
+        #[cfg_attr(feature = "serde_deprecated", serde(rename = "bakerId"))]
         baker_id: BakerId,
     },
 }
@@ -1066,34 +1070,43 @@ impl fmt::Display for PartsPerHundredThousands {
     }
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, PartialEq, Eq, Serialize, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Serialize, Debug, Clone, Copy)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
 pub struct CommissionRates {
     /// Fraction of finalization rewards charged by the pool owner.
-    #[serde(rename = "finalizationCommission")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "finalizationCommission"))]
     pub finalization: AmountFraction,
     /// Fraction of baking rewards charged by the pool owner.
-    #[serde(rename = "bakingCommission")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "bakingCommission"))]
     pub baking: AmountFraction,
     /// Fraction of transaction rewards charged by the pool owner.
-    #[serde(rename = "transactionCommission")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "transactionCommission"))]
     pub transaction: AmountFraction,
 }
 
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
 /// Ranges of allowed commission values that pools may choose from.
 pub struct CommissionRanges {
     /// The range of allowed finalization commissions.
-    #[serde(rename = "finalizationCommissionRange")]
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(rename = "finalizationCommissionRange")
+    )]
     pub finalization: InclusiveRange<AmountFraction>,
     /// The range of allowed baker commissions.
-    #[serde(rename = "bakingCommissionRange")]
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "bakingCommissionRange"))]
     pub baking: InclusiveRange<AmountFraction>,
     /// The range of allowed transaction commissions.
-    #[serde(rename = "transactionCommissionRange")]
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(rename = "transactionCommissionRange")
+    )]
     pub transaction: InclusiveRange<AmountFraction>,
 }
 
-#[derive(Debug, Copy, Clone, SerdeSerialize, SerdeDeserialize, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
 pub struct InclusiveRange<T> {
     pub min: T,
     pub max: T,
@@ -1187,8 +1200,9 @@ impl Deserial for LeverageFactor {
     }
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, Serial, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
+#[derive(Serial, Debug, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// Mint distribution that applies to protocol versions 1-3.
 pub struct MintDistributionV0 {
     /// The increase in CCD amount per slot.
@@ -1199,8 +1213,9 @@ pub struct MintDistributionV0 {
     pub finalization_reward: AmountFraction,
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, Serial, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
+#[derive(Serial, Debug, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 /// Mint distribution parameters that apply to protocol version 4 and up.
 pub struct MintDistributionV1 {
     /// Fraction of newly minted CCD allocated to baker rewards.

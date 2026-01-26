@@ -279,7 +279,6 @@ pub fn make_sec_to_pub_transfer_data<C: Curve, R: Rng>(
 ///
 /// The return value is going to be `true` if verification succeeds and `false`
 /// if not.
-
 pub fn verify_sec_to_pub_transfer_data<C: Curve>(
     ctx: &GlobalContext<C>,
     pk: &PublicKey<C>,

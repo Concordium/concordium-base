@@ -211,8 +211,8 @@ enum CallErr {
     Write,
 }
 
-impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<ArtifactNamedImport>
-    for TestHost<'a, R, BackingStore>
+impl<R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<ArtifactNamedImport>
+    for TestHost<'_, R, BackingStore>
 {
     type Interrupt = NoInterrupt;
 
