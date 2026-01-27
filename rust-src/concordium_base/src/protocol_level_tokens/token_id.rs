@@ -1,4 +1,7 @@
 use crate::common;
+use crate::common::{Get, SerdeDeserialize};
+use serde::de::Error;
+use serde::Deserializer;
 use std::fmt::{Display, Formatter};
 
 /// The limit for the length of the byte encoding of a Token ID.
@@ -6,14 +9,20 @@ pub const TOKEN_ID_MIN_BYTE_LEN: usize = 1;
 pub const TOKEN_ID_MAX_BYTE_LEN: usize = 128;
 
 /// Protocol level token (PLT) ID.
-#[derive(
-    Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize, serde::Serialize, Clone,
-)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, Clone)]
 #[serde(try_from = "String", into = "String")]
 #[repr(transparent)]
 pub struct TokenId {
     /// Unique symbol identifying the PLT on chain.
     value: String,
+}
+
+impl<'de> SerdeDeserialize<'de> for TokenId {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let string = String::deserialize(deserializer)?;
+
+        Self::try_from(string).map_err(|err| D::Error::custom(err))
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -81,17 +90,10 @@ impl From<TokenId> for String {
 impl common::Serial for TokenId {
     fn serial<B: common::Buffer>(&self, out: &mut B) {
         // length is always less or equal to TYPE_MAX_BYTE_LEN
-        let len = u8::try_from(self.value.len())
-            .expect("Invariant violation for byte length of TokenModuleCborTypeDiscriminator");
+        let len =
+            u8::try_from(self.value.len()).expect("Invariant violation for byte length of TokenId");
         len.serial(out);
         common::serial_string(&self.value, out);
-
-        let bytes = self.value.as_bytes();
-        u8::try_from(bytes.len())
-            .expect("Invariant violation for byte length of TokenId") // This error will never occur due to length being at most 128
-            .serial(out);
-        out.write_all(bytes)
-            .expect("Writing TokenId bytes to buffer should not fail");
     }
 }
 
@@ -99,11 +101,9 @@ impl common::Serial for TokenId {
 /// in the Haskell module `Concordium.Types.Token`.
 impl common::Deserial for TokenId {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> common::ParseResult<Self> {
-        let len = source.read_u8()?;
-        let mut buf = vec![0u8; len as usize];
-        source.read_exact(&mut buf)?;
-        let value = String::from_utf8(buf)?;
-        Ok(value.try_into()?)
+        let len: u8 = source.get()?;
+        let value = common::deserial_string(source, len as usize)?;
+        Ok(Self::try_from(value)?)
     }
 }
 
@@ -163,14 +163,48 @@ mod tests {
         }
     }
 
+    /// Test binary serialization of [`TokenId`]
     #[test]
     fn test_token_id_serialize() {
+        // simple token id
         let token_id: TokenId = "tokenid1".parse().unwrap();
-
         let bytes = common::to_bytes(&token_id);
         assert_eq!(hex::encode(&bytes), "08746f6b656e696431");
-
         let deserialized: TokenId = common::from_bytes(&mut bytes.as_slice()).unwrap();
         assert_eq!(deserialized, token_id);
+
+        // token id which is too long
+        let bytes: Vec<_> = [129]
+            .into_iter()
+            .chain("a".repeat(129).as_bytes().to_vec().into_iter())
+            .collect();
+        let err = common::from_bytes::<TokenId, _>(&mut bytes.as_slice()).expect_err("deserial");
+        assert!(
+            err.to_string()
+                .contains("TokenId must be between 1 and 128 characters"),
+            "err: {}",
+            err
+        );
+    }
+
+    /// Test JSON serialization of [`TokenId`]
+    #[test]
+    fn test_token_id_json_serialize() {
+        // test simple token id
+        let token_id: TokenId = "tokenid1".parse().unwrap();
+        let json = serde_json::to_string(&token_id).expect("serialize");
+        assert_eq!(json, r#""tokenid1""#);
+        let token_id_deserialized: TokenId = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(token_id_deserialized, token_id);
+
+        // test token id above max length
+        let json = format!("\"{}\"", "a".repeat(129));
+        let err = serde_json::from_str::<TokenId>(&json).expect_err("deserialize");
+        assert!(
+            err.to_string()
+                .contains("TokenId must be between 1 and 128 characters"),
+            "err: {}",
+            err
+        );
     }
 }

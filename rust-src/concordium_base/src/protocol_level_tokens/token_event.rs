@@ -1,9 +1,7 @@
 use super::{CborHolderAccount, RawCbor, TokenAmount};
 use crate::common;
 use crate::common::cbor::CborSerializationResult;
-use crate::common::{
-    cbor, Buffer, Deserial, Get, ParseResult, SerdeDeserialize, SerdeSerialize, Serial,
-};
+use crate::common::{cbor, Buffer, Deserial, Get, ParseResult, SerdeDeserialize, Serial};
 use crate::transactions::Memo;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
@@ -432,19 +430,6 @@ mod test {
         assert_eq!(event_decoded, event);
     }
 
-    /// Test binary serialization of [`TokenModuleCborTypeDiscriminator`]
-    #[test]
-    fn test_token_module_cbor_type_discriminator_serialize() {
-        let discr: TokenModuleCborTypeDiscriminator = "discr1".parse().unwrap();
-
-        let bytes = common::to_bytes(&discr);
-        assert_eq!(hex::encode(&bytes), "06646973637231");
-
-        let discr_deserialized: TokenModuleCborTypeDiscriminator =
-            common::from_bytes(&mut bytes.as_slice()).unwrap();
-        assert_eq!(discr_deserialized, discr);
-    }
-
     /// Test `FromStr for TokenModuleCborTypeDiscriminator`
     #[test]
     fn test_token_module_cbor_type_discriminator_try_from_string() {
@@ -454,8 +439,8 @@ mod test {
         assert_eq!(discr.as_ref(), "discr1");
 
         // test max length discriminator
-        let discr =
-            TokenModuleCborTypeDiscriminator::try_from("a".repeat(255)).expect("max length");
+        let discr = TokenModuleCborTypeDiscriminator::from_str("a".repeat(255).as_str())
+            .expect("max length");
         assert_eq!(discr.as_ref(), "a".repeat(255));
 
         // test discriminator above max length
@@ -475,11 +460,6 @@ mod test {
         let discr = TokenModuleCborTypeDiscriminator::from_str("discr1").expect("simple");
         assert_eq!(discr.as_ref(), "discr1");
 
-        // test max length discriminator
-        let discr = TokenModuleCborTypeDiscriminator::from_str("a".repeat(255).as_str())
-            .expect("max length");
-        assert_eq!(discr.as_ref(), "a".repeat(255));
-
         // test discriminator above max length
         let err = TokenModuleCborTypeDiscriminator::from_str("a".repeat(256).as_str())
             .expect_err("above max length");
@@ -488,6 +468,17 @@ mod test {
             "err: {}",
             err
         );
+    }
+
+    /// Test binary serialization of [`TokenModuleCborTypeDiscriminator`]
+    #[test]
+    fn test_token_module_cbor_type_discriminator_serialize() {
+        let discr: TokenModuleCborTypeDiscriminator = "discr1".parse().unwrap();
+        let bytes = common::to_bytes(&discr);
+        assert_eq!(hex::encode(&bytes), "06646973637231");
+        let discr_deserialized: TokenModuleCborTypeDiscriminator =
+            common::from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(discr_deserialized, discr);
     }
 
     /// Test JSON serialization of [`TokenModuleCborTypeDiscriminator`]
