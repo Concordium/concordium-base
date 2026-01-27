@@ -1,11 +1,12 @@
 use super::{CborHolderAccount, RawCbor, TokenAmount};
 use crate::common::cbor::CborSerializationResult;
-use crate::common::{cbor, Buffer, Deserial, ParseResult, Serial};
+use crate::common::{cbor, Buffer, Deserial, Get, ParseResult, Put, Serial};
 use crate::transactions::Memo;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+use crate::common;
 
 /// Token module event type
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -260,13 +261,10 @@ pub struct TokenModuleCborTypeDiscriminator {
 /// in the Haskell module `Concordium.Types.Tokens`.
 impl Serial for TokenModuleCborTypeDiscriminator {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        let bytes = self.value.as_bytes();
-        u8::try_from(bytes.len())
-            // This error will never occur due to length being at most 255
-            .expect("Invariant violation for byte length of TokenModuleCborTypeDiscriminator")
-            .serial(out);
-        out.write_all(bytes)
-            .expect("Writing TokenModuleCborTypeDiscriminator bytes to buffer should not fail");
+        let len = u8::try_from(self.value.len())
+        .expect("Invariant violation for byte length of TokenModuleCborTypeDiscriminator");
+        len.serial(out);
+        common::serial_string(&self.value, out);
     }
 }
 
@@ -274,8 +272,9 @@ impl Serial for TokenModuleCborTypeDiscriminator {
 /// in the Haskell module `Concordium.Types.Tokens`.
 impl Deserial for TokenModuleCborTypeDiscriminator {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let len = source.read_u8()?;
-        let mut buf = vec![0u8; len as usize];
+        let len:u8 = source.get()?;
+        let mut buf = vec![0u8; ];
+        common::deserial_string(source, len as usize)
         source.read_exact(&mut buf)?;
         let value = String::from_utf8(buf)?;
         Ok(value.try_into()?)
