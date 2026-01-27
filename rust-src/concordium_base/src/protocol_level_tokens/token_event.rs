@@ -430,7 +430,7 @@ mod test {
         assert_eq!(event_decoded, event);
     }
 
-    /// Test `FromStr for TokenModuleCborTypeDiscriminator`
+    /// Test `TryFrom<String> for TokenModuleCborTypeDiscriminator`
     #[test]
     fn test_token_module_cbor_type_discriminator_try_from_string() {
         // test simple discriminator
@@ -453,7 +453,7 @@ mod test {
         );
     }
 
-    /// Test `TryFrom<String> for TokenModuleCborTypeDiscriminator`
+    /// Test `FromStr for TokenModuleCborTypeDiscriminator`
     #[test]
     fn test_token_module_cbor_type_discriminator_from_str() {
         // test simple discriminator
