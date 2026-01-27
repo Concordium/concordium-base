@@ -263,7 +263,7 @@ impl<'de> SerdeDeserialize<'de> for TokenModuleCborTypeDiscriminator {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let string = String::deserialize(deserializer)?;
 
-        Self::try_from(string).map_err(|err| D::Error::custom(err))
+        Self::try_from(string).map_err(D::Error::custom)
     }
 }
 
