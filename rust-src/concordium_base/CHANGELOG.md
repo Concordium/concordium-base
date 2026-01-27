@@ -1,5 +1,8 @@
 ## Unreleased
 - `cbor::cbor_encode` is now infallible and returns `Vec<u8>` instead of `CborSerializationResult<Vec<u8>>`
+- `&[T]` no longer implements `CborSerialize` in order to avoid ambiguity with `CborSerialize` implementation for `[u8]`. 
+  To serialize a slice as a CBOR array, wrap it in `ArraySlice`.
+  `[u8]` still implements `CborSerialize` and serializes as a CBOR bytestring.
 - Removed the module `upward`. This will be added to Rust SDK crate instead. 
 - Changes to `protocol_level_tokens` module:
   - Removed the usage of `Upward` in `TokenOperations` type. To CBOR decode and allow unknown variants,
@@ -20,7 +23,6 @@
     `TokenModuleRejectReasonType::try_from_type_discriminator` allows converting between `TokenModuleRejectReasonType`
     and `TokenModuleCborTypeDiscriminator`.
   - Implemented `concordium_base::common::Serialize` for `TokenModuleCborTypeDiscriminator`.
-
 
 - The flag `serde_deprecated` now guards `serde::Serialize` and `serde::Deserialize` implemetations on the following types. The implementations will eventually be removed.
   - `protocol_level_tokens::token_metadata_url::MetadataUrl`

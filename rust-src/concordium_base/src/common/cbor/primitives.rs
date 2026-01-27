@@ -714,6 +714,15 @@ mod test {
         assert_eq!(value_decoded, value);
     }
 
+    /// Test slice is serialized as bytes (and not as array)
+    #[test]
+    fn test_byte_slice() {
+        let byte_slice = &[1u8, 2u8];
+
+        let cbor = cbor_encode(byte_slice);
+        assert_eq!(hex::encode(&cbor), "420102");
+    }
+
     #[test]
     fn test_bytes() {
         let bytes = Bytes(vec![1, 2, 3, 4, 5]);
