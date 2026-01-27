@@ -1,12 +1,16 @@
 use super::{CborHolderAccount, RawCbor, TokenAmount};
+use crate::common;
 use crate::common::cbor::CborSerializationResult;
-use crate::common::{cbor, Buffer, Deserial, Get, ParseResult, Put, Serial};
+use crate::common::{
+    cbor, Buffer, Deserial, Get, ParseResult, SerdeDeserialize, SerdeSerialize, Serial,
+};
 use crate::transactions::Memo;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
+use serde::de::Error;
+use serde::Deserializer;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
-use crate::common;
 
 /// Token module event type
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -250,19 +254,28 @@ const TYPE_MAX_BYTE_LEN: usize = 255;
 /// reason type.
 ///
 /// Limited to 255 bytes in length and must be valid UTF-8.
-#[derive(Debug, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, serde::Serialize)]
 #[serde(try_from = "String", into = "String")]
 #[repr(transparent)]
 pub struct TokenModuleCborTypeDiscriminator {
     value: String,
 }
 
+impl<'de> SerdeDeserialize<'de> for TokenModuleCborTypeDiscriminator {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let string = String::deserialize(deserializer)?;
+
+        Self::try_from(string).map_err(|err| D::Error::custom(err))
+    }
+}
+
 /// Serial implementation matching the serialization of `TokenEventType`
 /// in the Haskell module `Concordium.Types.Tokens`.
 impl Serial for TokenModuleCborTypeDiscriminator {
     fn serial<B: Buffer>(&self, out: &mut B) {
+        // length is always less or equal to TYPE_MAX_BYTE_LEN which fits into a u8
         let len = u8::try_from(self.value.len())
-        .expect("Invariant violation for byte length of TokenModuleCborTypeDiscriminator");
+            .expect("Invariant violation for byte length of TokenModuleCborTypeDiscriminator");
         len.serial(out);
         common::serial_string(&self.value, out);
     }
@@ -272,12 +285,9 @@ impl Serial for TokenModuleCborTypeDiscriminator {
 /// in the Haskell module `Concordium.Types.Tokens`.
 impl Deserial for TokenModuleCborTypeDiscriminator {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let len:u8 = source.get()?;
-        let mut buf = vec![0u8; ];
-        common::deserial_string(source, len as usize)
-        source.read_exact(&mut buf)?;
-        let value = String::from_utf8(buf)?;
-        Ok(value.try_into()?)
+        let len: u8 = source.get()?;
+        let value = common::deserial_string(source, len as usize)?;
+        Ok(Self::try_from(value)?)
     }
 }
 
@@ -422,6 +432,7 @@ mod test {
         assert_eq!(event_decoded, event);
     }
 
+    /// Test binary serialization of [`TokenModuleCborTypeDiscriminator`]
     #[test]
     fn test_token_module_cbor_type_discriminator_serialize() {
         let discr: TokenModuleCborTypeDiscriminator = "discr1".parse().unwrap();
@@ -429,8 +440,75 @@ mod test {
         let bytes = common::to_bytes(&discr);
         assert_eq!(hex::encode(&bytes), "06646973637231");
 
-        let deserialized: TokenModuleCborTypeDiscriminator =
+        let discr_deserialized: TokenModuleCborTypeDiscriminator =
             common::from_bytes(&mut bytes.as_slice()).unwrap();
-        assert_eq!(deserialized, discr);
+        assert_eq!(discr_deserialized, discr);
+    }
+
+    /// Test `FromStr for TokenModuleCborTypeDiscriminator`
+    #[test]
+    fn test_token_module_cbor_type_discriminator_try_from_string() {
+        // test simple discriminator
+        let discr =
+            TokenModuleCborTypeDiscriminator::try_from("discr1".to_string()).expect("simple");
+        assert_eq!(discr.as_ref(), "discr1");
+
+        // test max length discriminator
+        let discr =
+            TokenModuleCborTypeDiscriminator::try_from("a".repeat(255)).expect("max length");
+        assert_eq!(discr.as_ref(), "a".repeat(255));
+
+        // test discriminator above max length
+        let err = TokenModuleCborTypeDiscriminator::try_from("a".repeat(256))
+            .expect_err("above max length");
+        assert!(
+            err.to_string().contains("must be within 255 bytes"),
+            "err: {}",
+            err
+        );
+    }
+
+    /// Test `TryFrom<String> for TokenModuleCborTypeDiscriminator`
+    #[test]
+    fn test_token_module_cbor_type_discriminator_from_str() {
+        // test simple discriminator
+        let discr = TokenModuleCborTypeDiscriminator::from_str("discr1").expect("simple");
+        assert_eq!(discr.as_ref(), "discr1");
+
+        // test max length discriminator
+        let discr = TokenModuleCborTypeDiscriminator::from_str("a".repeat(255).as_str())
+            .expect("max length");
+        assert_eq!(discr.as_ref(), "a".repeat(255));
+
+        // test discriminator above max length
+        let err = TokenModuleCborTypeDiscriminator::from_str("a".repeat(256).as_str())
+            .expect_err("above max length");
+        assert!(
+            err.to_string().contains("must be within 255 bytes"),
+            "err: {}",
+            err
+        );
+    }
+
+    /// Test JSON serialization of [`TokenModuleCborTypeDiscriminator`]
+    #[test]
+    fn test_token_module_cbor_type_discriminator_json_serialize() {
+        // test simple discriminator
+        let discr: TokenModuleCborTypeDiscriminator = "discr1".parse().unwrap();
+        let json = serde_json::to_string(&discr).expect("serialize");
+        assert_eq!(json, r#""discr1""#);
+        let discr_deserialized: TokenModuleCborTypeDiscriminator =
+            serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(discr_deserialized, discr);
+
+        // test discriminator above max length
+        let json = format!("\"{}\"", "a".repeat(256));
+        let err = serde_json::from_str::<TokenModuleCborTypeDiscriminator>(&json)
+            .expect_err("deserialize");
+        assert!(
+            err.to_string().contains("must be within 255 bytes"),
+            "err: {}",
+            err
+        );
     }
 }

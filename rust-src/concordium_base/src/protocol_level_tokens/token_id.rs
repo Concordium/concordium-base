@@ -80,6 +80,12 @@ impl From<TokenId> for String {
 /// in the Haskell module `Concordium.Types.Token`.
 impl common::Serial for TokenId {
     fn serial<B: common::Buffer>(&self, out: &mut B) {
+        // length is always less or equal to TYPE_MAX_BYTE_LEN
+        let len = u8::try_from(self.value.len())
+            .expect("Invariant violation for byte length of TokenModuleCborTypeDiscriminator");
+        len.serial(out);
+        common::serial_string(&self.value, out);
+
         let bytes = self.value.as_bytes();
         u8::try_from(bytes.len())
             .expect("Invariant violation for byte length of TokenId") // This error will never occur due to length being at most 128
