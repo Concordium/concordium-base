@@ -288,6 +288,7 @@ module Concordium.Types.ProtocolVersion (
     P8Sym0,
     P9Sym0,
     P10Sym0,
+    P11Sym0,
     TOV0Sym0,
     TOV1Sym0,
     TOV2Sym0,
@@ -323,6 +324,7 @@ $( singletons
             | P8
             | P9
             | P10
+            | P11
             deriving (Eq, Ord)
 
         data ChainParametersVersion
@@ -343,6 +345,7 @@ $( singletons
         chainParametersVersionFor P8 = ChainParametersV3
         chainParametersVersionFor P9 = ChainParametersV3
         chainParametersVersionFor P10 = ChainParametersV3
+        chainParametersVersionFor P11 = ChainParametersV3
 
         -- \* Account versions
 
@@ -375,6 +378,7 @@ $( singletons
         accountVersionFor P8 = AccountV4
         accountVersionFor P9 = AccountV5
         accountVersionFor P10 = AccountV5
+        accountVersionFor P11 = AccountV5
 
         -- \|Authorizations version.
         data AuthorizationsVersion
@@ -394,6 +398,7 @@ $( singletons
         authorizationsVersionFor P8 = AuthorizationsVersion1
         authorizationsVersionFor P9 = AuthorizationsVersion2
         authorizationsVersionFor P10 = AuthorizationsVersion2
+        authorizationsVersionFor P11 = AuthorizationsVersion2
 
         -- \|Transaction outcomes versions.
         -- The difference between the two versions are only related
@@ -425,6 +430,7 @@ $( singletons
         transactionOutcomesVersionFor P8 = TOV2
         transactionOutcomesVersionFor P9 = TOV2
         transactionOutcomesVersionFor P10 = TOV3
+        transactionOutcomesVersionFor P11 = TOV3
 
         -- \| Whether the `TransactionSummary` for the given transaction outcome
         --  version contains the sponsor details field. Present since P10.
@@ -477,6 +483,7 @@ $( singletons
         supportsSponsoredTransactions P8 = False
         supportsSponsoredTransactions P9 = False
         supportsSponsoredTransactions P10 = True
+        supportsSponsoredTransactions P11 = True
 
         -- \| A type representing the different hashing structures used for the block hash depending on
         -- the protocol version.
@@ -498,6 +505,7 @@ $( singletons
         blockHashVersionFor P8 = BlockHashVersion1
         blockHashVersionFor P9 = BlockHashVersion1
         blockHashVersionFor P10 = BlockHashVersion1
+        blockHashVersionFor P11 = BlockHashVersion1
 
         -- \| Whether the block state hash is tracked as part of the block metadata.
         blockStateHashInMetadata :: BlockHashVersion -> Bool
@@ -525,6 +533,7 @@ protocolVersionToWord64 P7 = 7
 protocolVersionToWord64 P8 = 8
 protocolVersionToWord64 P9 = 9
 protocolVersionToWord64 P10 = 10
+protocolVersionToWord64 P11 = 11
 
 -- | Parse a 'Word64' as a 'ProtocolVersion'.
 protocolVersionFromWord64 :: (MonadFail m) => Word64 -> m ProtocolVersion
@@ -538,6 +547,7 @@ protocolVersionFromWord64 7 = return P7
 protocolVersionFromWord64 8 = return P8
 protocolVersionFromWord64 9 = return P9
 protocolVersionFromWord64 10 = return P10
+protocolVersionFromWord64 11 = return P11
 protocolVersionFromWord64 v = fail $ "Unknown protocol version: " ++ show v
 
 -- | Convert a @ChainParametersVersion@ to the corresponding 'Word64'.
@@ -576,6 +586,7 @@ promoteProtocolVersion P7 = SomeProtocolVersion SP7
 promoteProtocolVersion P8 = SomeProtocolVersion SP8
 promoteProtocolVersion P9 = SomeProtocolVersion SP9
 promoteProtocolVersion P10 = SomeProtocolVersion SP10
+promoteProtocolVersion P11 = SomeProtocolVersion SP11
 
 -- | Demote an 'SProtocolVersion' to a 'ProtocolVersion'.
 demoteProtocolVersion :: SProtocolVersion pv -> ProtocolVersion
@@ -774,6 +785,7 @@ supportsMemo SP7 = True
 supportsMemo SP8 = True
 supportsMemo SP9 = True
 supportsMemo SP10 = True
+supportsMemo SP11 = True
 
 -- | Whether the protocol version supports account aliases.
 --  (Account aliases are supported in 'P3' onwards.)
@@ -788,6 +800,7 @@ supportsAccountAliases SP7 = True
 supportsAccountAliases SP8 = True
 supportsAccountAliases SP9 = True
 supportsAccountAliases SP10 = True
+supportsAccountAliases SP11 = True
 
 -- | Whether the protocol version supports V1 smart contracts.
 --  (V1 contracts are supported in 'P4' onwards.)
@@ -802,6 +815,7 @@ supportsV1Contracts SP7 = True
 supportsV1Contracts SP8 = True
 supportsV1Contracts SP9 = True
 supportsV1Contracts SP10 = True
+supportsV1Contracts SP11 = True
 
 -- | Whether the protocol version supports delegation.
 --  (Delegation is supported in 'P4' onwards.)
@@ -816,6 +830,7 @@ supportsDelegationPV SP7 = True
 supportsDelegationPV SP8 = True
 supportsDelegationPV SP9 = True
 supportsDelegationPV SP10 = True
+supportsDelegationPV SP11 = True
 
 -- | Whether the protocol version supports upgradable smart contracts.
 --  (Supported in 'P5' and onwards)
@@ -831,6 +846,7 @@ supportsUpgradableContracts spv = case spv of
     SP8 -> True
     SP9 -> True
     SP10 -> True
+    SP11 -> True
 
 -- | Whether the protocol version supports chain queries in smart contracts.
 --  (Supported in 'P5' and onwards)
@@ -846,6 +862,7 @@ supportsChainQueryContracts spv = case spv of
     SP8 -> True
     SP9 -> True
     SP10 -> True
+    SP11 -> True
 
 -- | Whether the protocol version supports sign extension instructions for V1
 --  contracts. (Supported in 'P6' and onwards)
@@ -861,6 +878,7 @@ supportsSignExtensionInstructions spv = case spv of
     SP8 -> True
     SP9 -> True
     SP10 -> True
+    SP11 -> True
 
 -- | Whether the protocol version allows globals in data and element sections of
 --  Wasm modules for V1 contracts. (Supported before 'P6')
@@ -876,6 +894,7 @@ supportsGlobalsInInitSections spv = case spv of
     SP8 -> False
     SP9 -> False
     SP10 -> False
+    SP11 -> False
 
 -- | Whether the protocol version specifies that custom section should not be
 --  counted towards module size when executing V1 contracts.
@@ -897,6 +916,7 @@ supportsAccountSignatureChecks spv = case spv of
     SP8 -> True
     SP9 -> True
     SP10 -> True
+    SP11 -> True
 
 -- | Whether the protocol version supports querying a smart contract's module reference and name
 --  from smart contracts.
@@ -913,6 +933,7 @@ supportsContractInspectionQueries = \case
     SP8 -> True
     SP9 -> True
     SP10 -> True
+    SP11 -> True
 
 -- | Whether the protocol version supports encrypting balances and sending encrypted transfers.
 --  (Disabled in 'P7' and onwards.)
@@ -928,3 +949,4 @@ supportsEncryptedTransfers = \case
     SP8 -> False
     SP9 -> False
     SP10 -> False
+    SP11 -> False
