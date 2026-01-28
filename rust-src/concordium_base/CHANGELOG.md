@@ -1,4 +1,5 @@
 ## Unreleased
+- Implemented `common::from_bytes_complete` that fails if all bytes are not consumed during deserialization.
 - `cbor::cbor_encode` is now infallible and returns `Vec<u8>` instead of `CborSerializationResult<Vec<u8>>`
 - `&[T]` no longer implements `CborSerialize` in order to avoid ambiguity with `CborSerialize` implementation for `[u8]`. 
   To serialize a slice as a CBOR array, wrap it in `ArraySlice`.
@@ -25,7 +26,7 @@
   - Implemented `concordium_base::common::Serialize` for `TokenModuleCborTypeDiscriminator`.
   - Implemented checks in `serde::Deserialize` implementation on `TokenId` and `TokenModuleCborTypeDiscriminator` that the internal type
     invariants are fulfilled.
-  - Implemented limit on pre-allocation in `concordium_base::common::Deserial` implementation on `RawCbor`. 
+  - Implemented limit on pre-allocation in `concordium_base::common::Deserial` implementation on `RawCbor`.
 
 - The flag `serde_deprecated` now guards `serde::Serialize` and `serde::Deserialize` implemetations on the following types. The implementations will eventually be removed.
   - `protocol_level_tokens::token_metadata_url::MetadataUrl`
