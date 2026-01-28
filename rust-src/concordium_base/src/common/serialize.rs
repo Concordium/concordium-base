@@ -740,9 +740,9 @@ pub fn from_bytes<A: Deserial, R: ReadBytesExt>(source: &mut R) -> ParseResult<A
 }
 
 /// Deserializes the given bytes to a value of the type parameter `A`.
-/// Fails if all bytes were not consumed during deserialization.
+/// Fails if all bytes are not consumed during deserialization.
 #[inline]
-pub fn from_bytes_until_end<A: Deserial>(bytes: impl AsRef<[u8]>) -> ParseResult<A> {
+pub fn from_bytes_complete<A: Deserial>(bytes: impl AsRef<[u8]>) -> ParseResult<A> {
     let mut bytes = bytes.as_ref();
     let value = A::deserial(&mut bytes)?;
     ensure!(bytes.is_empty(), "Bytes remaining after deserialization");
@@ -1327,17 +1327,17 @@ mod test {
         assert_eq!(value, 1);
     }
 
-    /// Tests [`from_bytes_until_end`]
+    /// Tests [`from_bytes_complete`]
     #[test]
-    fn test_from_bytes_until_end() {
+    fn test_from_bytes_complete() {
         // Test deserialize bytes that are fully consumed.
         let bytes = hex::decode("01").unwrap();
-        let value: u8 = from_bytes_until_end(&mut bytes.as_slice()).unwrap();
+        let value: u8 = from_bytes_complete(&mut bytes.as_slice()).unwrap();
         assert_eq!(value, 1);
 
         // Test deserialize where there are bytes left. Should fail.
         let bytes = hex::decode("0101").unwrap();
-        let err = from_bytes_until_end::<u8>(&mut bytes.as_slice()).expect_err("deserialize bytes");
+        let err = from_bytes_complete::<u8>(&mut bytes.as_slice()).expect_err("deserialize bytes");
         assert!(err.to_string().contains("Bytes remaining"), "err: {}", err);
     }
 }
