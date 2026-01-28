@@ -1,4 +1,4 @@
-use crate::common::upward::CborUpward;
+use crate::common::cbor::CborMaybeKnown;
 use crate::{
     common::cbor::{self, CborSerializationResult},
     protocol_level_tokens::{CborHolderAccount, CoinInfo, RawCbor, TokenAmount, TokenId},
@@ -122,13 +122,25 @@ const CBOR_TAG: u64 = 24;
 pub struct TokenOperationsPayload {
     /// Id of the token
     pub token_id: TokenId,
-    /// Token operations in the transaction
+    /// Token operations in the transaction. CBOR encoding of [`TokenOperations`]
     pub operations: RawCbor,
 }
 
 impl TokenOperationsPayload {
     /// Decode token operations from CBOR
     pub fn decode_operations(&self) -> CborSerializationResult<TokenOperations> {
+        cbor::cbor_decode(&self.operations)
+    }
+
+    /// Decode token operations from CBOR. Unknown operations are wrapped
+    /// in [`CborMaybeKnown::Unknown`].
+    ///
+    /// Handling [`CborMaybeKnown::Unknown`] can be used to implement forwards compatability
+    /// with future token operations. Unknown token operations can e.g. be ignored, if the handler is only interested
+    /// in specific and known token operations.
+    pub fn decode_operations_maybe_known(
+        &self,
+    ) -> CborSerializationResult<Vec<CborMaybeKnown<TokenOperation>>> {
         cbor::cbor_decode(&self.operations)
     }
 }
@@ -140,19 +152,19 @@ impl TokenOperationsPayload {
 #[cbor(transparent)]
 pub struct TokenOperations {
     /// List of protocol level token operations
-    pub operations: Vec<CborUpward<TokenOperation>>,
+    pub operations: Vec<TokenOperation>,
 }
 
 impl FromIterator<TokenOperation> for TokenOperations {
     fn from_iter<T: IntoIterator<Item = TokenOperation>>(iter: T) -> Self {
         Self {
-            operations: iter.into_iter().map(CborUpward::Known).collect(),
+            operations: iter.into_iter().collect(),
         }
     }
 }
 
 impl TokenOperations {
-    pub fn new(operations: Vec<CborUpward<TokenOperation>>) -> Self {
+    pub fn new(operations: Vec<TokenOperation>) -> Self {
         Self { operations }
     }
 }
@@ -262,6 +274,15 @@ pub enum CborMemo {
     Cbor(Memo),
 }
 
+impl From<CborMemo> for Memo {
+    fn from(value: CborMemo) -> Self {
+        match value {
+            CborMemo::Raw(memo) => memo,
+            CborMemo::Cbor(memo) => memo,
+        }
+    }
+}
+
 #[cfg(test)]
 pub mod test {
     use super::*;
@@ -275,14 +296,14 @@ pub mod test {
     fn test_cbor_memo_cbor() {
         let memo = CborMemo::Raw(Memo::try_from(vec![0x01, 0x02, 0x03, 0x04]).unwrap());
 
-        let cbor = cbor::cbor_encode(&memo).unwrap();
+        let cbor = cbor::cbor_encode(&memo);
         assert_eq!(hex::encode(&cbor), "4401020304");
         let memo_decoded: CborMemo = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(memo_decoded, memo);
 
         let memo = CborMemo::Cbor(Memo::try_from(vec![0x01, 0x02, 0x03, 0x04]).unwrap());
 
-        let cbor = cbor::cbor_encode(&memo).unwrap();
+        let cbor = cbor::cbor_encode(&memo);
         assert_eq!(hex::encode(&cbor), "d8184401020304");
         let memo_decoded: CborMemo = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(memo_decoded, memo);
@@ -291,17 +312,17 @@ pub mod test {
     #[test]
     fn test_token_operations_cbor() {
         let operations = TokenOperations {
-            operations: vec![CborUpward::Known(TokenOperation::Transfer(TokenTransfer {
+            operations: vec![TokenOperation::Transfer(TokenTransfer {
                 amount: TokenAmount::from_raw(12300, 3),
                 recipient: CborHolderAccount {
                     address: ADDRESS,
                     coin_info: None,
                 },
                 memo: None,
-            }))],
+            })],
         };
 
-        let cbor = cbor::cbor_encode(&operations).unwrap();
+        let cbor = cbor::cbor_encode(&operations);
         assert_eq!(hex::encode(&cbor), "81a1687472616e73666572a266616d6f756e74c4822219300c69726563697069656e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let operations_decoded: TokenOperations = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operations_decoded, operations);
@@ -318,7 +339,7 @@ pub mod test {
             memo: None,
         });
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(hex::encode(&cbor), "a1687472616e73666572a266616d6f756e74c4822219300c69726563697069656e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
@@ -330,7 +351,7 @@ pub mod test {
             amount: TokenAmount::from_raw(12300, 3),
         });
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(
             hex::encode(&cbor),
             "a1646d696e74a166616d6f756e74c4822219300c"
@@ -345,7 +366,7 @@ pub mod test {
             amount: TokenAmount::from_raw(12300, 3),
         });
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(
             hex::encode(&cbor),
             "a1646275726ea166616d6f756e74c4822219300c"
@@ -363,7 +384,7 @@ pub mod test {
             },
         });
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(hex::encode(&cbor), "a16c616464416c6c6f774c697374a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
@@ -378,7 +399,7 @@ pub mod test {
             },
         });
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(hex::encode(&cbor), "a16f72656d6f7665416c6c6f774c697374a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
@@ -393,7 +414,7 @@ pub mod test {
             },
         });
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(hex::encode(&cbor), "a16b61646444656e794c697374a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
@@ -408,7 +429,7 @@ pub mod test {
             },
         });
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(hex::encode(&cbor), "a16e72656d6f766544656e794c697374a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
@@ -418,7 +439,7 @@ pub mod test {
     fn test_token_operation_cbor_pause() {
         let operation = TokenOperation::Pause(TokenPauseDetails {});
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(hex::encode(&cbor), "a1657061757365a0");
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
@@ -428,7 +449,7 @@ pub mod test {
     fn test_token_operation_cbor_unpause() {
         let operation = TokenOperation::Unpause(TokenPauseDetails {});
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(hex::encode(&cbor), "a167756e7061757365a0");
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
@@ -437,13 +458,42 @@ pub mod test {
     #[test]
     fn test_token_operation_cbor_unknown_variant() {
         let cbor = hex::decode("a172736f6d65556e6b6e6f776e56617269616e74a266616d6f756e74c4822219300c69726563697069656e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20").unwrap();
-        let operation_decoded: CborUpward<TokenOperation> = cbor::cbor_decode(&cbor).unwrap();
+        let operation_decoded: CborMaybeKnown<TokenOperation> = cbor::cbor_decode(&cbor).unwrap();
         assert_matches!(
             operation_decoded,
-            CborUpward::Unknown(value::Value::Map(v)) if matches!(
+            CborMaybeKnown::Unknown(value::Value::Map(v)) if matches!(
                 v.as_slice(),
                 [(value::Value::Text(s), _), ..] if s == "someUnknownVariant"
             )
         );
+    }
+
+    #[test]
+    fn test_token_operations_payload() {
+        let operations = TokenOperations {
+            operations: vec![TokenOperation::Transfer(TokenTransfer {
+                amount: TokenAmount::from_raw(12300, 3),
+                recipient: CborHolderAccount {
+                    address: ADDRESS,
+                    coin_info: None,
+                },
+                memo: None,
+            })],
+        };
+        let payload = TokenOperationsPayload {
+            token_id: "tk1".parse().unwrap(),
+            operations: RawCbor::from(cbor::cbor_encode(&operations)),
+        };
+
+        let operations_decoded = payload.decode_operations().unwrap();
+        assert_eq!(operations_decoded, operations);
+
+        let operations_known: Vec<_> = operations
+            .operations
+            .iter()
+            .map(|op| CborMaybeKnown::Known(op.clone()))
+            .collect();
+        let operations_decoded = payload.decode_operations_maybe_known().unwrap();
+        assert_eq!(operations_decoded, operations_known);
     }
 }

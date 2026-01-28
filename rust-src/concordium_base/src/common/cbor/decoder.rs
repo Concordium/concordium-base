@@ -4,12 +4,9 @@ use crate::common::cbor::{
     MAX_PRE_ALLOCATED_SIZE,
 };
 use anyhow::anyhow;
+use ciborium_io::Read;
 use ciborium_ll::Header;
-use std::{
-    fmt::Display,
-    io::{Cursor, Read},
-    iter,
-};
+use std::{io::Cursor, iter};
 
 /// CBOR decoder implementation
 pub struct Decoder<R: Read> {
@@ -27,7 +24,7 @@ impl<R: Read> Decoder<R> {
 
 impl<'a, R: Read> CborDecoder for &'a mut Decoder<R>
 where
-    <R as ciborium_io::Read>::Error: Display,
+    <R as Read>::Error: std::error::Error,
 {
     type ArrayDecoder = ArrayDecoder<'a, R>;
     type MapDecoder = MapDecoder<'a, R>;
@@ -272,7 +269,10 @@ impl CursorExt for Cursor<&mut [u8]> {
     }
 }
 
-impl<R: Read> Decoder<R> {
+impl<R: Read> Decoder<R>
+where
+    <R as Read>::Error: std::error::Error,
+{
     /// Current byte offset for the decoding
     pub fn offset(&mut self) -> usize {
         self.inner.offset()
@@ -287,7 +287,6 @@ impl<R: Read> Decoder<R> {
     ) -> CborSerializationResult<()>
     where
         Cursor<T>: CursorExt,
-        <R as ciborium_io::Read>::Error: Display,
     {
         let mut segments = self.inner.bytes(size);
         while let Some(mut segment) = segments.pull()? {
@@ -312,10 +311,7 @@ impl<R: Read> Decoder<R> {
         &mut self,
         dest: &mut Vec<u8>,
         size: Option<usize>,
-    ) -> CborSerializationResult<()>
-    where
-        <R as ciborium_io::Read>::Error: Display,
-    {
+    ) -> CborSerializationResult<()> {
         let mut dest = Cursor::new(dest);
         let mut segments = self.inner.text(size);
         while let Some(mut segment) = segments.pull()? {
@@ -379,7 +375,7 @@ impl<'a, R: Read> MapDecoder<'a, R> {
 
 impl<R: Read> CborMapDecoder for MapDecoder<'_, R>
 where
-    <R as ciborium_io::Read>::Error: Display,
+    <R as Read>::Error: std::error::Error,
 {
     fn size(&self) -> Option<usize> {
         self.declared_size
@@ -461,7 +457,7 @@ impl<'a, R: Read> ArrayDecoder<'a, R> {
 
 impl<R: Read> CborArrayDecoder for ArrayDecoder<'_, R>
 where
-    <R as ciborium_io::Read>::Error: Display,
+    <R as Read>::Error: std::error::Error,
 {
     fn size(&self) -> Option<usize> {
         self.declared_size
@@ -823,7 +819,7 @@ mod test {
         test_skip_data_item_impl(|encoder| encoder.encode_text(&"a".repeat(30)).unwrap());
         // definite length array
         test_skip_data_item_impl(|encoder| {
-            let mut array_encoder = encoder.encode_array(2).unwrap();
+            let mut array_encoder = encoder.encode_array().unwrap();
             array_encoder.serialize_element(&2).unwrap();
             array_encoder.serialize_element(&2).unwrap();
             array_encoder.end().unwrap();
@@ -837,7 +833,7 @@ mod test {
         });
         // definite length map
         test_skip_data_item_impl(|encoder| {
-            let mut map_encoder = encoder.encode_map(2).unwrap();
+            let mut map_encoder = encoder.encode_map().unwrap();
             map_encoder.serialize_entry(&2, &2).unwrap();
             map_encoder.serialize_entry(&2, &2).unwrap();
             map_encoder.end().unwrap();
