@@ -28,6 +28,7 @@
     invariants are fulfilled.
   - Implemented limit on pre-allocation in `concordium_base::common::Deserial` implementation on `RawCbor`.
 
+- Introduce protocol version 11 variant `ProtocolVersion::P11`.
 - The flag `serde_deprecated` now guards `serde::Serialize` and `serde::Deserialize` implemetations on the following types. The implementations will eventually be removed.
   - `protocol_level_tokens::token_metadata_url::MetadataUrl`
   - `protocol_level_tokens::token_amount::TokenAmount`

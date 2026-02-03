@@ -250,6 +250,7 @@ lookupModule SP7 ms = fromIntegral ms `div` 500
 lookupModule SP8 ms = fromIntegral ms `div` 500
 lookupModule SP9 ms = fromIntegral ms `div` 500
 lookupModule SP10 ms = fromIntegral ms `div` 500
+lookupModule SP11 ms = fromIntegral ms `div` 500
 
 -- | The base cost of initializing a contract instance to cover administrative costs.
 -- Even if no code is run and no instance created.

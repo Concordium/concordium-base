@@ -1,6 +1,6 @@
 cabal-version: 2.0
 
--- This file has been generated from package.yaml by hpack version 0.37.0.
+-- This file has been generated from package.yaml by hpack version 0.38.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -59,6 +59,7 @@ library
       Concordium.Genesis.Data.BaseV1
       Concordium.Genesis.Data.P1
       Concordium.Genesis.Data.P10
+      Concordium.Genesis.Data.P11
       Concordium.Genesis.Data.P2
       Concordium.Genesis.Data.P3
       Concordium.Genesis.Data.P4
