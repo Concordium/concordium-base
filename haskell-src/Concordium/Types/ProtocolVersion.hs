@@ -234,6 +234,24 @@ module Concordium.Types.ProtocolVersion (
     AVSupportsPLT,
     -- | Determine whether a specific protocol version supports protocol level tokens.
     PVSupportsPLT,
+    
+    -- | Version of PLT state.
+    -- 
+    -- * 'PLTStateNone': there is no PLT state (on protocol versions where 'SupportsPLT' is 'False')
+    -- * 'PLTStateV0': the state is managed in Haskell.
+    -- * 'PLTStateV1': the state is managed in Rust (does not include token account state)    
+    PLTStateVersion (..),    
+    -- | The singleton type associated with 'PLTStateVersion'.
+    SPLTStateVersion (..),
+    IsPLTStateVersion,
+    pltStateVersion,
+    -- | The PLT state version for a given protocol version
+    pltStateVersionFor,
+    -- | The PLT state version for a given protocol version (at the type level)
+    PltStateVersionFor,
+    -- | The PLT state version for a given protocol version (on singletons)
+    sPltStateVersionFor,
+    PVSupportsHaskellManagedPLT,
 
     -- * Sponsored transactions support
 
@@ -511,6 +529,30 @@ $( singletons
         blockStateHashInMetadata :: BlockHashVersion -> Bool
         blockStateHashInMetadata BlockHashVersion0 = False
         blockStateHashInMetadata BlockHashVersion1 = True
+
+        -- \| Version of PLT state.
+        -- 
+        -- * 'PLTStateNone': there is no PLT state (on protocol versions where 'SupportsPLT' is 'False')
+        -- * 'PLTStateV0': the state is managed in Haskell.
+        -- * 'PLTStateV1': the state is managed in Rust (does not include token account state)    
+        data PLTStateVersion
+            = PLTStateNone
+            | PLTStateV0
+            | PLTStateV1
+            deriving (Eq, Ord)
+
+        pltStateVersionFor:: ProtocolVersion -> PLTStateVersion 
+        pltStateVersionFor P1 = PLTStateNone
+        pltStateVersionFor P2 = PLTStateNone
+        pltStateVersionFor P3 = PLTStateNone
+        pltStateVersionFor P4 = PLTStateNone
+        pltStateVersionFor P5 = PLTStateNone
+        pltStateVersionFor P6 = PLTStateNone
+        pltStateVersionFor P7 = PLTStateNone
+        pltStateVersionFor P8 = PLTStateNone
+        pltStateVersionFor P9 = PLTStateV0
+        pltStateVersionFor P10 = PLTStateV0
+        pltStateVersionFor P11 = PLTStateV1
         |]
  )
 
@@ -628,7 +670,8 @@ class
       IsCompatibleAuthorizationsVersion (ChainParametersVersionFor pv) (AuthorizationsVersionFor pv) ~ 'True,
       IsAccountVersion (AccountVersionFor pv),
       IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv),
-      IsBlockHashVersion (BlockHashVersionFor pv)
+      IsBlockHashVersion (BlockHashVersionFor pv),
+      IsPLTStateVersion (PltStateVersionFor pv)
     ) =>
     IsProtocolVersion (pv :: ProtocolVersion)
 
@@ -639,7 +682,8 @@ instance
       IsCompatibleAuthorizationsVersion (ChainParametersVersionFor pv) (AuthorizationsVersionFor pv) ~ 'True,
       IsAccountVersion (AccountVersionFor pv),
       IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv),
-      IsBlockHashVersion (BlockHashVersionFor pv)
+      IsBlockHashVersion (BlockHashVersionFor pv),
+      IsPLTStateVersion (PltStateVersionFor pv)
     ) =>
     IsProtocolVersion (pv :: ProtocolVersion)
 
@@ -950,3 +994,18 @@ supportsEncryptedTransfers = \case
     SP9 -> False
     SP10 -> False
     SP11 -> False
+
+
+-- | Constraint on a type level 'PLTStateVersion' that can be used to get a corresponding
+--  'SPLTStateVersion' (see 'pltStateVersion'). (An alias for 'SingI'.)
+type IsPLTStateVersion (pltsv :: PLTStateVersion) = SingI pltsv
+
+-- | Produce the singleton 'SPLTStateVersion' from an 'IsPLTStateVersion' constraint.
+pltStateVersion :: (IsPLTStateVersion pltsv) => SPLTStateVersion pltsv
+pltStateVersion = sing
+
+-- | Constraint that a protocol version supports protocol level tokens and 
+-- that the state is managed in Haskell.
+type PVSupportsHaskellManagedPLT (pv :: ProtocolVersion) =
+    (PVSupportsPLT pv, PltStateVersionFor pv ~ PLTStateV0)
+
