@@ -226,25 +226,21 @@ module Concordium.Types.ProtocolVersion (
     -- * PLT support
 
     -- | Determine whether protocol level tokens are supported.
-    AccountSupportsPLT,
-    accountSupportsPLT,
-    sAccountSupportsPLT,
+    SupportsPLT,
+    supportsPLT,
+    sSupportsPLT,
     protocolSupportsPLT,
     -- | Determine whether a specific account version supports protocol level tokens.
     AVSupportsPLT,
     -- | Determine whether a specific protocol version supports protocol level tokens.
     PVSupportsPLT,
-    PVAccountStateSupportsPLT,
-    PVBlockStateSupportsPLT,
-    PVBlockStateSupportsHaskellMangagedPLT,
     PVSupportsHaskellManagedPLT,
-    
     -- | Version of PLT state.
-    -- 
+    --
     -- * 'PLTStateNone': there is no PLT state (on protocol versions where 'SupportsPLT' is 'False')
     -- * 'PLTStateV0': the state is managed in Haskell.
-    -- * 'PLTStateV1': the state is managed in Rust (does not include token account state)    
-    PLTStateVersion (..),    
+    -- * 'PLTStateV1': the state is managed in Rust (does not include token account state)
+    PLTStateVersion (..),
     -- | The singleton type associated with 'PLTStateVersion'.
     SPLTStateVersion (..),
     IsPLTStateVersion,
@@ -488,13 +484,13 @@ $( singletons
         supportsValidatorSuspension AccountV4 = True
         supportsValidatorSuspension AccountV5 = True
 
-        accountSupportsPLT :: AccountVersion -> Bool
-        accountSupportsPLT AccountV0 = False
-        accountSupportsPLT AccountV1 = False
-        accountSupportsPLT AccountV2 = False
-        accountSupportsPLT AccountV3 = False
-        accountSupportsPLT AccountV4 = False
-        accountSupportsPLT AccountV5 = True
+        supportsPLT :: AccountVersion -> Bool
+        supportsPLT AccountV0 = False
+        supportsPLT AccountV1 = False
+        supportsPLT AccountV2 = False
+        supportsPLT AccountV3 = False
+        supportsPLT AccountV4 = False
+        supportsPLT AccountV5 = True
 
         supportsSponsoredTransactions :: ProtocolVersion -> Bool
         supportsSponsoredTransactions P1 = False
@@ -537,17 +533,17 @@ $( singletons
         blockStateHashInMetadata BlockHashVersion1 = True
 
         -- \| Version of PLT state.
-        -- 
-        -- * 'PLTStateNone': there is no PLT state (on protocol versions where 'SupportsPLT' is 'False')
-        -- * 'PLTStateV0': the state is managed in Haskell.
-        -- * 'PLTStateV1': the state is managed in Rust (does not include token account state)    
+        --
+        -- \* 'PLTStateNone': there is no PLT state (on protocol versions where 'SupportsPLT' is 'False')
+        -- \* 'PLTStateV0': the state is managed in Haskell.
+        -- \* 'PLTStateV1': the state is managed in Rust (does not include token account state)
         data PLTStateVersion
             = PLTStateNone
             | PLTStateV0
             | PLTStateV1
             deriving (Eq, Ord)
 
-        pltStateVersionFor:: ProtocolVersion -> PLTStateVersion 
+        pltStateVersionFor :: ProtocolVersion -> PLTStateVersion
         pltStateVersionFor P1 = PLTStateNone
         pltStateVersionFor P2 = PLTStateNone
         pltStateVersionFor P3 = PLTStateNone
@@ -682,7 +678,8 @@ class
       IsAccountVersion (AccountVersionFor pv),
       IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv),
       IsBlockHashVersion (BlockHashVersionFor pv),
-      IsPLTStateVersion (PltStateVersionFor pv)
+      IsPLTStateVersion (PltStateVersionFor pv),
+      PltStatePresent (PltStateVersionFor pv) ~ SupportsPLT (AccountVersionFor pv)
     ) =>
     IsProtocolVersion (pv :: ProtocolVersion)
 
@@ -694,7 +691,8 @@ instance
       IsAccountVersion (AccountVersionFor pv),
       IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv),
       IsBlockHashVersion (BlockHashVersionFor pv),
-      IsPLTStateVersion (PltStateVersionFor pv)
+      IsPLTStateVersion (PltStateVersionFor pv),
+      PltStatePresent (PltStateVersionFor pv) ~ SupportsPLT (AccountVersionFor pv)
     ) =>
     IsProtocolVersion (pv :: ProtocolVersion)
 
@@ -801,49 +799,21 @@ type AVSupportsValidatorSuspension (av :: AccountVersion) =
 type PVSupportsValidatorSuspension (pv :: ProtocolVersion) =
     AVSupportsValidatorSuspension (AccountVersionFor pv)
 
-
-
-
-
-
-
-
 -- | Constraint that an account version supports protocol level tokens.
 type AVSupportsPLT (av :: AccountVersion) =
-    AccountSupportsPLT av ~ 'True
-
-
+    SupportsPLT av ~ 'True
 
 -- | Whether the protocol version supports Protocol Level Tokens (PLT).
 protocolSupportsPLT :: SProtocolVersion pv -> Bool
 {-# INLINE protocolSupportsPLT #-}
-protocolSupportsPLT spv = (fromSing $ sAccountSupportsPLT (sAccountVersionFor spv)) &&  
-    (fromSing $ sPltStatePresent (sPltStateVersionFor spv))
-    
-
-
-
-
-type PVBlockStateSupportsPLT (pv :: ProtocolVersion) =
-     PltStatePresent (PltStateVersionFor pv) ~ 'True
-   
+protocolSupportsPLT spv = fromSing $ sSupportsPLT (sAccountVersionFor spv)
 
 -- | Constraint that a protocol version supports protocol level tokens.
 type PVSupportsPLT (pv :: ProtocolVersion) =
-    (PVAccountStateSupportsPLT pv, PVBlockStateSupportsPLT pv)
-
-type PVAccountStateSupportsPLT (pv :: ProtocolVersion) =
     (AVSupportsPLT (AccountVersionFor pv))
 
-
-type PVBlockStateSupportsHaskellMangagedPLT (pv :: ProtocolVersion) =
-     PltStateVersionFor pv ~ 'PLTStateV0
-
-
-     
 type PVSupportsHaskellManagedPLT (pv :: ProtocolVersion) =
-    (PVAccountStateSupportsPLT pv, PVBlockStateSupportsHaskellMangagedPLT pv)
-
+    (PVSupportsPLT pv, PltStateVersionFor pv ~ 'PLTStateV0)
 
 -- | Constraint on a type level 'PLTStateVersion' that can be used to get a corresponding
 --  'SPLTStateVersion' (see 'pltStateVersion'). (An alias for 'SingI'.)
@@ -852,12 +822,6 @@ type IsPLTStateVersion (pltsv :: PLTStateVersion) = SingI pltsv
 -- | Produce the singleton 'SPLTStateVersion' from an 'IsPLTStateVersion' constraint.
 pltStateVersion :: (IsPLTStateVersion pltsv) => SPLTStateVersion pltsv
 pltStateVersion = sing
-
-
-
-
-
-
 
 -- | Constraint that an account version supports flexible cooldown.
 --
