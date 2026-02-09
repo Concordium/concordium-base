@@ -226,14 +226,18 @@ module Concordium.Types.ProtocolVersion (
     -- * PLT support
 
     -- | Determine whether protocol level tokens are supported.
-    SupportsPLT,
-    supportsPLT,
-    sSupportsPLT,
+    AccountSupportsPLT,
+    accountSupportsPLT,
+    sAccountSupportsPLT,
     protocolSupportsPLT,
     -- | Determine whether a specific account version supports protocol level tokens.
     AVSupportsPLT,
     -- | Determine whether a specific protocol version supports protocol level tokens.
     PVSupportsPLT,
+    PVAccountStateSupportsPLT,
+    PVBlockStateSupportsPLT,
+    PVBlockStateSupportsHaskellMangagedPLT,
+    PVSupportsHaskellManagedPLT,
     
     -- | Version of PLT state.
     -- 
@@ -251,7 +255,9 @@ module Concordium.Types.ProtocolVersion (
     PltStateVersionFor,
     -- | The PLT state version for a given protocol version (on singletons)
     sPltStateVersionFor,
-    PVSupportsHaskellManagedPLT,
+    pltStatePresent,
+    PltStatePresent,
+    sPltStatePresent,
 
     -- * Sponsored transactions support
 
@@ -482,13 +488,13 @@ $( singletons
         supportsValidatorSuspension AccountV4 = True
         supportsValidatorSuspension AccountV5 = True
 
-        supportsPLT :: AccountVersion -> Bool
-        supportsPLT AccountV0 = False
-        supportsPLT AccountV1 = False
-        supportsPLT AccountV2 = False
-        supportsPLT AccountV3 = False
-        supportsPLT AccountV4 = False
-        supportsPLT AccountV5 = True
+        accountSupportsPLT :: AccountVersion -> Bool
+        accountSupportsPLT AccountV0 = False
+        accountSupportsPLT AccountV1 = False
+        accountSupportsPLT AccountV2 = False
+        accountSupportsPLT AccountV3 = False
+        accountSupportsPLT AccountV4 = False
+        accountSupportsPLT AccountV5 = True
 
         supportsSponsoredTransactions :: ProtocolVersion -> Bool
         supportsSponsoredTransactions P1 = False
@@ -553,6 +559,11 @@ $( singletons
         pltStateVersionFor P9 = PLTStateV0
         pltStateVersionFor P10 = PLTStateV0
         pltStateVersionFor P11 = PLTStateV1
+
+        pltStatePresent :: PLTStateVersion -> Bool
+        pltStatePresent PLTStateNone = False
+        pltStatePresent PLTStateV0 = True
+        pltStatePresent PLTStateV1 = True
         |]
  )
 
@@ -790,20 +801,63 @@ type AVSupportsValidatorSuspension (av :: AccountVersion) =
 type PVSupportsValidatorSuspension (pv :: ProtocolVersion) =
     AVSupportsValidatorSuspension (AccountVersionFor pv)
 
+
+
+
+
+
+
+
 -- | Constraint that an account version supports protocol level tokens.
 type AVSupportsPLT (av :: AccountVersion) =
-    SupportsPLT av ~ 'True
+    AccountSupportsPLT av ~ 'True
 
--- | Constraint that a protocol version supports protocol level tokens.
-type PVSupportsPLT (pv :: ProtocolVersion) =
-    AVSupportsPLT (AccountVersionFor pv)
+
 
 -- | Whether the protocol version supports Protocol Level Tokens (PLT).
 protocolSupportsPLT :: SProtocolVersion pv -> Bool
 {-# INLINE protocolSupportsPLT #-}
-protocolSupportsPLT spv = case sSupportsPLT (sAccountVersionFor spv) of
-    STrue -> True
-    SFalse -> False
+protocolSupportsPLT spv = (fromSing $ sAccountSupportsPLT (sAccountVersionFor spv)) &&  
+    (fromSing $ sPltStatePresent (sPltStateVersionFor spv))
+    
+
+
+
+
+type PVBlockStateSupportsPLT (pv :: ProtocolVersion) =
+     PltStatePresent (PltStateVersionFor pv) ~ 'True
+   
+
+-- | Constraint that a protocol version supports protocol level tokens.
+type PVSupportsPLT (pv :: ProtocolVersion) =
+    (PVAccountStateSupportsPLT pv, PVBlockStateSupportsPLT pv)
+
+type PVAccountStateSupportsPLT (pv :: ProtocolVersion) =
+    (AVSupportsPLT (AccountVersionFor pv))
+
+
+type PVBlockStateSupportsHaskellMangagedPLT (pv :: ProtocolVersion) =
+     PltStateVersionFor pv ~ 'PLTStateV0
+
+
+     
+type PVSupportsHaskellManagedPLT (pv :: ProtocolVersion) =
+    (PVAccountStateSupportsPLT pv, PVBlockStateSupportsHaskellMangagedPLT pv)
+
+
+-- | Constraint on a type level 'PLTStateVersion' that can be used to get a corresponding
+--  'SPLTStateVersion' (see 'pltStateVersion'). (An alias for 'SingI'.)
+type IsPLTStateVersion (pltsv :: PLTStateVersion) = SingI pltsv
+
+-- | Produce the singleton 'SPLTStateVersion' from an 'IsPLTStateVersion' constraint.
+pltStateVersion :: (IsPLTStateVersion pltsv) => SPLTStateVersion pltsv
+pltStateVersion = sing
+
+
+
+
+
+
 
 -- | Constraint that an account version supports flexible cooldown.
 --
@@ -994,18 +1048,3 @@ supportsEncryptedTransfers = \case
     SP9 -> False
     SP10 -> False
     SP11 -> False
-
-
--- | Constraint on a type level 'PLTStateVersion' that can be used to get a corresponding
---  'SPLTStateVersion' (see 'pltStateVersion'). (An alias for 'SingI'.)
-type IsPLTStateVersion (pltsv :: PLTStateVersion) = SingI pltsv
-
--- | Produce the singleton 'SPLTStateVersion' from an 'IsPLTStateVersion' constraint.
-pltStateVersion :: (IsPLTStateVersion pltsv) => SPLTStateVersion pltsv
-pltStateVersion = sing
-
--- | Constraint that a protocol version supports protocol level tokens and 
--- that the state is managed in Haskell.
-type PVSupportsHaskellManagedPLT (pv :: ProtocolVersion) =
-    (PVSupportsPLT pv, PltStateVersionFor pv ~ PLTStateV0)
-
