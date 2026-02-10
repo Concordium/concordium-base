@@ -225,15 +225,38 @@ module Concordium.Types.ProtocolVersion (
 
     -- * PLT support
 
-    -- | Determine whether protocol level tokens are supported.
-    SupportsPLT,
+    -- | Determine whether protocol level tokens are supported for a given account version.
     supportsPLT,
+    -- | Determine whether protocol level tokens are supported for a given account version (at the type level).
+    SupportsPLT,
+    -- | Determine whether protocol level tokens are supported for a given account version (on singletons).
     sSupportsPLT,
     protocolSupportsPLT,
-    -- | Determine whether a specific account version supports protocol level tokens.
     AVSupportsPLT,
-    -- | Determine whether a specific protocol version supports protocol level tokens.
     PVSupportsPLT,
+    PVSupportsHaskellManagedPLT,
+    -- | Version of PLT state (disregarding PLT account state which is handled separately).
+    --
+    -- * 'PLTStateNone': there is no PLT state (on protocol versions where 'SupportsPLT' is 'False')
+    -- * 'PLTStateV0': the state is managed in Haskell.
+    -- * 'PLTStateV1': the state is managed in Rust (token account state excluded)
+    PLTStateVersion (..),
+    -- | The singleton type associated with 'PLTStateVersion'.
+    SPLTStateVersion (..),
+    IsPLTStateVersion,
+    pltStateVersion,
+    -- | The PLT state version for a given protocol version.
+    pltStateVersionFor,
+    -- | The PLT state version for a given protocol version (at the type level).
+    PltStateVersionFor,
+    -- | The PLT state version for a given protocol version (on singletons).
+    sPltStateVersionFor,
+    -- | If PLT state is present for a given PLT state version.
+    pltStatePresent,
+    -- | If PLT state is present for a given PLT state version (at the type level).
+    PltStatePresent,
+    -- | If PLT state is present for a given PLT state version (on singletons).
+    sPltStatePresent,
 
     -- * Sponsored transactions support
 
@@ -511,6 +534,35 @@ $( singletons
         blockStateHashInMetadata :: BlockHashVersion -> Bool
         blockStateHashInMetadata BlockHashVersion0 = False
         blockStateHashInMetadata BlockHashVersion1 = True
+
+        -- \| Version of PLT state (disregarding PLT account state which is handled separately).
+        --
+        -- \* 'PLTStateNone': there is no PLT state (on protocol versions where 'SupportsPLT' is 'False')
+        -- \* 'PLTStateV0': the state is managed in Haskell.
+        -- \* 'PLTStateV1': the state is managed in Rust (token account state excluded)
+        data PLTStateVersion
+            = PLTStateNone
+            | PLTStateV0
+            | PLTStateV1
+            deriving (Eq, Ord)
+
+        pltStateVersionFor :: ProtocolVersion -> PLTStateVersion
+        pltStateVersionFor P1 = PLTStateNone
+        pltStateVersionFor P2 = PLTStateNone
+        pltStateVersionFor P3 = PLTStateNone
+        pltStateVersionFor P4 = PLTStateNone
+        pltStateVersionFor P5 = PLTStateNone
+        pltStateVersionFor P6 = PLTStateNone
+        pltStateVersionFor P7 = PLTStateNone
+        pltStateVersionFor P8 = PLTStateNone
+        pltStateVersionFor P9 = PLTStateV0
+        pltStateVersionFor P10 = PLTStateV0
+        pltStateVersionFor P11 = PLTStateV1
+
+        pltStatePresent :: PLTStateVersion -> Bool
+        pltStatePresent PLTStateNone = False
+        pltStatePresent PLTStateV0 = True
+        pltStatePresent PLTStateV1 = True
         |]
  )
 
@@ -628,7 +680,9 @@ class
       IsCompatibleAuthorizationsVersion (ChainParametersVersionFor pv) (AuthorizationsVersionFor pv) ~ 'True,
       IsAccountVersion (AccountVersionFor pv),
       IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv),
-      IsBlockHashVersion (BlockHashVersionFor pv)
+      IsBlockHashVersion (BlockHashVersionFor pv),
+      IsPLTStateVersion (PltStateVersionFor pv),
+      PltStatePresent (PltStateVersionFor pv) ~ SupportsPLT (AccountVersionFor pv)
     ) =>
     IsProtocolVersion (pv :: ProtocolVersion)
 
@@ -639,7 +693,9 @@ instance
       IsCompatibleAuthorizationsVersion (ChainParametersVersionFor pv) (AuthorizationsVersionFor pv) ~ 'True,
       IsAccountVersion (AccountVersionFor pv),
       IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv),
-      IsBlockHashVersion (BlockHashVersionFor pv)
+      IsBlockHashVersion (BlockHashVersionFor pv),
+      IsPLTStateVersion (PltStateVersionFor pv),
+      PltStatePresent (PltStateVersionFor pv) ~ SupportsPLT (AccountVersionFor pv)
     ) =>
     IsProtocolVersion (pv :: ProtocolVersion)
 
@@ -750,16 +806,27 @@ type PVSupportsValidatorSuspension (pv :: ProtocolVersion) =
 type AVSupportsPLT (av :: AccountVersion) =
     SupportsPLT av ~ 'True
 
--- | Constraint that a protocol version supports protocol level tokens.
-type PVSupportsPLT (pv :: ProtocolVersion) =
-    AVSupportsPLT (AccountVersionFor pv)
-
 -- | Whether the protocol version supports Protocol Level Tokens (PLT).
 protocolSupportsPLT :: SProtocolVersion pv -> Bool
 {-# INLINE protocolSupportsPLT #-}
-protocolSupportsPLT spv = case sSupportsPLT (sAccountVersionFor spv) of
-    STrue -> True
-    SFalse -> False
+protocolSupportsPLT spv = fromSing $ sSupportsPLT (sAccountVersionFor spv)
+
+-- | Constraint that a protocol version supports protocol level tokens.
+type PVSupportsPLT (pv :: ProtocolVersion) =
+    (AVSupportsPLT (AccountVersionFor pv))
+
+-- | Constraint that a protocol version supports protocol level tokens and
+-- that the PLT state is managed in Haskell (the alternative is that it is managed in Rust).
+type PVSupportsHaskellManagedPLT (pv :: ProtocolVersion) =
+    (PVSupportsPLT pv, PltStateVersionFor pv ~ 'PLTStateV0)
+
+-- | Constraint on a type level 'PLTStateVersion' that can be used to get a corresponding
+--  'SPLTStateVersion' (see 'pltStateVersion'). (An alias for 'SingI'.)
+type IsPLTStateVersion (pltsv :: PLTStateVersion) = SingI pltsv
+
+-- | Produce the singleton 'SPLTStateVersion' from an 'IsPLTStateVersion' constraint.
+pltStateVersion :: (IsPLTStateVersion pltsv) => SPLTStateVersion pltsv
+pltStateVersion = sing
 
 -- | Constraint that an account version supports flexible cooldown.
 --
