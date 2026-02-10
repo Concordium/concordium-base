@@ -537,9 +537,9 @@ $( singletons
 
         -- \| Version of PLT state (disregarding PLT account state which is handled separately).
         --
-        -- * 'PLTStateNone': there is no PLT state (on protocol versions where 'SupportsPLT' is 'False')
-        -- * 'PLTStateV0': the state is managed in Haskell.
-        -- * 'PLTStateV1': the state is managed in Rust (token account state excluded)
+        -- \* 'PLTStateNone': there is no PLT state (on protocol versions where 'SupportsPLT' is 'False')
+        -- \* 'PLTStateV0': the state is managed in Haskell.
+        -- \* 'PLTStateV1': the state is managed in Rust (token account state excluded)
         data PLTStateVersion
             = PLTStateNone
             | PLTStateV0
@@ -816,7 +816,7 @@ type PVSupportsPLT (pv :: ProtocolVersion) =
     (AVSupportsPLT (AccountVersionFor pv))
 
 -- | Constraint that a protocol version supports protocol level tokens and
--- that the PLT state is managed in Haskell (the alternative is that it is managed in Rust).    
+-- that the PLT state is managed in Haskell (the alternative is that it is managed in Rust).
 type PVSupportsHaskellManagedPLT (pv :: ProtocolVersion) =
     (PVSupportsPLT pv, PltStateVersionFor pv ~ 'PLTStateV0)
 
