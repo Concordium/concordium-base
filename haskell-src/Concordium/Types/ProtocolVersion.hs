@@ -225,34 +225,37 @@ module Concordium.Types.ProtocolVersion (
 
     -- * PLT support
 
-    -- | Determine whether protocol level tokens are supported.
-    SupportsPLT,
+    -- | Determine whether protocol level tokens are supported for a given account version.
     supportsPLT,
+    -- | Determine whether protocol level tokens are supported for a given account version (at the type level).
+    SupportsPLT,
+    -- | Determine whether protocol level tokens are supported for a given account version (on singletons).
     sSupportsPLT,
     protocolSupportsPLT,
-    -- | Determine whether a specific account version supports protocol level tokens.
     AVSupportsPLT,
-    -- | Determine whether a specific protocol version supports protocol level tokens.
     PVSupportsPLT,
     PVSupportsHaskellManagedPLT,
-    -- | Version of PLT state.
+    -- | Version of PLT state (disregarding PLT account state which is handled separately).
     --
     -- * 'PLTStateNone': there is no PLT state (on protocol versions where 'SupportsPLT' is 'False')
     -- * 'PLTStateV0': the state is managed in Haskell.
-    -- * 'PLTStateV1': the state is managed in Rust (does not include token account state)
+    -- * 'PLTStateV1': the state is managed in Rust (token account state excluded)
     PLTStateVersion (..),
     -- | The singleton type associated with 'PLTStateVersion'.
     SPLTStateVersion (..),
     IsPLTStateVersion,
     pltStateVersion,
-    -- | The PLT state version for a given protocol version
+    -- | The PLT state version for a given protocol version.
     pltStateVersionFor,
-    -- | The PLT state version for a given protocol version (at the type level)
+    -- | The PLT state version for a given protocol version (at the type level).
     PltStateVersionFor,
-    -- | The PLT state version for a given protocol version (on singletons)
+    -- | The PLT state version for a given protocol version (on singletons).
     sPltStateVersionFor,
+    -- | If PLT state is present for a given PLT state version.
     pltStatePresent,
+    -- | If PLT state is present for a given PLT state version (at the type level).
     PltStatePresent,
+    -- | If PLT state is present for a given PLT state version (on singletons).
     sPltStatePresent,
 
     -- * Sponsored transactions support
@@ -532,11 +535,11 @@ $( singletons
         blockStateHashInMetadata BlockHashVersion0 = False
         blockStateHashInMetadata BlockHashVersion1 = True
 
-        -- \| Version of PLT state.
+        -- \| Version of PLT state (disregarding PLT account state which is handled separately).
         --
-        -- \* 'PLTStateNone': there is no PLT state (on protocol versions where 'SupportsPLT' is 'False')
-        -- \* 'PLTStateV0': the state is managed in Haskell.
-        -- \* 'PLTStateV1': the state is managed in Rust (does not include token account state)
+        -- * 'PLTStateNone': there is no PLT state (on protocol versions where 'SupportsPLT' is 'False')
+        -- * 'PLTStateV0': the state is managed in Haskell.
+        -- * 'PLTStateV1': the state is managed in Rust (token account state excluded)
         data PLTStateVersion
             = PLTStateNone
             | PLTStateV0
@@ -812,6 +815,8 @@ protocolSupportsPLT spv = fromSing $ sSupportsPLT (sAccountVersionFor spv)
 type PVSupportsPLT (pv :: ProtocolVersion) =
     (AVSupportsPLT (AccountVersionFor pv))
 
+-- | Constraint that a protocol version supports protocol level tokens and
+-- that the PLT state is managed in Haskell (the alternative is that it is managed in Rust).    
 type PVSupportsHaskellManagedPLT (pv :: ProtocolVersion) =
     (PVSupportsPLT pv, PltStateVersionFor pv ~ 'PLTStateV0)
 
