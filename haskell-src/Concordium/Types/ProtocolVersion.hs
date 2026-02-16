@@ -235,6 +235,7 @@ module Concordium.Types.ProtocolVersion (
     AVSupportsPLT,
     PVSupportsPLT,
     PVSupportsHaskellManagedPLT,
+    PVSupportsRustManagedPLT,
     -- | Version of PLT state (disregarding PLT account state which is handled separately).
     --
     -- * 'PLTStateNone': there is no PLT state (on protocol versions where 'SupportsPLT' is 'False')
@@ -819,6 +820,11 @@ type PVSupportsPLT (pv :: ProtocolVersion) =
 -- that the PLT state is managed in Haskell (the alternative is that it is managed in Rust).
 type PVSupportsHaskellManagedPLT (pv :: ProtocolVersion) =
     (PVSupportsPLT pv, PltStateVersionFor pv ~ 'PLTStateV0)
+
+-- | Constraint that a protocol version supports protocol level tokens and
+-- that the PLT state is managed in Rust (the alternative is that it is managed in Haskell).
+type PVSupportsRustManagedPLT (pv :: ProtocolVersion) =
+    (PVSupportsPLT pv, PltStateVersionFor pv ~ 'PLTStateV1)    
 
 -- | Constraint on a type level 'PLTStateVersion' that can be used to get a corresponding
 --  'SPLTStateVersion' (see 'pltStateVersion'). (An alias for 'SingI'.)
