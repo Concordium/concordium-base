@@ -85,8 +85,8 @@ type LogIO = LoggerT IO
 
 -- | The 'LoggerT' monad transformer equips a monad with logging
 --  functionality.
-newtype LoggerT m a = LoggerT {runLoggerT' :: ReaderT (LogMethod m) m a}
-    deriving (Functor, Applicative, Monad, MonadIO, MonadReader (LogMethod m), MonadThrow, MonadCatch, MonadMask)
+newtype LoggerT m a = LoggerT {runLoggerT' :: ReaderT (LogMethod IO) m a}
+    deriving (Functor, Applicative, Monad, MonadIO, MonadReader (LogMethod IO), MonadThrow, MonadCatch, MonadMask)
 
 instance MonadTrans LoggerT where
     lift = LoggerT . lift
@@ -94,11 +94,11 @@ instance MonadTrans LoggerT where
 
 -- | Run an action in the 'LoggerT' monad, handling log events with the
 --  given log method.
-runLoggerT :: LoggerT m a -> LogMethod m -> m a
+runLoggerT :: LoggerT m a -> LogMethod IO -> m a
 runLoggerT = runReaderT . runLoggerT'
 
 -- | Run an action in the 'LoggerT' monad, discarding all log events.
-runSilentLogger :: (Applicative m) => LoggerT m a -> m a
+runSilentLogger :: LoggerT m a -> m a
 runSilentLogger = flip runLoggerT (\_ _ _ -> pure ())
 
 ------------------------------------------------------------------------------
@@ -110,18 +110,33 @@ class (Monad m) => MonadLogger m where
     -- | Record a log event.
     logEvent :: LogMethod m
     default logEvent :: (MonadTrans t, MonadLogger m1, m ~ t m1) => LogMethod m
-    logEvent src lvl msg = lift (logEvent src lvl msg)
+    logEvent src lvl msg = lift $ logEvent src lvl msg
+
+    -- | Record a log event as an IO action.
+    logEventIO :: m (LogMethod IO)
+    default logEventIO :: (MonadTrans t, MonadLogger m1, m ~ t m1) => m (LogMethod IO)
+    logEventIO = lift $ logEventIO
+
+-- default logEventIO :: (MonadTrans t, MonadLogger m1, m ~ t m1) => LogMethod IO
+-- logEventIO src lvl msg = logEventIO src lvl msg
 
 -- These instances are declared in the same way as done in the mtl package.
 -- See https://hackage.haskell.org/package/mtl-2.2.2/docs/src/Control.Monad.Reader.Class.html#MonadReader
-instance (Monad m) => MonadLogger (LoggerT m) where
+instance (Monad m, MonadIO m) => MonadLogger (LoggerT m) where
     logEvent src lvl msg = do
         logm <- Control.Monad.Reader.Class.ask
-        lift $ logm src lvl msg
+        liftIO $ logm src lvl msg
+
+    logEventIO = do
+        logm <- Control.Monad.Reader.Class.ask
+        return $ \src lvl msg ->
+            logm src lvl msg
 
 -- The Identity Monad will not do any logging. This instance is only used in the StaticEnvironment implementation
 instance MonadLogger Identity where
     logEvent _ _ _ = pure ()
+
+    logEventIO = return $ \_ _ _ -> pure ()
 
 ------------------------------------------------------------------------------
 -- Instances for other mtl transformers.
