@@ -1,5 +1,6 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
 -- | Event logging monad.
@@ -110,15 +111,12 @@ class (Monad m) => MonadLogger m where
     -- | Record a log event.
     logEvent :: LogMethod m
     default logEvent :: (MonadTrans t, MonadLogger m1, m ~ t m1) => LogMethod m
-    logEvent src lvl msg = lift $ logEvent src lvl msg
+    logEvent src lvl msg = lift (logEvent src lvl msg)
 
     -- | Record a log event as an IO action.
     logEventIO :: m (LogMethod IO)
     default logEventIO :: (MonadTrans t, MonadLogger m1, m ~ t m1) => m (LogMethod IO)
-    logEventIO = lift $ logEventIO
-
--- default logEventIO :: (MonadTrans t, MonadLogger m1, m ~ t m1) => LogMethod IO
--- logEventIO src lvl msg = logEventIO src lvl msg
+    logEventIO = lift logEventIO
 
 -- These instances are declared in the same way as done in the mtl package.
 -- See https://hackage.haskell.org/package/mtl-2.2.2/docs/src/Control.Monad.Reader.Class.html#MonadReader
@@ -129,8 +127,7 @@ instance (Monad m, MonadIO m) => MonadLogger (LoggerT m) where
 
     logEventIO = do
         logm <- Control.Monad.Reader.Class.ask
-        return $ \src lvl msg ->
-            logm src lvl msg
+        return logm
 
 -- The Identity Monad will not do any logging. This instance is only used in the StaticEnvironment implementation
 instance MonadLogger Identity where
