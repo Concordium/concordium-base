@@ -1,6 +1,5 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
 -- | Event logging monad.
@@ -113,7 +112,7 @@ class (Monad m) => MonadLogger m where
     default logEvent :: (MonadTrans t, MonadLogger m1, m ~ t m1) => LogMethod m
     logEvent src lvl msg = lift (logEvent src lvl msg)
 
-    -- | Record a log event as an IO action.
+    -- | Record a log event in an IO action.
     logEventIO :: m (LogMethod IO)
     default logEventIO :: (MonadTrans t, MonadLogger m1, m ~ t m1) => m (LogMethod IO)
     logEventIO = lift logEventIO
