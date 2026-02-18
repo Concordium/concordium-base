@@ -824,7 +824,7 @@ type PVSupportsHaskellManagedPLT (pv :: ProtocolVersion) =
 -- | Constraint that a protocol version supports protocol level tokens and
 -- that the PLT state is managed in Rust (the alternative is that it is managed in Haskell).
 type PVSupportsRustManagedPLT (pv :: ProtocolVersion) =
-    (PVSupportsPLT pv, PltStateVersionFor pv ~ 'PLTStateV1)    
+    (PVSupportsPLT pv, PltStateVersionFor pv ~ 'PLTStateV1)
 
 -- | Constraint on a type level 'PLTStateVersion' that can be used to get a corresponding
 --  'SPLTStateVersion' (see 'pltStateVersion'). (An alias for 'SingI'.)
