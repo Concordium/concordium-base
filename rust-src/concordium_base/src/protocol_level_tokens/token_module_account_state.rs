@@ -42,19 +42,19 @@ mod test {
             additional: Default::default(),
         };
 
-        let cbor = cbor::cbor_encode(&token_module_account_state).unwrap();
+        let cbor = cbor::cbor_encode(&token_module_account_state);
         assert_eq!(hex::encode(&cbor), "a169616c6c6f774c697374f5");
         let decoded: TokenModuleAccountState = cbor::cbor_decode(cbor).unwrap();
         assert_eq!(token_module_account_state, decoded);
 
         token_module_account_state.allow_list = None;
-        let cbor = cbor::cbor_encode(&token_module_account_state).unwrap();
+        let cbor = cbor::cbor_encode(&token_module_account_state);
         assert_eq!(hex::encode(&cbor), "a0");
         let decoded: TokenModuleAccountState = cbor::cbor_decode(cbor).unwrap();
         assert_eq!(token_module_account_state, decoded);
 
         token_module_account_state.deny_list = Some(false);
-        let cbor = cbor::cbor_encode(&token_module_account_state).unwrap();
+        let cbor = cbor::cbor_encode(&token_module_account_state);
         assert_eq!(hex::encode(&cbor), "a16864656e794c697374f4");
         let decoded: TokenModuleAccountState = cbor::cbor_decode(cbor).unwrap();
         assert_eq!(token_module_account_state, decoded);
@@ -63,7 +63,7 @@ mod test {
             "customKey".to_string(),
             value::Value::Text("customValue".to_string()),
         );
-        let cbor = cbor::cbor_encode(&token_module_account_state).unwrap();
+        let cbor = cbor::cbor_encode(&token_module_account_state);
         assert_eq!(
             hex::encode(&cbor),
             "a26864656e794c697374f469637573746f6d4b65796b637573746f6d56616c7565"

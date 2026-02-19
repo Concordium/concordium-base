@@ -1,4 +1,32 @@
 ## Unreleased
+- Implemented `common::from_bytes_complete` that fails if all bytes are not consumed during deserialization.
+- `cbor::cbor_encode` is now infallible and returns `Vec<u8>` instead of `CborSerializationResult<Vec<u8>>`
+- `&[T]` no longer implements `CborSerialize` in order to avoid ambiguity with `CborSerialize` implementation for `[u8]`. 
+  To serialize a slice as a CBOR array, wrap it in `ArraySlice`.
+  `[u8]` still implements `CborSerialize` and serializes as a CBOR bytestring.
+- Removed the module `upward`. This will be added to Rust SDK crate instead. 
+- Changes to `protocol_level_tokens` module:
+  - Removed the usage of `Upward` in `TokenOperations` type. To CBOR decode and allow unknown variants,
+    the new function `TokenOperationsPayload::decode_operations_maybe_known` can be used instead.
+  - Removed the types `TokenModuleRejectReason`, `TokenEvent`, `TokenEventDetails`, `TokenModuleEvent`. These types 
+    will be moved to the Rust SDK crate. (`TokenModuleRejectReason` under the name `EncodedTokenModuleRejectReason`
+    and `TokenModuleEvent` under the name `EncodedTokenModuleEvent`).
+  - Renamed the existing type `TokenModuleEventType` that contains full token module events to `TokenModuleEvent` and
+    created a new `TokenModuleEventType` that is only the type of event. The new methods
+    `TokenModuleEvent::encode_event` and `TokenModuleEvent::decode_event` allows CBOR encoding from and CBOR decoding
+    to `TokenModuleEvent`. The new methods `TokenModuleEventType::to_type_discriminator` and
+    `TokenModuleEventType::try_from_type_discriminator` allows converting between `TokenModuleEventType`
+    and `TokenModuleCborTypeDiscriminator`.
+  - Renamed the existing type `TokenModuleRejectReasonType` that contains full token module reject reasons to `TokenModuleRejectReason` and
+    created a new `TokenModuleRejectReasonType` that is only the type of reject reason. The new methods
+    `TokenModuleRejectReason::encode_reject_reason` and `TokenModuleRejectReason::decode_reject_reason` allows CBOR encoding from and CBOR decoding
+    to `TokenModuleRejectReason`. The new methods `TokenModuleRejectReasonType::to_type_discriminator` and
+    `TokenModuleRejectReasonType::try_from_type_discriminator` allows converting between `TokenModuleRejectReasonType`
+    and `TokenModuleCborTypeDiscriminator`.
+  - Implemented `concordium_base::common::Serialize` for `TokenModuleCborTypeDiscriminator`.
+  - Implemented checks in `serde::Deserialize` implementation on `TokenId` and `TokenModuleCborTypeDiscriminator` that the internal type
+    invariants are fulfilled.
+  - Implemented limit on pre-allocation in `concordium_base::common::Deserial` implementation on `RawCbor`.
 
 - Introduce protocol version 11 variant `ProtocolVersion::P11`.
 - The flag `serde_deprecated` now guards `serde::Serialize` and `serde::Deserialize` implemetations on the following types. The implementations will eventually be removed.

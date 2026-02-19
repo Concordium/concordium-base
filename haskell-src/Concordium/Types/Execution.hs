@@ -3037,6 +3037,58 @@ data FailureKind
       MissingSponsorSignature
     deriving (Eq, Show)
 
+instance S.Serialize FailureKind where
+    put = \case
+        InsufficientFunds -> S.putWord8 0
+        IncorrectSignature -> S.putWord8 1
+        NonSequentialNonce nonce -> S.putWord8 2 <> S.put nonce
+        SuccessorOfInvalidTransaction -> S.putWord8 3
+        UnknownAccount address -> S.putWord8 4 <> S.put address
+        DepositInsufficient -> S.putWord8 5
+        ExpiredTransaction -> S.putWord8 6
+        ExceedsMaxBlockEnergy -> S.putWord8 7
+        ExceedsMaxBlockSize -> S.putWord8 8
+        NonExistentIdentityProvider ipi -> S.putWord8 9 <> S.put ipi
+        UnsupportedAnonymityRevokers -> S.putWord8 10
+        NonExistentAccount ip -> S.putWord8 11 <> S.put ip
+        AccountCredentialInvalid -> S.putWord8 12
+        DuplicateAccountRegistrationID credID -> S.putWord8 13 <> S.put credID
+        InvalidUpdateTime -> S.putWord8 14
+        ExceedsMaxCredentialDeployments -> S.putWord8 15
+        InvalidPayloadSize -> S.putWord8 16
+        NotSupportedAtCurrentProtocolVersion -> S.putWord8 17
+        DuplicateTokenId tokenId -> S.putWord8 18 <> S.put tokenId
+        TokenInitializeFailure failure -> S.putWord8 19 <> S.put failure
+        InvalidTokenModuleRef moduleRef -> S.putWord8 20 <> S.put moduleRef
+        MissingSponsorAccount -> S.putWord8 21
+        MissingSponsorSignature -> S.putWord8 22
+    get =
+        S.getWord8 >>= \case
+            0 -> return InsufficientFunds
+            1 -> return IncorrectSignature
+            2 -> NonSequentialNonce <$> S.get
+            3 -> return SuccessorOfInvalidTransaction
+            4 -> UnknownAccount <$> S.get
+            5 -> return DepositInsufficient
+            6 -> return ExpiredTransaction
+            7 -> return ExceedsMaxBlockEnergy
+            8 -> return ExceedsMaxBlockSize
+            9 -> NonExistentIdentityProvider <$> S.get
+            10 -> return UnsupportedAnonymityRevokers
+            11 -> NonExistentAccount <$> S.get
+            12 -> return AccountCredentialInvalid
+            13 -> DuplicateAccountRegistrationID <$> S.get
+            14 -> return InvalidUpdateTime
+            15 -> return ExceedsMaxCredentialDeployments
+            16 -> return InvalidPayloadSize
+            17 -> return NotSupportedAtCurrentProtocolVersion
+            18 -> DuplicateTokenId <$> S.get
+            19 -> TokenInitializeFailure <$> S.get
+            20 -> InvalidTokenModuleRef <$> S.get
+            21 -> return MissingSponsorAccount
+            22 -> return MissingSponsorSignature
+            n -> fail $ "Unrecognized FailureKind tag: " ++ show n
+
 data TxResult (tov :: TransactionOutcomesVersion) = TxValid !(TransactionSummary tov) | TxInvalid !FailureKind
 
 -- | Generate the challenge for adding a baker.

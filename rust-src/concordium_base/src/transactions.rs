@@ -48,7 +48,7 @@ pub struct Memo {
 }
 
 impl CborSerialize for Memo {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         encoder.encode_bytes(&self.bytes)
     }
 }
@@ -2339,7 +2339,6 @@ pub mod cost {
 /// See also the [send] module above which combines construction with signing.
 pub mod construct {
     use super::*;
-    use crate::common::upward::Upward;
     use crate::{
         common::cbor,
         protocol_level_tokens::{RawCbor, TokenId, TokenOperation, TokenOperations},
@@ -2617,16 +2616,14 @@ pub mod construct {
                 .operations
                 .iter()
                 .map(|op| match op {
-                    Upward::Known(TokenOperation::Transfer(_)) => cost::PLT_TRANSFER,
-                    Upward::Known(TokenOperation::Mint(_)) => cost::PLT_MINT,
-                    Upward::Known(TokenOperation::Burn(_)) => cost::PLT_BURN,
-                    Upward::Known(TokenOperation::AddAllowList(_))
-                    | Upward::Known(TokenOperation::RemoveAllowList(_))
-                    | Upward::Known(TokenOperation::AddDenyList(_))
-                    | Upward::Known(TokenOperation::RemoveDenyList(_)) => cost::PLT_LIST_UPDATE,
-                    Upward::Known(TokenOperation::Pause(_))
-                    | Upward::Known(TokenOperation::Unpause(_)) => cost::PLT_PAUSE,
-                    Upward::Unknown(_) => Default::default(),
+                    TokenOperation::Transfer(_) => cost::PLT_TRANSFER,
+                    TokenOperation::Mint(_) => cost::PLT_MINT,
+                    TokenOperation::Burn(_) => cost::PLT_BURN,
+                    TokenOperation::AddAllowList(_)
+                    | TokenOperation::RemoveAllowList(_)
+                    | TokenOperation::AddDenyList(_)
+                    | TokenOperation::RemoveDenyList(_) => cost::PLT_LIST_UPDATE,
+                    TokenOperation::Pause(_) | TokenOperation::Unpause(_) => cost::PLT_PAUSE,
                 })
                 .sum()
     }
@@ -2643,9 +2640,9 @@ pub mod construct {
         expiry: TransactionTime,
         token_id: TokenId,
         operations: TokenOperations,
-    ) -> CborSerializationResult<PreAccountTransaction> {
+    ) -> PreAccountTransaction {
         let energy = token_operations_txn_energy(&operations);
-        let operations = RawCbor::from(cbor::cbor_encode(&operations)?);
+        let operations = RawCbor::from(cbor::cbor_encode(&operations));
 
         let payload = Payload::TokenUpdate {
             payload: TokenOperationsPayload {
@@ -2653,13 +2650,13 @@ pub mod construct {
                 operations,
             },
         };
-        Ok(make_transaction(
+        make_transaction(
             sender,
             nonce,
             expiry,
             GivenEnergy::Add { num_sigs, energy },
             payload,
-        ))
+        )
     }
 
     /// Make an encrypted transfer. The payload can be constructed using
@@ -3305,16 +3302,16 @@ pub mod send {
         expiry: TransactionTime,
         token_id: TokenId,
         operations: TokenOperations,
-    ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
-        Ok(construct::token_update_operations(
+    ) -> AccountTransaction<EncodedPayload> {
+        construct::token_update_operations(
             signer.num_keys(),
             sender,
             nonce,
             expiry,
             token_id,
             operations,
-        )?
-        .sign(signer))
+        )
+        .sign(signer)
     }
 
     /// Make an encrypted transfer. The payload can be constructed using
