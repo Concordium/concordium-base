@@ -99,6 +99,7 @@ token-operation = token-transfer
     / token-update-list
     / token-pause
     / token-unpause
+    / token-update-metadata
 
 ; A token transfer operation. This transfers a specified amount of tokens from the sender account
 ; (implicit) to the recipient account.
@@ -184,6 +185,19 @@ token-unpause = {
     "unpause": {}
 }
 
+; Update the token metadata of a token.
+token-update-metadata = {
+    "updateMetadata": token-update-metadata-details
+}
+
+; The details of a `token-update-metadata` operation.
+token-update-metadata-details = {
+    ; A string field representing the URL
+    "url": text,
+    ; An optional sha256 checksum value tied to the content of the URL
+    ? "checksumSha256": sha256-hash
+}
+
 ; Events
 
 ; The details of a token "addAllowList" event.
@@ -209,6 +223,10 @@ token-pause-event = {}
 ; The details of a token "unpause" event.
 ; Indicates that the token operations involving balance changes are resumed.
 token-unpause-event = {}
+
+; The details of a token "updateMetadata" event.
+; Indicates that a token had its metadata reference updated.
+token-update-metadata-event = token-update-metadata-details
 
 ; Reject Reasons
 
