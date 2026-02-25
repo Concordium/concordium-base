@@ -207,13 +207,13 @@ token-update-metadata-details = {
 
 ; Assign an authorization role to an account.
 token-assign-authorization-role = {
-    "assignAuthorizationRole": token-role-update-details
+    "assignAuthorizationRole": token-update-authorization-role-details
 }
 
 ; Revoke an authorization role from an account. If the account specified by the operation details
 ; does not have the role assigned, the transaction will fail.
 token-revoke-authorization-role = {
-    "revokeAuthorizationRole": token-role-update-details
+    "revokeAuthorizationRole": token-update-authorization-role-details
 }
 
 token-update-authorization-role = token-assign-authorization-role / token-revoke-authorization-role
