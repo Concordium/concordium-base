@@ -1,12 +1,18 @@
-; Common Types
+; Specification of CCDL related to protocol-level tokens.
+;
+; When changing it, please check the syntax first using
+;   cargo install cddl
+;   cddl compile-cddl --cddl cis-7.cddl
 
-token-id = text .size (1..128) .regexp "[a-zA-Z0-9\-.%]+"
+; Common Types 
+
+token-id = (text .size (1..128)) .regexp "[a-zA-Z0-9\\-.%]+"
 
 token-module-hash = sha256-hash
 
 sha256-hash = bytes .size(32)
 
-token-decimals = int .range (0..255)
+token-decimals = (int .ge 0) .le 255
 
 token-amount = decfrac
 
@@ -262,9 +268,6 @@ token-update-metadata-event = token-update-metadata-details
 ; Indicates that the account was assigned the authorization role specified by the key.
 token-assign-authorization-role-event = token-update-authorization-role-details
 
-; The details of a token "revokeAuthorizationRole" event.
-; Indicates that the account had the authorization role specified by the key revoked.
-token-assign-authorization-role-event = token-update-authorization-role-details
 
 ; Reject Reasons
 
