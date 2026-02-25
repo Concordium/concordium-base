@@ -12,7 +12,7 @@ token-module-hash = sha256-hash
 
 sha256-hash = bytes .size(32)
 
-token-decimals = (int .ge 0) .le 255
+token-decimals = 0..255
 
 token-amount = decfrac
 
