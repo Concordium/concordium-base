@@ -14,6 +14,7 @@ module Concordium.Types.Queries.Tokens (
 import Data.Aeson as AE
 import qualified Data.ByteString as BS
 import Data.Maybe (catMaybes)
+import Data.Serialize
 import Data.Word
 
 import Concordium.Crypto.ByteStringHelpers
@@ -42,6 +43,15 @@ instance FromJSON Token where
     parseJSON = withObject "Token" $ \o -> do
         tokenId <- o .: "tokenId"
         tokenAccountState <- o .: "tokenAccountState"
+        return Token{..}
+
+instance Serialize Token where
+    put Token{..} = do
+        put tokenId
+        put tokenAccountState
+    get = do
+        tokenId <- get
+        tokenAccountState <- get
         return Token{..}
 
 -- | The account level state of a token.
@@ -90,6 +100,15 @@ instance FromJSON TokenAccountState where
     parseJSON = withObject "TokenAccountState" $ \o -> do
         balance <- o .: "balance"
         moduleAccountState <- fmap encodedTokenModuleAccountState <$> o .:? "state"
+        return TokenAccountState{..}
+
+instance Serialize TokenAccountState where
+    put TokenAccountState{..} = do
+        put balance
+        put moduleAccountState
+    get = do
+        balance <- get
+        moduleAccountState <- get
         return TokenAccountState{..}
 
 -- | The global token state.
@@ -148,6 +167,19 @@ instance FromJSON TokenState where
         (EncodedTokenModuleState tsModuleState) <- o AE..: "moduleState"
         return TokenState{..}
 
+instance Serialize TokenState where
+    put TokenState{..} = do
+        put tsTokenModuleRef
+        put tsDecimals
+        put tsTotalSupply
+        put tsModuleState
+    get = do
+        tsTokenModuleRef <- get
+        tsDecimals <- get
+        tsTotalSupply <- get
+        tsModuleState <- get
+        return TokenState{..}
+
 -- | The global info about a protocol-level token.
 data TokenInfo = TokenInfo
     { -- | The symbol uniquely identifying the protocol-level token.
@@ -169,4 +201,13 @@ instance FromJSON TokenInfo where
     parseJSON = withObject "TokenInfo" $ \o -> do
         tiTokenId <- o .: "tokenId"
         tiTokenState <- o .: "tokenState"
+        return TokenInfo{..}
+
+instance Serialize TokenInfo where
+    put TokenInfo{..} = do
+        put tiTokenId
+        put tiTokenState
+    get = do
+        tiTokenId <- get
+        tiTokenState <- get
         return TokenInfo{..}
