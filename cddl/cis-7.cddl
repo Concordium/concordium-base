@@ -100,6 +100,7 @@ token-operation = token-transfer
     / token-pause
     / token-unpause
     / token-update-metadata
+    / token-update-authorization-role
 
 ; A token transfer operation. This transfers a specified amount of tokens from the sender account
 ; (implicit) to the recipient account.
@@ -198,6 +199,35 @@ token-update-metadata-details = {
     ? "checksumSha256": sha256-hash
 }
 
+; Assign an authorization role to an account.
+token-assign-authorization-role = {
+    "assignAuthorizationRole": token-role-update-details
+}
+
+; Revoke an authorization role from an account. If the account specified by the operation details
+; does not have the role assigned, the transaction will fail.
+token-revoke-authorization-role = {
+    "revokeAuthorizationRole": token-role-update-details
+}
+
+token-update-authorization-role = token-assign-authorization-role / token-revoke-authorization-role
+
+; The details of the `token-assign-authorization-role` and `token-revoke-authorization-role`
+; operations.
+token-update-authorization-role-details = {
+    ; assigns the role declared by the key to the account address specified in the value.
+    token-authorization-role => tagged-account-address
+}
+
+; The different authorization roles defined for the current token module implementation
+token-authorization-role = "admin"
+    / "mint" 
+    / "burn"
+    / "allowList"
+    / "denyList"
+    / "pause"
+    / "metadata"
+
 ; Events
 
 ; The details of a token "addAllowList" event.
@@ -227,6 +257,14 @@ token-unpause-event = {}
 ; The details of a token "updateMetadata" event.
 ; Indicates that a token had its metadata reference updated.
 token-update-metadata-event = token-update-metadata-details
+
+; The details of a token "assignAuthorizationRole" event.
+; Indicates that the account was assigned the authorization role specified by the key.
+token-assign-authorization-role-event = token-update-authorization-role-details
+
+; The details of a token "revokeAuthorizationRole" event.
+; Indicates that the account had the authorization role specified by the key revoked.
+token-assign-authorization-role-event = token-update-authorization-role-details
 
 ; Reject Reasons
 
@@ -327,23 +365,23 @@ token-module-state = {
 
 ; Describes the access control structure for protocol level tokens.
 token-access-control = {
-    ; Token "admins", which gives authority to perform `token-assign-role` and `token-revoke-role`
-    ; operations.
+    ; Token "admins", which gives authority to perform `token-assign-authorization-role` and
+    ; `token-revoke-authorization-role` operations.
     ; This role is special in the sense that it always has at least 1 member to ensure the token
     ; remains operational.
     "admin": [ + tagged-account-address ],
     ; Gives authority to perform `token-mint` operations.
-    "mint": [ * tagged-account-address ],
+    ? "mint": [ * tagged-account-address ],
     ; Gives authority to perform `token-burn` operations.
-    "burn": [ * tagged-account-address ],
+    ? "burn": [ * tagged-account-address ],
     ; Gives authority to perform `token-add-allow-list` and `token-remove-allow-list` operations.
-    "allowList": [ * tagged-account-address ],
+    ? "allowList": [ * tagged-account-address ],
     ; Gives authority to perform `token-add-deny-list` and `token-remove-deny-list` operations.
-    "denyList": [ * tagged-account-address ],
+    ? "denyList": [ * tagged-account-address ],
     ; Gives authority to perform `token-pause` and `token-unpause` operations.
-    "pause": [ * tagged-account-address ],
+    ? "pause": [ * tagged-account-address ],
     ; Gives authority to perform `token-update-metadata` operations.
-    "metadata": [ * tagged-account-address ],
+    ? "metadata": [ * tagged-account-address ],
     ; Additional state information may be provided under further text keys, the meaning
     ; of which are not defined in the present specification.
     * text => any
