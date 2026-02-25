@@ -9,18 +9,18 @@ module Concordium.Types.Queries.Tokens (
     TokenAccountState (..),
     TokenState (..),
     TokenInfo (..),
-)
-where
+) where
 
-import Concordium.Crypto.ByteStringHelpers
-import Concordium.Types
-import qualified Concordium.Types.ProtocolLevelTokens.CBOR as CBOR
-import Concordium.Types.Tokens
 import Data.Aeson as AE
 import qualified Data.ByteString as BS
 import Data.Maybe (catMaybes)
 import Data.Serialize
 import Data.Word
+
+import Concordium.Crypto.ByteStringHelpers
+import Concordium.Types
+import qualified Concordium.Types.ProtocolLevelTokens.CBOR as CBOR
+import Concordium.Types.Tokens
 
 -- | Protocol level token.
 data Token = Token
@@ -46,7 +46,9 @@ instance FromJSON Token where
         return Token{..}
 
 instance Serialize Token where
-    put Token{..} = put tokenId >> put tokenAccountState
+    put Token{..} = do
+        put tokenId
+        put tokenAccountState
     get = do
         tokenId <- get
         tokenAccountState <- get
@@ -101,7 +103,9 @@ instance FromJSON TokenAccountState where
         return TokenAccountState{..}
 
 instance Serialize TokenAccountState where
-    put TokenAccountState{..} = put balance >> put moduleAccountState
+    put TokenAccountState{..} = do
+        put balance
+        put moduleAccountState
     get = do
         balance <- get
         moduleAccountState <- get
@@ -164,7 +168,11 @@ instance FromJSON TokenState where
         return TokenState{..}
 
 instance Serialize TokenState where
-    put TokenState{..} = put tsTokenModuleRef >> put tsDecimals >> put tsTotalSupply >> put tsModuleState
+    put TokenState{..} = do
+        put tsTokenModuleRef
+        put tsDecimals
+        put tsTotalSupply
+        put tsModuleState
     get = do
         tsTokenModuleRef <- get
         tsDecimals <- get
@@ -196,7 +204,9 @@ instance FromJSON TokenInfo where
         return TokenInfo{..}
 
 instance Serialize TokenInfo where
-    put TokenInfo{..} = put tiTokenId >> put tiTokenState
+    put TokenInfo{..} = do
+        put tiTokenId
+        put tiTokenState
     get = do
         tiTokenId <- get
         tiTokenState <- get
