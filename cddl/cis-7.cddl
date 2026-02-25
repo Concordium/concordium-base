@@ -264,7 +264,7 @@ token-assign-authorization-role-event = token-update-authorization-role-details
 
 ; The details of a token "revokeAuthorizationRole" event.
 ; Indicates that the account had the authorization role specified by the key revoked.
-token-assign-authorization-role-event = token-update-authorization-role-details
+token-revoke-authorization-role-event = token-update-authorization-role-details
 
 ; Reject Reasons
 
@@ -367,24 +367,33 @@ token-module-state = {
 token-access-control = {
     ; Token "admins", which gives authority to perform `token-assign-authorization-role` and
     ; `token-revoke-authorization-role` operations.
-    ; This role is special in the sense that it always has at least 1 member to ensure the token
-    ; remains operational.
-    "admin": [ + tagged-account-address ],
+    "admin": token-admin-access-control,
     ; Gives authority to perform `token-mint` operations.
-    ? "mint": [ * tagged-account-address ],
+    ? "mint": token-role-access-control,
     ; Gives authority to perform `token-burn` operations.
-    ? "burn": [ * tagged-account-address ],
+    ? "burn": token-role-access-control,
     ; Gives authority to perform `token-add-allow-list` and `token-remove-allow-list` operations.
-    ? "allowList": [ * tagged-account-address ],
+    ? "allowList": token-role-access-control,
     ; Gives authority to perform `token-add-deny-list` and `token-remove-deny-list` operations.
-    ? "denyList": [ * tagged-account-address ],
+    ? "denyList": token-role-access-control,
     ; Gives authority to perform `token-pause` and `token-unpause` operations.
-    ? "pause": [ * tagged-account-address ],
+    ? "pause": token-role-access-control,
     ; Gives authority to perform `token-update-metadata` operations.
-    ? "metadata": [ * tagged-account-address ],
+    ? "metadata": token-role-access-control,
     ; Additional state information may be provided under further text keys, the meaning
     ; of which are not defined in the present specification.
     * text => any
+}
+
+; This role is special in the sense that it always has at least 1 member to ensure the token
+; remains operational.
+token-admin-access-control = {
+    accounts: [ + tagged-account-address ]
+}
+
+; Generic access control details applicable to any role, except for the specialized "admin" case.
+token-role-access-control = {
+    accounts: [ * tagged-account-address ]
 }
 
 ; Account state for the token. This contains state per account for the token.
