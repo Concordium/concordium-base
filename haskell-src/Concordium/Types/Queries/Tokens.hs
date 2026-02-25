@@ -172,12 +172,14 @@ instance Serialize TokenState where
         put tsTokenModuleRef
         put tsDecimals
         put tsTotalSupply
-        put tsModuleState
+        putWord32be (fromIntegral (BS.length tsModuleState))
+        putByteString tsModuleState
     get = do
         tsTokenModuleRef <- get
         tsDecimals <- get
         tsTotalSupply <- get
-        tsModuleState <- get
+        moduleStateLen <- getWord32be
+        tsModuleState <- getByteString (fromIntegral moduleStateLen)
         return TokenState{..}
 
 -- | The global info about a protocol-level token.
