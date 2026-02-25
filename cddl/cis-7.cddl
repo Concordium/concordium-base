@@ -221,12 +221,14 @@ token-update-authorization-role = token-assign-authorization-role / token-revoke
 ; The details of the `token-assign-authorization-role` and `token-revoke-authorization-role`
 ; operations.
 token-update-authorization-role-details = {
-    ; assigns the role declared by the key to the account address specified in the value.
-    token-authorization-role => tagged-account-address
+    ; The authorization role to update.
+    "role": token-authorization-role,
+    ; The account to update authorization for.
+    "account": tagged-account-address
 }
 
 ; The different authorization roles defined for the current token module implementation
-token-authorization-role = "admin"
+token-authorization-role = "updateRole"
     / "mint" 
     / "burn"
     / "allowList"
@@ -368,26 +370,35 @@ token-module-state = {
 
 ; Describes the access control structure for protocol level tokens.
 token-access-control = {
-    ; Token "admins", which gives authority to perform `token-assign-authorization-role` and
+    ; Gives authority to perform `token-assign-authorization-role` and
     ; `token-revoke-authorization-role` operations.
-    ; This role is special in the sense that it always has at least 1 member to ensure the token
-    ; remains operational.
-    "admin": [ + tagged-account-address ],
+    "updateRole": token-update-role-access-control,
     ; Gives authority to perform `token-mint` operations.
-    ? "mint": [ * tagged-account-address ],
+    ? "mint": token-generic-access-control,
     ; Gives authority to perform `token-burn` operations.
-    ? "burn": [ * tagged-account-address ],
+    ? "burn": token-generic-access-control,
     ; Gives authority to perform `token-add-allow-list` and `token-remove-allow-list` operations.
-    ? "allowList": [ * tagged-account-address ],
+    ? "allowList": token-generic-access-control,
     ; Gives authority to perform `token-add-deny-list` and `token-remove-deny-list` operations.
-    ? "denyList": [ * tagged-account-address ],
+    ? "denyList": token-generic-access-control,
     ; Gives authority to perform `token-pause` and `token-unpause` operations.
-    ? "pause": [ * tagged-account-address ],
+    ? "pause": token-generic-access-control,
     ; Gives authority to perform `token-update-metadata` operations.
-    ? "metadata": [ * tagged-account-address ],
+    ? "metadata": token-generic-access-control,
     ; Additional state information may be provided under further text keys, the meaning
     ; of which are not defined in the present specification.
     * text => any
+}
+
+; This role is special in the sense that it always has at least 1 member to ensure the token
+; remains operational.
+token-update-role-access-control = {
+    accounts: [ + tagged-account-address ]
+}
+
+; Generic access control details applicable to any role, except for the specialized "admin" case.
+token-generic-access-control = {
+    accounts: [ * tagged-account-address ]
 }
 
 ; Account state for the token. This contains state per account for the token.
