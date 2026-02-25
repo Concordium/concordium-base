@@ -267,8 +267,12 @@ token-unpause-event = {}
 token-update-metadata-event = token-update-metadata-details
 
 ; The details of a token "assignAuthorizationRole" event.
-; Indicates that the account was assigned the authorization role specified by the key.
+; Indicates that the account was assigned the authorization role specified.
 token-assign-authorization-role-event = token-update-authorization-role-details
+
+; The details of a token "revokeAuthorizationRole" event.
+; Indicates that the authorization role specified was revoked from the account
+token-revoke-authorization-role-event = token-update-authorization-role-details
 
 
 ; Reject Reasons
@@ -362,7 +366,7 @@ token-module-state = {
     ? "paused": bool,
     ; Authorizations for the token, i.e. which accounts have authority to perform administrative
     ; operations corresponding to the roles assigned.
-    ? "authorizations": token-access-control
+    ? "authorizations": token-access-control ; TODO: Move this to be accessible through a dedicated query.
     ; Additional state information may be provided under further text keys, the meaning
     ; of which are not defined in the present specification.
     * text => any
@@ -372,32 +376,27 @@ token-module-state = {
 token-access-control = {
     ; Gives authority to perform `token-assign-authorization-role` and
     ; `token-revoke-authorization-role` operations.
-    "updateRole": token-update-role-access-control,
+    ? "updateRole": token-role-access-control,
     ; Gives authority to perform `token-mint` operations.
-    ? "mint": token-generic-access-control,
+    ? "mint": token-role-access-control,
     ; Gives authority to perform `token-burn` operations.
-    ? "burn": token-generic-access-control,
+    ? "burn": token-role-access-control,
     ; Gives authority to perform `token-add-allow-list` and `token-remove-allow-list` operations.
-    ? "allowList": token-generic-access-control,
+    ? "allowList": token-role-access-control,
     ; Gives authority to perform `token-add-deny-list` and `token-remove-deny-list` operations.
-    ? "denyList": token-generic-access-control,
+    ? "denyList": token-role-access-control,
     ; Gives authority to perform `token-pause` and `token-unpause` operations.
-    ? "pause": token-generic-access-control,
+    ? "pause": token-role-access-control,
     ; Gives authority to perform `token-update-metadata` operations.
-    ? "metadata": token-generic-access-control,
+    ? "metadata": token-role-access-control,
     ; Additional state information may be provided under further text keys, the meaning
     ; of which are not defined in the present specification.
     * text => any
 }
 
-; This role is special in the sense that it always has at least 1 member to ensure the token
-; remains operational.
-token-update-role-access-control = {
-    accounts: [ + tagged-account-address ]
-}
-
-; Generic access control details applicable to any role, except for the specialized "admin" case.
-token-generic-access-control = {
+; Access control details applicable to any role.
+token-role-access-control = {
+    ; The accounts that have the role assigned.
     accounts: [ * tagged-account-address ]
 }
 
