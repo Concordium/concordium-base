@@ -227,14 +227,23 @@ token-update-admin-role-details = {
     "account": tagged-account-address
 }
 
-; The different admin roles defined for the current token module implementation
-token-admin-role = "updateRole"
-    / "mint" 
-    / "burn"
-    / "allowList"
-    / "denyList"
-    / "pause"
-    / "metadata"
+; The different The different admin roles defined for the current token module implementation.
+; Each role gives access to specific administrative operations.
+token-admin-role =
+    ; Gives authority to perform `token-assign-admin-role` and `token-revoke-admin-role` operations.
+    "updateRole" /
+    ; Gives authority to perform `token-mint` operations.
+    "mint" /
+    ; Gives authority to perform `token-burn` operations.
+    "burn" /
+    ; Gives authority to perform `token-add-allow-list` and `token-remove-allow-list` operations.
+    "allowList" /
+    ; Gives authority to perform `token-add-deny-list` and `token-remove-deny-list` operations.
+    "denyList" /
+    ; Gives authority to perform `token-pause` and `token-unpause` operations.
+    "pause" /
+    ; Gives authority to perform `token-update-metadata` operations.
+    "metadata"
 
 ; Events
 
@@ -381,27 +390,14 @@ token-module-state = {
 
 ; Describes the authorizations structure for protocol level tokens.
 token-authorizations = {
-    ; Gives authority to perform `token-assign-admin-role` and
-    ; `token-revoke-admin-role` operations.
-    ? "updateRole": token-role-authorizations,
-    ; Gives authority to perform `token-mint` operations.
-    ? "mint": token-role-authorizations,
-    ; Gives authority to perform `token-burn` operations.
-    ? "burn": token-role-authorizations,
-    ; Gives authority to perform `token-add-allow-list` and `token-remove-allow-list` operations.
-    ? "allowList": token-role-authorizations,
-    ; Gives authority to perform `token-add-deny-list` and `token-remove-deny-list` operations.
-    ? "denyList": token-role-authorizations,
-    ; Gives authority to perform `token-pause` and `token-unpause` operations.
-    ? "pause": token-role-authorizations,
-    ; Gives authority to perform `token-update-metadata` operations.
-    ? "metadata": token-role-authorizations,
+    ; A map of admin roles to the accounts that have those roles assigned.
+    * token-admin-role => token-role-authorizations
     ; Additional state information may be provided under further text keys, the meaning
     ; of which are not defined in the present specification.
     * text => any
 }
 
-; Authorizations details applicable to any role.
+; Authorizations details applicable to any admin role.
 token-role-authorizations = {
     ; The accounts that have the role assigned.
     accounts: [ * tagged-account-address ]
