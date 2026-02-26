@@ -192,7 +192,7 @@ token-unpause = {
     "unpause": {}
 }
 
-; Update the token metadata of a token.
+; Update the token metadata of a token. Supported from protocol version 11.
 token-update-metadata = {
     "updateMetadata": token-update-metadata-details
 }
@@ -205,13 +205,13 @@ token-update-metadata-details = {
     ? "checksumSha256": sha256-hash
 }
 
-; Assign an admin role to an account.
+; Assign an admin role to an account. Supported from protocol version 11.
 token-assign-admin-role = {
     "assignAdminRole": token-update-admin-role-details
 }
 
 ; Revoke an admin role from an account. If the account specified by the operation details
-; does not have the role assigned, the transaction will fail.
+; does not have the role assigned, the transaction will fail. Supported from protocol version 11.
 token-revoke-admin-role = {
     "revokeAdminRole": token-update-admin-role-details
 }
@@ -353,7 +353,7 @@ reject-details-mint-would-overflow = {
 
 ; The authorizations query for a token. This query returns `token-authorizations-response`.
 token-authorizations-query = {
-    roles: [ * token-admin-role ]
+    "roles": [ * token-admin-role ]
 }
 
 ; The response to a token authorizations query. This contains the accounts that have each admin role assigned.
@@ -370,9 +370,6 @@ token-module-state = {
     ; The governance account of the token. When present, this account has complete authority over
     ; administritive operations for the token.
     ? "governanceAccount": tagged-account-address
-    ; The issuer account of the token. When present, this account serves as a reference to the
-    ; issuing entity of the token.
-    ? "issuerAccount": tagged-account-address
     ; Whether the token enforces an allow list.
     ? "allowList": bool,
     ; Whether the token enforces a deny list.
@@ -383,9 +380,6 @@ token-module-state = {
     ? "burnable": bool,
     ; Whether the token is paused, i.e. operations involving balance changes are suspended.
     ? "paused": bool,
-    ; Additional state information may be provided under further text keys, the meaning
-    ; of which are not defined in the present specification.
-    * text => any
 }
 
 ; Describes the authorizations structure for protocol level tokens.
@@ -400,7 +394,7 @@ token-authorizations = {
 ; Authorizations details applicable to any admin role.
 token-role-authorizations = {
     ; The accounts that have the role assigned.
-    accounts: [ * tagged-account-address ]
+    "accounts": [ * tagged-account-address ]
 }
 
 ; Account state for the token. This contains state per account for the token.
