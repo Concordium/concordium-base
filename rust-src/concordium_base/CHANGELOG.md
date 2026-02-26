@@ -76,6 +76,9 @@
   - `encrypted_transfers::types::SecToPubAmountTransferData`
   - `encrypted_transfers::types::AggregatedDecryptedAmount`
 - Memory pre allocation is capped to `MAX_PRE_ALLOCATED_SIZE=4096` when cbor decoding vectors and maps.
+- In V1 identity based verifiable presentations, it has been changed such that the same attribute 
+  can be used both in set membership and range proofs, and at the same time being revealed. It was already possible
+  for account credentials.
 
 ## 10.0.0 (2026-01-09)
 
