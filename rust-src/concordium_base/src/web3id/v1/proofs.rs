@@ -351,6 +351,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
         transcript.append_message("Network", &self.network);
 
         let mut attributes_handling = BTreeMap::new();
+        // First register any attributes that must be revealed in the identity credential attributes subproof.
         for stmt in &self.statements {
             match stmt {
                 AtomicStatementV1::AttributeValue(statement) => {
@@ -360,6 +361,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
                 _ => (),
             }
         }
+        // Second register any attributes that must be committed to, possibly overwriting reveal, if the
+        // same attribute appears again.
         for stmt in &self.statements {
             match stmt {
                 AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
