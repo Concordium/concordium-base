@@ -210,8 +210,7 @@ token-assign-admin-role = {
     "assignAdminRole": token-update-admin-role-details
 }
 
-; Revoke an admin role from an account. If the account specified by the operation details
-; does not have the role assigned, the transaction will fail. Supported from protocol version 11.
+; Revoke an admin role from an account. Supported from protocol version 11.
 token-revoke-admin-role = {
     "revokeAdminRole": token-update-admin-role-details
 }
