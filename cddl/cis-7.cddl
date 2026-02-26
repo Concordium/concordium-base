@@ -106,7 +106,7 @@ token-operation = token-transfer
     / token-pause
     / token-unpause
     / token-update-metadata
-    / token-update-authorization-role
+    / token-update-admin-role
 
 ; A token transfer operation. This transfers a specified amount of tokens from the sender account
 ; (implicit) to the recipient account.
@@ -205,30 +205,30 @@ token-update-metadata-details = {
     ? "checksumSha256": sha256-hash
 }
 
-; Assign an authorization role to an account.
-token-assign-authorization-role = {
-    "assignAuthorizationRole": token-update-authorization-role-details
+; Assign an admin role to an account.
+token-assign-admin-role = {
+    "assignAdminRole": token-update-admin-role-details
 }
 
-; Revoke an authorization role from an account. If the account specified by the operation details
+; Revoke an admin role from an account. If the account specified by the operation details
 ; does not have the role assigned, the transaction will fail.
-token-revoke-authorization-role = {
-    "revokeAuthorizationRole": token-update-authorization-role-details
+token-revoke-admin-role = {
+    "revokeAdminRole": token-update-admin-role-details
 }
 
-token-update-authorization-role = token-assign-authorization-role / token-revoke-authorization-role
+token-update-admin-role = token-assign-admin-role / token-revoke-admin-role
 
-; The details of the `token-assign-authorization-role` and `token-revoke-authorization-role`
+; The details of the `token-assign-admin-role` and `token-revoke-admin-role`
 ; operations.
-token-update-authorization-role-details = {
-    ; The authorization role to update.
-    "role": token-authorization-role,
-    ; The account to update authorization for.
+token-update-admin-role-details = {
+    ; The admin role to update.
+    "role": token-admin-role,
+    ; The account to update admin for.
     "account": tagged-account-address
 }
 
-; The different authorization roles defined for the current token module implementation
-token-authorization-role = "updateRole"
+; The different admin roles defined for the current token module implementation
+token-admin-role = "updateRole"
     / "mint" 
     / "burn"
     / "allowList"
@@ -266,13 +266,13 @@ token-unpause-event = {}
 ; Indicates that a token had its metadata reference updated.
 token-update-metadata-event = token-update-metadata-details
 
-; The details of a token "assignAuthorizationRole" event.
-; Indicates that the account was assigned the authorization role specified.
-token-assign-authorization-role-event = token-update-authorization-role-details
+; The details of a token "assignAdminRole" event.
+; Indicates that the account was assigned the admin role specified.
+token-assign-admin-role-event = token-update-admin-role-details
 
-; The details of a token "revokeAuthorizationRole" event.
-; Indicates that the authorization role specified was revoked from the account
-token-revoke-authorization-role-event = token-update-authorization-role-details
+; The details of a token "revokeAdminRole" event.
+; Indicates that the admin role specified was revoked from the account
+token-revoke-admin-role-event = token-update-admin-role-details
 
 
 ; Reject Reasons
@@ -340,6 +340,16 @@ reject-details-mint-would-overflow = {
     "maxRepresentableAmount": token-amount,
 }
 
+; Queries
+
+; The authorizations query for a token. This query returns `token-authorizations-response`.
+token-authorizations-query = {
+    roles: [ * token-admin-role ]
+}
+
+; The response to a token authorizations query. This contains the accounts that have each admin role assigned.
+token-authorizations-response = token-authorizations
+
 ; State
 
 ; Global state for the token.
@@ -364,38 +374,35 @@ token-module-state = {
     ? "burnable": bool,
     ; Whether the token is paused, i.e. operations involving balance changes are suspended.
     ? "paused": bool,
-    ; Authorizations for the token, i.e. which accounts have authority to perform administrative
-    ; operations corresponding to the roles assigned.
-    ? "authorizations": token-access-control ; TODO: Move this to be accessible through a dedicated query.
     ; Additional state information may be provided under further text keys, the meaning
     ; of which are not defined in the present specification.
     * text => any
 }
 
-; Describes the access control structure for protocol level tokens.
-token-access-control = {
-    ; Gives authority to perform `token-assign-authorization-role` and
-    ; `token-revoke-authorization-role` operations.
-    ? "updateRole": token-role-access-control,
+; Describes the authorizations structure for protocol level tokens.
+token-authorizations = {
+    ; Gives authority to perform `token-assign-admin-role` and
+    ; `token-revoke-admin-role` operations.
+    ? "updateRole": token-role-authorizations,
     ; Gives authority to perform `token-mint` operations.
-    ? "mint": token-role-access-control,
+    ? "mint": token-role-authorizations,
     ; Gives authority to perform `token-burn` operations.
-    ? "burn": token-role-access-control,
+    ? "burn": token-role-authorizations,
     ; Gives authority to perform `token-add-allow-list` and `token-remove-allow-list` operations.
-    ? "allowList": token-role-access-control,
+    ? "allowList": token-role-authorizations,
     ; Gives authority to perform `token-add-deny-list` and `token-remove-deny-list` operations.
-    ? "denyList": token-role-access-control,
+    ? "denyList": token-role-authorizations,
     ; Gives authority to perform `token-pause` and `token-unpause` operations.
-    ? "pause": token-role-access-control,
+    ? "pause": token-role-authorizations,
     ; Gives authority to perform `token-update-metadata` operations.
-    ? "metadata": token-role-access-control,
+    ? "metadata": token-role-authorizations,
     ; Additional state information may be provided under further text keys, the meaning
     ; of which are not defined in the present specification.
     * text => any
 }
 
-; Access control details applicable to any role.
-token-role-access-control = {
+; Authorizations details applicable to any role.
+token-role-authorizations = {
     ; The accounts that have the role assigned.
     accounts: [ * tagged-account-address ]
 }
