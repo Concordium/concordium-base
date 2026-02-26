@@ -1,21 +1,29 @@
 
+; A sequence of operations on a particular PLT.
 token-update-transaction = [ * token-operation ]
 
+; A sequence of operations on PLTs and locks.
 meta-update-transaction = [ * meta-operation ]
 
+; Operations on a particular PLT.
 token-operation = token-transfer
     / token-mint
     / token-burn
     / token-update-list
     / token-pause
     / token-unpause
+    / token-lock-operation
 
+; Meta-operations combine token and lock operations.
 meta-operation = meta-token-transfer
     / meta-token-mint
     / meta-token-burn
     / meta-token-update-list
     / meta-token-pause
     / meta-token-unpause
+    / meta-token-lock-operation
+    / meta-lock-create
+    / meta-lock-cancel
 
 ; A token transfer operation. This transfers a specified amount of tokens from the sender account
 ; (implicit) to the recipient account.
@@ -272,6 +280,11 @@ lock-return-body = (
     ? "memo": memo
 )
 
+; Create a lock with the specified configuration.
+meta-lock-create = {
+    "lockCreate": { lock-create-body }
+}
+
 lock-create-body = (
     "recipients": [ * tagged-account-address ],
     "expiry": epoch-time,
@@ -295,6 +308,11 @@ lock-controller-simple = {
         ; If set, then the lock will only be destroyed by a cancel operation.
         ? "keepAlive": bool .default false
     }
+}
+
+; Cancel a lock, returning funds to their owners and destroying the lock.
+meta-lock-cancel = {
+    "lockCancel": { lock-cancel-body }
 }
 
 lock-cancel-body = (
