@@ -176,89 +176,89 @@ testTokenAccountStateEncodeDecode = forAll genTokenAccountState $ \a ->
 testTokenAccountStateSerializationExamples :: Spec
 testTokenAccountStateSerializationExamples =
     describe "TokenAccountState binary serialization examples" $ do
-        it "encodes and decodes fixture value with module state" $ do
-            let value = TokenAccountState{balance = tokenAmountFixture, moduleAccountState = Just moduleStateFixture}
+        it "encodes and decodes example value with module state" $ do
+            let value = TokenAccountState{balance = tokenAmountExample, moduleAccountState = Just moduleStateExample}
                 expected = BS.pack [0x64, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x03, 0x01, 0x02, 0x03]
             encode value `shouldBe` expected
             decodeFull get expected `shouldBe` Right value
 
-        it "encodes and decodes fixture value without module state" $ do
-            let value = TokenAccountState{balance = tokenAmountFixture, moduleAccountState = Nothing}
+        it "encodes and decodes example value without module state" $ do
+            let value = TokenAccountState{balance = tokenAmountExample, moduleAccountState = Nothing}
                 expected = BS.pack [0x64, 0x0a, 0x00]
             encode value `shouldBe` expected
             decodeFull get expected `shouldBe` Right value
   where
-    tokenAmountFixture = TokenAmount 100 10
-    moduleStateFixture = BS.pack [0x01, 0x02, 0x03]
+    tokenAmountExample = TokenAmount 100 10
+    moduleStateExample = BS.pack [0x01, 0x02, 0x03]
 
 -- | Binary serialization examples for 'Token'.
 testTokenSerializationExamples :: Spec
 testTokenSerializationExamples =
     describe "Token binary serialization examples" $ do
-        it "encodes and decodes fixture value" $ do
+        it "encodes and decodes example value" $ do
             let value =
                     Token
-                        { tokenId = tokenIdFixture,
-                          tokenAccountState = TokenAccountState{balance = tokenAmountFixture, moduleAccountState = Just moduleStateFixture}
+                        { tokenId = tokenIdExample,
+                          tokenAccountState = TokenAccountState{balance = tokenAmountExample, moduleAccountState = Just moduleStateExample}
                         }
                 expected = BS.pack [0x05, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x64, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x03, 0x01, 0x02, 0x03]
             encode value `shouldBe` expected
             decodeFull get expected `shouldBe` Right value
   where
-    tokenIdFixture = TokenId "token"
-    tokenAmountFixture = TokenAmount 100 10
-    moduleStateFixture = BS.pack [0x01, 0x02, 0x03]
+    tokenIdExample = TokenId "token"
+    tokenAmountExample = TokenAmount 100 10
+    moduleStateExample = BS.pack [0x01, 0x02, 0x03]
 
 -- | Binary serialization examples for 'TokenState'.
 testTokenStateSerializationExamples :: Spec
 testTokenStateSerializationExamples =
     describe "TokenState binary serialization examples" $ do
-        it "encodes and decodes fixture value" $ do
+        it "encodes and decodes example value" $ do
             let value =
                     TokenState
-                        { tsTokenModuleRef = tokenModuleRefFixture,
+                        { tsTokenModuleRef = tokenModuleRefExample,
                           tsDecimals = 10,
-                          tsTotalSupply = tokenAmountFixture,
-                          tsModuleState = moduleStateFixture
+                          tsTotalSupply = tokenAmountExample,
+                          tsModuleState = moduleStateExample
                         }
                 expected = BS.pack (replicate 32 0x01 ++ [0x0a, 0x64, 0x0a, 0x00, 0x00, 0x00, 0x03, 0x01, 0x02, 0x03])
             encode value `shouldBe` expected
             decodeFull get expected `shouldBe` Right value
   where
-    tokenAmountFixture = TokenAmount 100 10
-    moduleStateFixture = BS.pack [0x01, 0x02, 0x03]
-    tokenModuleRefFixture =
+    tokenAmountExample = TokenAmount 100 10
+    moduleStateExample = BS.pack [0x01, 0x02, 0x03]
+    tokenModuleRefExample =
         case decode (BS.pack (replicate 32 0x01)) of
             Right r -> r
-            Left e -> error ("Failed to decode token module ref fixture: " ++ e)
+            Left e -> error ("Failed to decode token module ref example: " ++ e)
 
 -- | Binary serialization examples for 'TokenInfo'.
 testTokenInfoSerializationExamples :: Spec
 testTokenInfoSerializationExamples =
     describe "TokenInfo binary serialization examples" $ do
-        it "encodes and decodes fixture value" $ do
+        it "encodes and decodes example value" $ do
             let value =
                     TokenInfo
-                        { tiTokenId = tokenIdFixture,
+                        { tiTokenId = tokenIdExample,
                           tiTokenState =
                             TokenState
-                                { tsTokenModuleRef = tokenModuleRefFixture,
+                                { tsTokenModuleRef = tokenModuleRefExample,
                                   tsDecimals = 10,
-                                  tsTotalSupply = tokenAmountFixture,
-                                  tsModuleState = moduleStateFixture
+                                  tsTotalSupply = tokenAmountExample,
+                                  tsModuleState = moduleStateExample
                                 }
                         }
                 expected = BS.pack ([0x05, 0x74, 0x6f, 0x6b, 0x65, 0x6e] ++ replicate 32 0x01 ++ [0x0a, 0x64, 0x0a, 0x00, 0x00, 0x00, 0x03, 0x01, 0x02, 0x03])
             encode value `shouldBe` expected
             decodeFull get expected `shouldBe` Right value
   where
-    tokenIdFixture = TokenId "token"
-    tokenAmountFixture = TokenAmount 100 10
-    moduleStateFixture = BS.pack [0x01, 0x02, 0x03]
-    tokenModuleRefFixture =
+    tokenIdExample = TokenId "token"
+    tokenAmountExample = TokenAmount 100 10
+    moduleStateExample = BS.pack [0x01, 0x02, 0x03]
+    tokenModuleRefExample =
         case decode (BS.pack (replicate 32 0x01)) of
             Right r -> r
-            Left e -> error ("Failed to decode token module ref fixture: " ++ e)
+            Left e -> error ("Failed to decode token module ref example: " ++ e)
 
 -- | Tests for token types.
 tests :: Spec
