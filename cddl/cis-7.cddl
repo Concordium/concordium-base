@@ -194,15 +194,7 @@ token-unpause = {
 
 ; Update the token metadata of a token. Supported from protocol version 11.
 token-update-metadata = {
-    "updateMetadata": token-update-metadata-details
-}
-
-; The details of a `token-update-metadata` operation.
-token-update-metadata-details = {
-    ; A string field representing the URL
-    "url": text,
-    ; An optional sha256 checksum value tied to the content of the URL
-    ? "checksumSha256": sha256-hash
+    "updateMetadata": metadata-url
 }
 
 ; Assign an admin role to an account. Supported from protocol version 11.
@@ -272,7 +264,7 @@ token-unpause-event = {}
 
 ; The details of a token "updateMetadata" event.
 ; Indicates that a token had its metadata reference updated.
-token-update-metadata-event = token-update-metadata-details
+token-update-metadata-event = metadata-url
 
 ; The details of a token "assignAdminRole" event.
 ; Indicates that the account was assigned the admin role specified.
@@ -385,9 +377,6 @@ token-module-state = {
 token-authorizations = {
     ; A map of admin roles to the accounts that have those roles assigned.
     * token-admin-role => token-role-authorizations
-    ; Additional state information may be provided under further text keys, the meaning
-    ; of which are not defined in the present specification.
-    * text => any
 }
 
 ; Authorizations details applicable to any admin role.
