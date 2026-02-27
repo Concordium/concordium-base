@@ -21,6 +21,7 @@ import Concordium.Crypto.ByteStringHelpers
 import Concordium.Types
 import qualified Concordium.Types.ProtocolLevelTokens.CBOR as CBOR
 import Concordium.Types.Tokens
+import Concordium.Utils.Serialization
 
 -- | Protocol level token.
 data Token = Token
@@ -105,10 +106,21 @@ instance FromJSON TokenAccountState where
 instance Serialize TokenAccountState where
     put TokenAccountState{..} = do
         put balance
-        put moduleAccountState
+        case moduleAccountState of
+            Nothing -> do
+                putBool False
+            Just moduleAccountState' -> do
+                putBool True
+                putWord32be (fromIntegral (BS.length moduleAccountState'))
+                putByteString moduleAccountState'
     get = do
         balance <- get
-        moduleAccountState <- get
+        moduleAccountStatePresent <- getBool
+        moduleAccountState <- case moduleAccountStatePresent of
+            False -> return Nothing
+            True -> do
+                moduleAccountStateLen <- getWord32be
+                Just <$> getByteString (fromIntegral moduleAccountStateLen)
         return TokenAccountState{..}
 
 -- | The global token state.
@@ -172,12 +184,14 @@ instance Serialize TokenState where
         put tsTokenModuleRef
         put tsDecimals
         put tsTotalSupply
-        put tsModuleState
+        putWord32be (fromIntegral (BS.length tsModuleState))
+        putByteString tsModuleState
     get = do
         tsTokenModuleRef <- get
         tsDecimals <- get
         tsTotalSupply <- get
-        tsModuleState <- get
+        moduleStateLen <- getWord32be
+        tsModuleState <- getByteString (fromIntegral moduleStateLen)
         return TokenState{..}
 
 -- | The global info about a protocol-level token.
