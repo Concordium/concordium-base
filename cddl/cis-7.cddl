@@ -230,19 +230,19 @@ token-update-admin-role-details = {
 ; Each role gives access to specific administrative operations.
 token-admin-role =
     ; Gives authority to perform `token-assign-admin-role` and `token-revoke-admin-role` operations.
-    "updateRole" /
+    "updateAdminRole" /
     ; Gives authority to perform `token-mint` operations.
     "mint" /
     ; Gives authority to perform `token-burn` operations.
     "burn" /
     ; Gives authority to perform `token-add-allow-list` and `token-remove-allow-list` operations.
-    "allowList" /
+    "updateAllowList" /
     ; Gives authority to perform `token-add-deny-list` and `token-remove-deny-list` operations.
-    "denyList" /
+    "updateDenyList" /
     ; Gives authority to perform `token-pause` and `token-unpause` operations.
     "pause" /
     ; Gives authority to perform `token-update-metadata` operations.
-    "metadata"
+    "updateMetadata"
 
 ; Events
 
