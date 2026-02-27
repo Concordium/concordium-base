@@ -59,8 +59,6 @@ metadata-url = {
     "url": text,
     ; An optional sha256 checksum value tied to the content of the URL
     ? "checksumSha256": sha256-hash
-    ; Additional fields may be included for future extensibility, e.g. another hash algorithm.
-    * text => any
 }
 
 ; Initialization
@@ -85,8 +83,6 @@ token-initialization-parameters = {
     ? "mintable": bool .default false,
     ; Whether the token is burnable
     ? "burnable": bool .default false,
-    ; Additional fields
-    * text => any
 }
 
 ; Transactions
@@ -295,9 +291,6 @@ token-module-state = {
     ? "burnable": bool,
     ; Whether the token is paused, i.e. operations involving balance changes are suspended.
     ? "paused": bool,
-    ; Additional state information may be provided under further text keys, the meaning
-    ; of which are not defined in the present specification.
-    * text => any
 }
 
 ; Account state for the token. This contains state per account for the token.
@@ -310,7 +303,4 @@ token-module-account-state = {
     ; This is only present if the token supports a deny list; that is accounts can only
     ; send or receive tokens if they are not on the deny list.
     ? "denyList": bool,
-    ; Additional state information may be provided under further text keys, the meaning
-    ; of which are not defined in the present specification.
-    * text => any
 }
