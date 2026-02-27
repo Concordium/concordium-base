@@ -19,6 +19,7 @@ import Test.Hspec
 import Test.QuickCheck as QuickCheck hiding ((.&.))
 
 import Concordium.Types
+import Concordium.Types.Queries.Tokens
 import Concordium.Types.Tokens
 import Generators
 
@@ -161,15 +162,104 @@ testTokenInfoEncodeDecode :: Property
 testTokenInfoEncodeDecode = forAll genTokenInfo $ \a ->
     decodeFull get (encode a) == Right a
 
--- | Test the binary serialization and deserialization of 'TokenInfo'.
+-- | Test the binary serialization and deserialization of 'TokenState'.
 testTokenStateEncodeDecode :: Property
 testTokenStateEncodeDecode = forAll genQueryTypeTokenState $ \a ->
     decodeFull get (encode a) == Right a
 
--- | Test the binary serialization and deserialization of 'TokenAcountState'.
-testTokenAccuntStateEncodeDecode :: Property
-testTokenAccuntStateEncodeDecode = forAll genTokenAccountState $ \a ->
+-- | Test the binary serialization and deserialization of 'TokenAccountState'.
+testTokenAccountStateEncodeDecode :: Property
+testTokenAccountStateEncodeDecode = forAll genTokenAccountState $ \a ->
     decodeFull get (encode a) == Right a
+
+-- | Binary serialization examples for 'TokenAccountState'.
+testTokenAccountStateSerializationExamples :: Spec
+testTokenAccountStateSerializationExamples =
+    describe "TokenAccountState binary serialization examples" $ do
+        it "encodes and decodes fixture value with module state" $ do
+            let value = TokenAccountState{balance = tokenAmountFixture, moduleAccountState = Just moduleStateFixture}
+                expected = BS.pack [0x64, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x03, 0x01, 0x02, 0x03]
+            encode value `shouldBe` expected
+            decodeFull get expected `shouldBe` Right value
+
+        it "encodes and decodes fixture value without module state" $ do
+            let value = TokenAccountState{balance = tokenAmountFixture, moduleAccountState = Nothing}
+                expected = BS.pack [0x64, 0x0a, 0x00]
+            encode value `shouldBe` expected
+            decodeFull get expected `shouldBe` Right value
+  where
+    tokenAmountFixture = TokenAmount 100 10
+    moduleStateFixture = BS.pack [0x01, 0x02, 0x03]
+
+-- | Binary serialization examples for 'Token'.
+testTokenSerializationExamples :: Spec
+testTokenSerializationExamples =
+    describe "Token binary serialization examples" $ do
+        it "encodes and decodes fixture value" $ do
+            let value =
+                    Token
+                        { tokenId = tokenIdFixture,
+                          tokenAccountState = TokenAccountState{balance = tokenAmountFixture, moduleAccountState = Just moduleStateFixture}
+                        }
+                expected = BS.pack [0x05, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x64, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x03, 0x01, 0x02, 0x03]
+            encode value `shouldBe` expected
+            decodeFull get expected `shouldBe` Right value
+  where
+    tokenIdFixture = TokenId "token"
+    tokenAmountFixture = TokenAmount 100 10
+    moduleStateFixture = BS.pack [0x01, 0x02, 0x03]
+
+-- | Binary serialization examples for 'TokenState'.
+testTokenStateSerializationExamples :: Spec
+testTokenStateSerializationExamples =
+    describe "TokenState binary serialization examples" $ do
+        it "encodes and decodes fixture value" $ do
+            let value =
+                    TokenState
+                        { tsTokenModuleRef = tokenModuleRefFixture,
+                          tsDecimals = 10,
+                          tsTotalSupply = tokenAmountFixture,
+                          tsModuleState = moduleStateFixture
+                        }
+                expected = BS.pack (replicate 32 0x01 ++ [0x0a, 0x64, 0x0a, 0x00, 0x00, 0x00, 0x03, 0x01, 0x02, 0x03])
+            encode value `shouldBe` expected
+            decodeFull get expected `shouldBe` Right value
+  where
+    tokenAmountFixture = TokenAmount 100 10
+    moduleStateFixture = BS.pack [0x01, 0x02, 0x03]
+    tokenModuleRefFixture =
+        case decode (BS.pack (replicate 32 0x01)) of
+            Right r -> r
+            Left e -> error ("Failed to decode token module ref fixture: " ++ e)
+
+-- | Binary serialization examples for 'TokenInfo'.
+testTokenInfoSerializationExamples :: Spec
+testTokenInfoSerializationExamples =
+    describe "TokenInfo binary serialization examples" $ do
+        it "encodes and decodes fixture value" $ do
+            let value =
+                    TokenInfo
+                        { tiTokenId = tokenIdFixture,
+                          tiTokenState =
+                            TokenState
+                                { tsTokenModuleRef = tokenModuleRefFixture,
+                                  tsDecimals = 10,
+                                  tsTotalSupply = tokenAmountFixture,
+                                  tsModuleState = moduleStateFixture
+                                }
+                        }
+                expected = BS.pack ([0x05, 0x74, 0x6f, 0x6b, 0x65, 0x6e] ++ replicate 32 0x01 ++ [0x0a, 0x64, 0x0a, 0x00, 0x00, 0x00, 0x03, 0x01, 0x02, 0x03])
+            encode value `shouldBe` expected
+            decodeFull get expected `shouldBe` Right value
+  where
+    tokenIdFixture = TokenId "token"
+    tokenAmountFixture = TokenAmount 100 10
+    moduleStateFixture = BS.pack [0x01, 0x02, 0x03]
+    tokenModuleRefFixture =
+        case decode (BS.pack (replicate 32 0x01)) of
+            Right r -> r
+            Left e -> error ("Failed to decode token module ref fixture: " ++ e)
+
 -- | Tests for token types.
 tests :: Spec
 tests = parallel $ do
@@ -191,4 +281,17 @@ tests = parallel $ do
             withMaxSuccess 10000 testTokenAmountEncodeDecode
     describe "TokenAccountState" $ do
         it "Binary Serialization and deserialization of valid TokenAccountState" $
-            withMaxSuccess 10000 testTokenAccuntStateEncodeDecode
+            withMaxSuccess 10000 testTokenAccountStateEncodeDecode
+        testTokenAccountStateSerializationExamples
+    describe "Token" $ do
+        it "Binary Serialization and deserialization of valid Token" $
+            withMaxSuccess 10000 testTokenEncodeDecode
+        testTokenSerializationExamples
+    describe "TokenState" $ do
+        it "Binary Serialization and deserialization of valid TokenState" $
+            withMaxSuccess 10000 testTokenStateEncodeDecode
+        testTokenStateSerializationExamples
+    describe "TokenInfo" $ do
+        it "Binary Serialization and deserialization of valid TokenInfo" $
+            withMaxSuccess 10000 testTokenInfoEncodeDecode
+        testTokenInfoSerializationExamples

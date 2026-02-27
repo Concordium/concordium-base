@@ -51,7 +51,6 @@ import Concordium.Types.Transactions
 import Concordium.Types.Updates
 import qualified Concordium.Wasm as Wasm
 import qualified Data.FixedByteString as FBS
-import Concordium.Types.Queries.Tokens
 
 genAmount :: Gen Amount
 genAmount = Amount <$> arbitrary
@@ -1210,7 +1209,7 @@ genTokenEventDetails = do
 genTokenAccountState :: Gen QueryTokenTypes.TokenAccountState
 genTokenAccountState = do
     balance <- genTokenAmount
-    moduleAccountState <- Just <$> Generators.genByteString
+    moduleAccountState <- oneof [pure Nothing, Just <$> Generators.genByteString]
     return QueryTokenTypes.TokenAccountState{..}
 
 -- | Generate an arbitrary 'Token'
