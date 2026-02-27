@@ -45,11 +45,13 @@ import Concordium.Types
 import Concordium.Types.Conditionally
 import Concordium.Types.Execution
 import Concordium.Types.Parameters
+import qualified Concordium.Types.Queries.Tokens as QueryTokenTypes
 import Concordium.Types.Tokens
 import Concordium.Types.Transactions
 import Concordium.Types.Updates
 import qualified Concordium.Wasm as Wasm
 import qualified Data.FixedByteString as FBS
+import Concordium.Types.Queries.Tokens
 
 genAmount :: Gen Amount
 genAmount = Amount <$> arbitrary
@@ -1204,6 +1206,33 @@ genTokenEventDetails :: Gen TokenEventDetails
 genTokenEventDetails = do
     len <- chooseBoundedIntegral (0, 1000)
     TokenEventDetails . BSS.pack <$> genUtf8String len
+
+genTokenAccountState :: Gen QueryTokenTypes.TokenAccountState
+genTokenAccountState = do
+    balance <- genTokenAmount
+    moduleAccountState <- Just <$> Generators.genByteString
+    return QueryTokenTypes.TokenAccountState{..}
+
+-- | Generate an arbitrary 'Token'
+genToken :: Gen QueryTokenTypes.Token
+genToken = do
+    tokenId <- genTokenId
+    tokenAccountState <- genTokenAccountState
+    return QueryTokenTypes.Token{..}
+
+genQueryTypeTokenState :: Gen QueryTokenTypes.TokenState
+genQueryTypeTokenState = do
+    tsTokenModuleRef <- genTokenModuleRef
+    tsDecimals <- chooseBoundedIntegral (0, 255)
+    tsTotalSupply <- genTokenAmount
+    tsModuleState <- Generators.genByteString
+    return QueryTokenTypes.TokenState{..}
+
+genTokenInfo :: Gen QueryTokenTypes.TokenInfo
+genTokenInfo = do
+    tiTokenId <- genTokenId
+    tiTokenState <- genQueryTypeTokenState
+    return QueryTokenTypes.TokenInfo{..}
 
 -- | Generate an arbitrary 'CreatePLT' chain update, consisting of:
 --   * Random token symbol up to 255 bytes valid UTF-8.

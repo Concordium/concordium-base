@@ -151,6 +151,25 @@ testTokenAmountEncodeDecode :: Property
 testTokenAmountEncodeDecode = forAll genTokenAmount $ \a ->
     decodeFull get (encode a) == Right a
 
+-- | Test the binary serialization and deserialization of 'Token'.
+testTokenEncodeDecode :: Property
+testTokenEncodeDecode = forAll genToken $ \a ->
+    decodeFull get (encode a) == Right a
+
+-- | Test the binary serialization and deserialization of 'TokenInfo'.
+testTokenInfoEncodeDecode :: Property
+testTokenInfoEncodeDecode = forAll genTokenInfo $ \a ->
+    decodeFull get (encode a) == Right a
+
+-- | Test the binary serialization and deserialization of 'TokenInfo'.
+testTokenStateEncodeDecode :: Property
+testTokenStateEncodeDecode = forAll genQueryTypeTokenState $ \a ->
+    decodeFull get (encode a) == Right a
+
+-- | Test the binary serialization and deserialization of 'TokenAcountState'.
+testTokenAccuntStateEncodeDecode :: Property
+testTokenAccuntStateEncodeDecode = forAll genTokenAccountState $ \a ->
+    decodeFull get (encode a) == Right a
 -- | Tests for token types.
 tests :: Spec
 tests = parallel $ do
@@ -170,3 +189,6 @@ tests = parallel $ do
         testTokenAmountJSONDecodeCases
         it "Binary Serialization and deserialization of valid TokenAmounts" $
             withMaxSuccess 10000 testTokenAmountEncodeDecode
+    describe "TokenAccountState" $ do
+        it "Binary Serialization and deserialization of valid TokenAccountState" $
+            withMaxSuccess 10000 testTokenAccuntStateEncodeDecode
