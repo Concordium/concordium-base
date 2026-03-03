@@ -106,7 +106,7 @@ token-operation = token-transfer
     / token-pause
     / token-unpause
     / token-update-metadata
-    / token-update-admin-role
+    / token-update-admin-roles
 
 ; A token transfer operation. This transfers a specified amount of tokens from the sender account
 ; (implicit) to the recipient account.
@@ -198,22 +198,22 @@ token-update-metadata = {
 }
 
 ; Assign an admin role to an account. Supported from protocol version 11.
-token-assign-admin-role = {
-    "assignAdminRole": token-update-admin-role-details
+token-assign-admin-roles = {
+    "assignAdminRoles": token-update-admin-roles-details
 }
 
 ; Revoke an admin role from an account. Supported from protocol version 11.
-token-revoke-admin-role = {
-    "revokeAdminRole": token-update-admin-role-details
+token-revoke-admin-roles = {
+    "revokeAdminRoles": token-update-admin-roles-details
 }
 
-token-update-admin-role = token-assign-admin-role / token-revoke-admin-role
+token-update-admin-roles = token-assign-admin-roles / token-revoke-admin-roles
 
-; The details of the `token-assign-admin-role` and `token-revoke-admin-role`
+; The details of the `token-assign-admin-roles` and `token-revoke-admin-roles`
 ; operations.
-token-update-admin-role-details = {
-    ; The admin role to update.
-    "role": token-admin-role,
+token-update-admin-roles-details = {
+    ; The admin roles to update.
+    "roles": [ * token-admin-role ],
     ; The account to update admin for.
     "account": tagged-account-address
 }
@@ -221,8 +221,8 @@ token-update-admin-role-details = {
 ; The different The different admin roles defined for the current token module implementation.
 ; Each role gives access to specific administrative operations.
 token-admin-role =
-    ; Gives authority to perform `token-assign-admin-role` and `token-revoke-admin-role` operations.
-    "updateAdminRole" /
+    ; Gives authority to perform `token-assign-admin-roles` and `token-revoke-admin-roles` operations.
+    "updateAdminRoles" /
     ; Gives authority to perform `token-mint` operations.
     "mint" /
     ; Gives authority to perform `token-burn` operations.
@@ -266,13 +266,13 @@ token-unpause-event = {}
 ; Indicates that a token had its metadata reference updated.
 token-update-metadata-event = metadata-url
 
-; The details of a token "assignAdminRole" event.
+; The details of a token "assignAdminRoles" event.
 ; Indicates that the account was assigned the admin role specified.
-token-assign-admin-role-event = token-update-admin-role-details
+token-assign-admin-roles-event = token-update-admin-roles-details
 
-; The details of a token "revokeAdminRole" event.
+; The details of a token "revokeAdminRoles" event.
 ; Indicates that the admin role specified was revoked from the account
-token-revoke-admin-role-event = token-update-admin-role-details
+token-revoke-admin-roles-event = token-update-admin-roles-details
 
 
 ; Reject Reasons
@@ -344,7 +344,7 @@ reject-details-mint-would-overflow = {
 
 ; The authorizations query for a token. This query returns `token-authorizations-response`.
 token-authorizations-query = {
-    "roles": [ * token-admin-role ]
+    "roles": [ * token-admin-roles ]
 }
 
 ; The response to a token authorizations query. This contains the accounts that have each admin role assigned.
@@ -376,7 +376,7 @@ token-module-state = {
 ; Describes the authorizations structure for protocol level tokens.
 token-authorizations = {
     ; A map of admin roles to the accounts that have those roles assigned.
-    * token-admin-role => token-role-authorizations
+    * token-admin-roles => token-role-authorizations
 }
 
 ; Authorizations details applicable to any admin role.
