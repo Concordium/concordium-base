@@ -340,16 +340,6 @@ reject-details-mint-would-overflow = {
     "maxRepresentableAmount": token-amount,
 }
 
-; Queries
-
-; The authorizations query for a token. This query returns `token-authorizations-response`.
-token-authorizations-query = {
-    "roles": [ * token-admin-role ]
-}
-
-; The response to a token authorizations query. This contains the accounts that have each admin role assigned.
-token-authorizations-response = token-authorizations
-
 ; State
 
 ; Global state for the token.
