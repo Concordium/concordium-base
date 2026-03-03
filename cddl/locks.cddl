@@ -1,0 +1,375 @@
+
+; A sequence of operations on a particular PLT.
+token-update-transaction = [ * token-operation ]
+
+; A sequence of operations on PLTs and locks.
+meta-update-transaction = [ * meta-operation ]
+
+; Operations on a particular PLT.
+token-operation = token-transfer
+    / token-mint
+    / token-burn
+    / token-update-list
+    / token-pause
+    / token-unpause
+    / token-lock-operation
+
+; Meta-operations combine token and lock operations.
+meta-operation = meta-token-transfer
+    / meta-token-mint
+    / meta-token-burn
+    / meta-token-update-list
+    / meta-token-pause
+    / meta-token-unpause
+    / meta-token-lock-operation
+    / meta-lock-create
+    / meta-lock-cancel
+
+; A token transfer operation. This transfers a specified amount of tokens from the sender account
+; (implicit) to the recipient account.
+token-transfer = {
+    ; The operation type is "transfer".
+    "transfer": {
+        token-transfer-body
+    }
+}
+
+; A token transfer operation. This transfers a specified amount of tokens from the sender account
+; (implicit) to the recipient account.
+meta-token-transfer = {
+    "transfer": {
+        "token": token-id,
+        token-transfer-body
+    }
+}
+
+token-transfer-body = (
+    ; The amount of tokens to transfer.
+    "amount": token-amount,
+    ; The recipient account.
+    "recipient": tagged-account-address,
+    ; An optional memo.
+    ? "memo": memo
+)
+
+; Mint a specified amount to the sender account.
+token-mint = {
+    ; The operation type is "mint".
+    "mint": { token-supply-update-body }
+}
+
+meta-token-mint = {
+    ; The operation type is "mint".
+    "mint": {
+        "token": token-id,
+        token-supply-update-body
+    }
+}
+
+; Burn a specified amount from the sender account.
+token-burn = {
+    ; The operation type is "burn".
+    "burn": { token-supply-update-body }
+}
+
+meta-token-burn = {
+    ; The operation type is "burn".
+    "burn": {
+        "token": token-id,
+        token-supply-update-body
+    }
+}
+
+; Specifies the details of a mint/burn operation.
+token-supply-update-body = (
+    ; The amount of tokens to either mint or burn.
+    "amount": token-amount
+)
+
+; Update an allow or a deny list by adding or removing an account from it.
+token-update-list =
+    token-add-allow-list
+    / token-remove-allow-list
+    / token-add-deny-list
+    / token-remove-deny-list
+
+meta-token-update-list =
+    meta-token-add-allow-list
+    / meta-token-remove-allow-list
+    / meta-token-add-deny-list
+    / meta-token-remove-deny-list
+
+; Add an account to the allow list.
+token-add-allow-list = {
+    ; The operation type is "addAllowList".
+    "addAllowList": { token-list-update-body }
+}
+
+meta-token-token-add-allow-list = {
+    ; The operation type is "addAllowList".
+    "addAllowList": {
+        "token": token-id,
+        token-list-update-body
+    }
+}
+
+; Remove an account from the allow list.
+token-remove-allow-list = {
+    ; The operation type is "removeAllowList".
+    "removeAllowList": { token-list-update-body }
+}
+
+meta-token-remove-allow-list = {
+    ; The operation type is "removeAllowList".
+    "removeAllowList": {
+        "token": token-id,
+        token-list-update-body
+    }
+}
+
+; Add an account to the deny list.
+token-add-deny-list = {
+    ; The operation type is "addDenyList".
+    "addDenyList": { token-list-update-body }
+}
+
+meta-token-add-deny-list = {
+    ; The operation type is "addDenyList".
+    "addDenyList": {
+        "token": token-id,
+        token-list-update-body
+    }
+}
+
+; Remove an account from the deny list.
+token-remove-deny-list = {
+    ; The operation type is "removeDenyList".
+    "removeDenyList": { token-list-update-body }
+}
+
+meta-token-remove-deny-list = {
+    ; The operation type is "removeDenyList".
+    "removeDenyList": {
+        "token": token-id,
+        token-list-update-body
+    }
+}
+
+; Specifies the details of a list-update operation.
+token-list-update-body = (
+    ; The account to add or remove from the list.
+    "target": tagged-account-address
+)
+
+; Suspend any current or future token operations involving
+; balance changes. If any transaction submitted includes any such operation
+; while the token is in its paused state, the transaction will fail. The
+; suspension lasts until the token is unpaused with the corresponding
+; `token-unpause` operation.
+token-pause = {
+    "pause": {}
+}
+
+meta-token-pause = {
+    "pause": {
+        "token": token-id
+    }
+}
+
+; Unpause the token operations described in the `token-pause` operation,
+; thus acting as an inverse of `token-pause`.
+token-unpause = {
+    "unpause": {}
+}
+
+meta-token-unpause = {
+    "unpause": {
+        "token": token-id
+    }
+}
+
+; Token lock operations
+
+token-lock-operation =
+    lock-fund
+    / lock-send
+    / lock-return
+
+meta-token-lock-operation =
+    meta-lock-fund
+    / meta-lock-send
+    / meta-lock-return
+
+; Fund a lock by locking the specified amount on the sender account (implicit)
+; under the control of a specified lock.
+lock-fund = {
+    "lockFund" : { lock-fund-body }
+}
+
+; Fund a lock by locking the specified amount on the sender account (implicit)
+; under the control of a specified lock.
+meta-lock-fund = {
+    "lockFund" : {
+        "token": token-id,
+        lock-fund-body
+    }
+}
+
+lock-fund-body = (
+    ; The lock that will control the funds.
+    "lock": lock-ref,
+    ; The amount to lock.
+    "amount": token-amount,
+    ; An optional memo.
+    ? "memo": memo
+)
+
+; Send funds under the control of a lock from a source account to a recipient.
+; The funds will be transferred to the available balance of the recipient.
+lock-send = {
+    "lockSend": { lock-send-body }
+}
+
+; Send funds under the control of a lock from a source account to a recipient.
+; The funds will be transferred to the available balance of the recipient.
+meta-lock-send = {
+    "lockSend": {
+        "token": token-id,
+        lock-send-body
+    }
+}
+
+lock-send-body = (
+    ; The lock controlling the funds.
+    "lock": lock-ref,
+    ; The account holding the funds.
+    "source": tagged-account-address,
+    ; The amount of tokens to transfer.
+    "amount": token-amount,
+    ; The recipient account.
+    "recipient": tagged-account-address,
+    ; An optional memo.
+    ? "memo": memo
+)
+
+; Return funds under the control of a lock to the owner account.
+; The funds are moved from the locked balance to the available balance of the
+; owner.
+lock-return = {
+    "lockReturn": { lock-return-body }
+}
+
+; Return funds under the control of a lock to the owner account.
+; The funds are moved from the locked balance to the available balance of the
+; owner.
+meta-lock-return = {
+    "lockReturn": {
+        "token": token-id,
+        lock-return-body
+    }
+}
+
+lock-return-body = (
+    ; The lock controlling the funds.
+    "lock": lock-ref,
+    ; The account holding the funds.
+    "source": tagged-account-address,
+    ; The amount of tokens to transfer.
+    "amount": token-amount,
+    ; An optional memo.
+    ? "memo": memo
+)
+
+; Create a lock with the specified configuration.
+meta-lock-create = {
+    "lockCreate": { lock-create-body }
+}
+
+lock-create-body = (
+    "recipients": [ * tagged-account-address ],
+    "expiry": epoch-time,
+    "controller": lock-controller,
+)
+
+lock-controller =
+    lock-controller-simple
+
+; The simple lock controller initialization parameters.
+lock-controller-simple = {
+    "simpleV0": {
+        ; The set of accounts that may fund the lock.
+        "funders": [ + tagged-account-address ],
+        ; The set of accounts that may return funds from the lock.
+        "returners": [ * tagged-account-address ],
+        ; The set of accounts that may send funds from the lock.
+        "senders": [ * tagged-account-address ],
+        ; The set of accounts that may cancel the lock before its expiry.
+        "cancellers": [ * tagged-account-address ],
+        ; If set, then the lock will only be destroyed by a cancel operation.
+        ? "keepAlive": bool .default false
+    }
+}
+
+; Cancel a lock, returning funds to their owners and destroying the lock.
+meta-lock-cancel = {
+    "lockCancel": { lock-cancel-body }
+}
+
+lock-cancel-body = (
+    ; The lock to cancel.
+    "lock": lock-ref,
+    ; An optional memo.
+    ? "memo": memo
+)
+
+; A lock identifier is a number that uniquely identifies a lock across time on
+; the chain.
+lock-id = #6.40920(raw-lock-id)
+
+raw-lock-id = uint
+
+; A local lock reference identifies a lock that was created in the current
+; transaction in creation order. That is, #6.40921(0) refers to the first
+; lock created in the current transaction, #6.40921(1) refers to the second
+; lock created in the transaction, and so on. Local references support
+; (safely) interacting with a lock in the same transaction as the lock is
+; created. Since the lock-id cannot generally be known before creation, it
+; would not otherwise be possible to (for example) create a lock and fund it
+; in a single transaction.
+lock-local-ref = #6.40921(raw-lock-local-ref)
+
+raw-lock-local-ref = uint
+
+; A reference to a lock used to identify it in a transaction.
+lock-ref = lock-id / lock-local-ref
+
+epoch-time = #6.1(uint)
+
+; Query support
+
+lock-config = { lock-create-body }
+
+; Data returned by a GetLockInfo query.
+lock-info = {
+    ; The lock identifier
+    "lock": lock-id,
+    ; The configuration of the lock.
+    "config": lock-config,
+    ; The state of funds of the lock.
+    "funds": [ * lock-account-fund ]
+}
+
+; Funds on a particular account that are controlled by a lock.
+lock-account-fund = {
+    ; The account with locked funds.
+    "account": tagged-account-address,
+    ; The amount of each token locked by the account.
+    "amounts": [ + locked-token-and-amount ],
+}
+
+locked-token-and-amount = {
+    ; The token the funds are locked for.
+    "token": token-id,
+    ; The amount of this token that is controlled by the lock for this account.
+    "amount": token-amount
+}
