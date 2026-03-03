@@ -376,7 +376,7 @@ token-module-state = {
 ; Describes the authorizations structure for protocol level tokens.
 token-authorizations = {
     ; A map of admin roles to the accounts that have those roles assigned.
-    * token-admin-roles => token-role-authorizations
+    * token-admin-role => token-role-authorizations
 }
 
 ; Authorizations details applicable to any admin role.
