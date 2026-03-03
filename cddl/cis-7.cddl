@@ -344,7 +344,7 @@ reject-details-mint-would-overflow = {
 
 ; The authorizations query for a token. This query returns `token-authorizations-response`.
 token-authorizations-query = {
-    "roles": [ * token-admin-roles ]
+    "roles": [ * token-admin-role ]
 }
 
 ; The response to a token authorizations query. This contains the accounts that have each admin role assigned.
