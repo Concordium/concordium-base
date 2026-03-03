@@ -347,12 +347,14 @@ epoch-time = #6.1(uint)
 
 ; Query support
 
+lock-config = { lock-create-body }
+
 ; Data returned by a GetLockInfo query.
 lock-info = {
     ; The lock identifier
     "lock": lock-id,
     ; The configuration of the lock.
-    "config": { lock-create-body },
+    "config": lock-config,
     ; The state of funds of the lock.
     "funds": [ * lock-account-fund ]
 }
