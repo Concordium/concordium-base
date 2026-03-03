@@ -91,8 +91,6 @@ token-initialization-parameters = {
     ? "mintable": bool .default false,
     ; Whether the token is burnable
     ? "burnable": bool .default false,
-    ; Additional fields
-    * text => any
 }
 
 ; Transactions
@@ -395,7 +393,4 @@ token-module-account-state = {
     ; This is only present if the token supports a deny list; that is accounts can only
     ; send or receive tokens if they are not on the deny list.
     ? "denyList": bool,
-    ; Additional state information may be provided under further text keys, the meaning
-    ; of which are not defined in the present specification.
-    * text => any
 }
