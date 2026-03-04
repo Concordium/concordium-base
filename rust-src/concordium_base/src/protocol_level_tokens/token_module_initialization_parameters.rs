@@ -63,7 +63,7 @@ mod test {
             additional: Default::default(),
         };
 
-        let cbor = cbor::cbor_encode(&token_module_initialization_parameters).unwrap();
+        let cbor = cbor::cbor_encode(&token_module_initialization_parameters);
         assert_eq!(hex::encode(&cbor),
                    "a8646e616d6563544b31686275726e61626c65f56864656e794c697374f5686d65746164617461a26375726c7168747470733a2f2f746f6b656e75726c316e636865636b73756d53686132353658200101010101010101010101010101010101010101010101010101010101010101686d696e7461626c65f569616c6c6f774c697374f56d696e697469616c537570706c79c482271a0098968071676f7665726e616e63654163636f756e74d99d73a201d99d71a101190397035820ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         );
