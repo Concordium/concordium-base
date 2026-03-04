@@ -2,6 +2,7 @@ use super::{CborHolderAccount, RawCbor, TokenAmount};
 use crate::common;
 use crate::common::cbor::CborSerializationResult;
 use crate::common::{cbor, Buffer, Deserial, Get, ParseResult, SerdeDeserialize, Serial};
+use crate::protocol_level_tokens::TokenAdminRole;
 use crate::transactions::Memo;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
@@ -27,6 +28,10 @@ pub enum TokenModuleEventType {
     /// Execution of certain operations on a protocol level token was
     /// unpaused ([`UnpauseEvent`])
     Unpause,
+    // Assign admin roles to an Account for a protocol level token.
+    AssignAdminRoles,
+    // Revoke admin roles from an Account for a protocol level token.
+    RevokeAdminRoles,
 }
 
 /// Unknown token module event
@@ -44,6 +49,8 @@ impl TokenModuleEventType {
             TokenModuleEventType::RemoveDenyList => "removeDenyList",
             TokenModuleEventType::Pause => "pause",
             TokenModuleEventType::Unpause => "unpause",
+            TokenModuleEventType::AssignAdminRoles => "assignAdminRoles",
+            TokenModuleEventType::RevokeAdminRoles => "revokeAdminRoles",
         }
     }
 
@@ -63,6 +70,8 @@ impl TokenModuleEventType {
             "removeDenyList" => TokenModuleEventType::RemoveDenyList,
             "pause" => TokenModuleEventType::Pause,
             "unpause" => TokenModuleEventType::Unpause,
+            "assignAdminRoles" => TokenModuleEventType::AssignAdminRoles,
+            "revokeAdminRoles" => TokenModuleEventType::RevokeAdminRoles,
             _ => {
                 return Err(UnknownTokenModuleEventTypeError(
                     type_discriminator.to_string(),
@@ -94,6 +103,10 @@ pub enum TokenModuleEvent {
     /// Execution of certain operations on a protocol level token was
     /// unpaused
     Unpause(UnpauseEvent),
+    /// Assign admin roles to an Account for a protocol level token
+    AssignAdminRoles(AssignAdminRolesEvent),
+    /// Revoke admin roles to an Account for a protocol level token
+    RevokeAdminRoles(RevokeAdminRolesEvent),
 }
 
 impl TokenModuleEvent {
@@ -106,6 +119,8 @@ impl TokenModuleEvent {
             TokenModuleEvent::RemoveDenyList(_) => TokenModuleEventType::RemoveDenyList,
             TokenModuleEvent::Pause(_) => TokenModuleEventType::Pause,
             TokenModuleEvent::Unpause(_) => TokenModuleEventType::Unpause,
+            TokenModuleEvent::AssignAdminRoles(_) => TokenModuleEventType::AssignAdminRoles,
+            TokenModuleEvent::RevokeAdminRoles(_) => TokenModuleEventType::RevokeAdminRoles,
         }
     }
 
@@ -136,6 +151,14 @@ impl TokenModuleEvent {
                 TokenModuleEventType::Unpause,
                 RawCbor::from(cbor::cbor_encode(event)),
             ),
+            TokenModuleEvent::AssignAdminRoles(event) => (
+                TokenModuleEventType::AssignAdminRoles,
+                RawCbor::from(cbor::cbor_encode(event)),
+            ),
+            TokenModuleEvent::RevokeAdminRoles(event) => (
+                TokenModuleEventType::RevokeAdminRoles,
+                RawCbor::from(cbor::cbor_encode(event)),
+            ),
         }
     }
 
@@ -159,6 +182,12 @@ impl TokenModuleEvent {
             }
             TokenModuleEventType::Pause => TokenModuleEvent::Pause(cbor::cbor_decode(cbor)?),
             TokenModuleEventType::Unpause => TokenModuleEvent::Unpause(cbor::cbor_decode(cbor)?),
+            TokenModuleEventType::AssignAdminRoles => {
+                TokenModuleEvent::AssignAdminRoles(cbor::cbor_decode(cbor)?)
+            }
+            TokenModuleEventType::RevokeAdminRoles => {
+                TokenModuleEvent::RevokeAdminRoles(cbor::cbor_decode(cbor)?)
+            }
         })
     }
 }
@@ -169,6 +198,8 @@ pub type AddDenyListEvent = TokenListUpdateEventDetails;
 pub type RemoveDenyListEvent = TokenListUpdateEventDetails;
 pub type PauseEvent = TokenPauseEventDetails;
 pub type UnpauseEvent = TokenPauseEventDetails;
+pub type AssignAdminRolesEvent = TokenUpdateAdminRolesEventDetails;
+pub type RevokeAdminRolesEvent = TokenUpdateAdminRolesEventDetails;
 
 /// Details of an event updating the allow or deny list of a protocol level
 /// token
@@ -191,6 +222,19 @@ pub struct TokenListUpdateEventDetails {
 )]
 #[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct TokenPauseEventDetails {}
+
+/// An event emmitted when there are updates made to admin roles
+/// that are assigned or revoked from an Account for a protocol level token.
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+pub struct TokenUpdateAdminRolesEventDetails {
+    pub roles: Vec<TokenAdminRole>,
+    pub account: CborHolderAccount,
+}
 
 /// An entity that can hold PLTs (protocol level tokens).
 /// The type is used in the `TokenTransfer`, `TokenMint`, and `TokenBurn`
@@ -427,6 +471,50 @@ mod test {
         assert_eq!(hex::encode(&cbor), "a0");
 
         let event_decoded: TokenPauseEventDetails = cbor::cbor_decode(cbor).unwrap();
+        assert_eq!(event_decoded, event);
+    }
+
+    /// Test decoding a role event operation for assigning or revoking a single role.
+    #[test]
+    fn test_decode_assign_mint_admin_roles_event_cbor() {
+        let event = TokenUpdateAdminRolesEventDetails {
+            account: CborHolderAccount {
+                address: token_holder::test_fixtures::ADDRESS,
+                coin_info: None,
+            },
+            roles: vec![TokenAdminRole::Mint],
+        };
+
+        let cbor = cbor::cbor_encode(&event);
+        assert_eq!(hex::encode(&cbor), "a265726f6c657381646d696e74676163636f756e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+
+        let event_decoded: TokenUpdateAdminRolesEventDetails = cbor::cbor_decode(cbor).unwrap();
+        assert_eq!(event_decoded, event);
+    }
+
+    /// Test Decoding all roles event details for assigning or revoking roles.
+    #[test]
+    fn test_decode_all_admin_roles_event_cbor() {
+        let event = TokenUpdateAdminRolesEventDetails {
+            account: CborHolderAccount {
+                address: token_holder::test_fixtures::ADDRESS,
+                coin_info: None,
+            },
+            roles: vec![
+                TokenAdminRole::UpdateAdminRoles,
+                TokenAdminRole::Mint,
+                TokenAdminRole::Burn,
+                TokenAdminRole::UpdateAllowList,
+                TokenAdminRole::UpdateDenyList,
+                TokenAdminRole::Pause,
+                TokenAdminRole::UpdateMetadata,
+            ],
+        };
+
+        let cbor = cbor::cbor_encode(&event);
+        assert_eq!(hex::encode(&cbor), "a265726f6c6573877075706461746541646d696e526f6c6573646d696e74646275726e6f757064617465416c6c6f774c6973746e75706461746544656e794c6973746570617573656e7570646174654d65746164617461676163636f756e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+
+        let event_decoded: TokenUpdateAdminRolesEventDetails = cbor::cbor_decode(cbor).unwrap();
         assert_eq!(event_decoded, event);
     }
 

@@ -2225,6 +2225,9 @@ pub mod cost {
     /// Additional cost of a PLT pause
     pub const PLT_PAUSE: Energy = Energy { energy: 50 };
 
+    /// Additional cost of assigning/revoking roles for a PLT
+    pub const PLT_ASSIGN_REVOKE_ROLES: Energy = Energy { energy: 50 };
+
     /// Additional cost of an encrypted transfer.
     #[deprecated(
         since = "5.0.1",
@@ -2624,6 +2627,9 @@ pub mod construct {
                     | TokenOperation::AddDenyList(_)
                     | TokenOperation::RemoveDenyList(_) => cost::PLT_LIST_UPDATE,
                     TokenOperation::Pause(_) | TokenOperation::Unpause(_) => cost::PLT_PAUSE,
+                    TokenOperation::AssignAdminRoles(_) | TokenOperation::RevokeAdminRoles(_) => {
+                        cost::PLT_ASSIGN_REVOKE_ROLES
+                    }
                 })
                 .sum()
     }
