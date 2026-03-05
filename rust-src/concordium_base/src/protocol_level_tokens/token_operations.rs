@@ -386,7 +386,7 @@ impl CborDeserialize for TokenAdminRole {
     {
         let bytes = decoder.decode_text()?;
         let s = String::from_utf8(bytes)
-            .map_err(|e| crate::common::cbor::CborSerializationError::invalid_data(e))?;
+            .map_err(crate::common::cbor::CborSerializationError::invalid_data)?;
         match s.as_str() {
             UPDATE_ADMIN_ROLES_ROLE_NAME => Ok(Self::UpdateAdminRoles),
             MINT_ROLE_NAME => Ok(Self::Mint),
