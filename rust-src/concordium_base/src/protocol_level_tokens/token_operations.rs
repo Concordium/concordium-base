@@ -334,7 +334,6 @@ impl From<CborMemo> for Memo {
     }
 }
 
-// TODO ROB - definition of TokenAdminRole, what we can assign/revoke
 /// Defines roles that can be assigned or revoked for an account, for a protocol
 /// level token.
 #[derive(Debug, Clone, Eq, PartialEq)]
