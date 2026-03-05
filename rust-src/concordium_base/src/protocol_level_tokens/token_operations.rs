@@ -354,13 +354,13 @@ pub enum TokenAdminRole {
 }
 
 /// Admin Role names
-pub const UPDATE_ADMIN_ROLES_ROLE_NAME: &str = "updateAdminRoles";
-pub const MINT_ROLE_NAME: &str = "mint";
-pub const BURN_ROLE_NAME: &str = "burn";
-pub const UPDATE_ALLOW_LIST_ROLE_NAME: &str = "updateAllowList";
-pub const UPDATE_DENY_LIST_ROLE_NAME: &str = "updateDenyList";
-pub const PAUSE_ROLE_NAME: &str = "pause";
-pub const UPDATE_METADATA_ROLE_NAME: &str = "updateMetadata";
+const UPDATE_ADMIN_ROLES_ROLE_NAME: &str = "updateAdminRoles";
+const MINT_ROLE_NAME: &str = "mint";
+const BURN_ROLE_NAME: &str = "burn";
+const UPDATE_ALLOW_LIST_ROLE_NAME: &str = "updateAllowList";
+const UPDATE_DENY_LIST_ROLE_NAME: &str = "updateDenyList";
+const PAUSE_ROLE_NAME: &str = "pause";
+const UPDATE_METADATA_ROLE_NAME: &str = "updateMetadata";
 
 /// Encoding the `TokenAdminRole` to string for Cbor
 impl CborSerialize for TokenAdminRole {
@@ -586,6 +586,54 @@ pub mod test {
                 [(value::Value::Text(s), _), ..] if s == "someUnknownVariant"
             )
         );
+    }
+
+    #[test]
+    fn test_token_operation_cbor_assign_admin_roles() {
+        let operation = TokenOperation::AssignAdminRoles(TokenUpdateAdminRolesDetails {
+            account: CborHolderAccount {
+                address: ADDRESS,
+                coin_info: None,
+            },
+            roles: vec![
+                TokenAdminRole::UpdateAdminRoles,
+                TokenAdminRole::Mint,
+                TokenAdminRole::Burn,
+                TokenAdminRole::UpdateAllowList,
+                TokenAdminRole::UpdateDenyList,
+                TokenAdminRole::Pause,
+                TokenAdminRole::UpdateMetadata,
+            ],
+        });
+
+        let cbor = cbor::cbor_encode(&operation);
+        assert_eq!(hex::encode(&cbor), "a17061737369676e41646d696e526f6c6573a265726f6c6573877075706461746541646d696e526f6c6573646d696e74646275726e6f757064617465416c6c6f774c6973746e75706461746544656e794c6973746570617573656e7570646174654d65746164617461676163636f756e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_token_operation_cbor_revoke_admin_roles() {
+        let operation = TokenOperation::RevokeAdminRoles(TokenUpdateAdminRolesDetails {
+            account: CborHolderAccount {
+                address: ADDRESS,
+                coin_info: None,
+            },
+            roles: vec![
+                TokenAdminRole::UpdateAdminRoles,
+                TokenAdminRole::Mint,
+                TokenAdminRole::Burn,
+                TokenAdminRole::UpdateAllowList,
+                TokenAdminRole::UpdateDenyList,
+                TokenAdminRole::Pause,
+                TokenAdminRole::UpdateMetadata,
+            ],
+        });
+
+        let cbor = cbor::cbor_encode(&operation);
+        assert_eq!(hex::encode(&cbor), "a1707265766f6b6541646d696e526f6c6573a265726f6c6573877075706461746541646d696e526f6c6573646d696e74646275726e6f757064617465416c6c6f774c6973746e75706461746544656e794c6973746570617573656e7570646174654d65746164617461676163636f756e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
     }
 
     #[test]
