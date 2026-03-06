@@ -9,6 +9,7 @@ module Concordium.Types.Queries.Tokens (
     TokenAccountState (..),
     TokenState (..),
     TokenInfo (..),
+    TokenAuthorizations (..),
 ) where
 
 import Data.Aeson as AE
@@ -225,3 +226,12 @@ instance Serialize TokenInfo where
         tiTokenId <- get
         tiTokenState <- get
         return TokenInfo{..}
+
+-- | Role based authorizations structure for a given token. The authorizations are CBOR encoded
+-- inside the 'taDetails' field
+data TokenAuthorizations = TokenAuthorizations
+    { -- | The symbol uniquely identifying the protocol-level token.
+      taTokenId :: !TokenId,
+      -- | The CBOR encoded authorizations details
+      taDetails :: !BS.ByteString
+    }
