@@ -2225,6 +2225,7 @@ pub mod cost {
     /// Additional cost of a PLT pause
     pub const PLT_PAUSE: Energy = Energy { energy: 50 };
 
+    /// TODO - this is a placeholder value for now - RBC-26 will investigate the correct energy to use.
     /// Additional cost of assigning/revoking roles for a PLT
     pub const PLT_ASSIGN_REVOKE_ROLES: Energy = Energy { energy: 50 };
 
