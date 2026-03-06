@@ -7,7 +7,7 @@ use crate::transactions::Memo;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
 use serde::de::Error;
-use serde::{Deserializer, Serialize};
+use serde::Deserializer;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
@@ -226,7 +226,14 @@ pub struct TokenPauseEventDetails {}
 /// An event emmitted when there are updates made to admin roles
 /// that are assigned or revoked from an Account for a protocol level token.
 #[derive(
-    Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize, SerdeDeserialize, Serialize,
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    CborSerialize,
+    CborDeserialize,
+    serde::Serialize,
+    serde::Deserialize,
 )]
 pub struct TokenUpdateAdminRolesEventDetails {
     // The admin roles to update.

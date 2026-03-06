@@ -336,12 +336,7 @@ impl From<CborMemo> for Memo {
 
 /// Defines roles that can be assigned or revoked for an account, for a protocol
 /// level token.
-#[derive(Debug, Clone, Eq, PartialEq)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum TokenAdminRole {
     UpdateAdminRoles,
     Mint,
