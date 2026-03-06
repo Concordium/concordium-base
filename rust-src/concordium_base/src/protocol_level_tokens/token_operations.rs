@@ -1,4 +1,6 @@
-use crate::common::cbor::CborMaybeKnown;
+use crate::common::cbor::{
+    CborDecoder, CborDeserialize, CborEncoder, CborMaybeKnown, CborSerialize,
+};
 use crate::{
     common::cbor::{self, CborSerializationResult},
     protocol_level_tokens::{CborHolderAccount, CoinInfo, RawCbor, TokenAmount, TokenId},
@@ -104,6 +106,36 @@ pub mod operations {
     pub fn unpause() -> TokenOperation {
         TokenOperation::Unpause(TokenPauseDetails {})
     }
+
+    /// Construct operation to assign admin roles to an Address
+    /// for a protocol level token.
+    pub fn assign_admin_roles(
+        account: AccountAddress,
+        roles: Vec<TokenAdminRole>,
+    ) -> TokenOperation {
+        TokenOperation::AssignAdminRoles(TokenUpdateAdminRolesDetails {
+            account: CborHolderAccount {
+                coin_info: Some(CoinInfo::CCD),
+                address: account,
+            },
+            roles,
+        })
+    }
+
+    /// Construct operation to revoke admin roles from an Address
+    /// for a protocol level token.
+    pub fn revoke_admin_roles(
+        account: AccountAddress,
+        roles: Vec<TokenAdminRole>,
+    ) -> TokenOperation {
+        TokenOperation::RevokeAdminRoles(TokenUpdateAdminRolesDetails {
+            account: CborHolderAccount {
+                coin_info: Some(CoinInfo::CCD),
+                address: account,
+            },
+            roles,
+        })
+    }
 }
 
 /// Embedded CBOR, see <https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml>
@@ -200,6 +232,10 @@ pub enum TokenOperation {
     /// Operation that unpauses execution of any balance changing operations for
     /// a protocol level token
     Unpause(TokenPauseDetails),
+    /// Operation to assign roles to an account for a protocol level token.
+    AssignAdminRoles(TokenUpdateAdminRolesDetails),
+    /// Operation to revoke roles for an account for a protocol level token.
+    RevokeAdminRoles(TokenUpdateAdminRolesDetails),
 }
 
 /// Details of an operation that changes a protocol level token supply.
@@ -236,6 +272,21 @@ pub struct TokenPauseDetails {}
 pub struct TokenListUpdateDetails {
     /// Account that is added to or removed from a list
     pub target: CborHolderAccount,
+}
+
+/// Details of an operation to assign or revoke roles for an account
+/// for a protocol level token.
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+pub struct TokenUpdateAdminRolesDetails {
+    /// roles to be assigned or revoked
+    pub roles: Vec<TokenAdminRole>,
+    /// Account that that will be assigned or revoked roles.
+    pub account: CborHolderAccount,
 }
 
 /// Protocol level token transfer
@@ -279,6 +330,69 @@ impl From<CborMemo> for Memo {
         match value {
             CborMemo::Raw(memo) => memo,
             CborMemo::Cbor(memo) => memo,
+        }
+    }
+}
+
+/// Defines roles that can be assigned or revoked for an account, for a protocol
+/// level token.
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum TokenAdminRole {
+    UpdateAdminRoles,
+    Mint,
+    Burn,
+    UpdateAllowList,
+    UpdateDenyList,
+    Pause,
+    UpdateMetadata,
+}
+
+/// Admin Role names
+const UPDATE_ADMIN_ROLES_ROLE_NAME: &str = "updateAdminRoles";
+const MINT_ROLE_NAME: &str = "mint";
+const BURN_ROLE_NAME: &str = "burn";
+const UPDATE_ALLOW_LIST_ROLE_NAME: &str = "updateAllowList";
+const UPDATE_DENY_LIST_ROLE_NAME: &str = "updateDenyList";
+const PAUSE_ROLE_NAME: &str = "pause";
+const UPDATE_METADATA_ROLE_NAME: &str = "updateMetadata";
+
+/// Encoding the `TokenAdminRole` to string for Cbor
+impl CborSerialize for TokenAdminRole {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
+        let s = match self {
+            TokenAdminRole::UpdateAdminRoles => UPDATE_ADMIN_ROLES_ROLE_NAME,
+            TokenAdminRole::Mint => MINT_ROLE_NAME,
+            TokenAdminRole::Burn => BURN_ROLE_NAME,
+            TokenAdminRole::UpdateAllowList => UPDATE_ALLOW_LIST_ROLE_NAME,
+            TokenAdminRole::UpdateDenyList => UPDATE_DENY_LIST_ROLE_NAME,
+            TokenAdminRole::Pause => PAUSE_ROLE_NAME,
+            TokenAdminRole::UpdateMetadata => UPDATE_METADATA_ROLE_NAME,
+        };
+        encoder.encode_text(s)
+    }
+}
+
+/// Decoding the Cbor for a `TokenAdminRole`. Decoding gives text as bytes which can be
+/// mapped back to the Admin Role constant names.
+impl CborDeserialize for TokenAdminRole {
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
+    where
+        Self: Sized,
+    {
+        let bytes = decoder.decode_text()?;
+        let s = String::from_utf8(bytes)
+            .map_err(crate::common::cbor::CborSerializationError::invalid_data)?;
+        match s.as_str() {
+            UPDATE_ADMIN_ROLES_ROLE_NAME => Ok(Self::UpdateAdminRoles),
+            MINT_ROLE_NAME => Ok(Self::Mint),
+            BURN_ROLE_NAME => Ok(Self::Burn),
+            UPDATE_ALLOW_LIST_ROLE_NAME => Ok(Self::UpdateAllowList),
+            UPDATE_DENY_LIST_ROLE_NAME => Ok(Self::UpdateDenyList),
+            PAUSE_ROLE_NAME => Ok(Self::Pause),
+            UPDATE_METADATA_ROLE_NAME => Ok(Self::UpdateMetadata),
+            _ => Err(crate::common::cbor::CborSerializationError::invalid_data(
+                format!("unknown token admin role: {s}"),
+            )),
         }
     }
 }
@@ -466,6 +580,54 @@ pub mod test {
                 [(value::Value::Text(s), _), ..] if s == "someUnknownVariant"
             )
         );
+    }
+
+    #[test]
+    fn test_token_operation_cbor_assign_admin_roles() {
+        let operation = TokenOperation::AssignAdminRoles(TokenUpdateAdminRolesDetails {
+            account: CborHolderAccount {
+                address: ADDRESS,
+                coin_info: None,
+            },
+            roles: vec![
+                TokenAdminRole::UpdateAdminRoles,
+                TokenAdminRole::Mint,
+                TokenAdminRole::Burn,
+                TokenAdminRole::UpdateAllowList,
+                TokenAdminRole::UpdateDenyList,
+                TokenAdminRole::Pause,
+                TokenAdminRole::UpdateMetadata,
+            ],
+        });
+
+        let cbor = cbor::cbor_encode(&operation);
+        assert_eq!(hex::encode(&cbor), "a17061737369676e41646d696e526f6c6573a265726f6c6573877075706461746541646d696e526f6c6573646d696e74646275726e6f757064617465416c6c6f774c6973746e75706461746544656e794c6973746570617573656e7570646174654d65746164617461676163636f756e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_token_operation_cbor_revoke_admin_roles() {
+        let operation = TokenOperation::RevokeAdminRoles(TokenUpdateAdminRolesDetails {
+            account: CborHolderAccount {
+                address: ADDRESS,
+                coin_info: None,
+            },
+            roles: vec![
+                TokenAdminRole::UpdateAdminRoles,
+                TokenAdminRole::Mint,
+                TokenAdminRole::Burn,
+                TokenAdminRole::UpdateAllowList,
+                TokenAdminRole::UpdateDenyList,
+                TokenAdminRole::Pause,
+                TokenAdminRole::UpdateMetadata,
+            ],
+        });
+
+        let cbor = cbor::cbor_encode(&operation);
+        assert_eq!(hex::encode(&cbor), "a1707265766f6b6541646d696e526f6c6573a265726f6c6573877075706461746541646d696e526f6c6573646d696e74646275726e6f757064617465416c6c6f774c6973746e75706461746544656e794c6973746570617573656e7570646174654d65746164617461676163636f756e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
     }
 
     #[test]

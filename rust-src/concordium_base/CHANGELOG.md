@@ -1,4 +1,6 @@
 ## Unreleased
+- Implemented definition for `TokenAdminRole` which describes the list of supported roles. 
+  Implemented `assignAdminRoles` and `revokeAdminRoles` token operations for RBAC too.
 - Implemented `common::from_bytes_complete` that fails if all bytes are not consumed during deserialization.
 - `cbor::cbor_encode` is now infallible and returns `Vec<u8>` instead of `CborSerializationResult<Vec<u8>>`
 - `&[T]` no longer implements `CborSerialize` in order to avoid ambiguity with `CborSerialize` implementation for `[u8]`. 
