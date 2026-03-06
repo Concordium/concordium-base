@@ -27,6 +27,8 @@
   - Implemented checks in `serde::Deserialize` implementation on `TokenId` and `TokenModuleCborTypeDiscriminator` that the internal type
     invariants are fulfilled.
   - Implemented limit on pre-allocation in `concordium_base::common::Deserial` implementation on `RawCbor`.
+  - The field `additional` containing dynamic CBOR model has been removed from `TokenModuleState`, `TokenModuleAccountState` and `TokenModuleInitializationParameters`.
+    The field could not contain any data.
 
 - Introduce protocol version 11 variant `ProtocolVersion::P11`.
 - The flag `serde_deprecated` now guards `serde::Serialize` and `serde::Deserialize` implemetations on the following types. The implementations will eventually be removed.
