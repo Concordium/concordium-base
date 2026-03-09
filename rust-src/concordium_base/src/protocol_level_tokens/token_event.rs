@@ -225,14 +225,7 @@ pub struct TokenPauseEventDetails {}
 
 /// An event emmitted when there are updates made to admin roles
 /// that are assigned or revoked from an Account for a protocol level token.
-#[derive(
-    Debug,
-    Clone,
-    Eq,
-    PartialEq,
-    CborSerialize,
-    CborDeserialize,
-)]
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
 #[cfg_attr(
     feature = "serde_deprecated",
     derive(serde::Serialize, serde::Deserialize)
