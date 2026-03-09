@@ -232,9 +232,12 @@ pub struct TokenPauseEventDetails {}
     PartialEq,
     CborSerialize,
     CborDeserialize,
-    serde::Serialize,
-    serde::Deserialize,
 )]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct TokenUpdateAdminRolesEventDetails {
     // The admin roles to update.
     pub roles: Vec<TokenAdminRole>,
