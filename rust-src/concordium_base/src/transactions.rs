@@ -2229,6 +2229,10 @@ pub mod cost {
     /// Additional cost of assigning/revoking roles for a PLT
     pub const PLT_ASSIGN_REVOKE_ROLES: Energy = Energy { energy: 50 };
 
+    /// TODO - this is a placeholder value for now - RBC-26 will investigate the correct energy to use.
+    /// Additional cost of update token metadata for a PLT
+    pub const PLT_UPDATE_TOKEN_METADATA: Energy = Energy { energy: 50 };
+
     /// Additional cost of an encrypted transfer.
     #[deprecated(
         since = "5.0.1",
@@ -2631,6 +2635,7 @@ pub mod construct {
                     TokenOperation::AssignAdminRoles(_) | TokenOperation::RevokeAdminRoles(_) => {
                         cost::PLT_ASSIGN_REVOKE_ROLES
                     }
+                    TokenOperation::UpdateMetadata(_) => cost::PLT_UPDATE_TOKEN_METADATA,
                 })
                 .sum()
     }

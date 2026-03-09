@@ -1,6 +1,7 @@
 use crate::common::cbor::{
     CborDecoder, CborDeserialize, CborEncoder, CborMaybeKnown, CborSerialize,
 };
+use crate::protocol_level_tokens::MetadataUrl;
 use crate::{
     common::cbor::{self, CborSerializationResult},
     protocol_level_tokens::{CborHolderAccount, CoinInfo, RawCbor, TokenAmount, TokenId},
@@ -136,6 +137,12 @@ pub mod operations {
             roles,
         })
     }
+
+    /// Construct operation to update token metadata for a protocol
+    /// level token.
+    pub fn update_metadata(metadata_url: MetadataUrl) -> TokenOperation {
+        TokenOperation::UpdateMetadata(metadata_url)
+    }
 }
 
 /// Embedded CBOR, see <https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml>
@@ -236,6 +243,8 @@ pub enum TokenOperation {
     AssignAdminRoles(TokenUpdateAdminRolesDetails),
     /// Operation to revoke roles for an account for a protocol level token.
     RevokeAdminRoles(TokenUpdateAdminRolesDetails),
+    /// Operation to update token metadata
+    UpdateMetadata(MetadataUrl),
 }
 
 /// Details of an operation that changes a protocol level token supply.
@@ -404,6 +413,8 @@ impl CborDeserialize for TokenAdminRole {
 
 #[cfg(test)]
 pub mod test {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::{
         common::cbor::{self, value},
@@ -631,6 +642,23 @@ pub mod test {
 
         let cbor = cbor::cbor_encode(&operation);
         assert_eq!(hex::encode(&cbor), "a1707265766f6b6541646d696e526f6c6573a265726f6c6573877075706461746541646d696e526f6c6573646d696e74646275726e6f757064617465416c6c6f774c6973746e75706461746544656e794c6973746570617573656e7570646174654d65746164617461676163636f756e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_token_operation_update_metadata() {
+        let operation = TokenOperation::UpdateMetadata(MetadataUrl {
+            url: "SomeUrl".to_string(),
+            checksum_sha_256: None,
+            additional: HashMap::new(),
+        });
+
+        let cbor = cbor::cbor_encode(&operation);
+        assert_eq!(
+            hex::encode(&cbor),
+            "a16e7570646174654d65746164617461a16375726c67536f6d6555726c"
+        );
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
     }
