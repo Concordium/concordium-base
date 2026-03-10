@@ -25,6 +25,8 @@ pub(crate) use low_level::Iterator;
 #[doc(hidden)]
 pub mod low_level;
 mod types;
+pub mod state_dump;
+
 pub use types::*;
 
 pub use low_level::{MutableTrie, Node};

@@ -3,6 +3,7 @@
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use derive_more::{AsRef, From, Into};
 use sha2::Digest;
+use std::fmt::{Display, Formatter};
 use std::{
     io::{Read, Seek, SeekFrom, Write},
     ops::{Index, IndexMut},
@@ -10,7 +11,7 @@ use std::{
 use thiserror::Error;
 
 #[repr(transparent)]
-#[derive(Default, Debug, Clone, Copy, Eq, PartialEq, From, Into)]
+#[derive(Default, Debug, Clone, Copy, Eq, PartialEq, Hash, From, Into)]
 /// Reference to a storage location where an item may be retrieved.
 pub struct Reference {
     pub(crate) reference: u64,
@@ -21,6 +22,12 @@ impl Reference {
     pub(crate) fn store(&self, sink: &mut impl std::io::Write) -> StoreResult<()> {
         sink.write_u64::<BigEndian>(self.reference)?;
         Ok(())
+    }
+}
+
+impl Display for Reference {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "@{}", self.reference)
     }
 }
 
