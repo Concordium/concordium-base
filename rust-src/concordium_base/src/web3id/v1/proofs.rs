@@ -353,6 +353,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
         let mut attributes_handling = BTreeMap::new();
         // First register any attributes that must be revealed in the identity credential attributes subproof.
         for stmt in &self.statements {
+            #[allow(clippy::single_match)]
             match stmt {
                 AtomicStatementV1::AttributeValue(statement) => {
                     attributes_handling
