@@ -111,7 +111,7 @@ pub enum TokenModuleEvent {
     AssignAdminRoles(AssignAdminRolesEvent),
     /// Revoke admin roles to an Account for a protocol level token
     RevokeAdminRoles(RevokeAdminRolesEvent),
-    /// NEW VARIANT HERE: Indicates that a token had its metadata reference updated.
+    /// Indicates that a token had its metadata reference updated.
     UpdateMetadata(UpdateMetadataEvent),
 }
 
@@ -253,7 +253,7 @@ pub struct TokenUpdateAdminRolesEventDetails {
     pub account: CborHolderAccount,
 }
 
-/// An event emmitted when there are updatesto the token metadata for a
+/// An event emitted when there are updates to the token metadata for a
 /// protocol level token.
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 #[cfg_attr(
