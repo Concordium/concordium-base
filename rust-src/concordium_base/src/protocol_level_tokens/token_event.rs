@@ -2,7 +2,7 @@ use super::{CborHolderAccount, RawCbor, TokenAmount};
 use crate::common;
 use crate::common::cbor::CborSerializationResult;
 use crate::common::{cbor, Buffer, Deserial, Get, ParseResult, SerdeDeserialize, Serial};
-use crate::protocol_level_tokens::TokenAdminRole;
+use crate::protocol_level_tokens::{MetadataUrl, TokenAdminRole};
 use crate::transactions::Memo;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
@@ -28,10 +28,12 @@ pub enum TokenModuleEventType {
     /// Execution of certain operations on a protocol level token was
     /// unpaused ([`UnpauseEvent`])
     Unpause,
-    // Assign admin roles to an Account for a protocol level token.
+    /// Assign admin roles to an Account for a protocol level token.
     AssignAdminRoles,
-    // Revoke admin roles from an Account for a protocol level token.
+    /// Revoke admin roles from an Account for a protocol level token.
     RevokeAdminRoles,
+    /// Update token metadata for a protocol level token.
+    UpdateMetada,
 }
 
 /// Unknown token module event
@@ -51,6 +53,7 @@ impl TokenModuleEventType {
             TokenModuleEventType::Unpause => "unpause",
             TokenModuleEventType::AssignAdminRoles => "assignAdminRoles",
             TokenModuleEventType::RevokeAdminRoles => "revokeAdminRoles",
+            TokenModuleEventType::UpdateMetada => "updateMetadata",
         }
     }
 
@@ -72,6 +75,7 @@ impl TokenModuleEventType {
             "unpause" => TokenModuleEventType::Unpause,
             "assignAdminRoles" => TokenModuleEventType::AssignAdminRoles,
             "revokeAdminRoles" => TokenModuleEventType::RevokeAdminRoles,
+            "updateMetadata" => TokenModuleEventType::UpdateMetada,
             _ => {
                 return Err(UnknownTokenModuleEventTypeError(
                     type_discriminator.to_string(),
@@ -82,7 +86,7 @@ impl TokenModuleEventType {
 }
 
 /// Token module event parsed from type and CBOR
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(
     feature = "serde_deprecated",
     derive(serde::Serialize, serde::Deserialize)
@@ -107,6 +111,8 @@ pub enum TokenModuleEvent {
     AssignAdminRoles(AssignAdminRolesEvent),
     /// Revoke admin roles to an Account for a protocol level token
     RevokeAdminRoles(RevokeAdminRolesEvent),
+    /// Indicates that a token had its metadata reference updated.
+    UpdateMetadata(UpdateMetadataEvent),
 }
 
 impl TokenModuleEvent {
@@ -121,6 +127,7 @@ impl TokenModuleEvent {
             TokenModuleEvent::Unpause(_) => TokenModuleEventType::Unpause,
             TokenModuleEvent::AssignAdminRoles(_) => TokenModuleEventType::AssignAdminRoles,
             TokenModuleEvent::RevokeAdminRoles(_) => TokenModuleEventType::RevokeAdminRoles,
+            TokenModuleEvent::UpdateMetadata(_) => TokenModuleEventType::UpdateMetada,
         }
     }
 
@@ -159,6 +166,10 @@ impl TokenModuleEvent {
                 TokenModuleEventType::RevokeAdminRoles,
                 RawCbor::from(cbor::cbor_encode(event)),
             ),
+            TokenModuleEvent::UpdateMetadata(event) => (
+                TokenModuleEventType::UpdateMetada,
+                RawCbor::from(cbor::cbor_encode(event)),
+            ),
         }
     }
 
@@ -188,6 +199,9 @@ impl TokenModuleEvent {
             TokenModuleEventType::RevokeAdminRoles => {
                 TokenModuleEvent::RevokeAdminRoles(cbor::cbor_decode(cbor)?)
             }
+            TokenModuleEventType::UpdateMetada => {
+                TokenModuleEvent::UpdateMetadata(cbor::cbor_decode(cbor)?)
+            }
         })
     }
 }
@@ -200,6 +214,7 @@ pub type PauseEvent = TokenPauseEventDetails;
 pub type UnpauseEvent = TokenPauseEventDetails;
 pub type AssignAdminRolesEvent = TokenUpdateAdminRolesEventDetails;
 pub type RevokeAdminRolesEvent = TokenUpdateAdminRolesEventDetails;
+pub type UpdateMetadataEvent = TokenUpdateMetadataEventDetails;
 
 /// Details of an event updating the allow or deny list of a protocol level
 /// token
@@ -236,6 +251,18 @@ pub struct TokenUpdateAdminRolesEventDetails {
     pub roles: Vec<TokenAdminRole>,
     // The account to update admin for.
     pub account: CborHolderAccount,
+}
+
+/// An event emitted when there are updates to the token metadata for a
+/// protocol level token.
+#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+pub struct TokenUpdateMetadataEventDetails {
+    pub metadata_url: MetadataUrl,
 }
 
 /// An entity that can hold PLTs (protocol level tokens).
@@ -389,6 +416,8 @@ impl From<TokenModuleCborTypeDiscriminator> for String {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::{
         common,
@@ -517,6 +546,27 @@ mod test {
         assert_eq!(hex::encode(&cbor), "a265726f6c6573877075706461746541646d696e526f6c6573646d696e74646275726e6f757064617465416c6c6f774c6973746e75706461746544656e794c6973746570617573656e7570646174654d65746164617461676163636f756e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
 
         let event_decoded: TokenUpdateAdminRolesEventDetails = cbor::cbor_decode(cbor).unwrap();
+        assert_eq!(event_decoded, event);
+    }
+
+    /// Test Update token metadata event
+    #[test]
+    fn test_decode_update_metadata_event_cbor() {
+        let event = TokenUpdateMetadataEventDetails {
+            metadata_url: MetadataUrl {
+                url: "http://someUrl.com".to_string(),
+                checksum_sha_256: None,
+                additional: HashMap::new(),
+            },
+        };
+
+        let cbor = cbor::cbor_encode(&event);
+        assert_eq!(
+            hex::encode(&cbor),
+            "a16b6d6574616461746155726ca16375726c72687474703a2f2f736f6d6555726c2e636f6d"
+        );
+
+        let event_decoded: TokenUpdateMetadataEventDetails = cbor::cbor_decode(cbor).unwrap();
         assert_eq!(event_decoded, event);
     }
 
