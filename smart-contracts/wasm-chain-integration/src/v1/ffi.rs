@@ -952,7 +952,7 @@ unsafe extern "C" fn insert_entry_value_mutable_state(
 /// - Argument `state_data_file_path` must be non-null and valid for reads for `state_data_file_path_len` many bytes.
 #[unsafe(no_mangle)]
 extern "C" fn ffi_dump_persistent_state(
-    mut load_callback: LoadCallback,
+    load_callback: LoadCallback,
     persistent_state: *const PersistentState,
     parent_node: u64,
     state_graph_file_path: *const u8,

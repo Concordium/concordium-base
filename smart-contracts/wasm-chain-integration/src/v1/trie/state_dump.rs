@@ -10,5 +10,4 @@ pub(crate) fn dump_persistent_state(
     tree: &PersistentState,
 ) {
     println!("test");
-    todo!()
 }
