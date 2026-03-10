@@ -350,13 +350,22 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
         transcript.append_message("Statements", &self.statements);
         transcript.append_message("Network", &self.network);
 
-        let attributes_handling: BTreeMap<_, _> = self
-            .statements
-            .iter()
-            .map(|stmt| match stmt {
+        let mut attributes_handling = BTreeMap::new();
+        // First register any attributes that must be revealed in the identity credential attributes subproof.
+        for stmt in &self.statements {
+            #[allow(clippy::single_match)]
+            match stmt {
                 AtomicStatementV1::AttributeValue(statement) => {
-                    (statement.attribute_tag, IdentityAttributeHandling::Reveal)
+                    attributes_handling
+                        .insert(statement.attribute_tag, IdentityAttributeHandling::Reveal);
                 }
+                _ => (),
+            }
+        }
+        // Second register any attributes that must be committed to, possibly overwriting reveal, if the
+        // same attribute appears again.
+        for stmt in &self.statements {
+            match stmt {
                 AtomicStatementV1::AttributeInRange(AttributeInRangeStatement {
                     attribute_tag,
                     ..
@@ -368,9 +377,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> IdentityBasedSubjectClaims<C
                 | AtomicStatementV1::AttributeNotInSet(AttributeNotInSetStatement {
                     attribute_tag,
                     ..
-                }) => (*attribute_tag, IdentityAttributeHandling::Commit),
-            })
-            .collect();
+                }) => {
+                    attributes_handling.insert(*attribute_tag, IdentityAttributeHandling::Commit);
+                }
+                _ => (),
+            }
+        }
 
         let (id_attr_cred_info, id_attr_cmm_rand) =
             identity_attributes_credentials::prove_identity_attributes(
@@ -823,6 +835,106 @@ pub mod tests {
         );
     }
 
+    /// Test prove and verify presentation for account credentials. Tests having an attribute
+    /// that is both revealed and used in bullet proofs.
+    #[test]
+    fn test_completeness_account_attribute_both_revealed_and_in_bullet_proofs() {
+        let challenge = challenge_fixture();
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let mut statements = vec![
+            AtomicStatementV1::AttributeInSet(AttributeInSetStatement {
+                attribute_tag: AttributeTag(1).to_string().parse().unwrap(),
+                set: [
+                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                ]
+                .into_iter()
+                .collect(),
+                _phantom: PhantomData,
+            }),
+            AtomicStatementV1::AttributeValue(AttributeValueStatement {
+                attribute_tag: AttributeTag(1).to_string().parse().unwrap(),
+                attribute_value: Web3IdAttribute::String(
+                    AttributeKind::try_new("aa".into()).unwrap(),
+                ),
+                _phantom: Default::default(),
+            }),
+        ];
+
+        let attributes = [(
+            AttributeTag(1).to_string().parse().unwrap(),
+            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+        )]
+        .into_iter()
+        .collect();
+
+        let acc_cred_fixture = fixtures::account_credentials_fixture(attributes, &global_context);
+
+        // Test prove and verify with reveal statement last.
+        let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
+            network: Network::Testnet,
+            issuer: acc_cred_fixture.issuer,
+            cred_id: acc_cred_fixture.cred_id,
+            statements: statements.clone(),
+        })];
+
+        let request = RequestV1::<ArCurve, Web3IdAttribute> {
+            context: challenge.clone(),
+            subject_claims,
+        };
+
+        let proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [acc_cred_fixture.private_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        let public = vec![acc_cred_fixture.verification_material.clone()];
+        assert_eq!(
+            proof
+                .verify(&global_context, public.iter())
+                .expect("verify"),
+            request,
+            "verify request"
+        );
+
+        // Test prove and verify with reveal statement first.
+        statements.reverse();
+        let subject_claims = vec![SubjectClaims::Account(AccountBasedSubjectClaims {
+            network: Network::Testnet,
+            issuer: acc_cred_fixture.issuer,
+            cred_id: acc_cred_fixture.cred_id,
+            statements: statements.clone(),
+        })];
+
+        let request = RequestV1::<ArCurve, Web3IdAttribute> {
+            context: challenge,
+            subject_claims,
+        };
+
+        let proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [acc_cred_fixture.private_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        let public = vec![acc_cred_fixture.verification_material];
+        assert_eq!(
+            proof
+                .verify(&global_context, public.iter())
+                .expect("verify"),
+            request,
+            "verify request"
+        );
+    }
+
     /// Test prove and verify presentation for account credentials. Tests empty set of statements.
     #[test]
     fn test_completeness_account_empty() {
@@ -1173,6 +1285,104 @@ pub mod tests {
 
         let id_cred_fixture = fixtures::identity_credentials_fixture(attributes, &global_context);
 
+        let subject_claims = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
+            network: Network::Testnet,
+            issuer: id_cred_fixture.issuer,
+            statements,
+        })];
+
+        let request = RequestV1::<ArCurve, Web3IdAttribute> {
+            context: challenge,
+            subject_claims,
+        };
+
+        let proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [id_cred_fixture.private_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        let public = vec![id_cred_fixture.verification_material];
+        assert_eq!(
+            proof
+                .verify(&global_context, public.iter())
+                .expect("verify"),
+            request,
+            "verify request"
+        );
+    }
+
+    /// Test prove and verify presentation for identity credentials. Tests having an attribute
+    /// that is both revealed and used in bullet proofs.
+    #[test]
+    fn test_completeness_identity_attribute_both_revealed_and_in_bullet_proofs() {
+        let challenge = challenge_fixture();
+
+        let global_context = GlobalContext::generate("Test".into());
+
+        let mut statements = vec![
+            AtomicStatementV1::AttributeInSet(AttributeInSetStatement {
+                attribute_tag: AttributeTag(1).to_string().parse().unwrap(),
+                set: [
+                    Web3IdAttribute::String(AttributeKind::try_new("ff".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+                    Web3IdAttribute::String(AttributeKind::try_new("zz".into()).unwrap()),
+                ]
+                .into_iter()
+                .collect(),
+                _phantom: PhantomData,
+            }),
+            AtomicStatementV1::AttributeValue(AttributeValueStatement {
+                attribute_tag: AttributeTag(1).to_string().parse().unwrap(),
+                attribute_value: Web3IdAttribute::String(
+                    AttributeKind::try_new("aa".into()).unwrap(),
+                ),
+                _phantom: Default::default(),
+            }),
+        ];
+
+        let attributes = [(
+            AttributeTag(1).to_string().parse().unwrap(),
+            Web3IdAttribute::String(AttributeKind::try_new("aa".into()).unwrap()),
+        )]
+        .into_iter()
+        .collect();
+
+        let id_cred_fixture = fixtures::identity_credentials_fixture(attributes, &global_context);
+
+        // Test prove and verify with reveal statement last.
+        let subject_claims = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
+            network: Network::Testnet,
+            issuer: id_cred_fixture.issuer,
+            statements: statements.clone(),
+        })];
+
+        let request = RequestV1::<ArCurve, Web3IdAttribute> {
+            context: challenge.clone(),
+            subject_claims,
+        };
+
+        let proof = request
+            .clone()
+            .prove(
+                &global_context,
+                [id_cred_fixture.private_inputs()].into_iter(),
+            )
+            .expect("prove");
+
+        let public = vec![id_cred_fixture.verification_material.clone()];
+        assert_eq!(
+            proof
+                .verify(&global_context, public.iter())
+                .expect("verify"),
+            request,
+            "verify request"
+        );
+
+        // Test prove and verify with reveal statement first.
+        statements.reverse();
         let subject_claims = vec![SubjectClaims::Identity(IdentityBasedSubjectClaims {
             network: Network::Testnet,
             issuer: id_cred_fixture.issuer,
