@@ -582,6 +582,132 @@ tokenMetadataUrlFromBytes =
 tokenMetadataUrlToBytes :: TokenMetadataUrl -> BS.ByteString
 tokenMetadataUrlToBytes = encodeToBytes . encodeTokenMetadataUrl
 
+-- * Administrative roles
+
+-- | The different admin roles defined for the current token module implementation.
+--  Each role gives access to specific adminstrative operations.
+data TokenAdminRole
+    = -- | Authority to perform @assignAdminRoles@ and @revokeAdminRoles@.
+      RoleUpdateAdminRoles
+    | -- | Authority to perform @mint@.
+      RoleMint
+    | -- | Authority to perfrom @burn@.
+      RoleBurn
+    | -- | Authority to perform @addAllowList@ and @removeAllowList@.
+      RoleUpdateAllowList
+    | -- | Authority to perform @addDenyList@ and @removeDenyList@.
+      RoleUpdateDenyList
+    | -- | Authority to perform @pause@ and @unpause@.
+      RolePause
+    | -- | Authority to perform @updateMetadata@.
+      RoleUpdateMetadata
+    deriving (Eq, Show)
+
+instance AE.ToJSON TokenAdminRole where
+    toJSON = AE.String . tokenAdminRoleToText
+
+instance AE.FromJSON TokenAdminRole where
+    parseJSON = AE.withText "TokenAdminRole" $ \role -> case tokenAdminRoleFromText role of
+        Just r -> return r
+        Nothing -> fail $ "Unsupported role: " ++ show role
+
+-- | Parse a 'Text' as a 'TokenAdminRole'.
+tokenAdminRoleFromText :: Text -> Maybe TokenAdminRole
+tokenAdminRoleFromText "updateAdminRoles" = Just RoleUpdateAdminRoles
+tokenAdminRoleFromText "mint" = Just RoleMint
+tokenAdminRoleFromText "burn" = Just RoleBurn
+tokenAdminRoleFromText "updateAllowList" = Just RoleUpdateAllowList
+tokenAdminRoleFromText "updateDenyList" = Just RoleUpdateDenyList
+tokenAdminRoleFromText "pause" = Just RolePause
+tokenAdminRoleFromText "updateMetadata" = Just RoleUpdateMetadata
+tokenAdminRoleFromText _ = Nothing
+
+-- | Encode a 'TokenAdminRole' as 'Text'.
+tokenAdminRoleToText :: TokenAdminRole -> Text
+tokenAdminRoleToText RoleUpdateAdminRoles = "updateAdminRoles"
+tokenAdminRoleToText RoleMint = "mint"
+tokenAdminRoleToText RoleBurn = "burn"
+tokenAdminRoleToText RoleUpdateAllowList = "updateAllowList"
+tokenAdminRoleToText RoleUpdateDenyList = "updateDenyList"
+tokenAdminRoleToText RolePause = "pause"
+tokenAdminRoleToText RoleUpdateMetadata = "updateMetadata"
+
+-- | Decode a CBOR-encoded 'TokenAdminRole'.
+decodeTokenAdminRole :: Decoder s TokenAdminRole
+decodeTokenAdminRole = do
+    role <- decodeString
+    case tokenAdminRoleFromText role of
+        Just r -> return r
+        Nothing -> fail $ "Unsupported role: " ++ show role
+
+-- | Encode a 'TokenAdminRole' as CBOR.
+encodeTokenAdminRole :: TokenAdminRole -> Encoding
+encodeTokenAdminRole = encodeString . tokenAdminRoleToText
+
+-- | The details of @assignAdminRoles@ and @revokeAdminRoles@ operations.
+data UpdateAdminRolesDetails = UpdateAdminRolesDetails
+    { -- | The account to assign or revoke administrative roles.
+      uardAccount :: !CborAccountAddress,
+      -- | The roles to assign or revoke.
+      uardRoles :: !(Seq.Seq TokenAdminRole)
+    }
+    deriving (Eq, Show)
+
+instance AE.ToJSON UpdateAdminRolesDetails where
+    toJSON UpdateAdminRolesDetails{..} = do
+        AE.object $
+            [ "account" AE..= uardAccount,
+              "roles" AE..= uardRoles
+            ]
+
+instance AE.FromJSON UpdateAdminRolesDetails where
+    parseJSON = AE.withObject "UpdateAdminRolesDetails" $ \o -> do
+        uardAccount <- o AE..: "account"
+        uardRoles <- o AE..: "roles"
+        return UpdateAdminRolesDetails{..}
+
+data UpdateAdminRolesDetailsBuilder = UpdateAdminRolesDetailsBuilder
+    { _uardbAccount :: Maybe CborAccountAddress,
+      _uardbRoles :: Maybe (Seq.Seq TokenAdminRole)
+    }
+
+makeLenses ''UpdateAdminRolesDetailsBuilder
+
+-- | Empty 'UpdateAdminRolesDetailsBuilder'.
+emptyUpdateAdminRolesDetailsBuilder :: UpdateAdminRolesDetailsBuilder
+emptyUpdateAdminRolesDetailsBuilder = UpdateAdminRolesDetailsBuilder Nothing Nothing
+
+-- | Construct an 'UpdateAdminRolesDetails' from a 'UpdateAdminRolesDetailsBuilder'.
+--  This results in @Left err@ (where @err@ describes the failure reason) when a required parameter
+--  is missing.
+buildUpdateAdminRolesDetails :: UpdateAdminRolesDetailsBuilder -> Either String UpdateAdminRolesDetails
+buildUpdateAdminRolesDetails UpdateAdminRolesDetailsBuilder{..} = do
+    uardAccount <- _uardbAccount `orFail` "Missing \"account\""
+    uardRoles <- _uardbRoles `orFail` "Missing \"roles\""
+    return UpdateAdminRolesDetails{..}
+
+-- | Decode a CBOR-encoded 'UpdateAdminRolesDetails'.
+decodeUpdateAdminRolesDetails :: Decoder s UpdateAdminRolesDetails
+decodeUpdateAdminRolesDetails =
+    decodeMap
+        valDecoder
+        buildUpdateAdminRolesDetails
+        emptyUpdateAdminRolesDetailsBuilder
+  where
+    valDecoder k@"account" = Just $ mapValueDecoder k decodeCborAccountAddress uardbAccount
+    valDecoder k@"roles" = Just $ mapValueDecoder k (decodeSequence decodeTokenAdminRole) uardbRoles
+    valDecoder _ = Nothing
+
+-- | Encode an 'UpdateAdminRolesDetails' as CBOR.
+encodeUpdateAdminRolesDetails :: UpdateAdminRolesDetails -> Encoding
+encodeUpdateAdminRolesDetails UpdateAdminRolesDetails{..} =
+    encodeMapDeterministic $
+        Map.empty
+            & k "account" ?~ encodeCborAccountAddress uardAccount
+            & k "roles" ?~ encodeSequence encodeTokenAdminRole uardRoles
+  where
+    k = at . makeMapKeyEncoding . encodeString
+
 -- * Initialization parameters
 
 -- | The parsed token-initialization-parameters. These parameters are passed to the token module
@@ -862,6 +988,12 @@ data TokenOperation
       TokenPause
     | -- | Unpause transfer/mint/burn operations for the token.
       TokenUnpause
+    | -- | Assign admin roles to an account.
+      TokenAssignAdminRoles !UpdateAdminRolesDetails
+    | -- | Revoke admin roles from an account.
+      TokenRevokeAdminRoles !UpdateAdminRolesDetails
+    | -- | Update metadata
+      TokenUpdateMetadata !TokenMetadataUrl
     deriving (Eq, Show)
 
 instance AE.ToJSON TokenOperation where
@@ -901,6 +1033,18 @@ instance AE.ToJSON TokenOperation where
         AE.object
             [ "unpause" AE..= AE.object []
             ]
+    toJSON (TokenAssignAdminRoles update) =
+        AE.object
+            [ "assignAdminRoles" AE..= update
+            ]
+    toJSON (TokenRevokeAdminRoles update) =
+        AE.object
+            [ "revokeAdminRoles" AE..= update
+            ]
+    toJSON (TokenUpdateMetadata metadata) =
+        AE.object
+            [ "updateMetadata" AE..= metadata
+            ]
 
 instance AE.FromJSON TokenOperation where
     parseJSON = AE.withObject "TokenOperation" $ \o -> do
@@ -931,6 +1075,15 @@ instance AE.FromJSON TokenOperation where
                 pure TokenPause
             ["unpause"] -> do
                 pure TokenUnpause
+            ["assignAdminRoles"] -> do
+                body <- o AE..: "assignAdminRoles"
+                pure $ TokenAssignAdminRoles body
+            ["revokeAdminRoles"] -> do
+                body <- o AE..: "revokeAdminRoles"
+                pure $ TokenRevokeAdminRoles body
+            ["updateMetadata"] -> do
+                metadata <- o AE..: "updateMetadata"
+                pure $ TokenUpdateMetadata metadata
             other -> fail $ "token-operation: unsupported operation type: " ++ show other
 
 -- | Decode a CBOR-encoded 'TokenOperation'.
@@ -952,6 +1105,9 @@ decodeTokenOperation = do
         "removeDenyList" -> TokenRemoveDenyList <$> decodeListTarget opType
         "pause" -> TokenPause <$ decodeEmptyMap
         "unpause" -> TokenUnpause <$ decodeEmptyMap
+        "assignAdminRoles" -> TokenAssignAdminRoles <$> decodeUpdateAdminRolesDetails
+        "revokeAdminRoles" -> TokenRevokeAdminRoles <$> decodeUpdateAdminRolesDetails
+        "updateMetadata" -> TokenUpdateMetadata <$> decodeTokenMetadataUrl
         _ -> fail $ "token-operation: unsupported operation type: " ++ show opType
     when (isNothing maybeMapLen) $ do
         isEnd <- decodeBreakOr
@@ -990,6 +1146,18 @@ encodeTokenOperation = \case
     TokenRemoveDenyList target -> encodeListTarget "removeDenyList" target
     TokenPause -> encodePause
     TokenUnpause -> encodeUnpause
+    TokenAssignAdminRoles body ->
+        encodeMapLen 1
+            <> encodeString "assignAdminRoles"
+            <> encodeUpdateAdminRolesDetails body
+    TokenRevokeAdminRoles body ->
+        encodeMapLen 1
+            <> encodeString "revokeAdminRoles"
+            <> encodeUpdateAdminRolesDetails body
+    TokenUpdateMetadata metadata ->
+        encodeMapLen 1
+            <> encodeString "updateMetadata"
+            <> encodeTokenMetadataUrl metadata
   where
     encodeSupplyUpdate opType amount =
         encodeMapLen 1

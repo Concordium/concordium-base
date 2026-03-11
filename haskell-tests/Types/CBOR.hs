@@ -99,6 +99,25 @@ genTaggableMemo =
           CBORMemo <$> genMemo
         ]
 
+-- | Generator for 'TokenAdminRole'.
+genTokenAdminRole :: Gen TokenAdminRole
+genTokenAdminRole =
+    elements
+        [ RoleUpdateAdminRoles,
+          RoleMint,
+          RoleBurn,
+          RoleUpdateAllowList,
+          RoleUpdateDenyList,
+          RolePause,
+          RoleUpdateMetadata
+        ]
+
+genUpdateAdminRolesDetails :: Gen UpdateAdminRolesDetails
+genUpdateAdminRolesDetails = do
+    uardAccount <- genCborAccountAddress
+    uardRoles <- Seq.fromList <$> listOf genTokenAdminRole
+    return UpdateAdminRolesDetails{..}
+
 -- | Generator for 'TokenGovernanceOperation'.
 genTokenOperation :: Gen TokenOperation
 genTokenOperation =
@@ -111,7 +130,10 @@ genTokenOperation =
           TokenAddDenyList <$> genCborAccountAddress,
           TokenRemoveDenyList <$> genCborAccountAddress,
           pure TokenPause,
-          pure TokenUnpause
+          pure TokenUnpause,
+          TokenAssignAdminRoles <$> genUpdateAdminRolesDetails,
+          TokenRevokeAdminRoles <$> genUpdateAdminRolesDetails,
+          TokenUpdateMetadata <$> genTokenMetadataUrlSimple
         ]
 
 -- | Generator for 'TokenGovernanceOperation'.
