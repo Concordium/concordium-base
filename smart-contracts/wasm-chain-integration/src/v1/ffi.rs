@@ -15,8 +15,10 @@
 //! between foreign code and Rust is mainly byte-arrays. The main reason for
 //! this is that this is cheap and relatively easy to do.
 
-use std::sync::LazyLock;
-use super::trie::{state_dump, EmptyCollector, LoadCallback, Loadable, MutableState, PersistentState, Reference, SizeCollector, StoreCallback};
+use super::trie::{
+    state_dump, EmptyCollector, LoadCallback, Loadable, MutableState, PersistentState, Reference,
+    SizeCollector, StoreCallback,
+};
 use crate::v1::*;
 use concordium_contracts_common::OwnedReceiveName;
 use concordium_wasm::{
@@ -26,13 +28,16 @@ use concordium_wasm::{
     validate::ValidationConfig,
     CostConfigurationV0, CostConfigurationV1,
 };
+use std::sync::LazyLock;
 
 use crate::v0::ffi::slice_from_c_bytes;
 
+use crate::v1::trie::state_dump::shared;
+use crate::v1::trie::state_dump::shared::{
+    NodeId, OutputFilesPaths, StateDumpBuilder, StateDumpContext,
+};
 use libc::size_t;
 use sha2::Digest;
-use crate::v1::trie::state_dump::shared;
-use crate::v1::trie::state_dump::shared::{Context, NodeId, StateDumpContext};
 
 /// Creating or updating a contract instance requires access to code to execute.
 /// This code is passed across the FFI boundary as serialized bytes, which are
@@ -960,7 +965,10 @@ extern "C" fn ffi_dump_persistent_state(
     state_data_file_path: *const u8,
     state_data_file_path_len: size_t,
 ) {
-    assert!(!persistent_state.is_null(), "block_state is a null pointer.");
+    assert!(
+        !persistent_state.is_null(),
+        "block_state is a null pointer."
+    );
     assert!(
         !state_graph_file_path.is_null(),
         "state_graph_file_path is a null pointer."
@@ -976,21 +984,23 @@ extern "C" fn ffi_dump_persistent_state(
         unsafe { std::slice::from_raw_parts(state_graph_file_path, state_graph_file_path_len) }
             .to_vec(),
     )
-        .unwrap();
+    .unwrap();
     let state_data_file_path = String::from_utf8(
         unsafe { std::slice::from_raw_parts(state_data_file_path, state_data_file_path_len) }
             .to_vec(),
     )
-        .unwrap();
+    .unwrap();
 
-    let files = shared::open_output_files(&state_graph_file_path, &state_data_file_path);
-    let mut context = Context {
-        files,
-        context: STATE_DUMP_CONTEXT.clone(),
+    let output_paths = OutputFilesPaths {
+        state_graph_file_path,
+        state_data_file_path,
     };
 
-    state_dump::dump_persistent_state(&mut context, load_callback, NodeId(parent_node), tree);
+    let mut builder = StateDumpBuilder::new(STATE_DUMP_CONTEXT.clone(), output_paths);
+
+    state_dump::dump_persistent_state(&mut builder, load_callback, NodeId(parent_node), tree);
 }
 
 /// Static context. Ideally we create a context per block state dump.
-static STATE_DUMP_CONTEXT: LazyLock<StateDumpContext> = LazyLock::new(|| StateDumpContext::new(NodeId(1_000_000)));
+static STATE_DUMP_CONTEXT: LazyLock<StateDumpContext> =
+    LazyLock::new(|| StateDumpContext::new(NodeId(1_000_000)));

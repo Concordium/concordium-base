@@ -1,10 +1,10 @@
-use crate::v1::trie::state_dump::shared::{Context, NodeId};
+use crate::v1::trie::state_dump::shared::{ NodeId, StateDumpBuilder};
 use crate::v1::trie::{LoadCallback, PersistentState};
 
 pub mod shared;
 
 pub(crate) fn dump_persistent_state(
-    context: &mut Context,
+    builder: &mut StateDumpBuilder,
     load_callback: LoadCallback,
     parent_node: NodeId,
     tree: &PersistentState,
