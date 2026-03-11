@@ -1233,6 +1233,12 @@ data TokenEvent
       Pause
     | -- | The execution of balance-changing operations was unpaused.
       Unpause
+    | -- | The token metadata reference was updated.
+      UpdateMetadataEvent !TokenMetadataUrl
+    | -- | Admin roles were assigned to an account.
+      AssignAdminRolesEvent !UpdateAdminRolesDetails
+    | -- | Admin roles were revoked from an account.
+      RevokeAdminRolesEvent !UpdateAdminRolesDetails
     deriving (Eq, Show)
 
 -- | CBOR-encode the details for the list update events in the form:
@@ -1282,6 +1288,27 @@ encodeTokenEvent = \case
             { eteType = TokenEventType "unpause",
               eteDetails = emptyEventDetails
             }
+    UpdateMetadataEvent meta ->
+        EncodedTokenEvent
+            { eteType = TokenEventType "updateMetadata",
+              eteDetails =
+                TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
+                    encodeTokenMetadataUrl meta
+            }
+    AssignAdminRolesEvent details ->
+        EncodedTokenEvent
+            { eteType = TokenEventType "assignAdminRoles",
+              eteDetails =
+                TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
+                    encodeUpdateAdminRolesDetails details
+            }
+    RevokeAdminRolesEvent details ->
+        EncodedTokenEvent
+            { eteType = TokenEventType "revokeAdminRoles",
+              eteDetails =
+                TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
+                    encodeUpdateAdminRolesDetails details
+            }
 
 -- | Decoder for the event details of the list update events.
 --  This is the "token-list-update-details" type in the CDDL schema.
@@ -1312,11 +1339,16 @@ decodeTokenEvent EncodedTokenEvent{..} = case tokenEventTypeBytes eteType of
     "removeDenyList" -> RemoveDenyListEvent <$> decodeTarget
     "pause" -> Pause <$ decodePauseUnpause
     "unpause" -> Unpause <$ decodePauseUnpause
+    "updateMetadata" -> UpdateMetadataEvent <$> decodeMetadata
+    "assignAdminRoles" -> AssignAdminRolesEvent <$> decodeRoleUpdate
+    "revokeAdminRoles" -> RevokeAdminRolesEvent <$> decodeRoleUpdate
     unknownType -> Left $ "token-event: unsupported event type: " ++ show unknownType
   where
     detailsLBS = LBS.fromStrict $ BSS.fromShort $ tokenEventDetailsBytes eteDetails
     decodeTarget = decodeFromBytes decodeTokenEventTarget "event details" detailsLBS
     decodePauseUnpause = decodeFromBytes decodeEmptyMap "event details" detailsLBS
+    decodeMetadata = decodeFromBytes decodeTokenMetadataUrl "event details" detailsLBS
+    decodeRoleUpdate = decodeFromBytes decodeUpdateAdminRolesDetails "event details" detailsLBS
 
 -- * Reject reasons
 

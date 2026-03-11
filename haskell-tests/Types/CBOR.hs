@@ -200,7 +200,10 @@ genTokenEvent =
           AddDenyListEvent <$> genCborAccountAddress,
           RemoveDenyListEvent <$> genCborAccountAddress,
           pure Pause,
-          pure Unpause
+          pure Unpause,
+          UpdateMetadataEvent <$> genTokenMetadataUrlSimple,
+          AssignAdminRolesEvent <$> genUpdateAdminRolesDetails,
+          RevokeAdminRolesEvent <$> genUpdateAdminRolesDetails
         ]
 
 -- | Generator for 'TokenRejectReason'.
