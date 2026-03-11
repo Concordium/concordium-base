@@ -1,3 +1,4 @@
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -601,15 +602,19 @@ data TokenAdminRole
       RolePause
     | -- | Authority to perform @updateMetadata@.
       RoleUpdateMetadata
-    deriving (Eq, Show)
+    deriving (Eq, Ord, Show)
 
 instance AE.ToJSON TokenAdminRole where
     toJSON = AE.String . tokenAdminRoleToText
 
 instance AE.FromJSON TokenAdminRole where
-    parseJSON = AE.withText "TokenAdminRole" $ \role -> case tokenAdminRoleFromText role of
-        Just r -> return r
-        Nothing -> fail $ "Unsupported role: " ++ show role
+    parseJSON = AE.withText "TokenAdminRole" parseTokenAdminRoleFromText
+
+instance AE.ToJSONKey TokenAdminRole where
+    toJSONKey = AE.toJSONKeyText tokenAdminRoleToText
+
+instance AE.FromJSONKey TokenAdminRole where
+    fromJSONKey = AE.FromJSONKeyTextParser parseTokenAdminRoleFromText
 
 -- | Parse a 'Text' as a 'TokenAdminRole'.
 tokenAdminRoleFromText :: Text -> Maybe TokenAdminRole
@@ -621,6 +626,13 @@ tokenAdminRoleFromText "updateDenyList" = Just RoleUpdateDenyList
 tokenAdminRoleFromText "pause" = Just RolePause
 tokenAdminRoleFromText "updateMetadata" = Just RoleUpdateMetadata
 tokenAdminRoleFromText _ = Nothing
+
+-- | Parse a 'TokenAdminRole' from a 'Text' in a monad that supports 'MonadFail'.
+parseTokenAdminRoleFromText :: (MonadFail m) => Text -> m TokenAdminRole
+{-# INLINE parseTokenAdminRoleFromText #-}
+parseTokenAdminRoleFromText role = case tokenAdminRoleFromText role of
+    Just r -> return r
+    Nothing -> fail $ "Unsupported role: " ++ show role
 
 -- | Encode a 'TokenAdminRole' as 'Text'.
 tokenAdminRoleToText :: TokenAdminRole -> Text
@@ -634,11 +646,7 @@ tokenAdminRoleToText RoleUpdateMetadata = "updateMetadata"
 
 -- | Decode a CBOR-encoded 'TokenAdminRole'.
 decodeTokenAdminRole :: Decoder s TokenAdminRole
-decodeTokenAdminRole = do
-    role <- decodeString
-    case tokenAdminRoleFromText role of
-        Just r -> return r
-        Nothing -> fail $ "Unsupported role: " ++ show role
+decodeTokenAdminRole = decodeString >>= parseTokenAdminRoleFromText
 
 -- | Encode a 'TokenAdminRole' as CBOR.
 encodeTokenAdminRole :: TokenAdminRole -> Encoding
@@ -1821,6 +1829,27 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
 --  be consumed in the parsing.
 tokenModuleStateFromBytes :: LBS.ByteString -> Either String TokenModuleState
 tokenModuleStateFromBytes = decodeFromBytes decodeTokenModuleState "token module state"
+
+-- * Token authorizations
+
+-- | The authorizations structure for a PLT.
+newtype TokenAuthorizations = TokenAuthorizations
+    { taMap :: Map.Map TokenAdminRole (Seq.Seq CborAccountAddress)
+    }
+    deriving newtype (Eq, Show, AE.ToJSON, AE.FromJSON)
+
+encodeTokenAuthorizations :: TokenAuthorizations -> Encoding
+encodeTokenAuthorizations (TokenAuthorizations m) =
+    encodeMapDeterministic $
+        Map.mapKeys (makeMapKeyEncoding . encodeTokenAdminRole) $
+            encodeSequence encodeCborAccountAddress <$> m
+
+decodeTokenAuthorizations :: Decoder s TokenAuthorizations
+decodeTokenAuthorizations = decodeMap decodeVal (Right . TokenAuthorizations) Map.empty
+  where
+    decodeVal key = do
+        role <- tokenAdminRoleFromText key
+        return $ mapValueDecoder key (decodeSequence decodeCborAccountAddress) (at role)
 
 -- * Token account state
 
