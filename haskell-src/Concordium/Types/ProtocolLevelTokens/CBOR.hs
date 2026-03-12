@@ -1833,23 +1833,35 @@ tokenModuleStateFromBytes = decodeFromBytes decodeTokenModuleState "token module
 -- * Token authorizations
 
 -- | The authorizations structure for a PLT.
-newtype TokenAuthorizations = TokenAuthorizations
+newtype TokenAuthorizationsMap = TokenAuthorizationsMap
     { taMap :: Map.Map TokenAdminRole (Seq.Seq CborAccountAddress)
     }
     deriving newtype (Eq, Show, AE.ToJSON, AE.FromJSON)
 
-encodeTokenAuthorizations :: TokenAuthorizations -> Encoding
-encodeTokenAuthorizations (TokenAuthorizations m) =
+-- | Encode a 'TokenAuthorizationsMap' as CBOR.
+encodeTokenAuthorizationsMap :: TokenAuthorizationsMap -> Encoding
+encodeTokenAuthorizationsMap (TokenAuthorizationsMap m) =
     encodeMapDeterministic $
         Map.mapKeys (makeMapKeyEncoding . encodeTokenAdminRole) $
             encodeSequence encodeCborAccountAddress <$> m
 
-decodeTokenAuthorizations :: Decoder s TokenAuthorizations
-decodeTokenAuthorizations = decodeMap decodeVal (Right . TokenAuthorizations) Map.empty
+-- | Decode a CBOR-encoded 'TokenAuthorizationsMap'.
+decodeTokenAuthorizationsMap :: Decoder s TokenAuthorizationsMap
+decodeTokenAuthorizationsMap = decodeMap decodeVal (Right . TokenAuthorizationsMap) Map.empty
   where
     decodeVal key = do
         role <- tokenAdminRoleFromText key
         return $ mapValueDecoder key (decodeSequence decodeCborAccountAddress) (at role)
+
+-- | Parse a 'TokenAuthorizationsMap' form a 'LBS.ByteString'. The entire bytestring must be
+--  consumed by the parsing.
+tokenAuthorizationsMapFromBytes :: LBS.ByteString -> Either String TokenAuthorizationsMap
+tokenAuthorizationsMapFromBytes =
+    decodeFromBytes decodeTokenAuthorizationsMap "token authorizations"
+
+-- | Encode a 'TokenAuthorizationsMap' as a 'BS.ByteString'.
+tokenAuthorizationsMapToBytes :: TokenAuthorizationsMap -> BS.ByteString
+tokenAuthorizationsMapToBytes = encodeToBytes . encodeTokenAuthorizationsMap
 
 -- * Token account state
 
