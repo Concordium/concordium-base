@@ -457,6 +457,56 @@ encTops1 =
                 CBOR.toStrictByteString $
                     encodeTokenUpdateTransaction tops1
 
+-- | Another example 'TokenUpdateTransaction', which tests new operations introduced in P11.
+tops2 :: TokenUpdateTransaction
+tops2 =
+    TokenUpdateTransaction $
+        Seq.fromList
+            [ TokenAssignAdminRoles
+                UpdateAdminRolesDetails
+                    { uardAccount = cborHolder,
+                      uardRoles = Seq.fromList [RoleUpdateAdminRoles, RoleMint, RoleBurn]
+                    },
+              TokenRevokeAdminRoles
+                UpdateAdminRolesDetails
+                    { uardAccount = cborHolder,
+                      uardRoles = Seq.fromList [RoleUpdateAllowList, RoleUpdateDenyList, RolePause, RoleUpdateMetadata]
+                    },
+              TokenUpdateMetadata
+                TokenMetadataUrl
+                    { tmUrl = "https://example.plt",
+                      tmChecksumSha256 = Nothing,
+                      tmAdditional = Map.empty
+                    },
+              TokenUpdateMetadata
+                TokenMetadataUrl
+                    { tmUrl = "https://example2.plt",
+                      tmChecksumSha256 = Just emptyStringHash,
+                      tmAdditional = Map.empty
+                    }
+            ]
+  where
+    cborHolder =
+        CborAccountAddress
+            { chaAccount =
+                AccountAddress $
+                    FBS.pack (replicate 32 1),
+              chaCoinInfo = Just CoinInfoConcordium
+            }
+
+-- | Expected encoding of 'tops2'.
+tops2ExpectedCbor :: BS.ByteString
+tops2ExpectedCbor = BS16.decodeLenient "84a17061737369676e41646d696e526f6c6573a265726f6c6573837075706461746541646d696e526f6c6573646d696e74646275726e676163636f756e74d99d73a201d99d71a1011903970358200101010101010101010101010101010101010101010101010101010101010101a1707265766f6b6541646d696e526f6c6573a265726f6c6573846f757064617465416c6c6f774c6973746e75706461746544656e794c6973746570617573656e7570646174654d65746164617461676163636f756e74d99d73a201d99d71a1011903970358200101010101010101010101010101010101010101010101010101010101010101a16e7570646174654d65746164617461a16375726c7368747470733a2f2f6578616d706c652e706c74a16e7570646174654d65746164617461a26375726c7468747470733a2f2f6578616d706c65322e706c746e636865636b73756d5368613235365820e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+-- | Actual encoding of 'tops2'.
+encTops2 :: EncodedTokenOperations
+encTops2 =
+    EncodedTokenOperations $
+        TokenParameter $
+            BSS.toShort $
+                CBOR.toStrictByteString $
+                    encodeTokenUpdateTransaction tops1
+
 -- | A dummy 'CborAccountAddress' value.
 dummyCborHolder :: CborAccountAddress
 dummyCborHolder =
@@ -531,6 +581,21 @@ testEncodedTokenOperationsJSON = describe "EncodedTokenOperations JSON serializa
                 _ -> assertFailure "Does not encode to JSON object"
             _ -> assertFailure "Does not encode to JSON array"
 
+    it "Serialize/Deserialize roundtrip success (P11 ops)" $
+        assertEqual
+            "Deserialized"
+            (Just encTops2)
+            ( AE.decode $
+                AE.encode
+                    encTops2
+            )
+    it "Serializes to expected JSON object (P11 ops)" $
+        case AE.toJSON encTops2 of
+            AE.Array v -> case V.head v of
+                AE.Object o -> assertBool "Does not contain field amount" $ AE.member "transfer" o
+                _ -> assertFailure "Does not encode to JSON object"
+            _ -> assertFailure "Does not encode to JSON array"
+
     it "Serialize/Deserialize roundtrip where CBOR is not a valid TokenUpdateTransaction" $
         assertEqual
             "Deserialized"
@@ -552,6 +617,16 @@ testTokenOperationsCBOR = describe "EncodedTokenOperations CBOR serialization" $
             "CBOR serialized"
             (tokenUpdateTransactionToBytes tops1)
             tops1ExpectedCbor
+    it "Serialize/Deserialize roundtrip (P11 ops)" $
+        assertEqual
+            "Deserialized"
+            (tokenUpdateTransactionFromBytes $ B8.fromStrict $ tokenUpdateTransactionToBytes tops2)
+            (Right tops2)
+    it "Serializes to expected CBOR bytestring (P11 ops)" $
+        assertEqual
+            "CBOR serialized"
+            (tokenUpdateTransactionToBytes tops2)
+            tops2ExpectedCbor
 
 testEncodedTokenEvents :: Spec
 testEncodedTokenEvents = describe "TokenEvents CBOR serialization" $ do
