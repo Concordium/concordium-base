@@ -1,3 +1,4 @@
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -601,15 +602,19 @@ data TokenAdminRole
       RolePause
     | -- | Authority to perform @updateMetadata@.
       RoleUpdateMetadata
-    deriving (Eq, Show)
+    deriving (Eq, Ord, Show)
 
 instance AE.ToJSON TokenAdminRole where
     toJSON = AE.String . tokenAdminRoleToText
 
 instance AE.FromJSON TokenAdminRole where
-    parseJSON = AE.withText "TokenAdminRole" $ \role -> case tokenAdminRoleFromText role of
-        Just r -> return r
-        Nothing -> fail $ "Unsupported role: " ++ show role
+    parseJSON = AE.withText "TokenAdminRole" parseTokenAdminRoleFromText
+
+instance AE.ToJSONKey TokenAdminRole where
+    toJSONKey = AE.toJSONKeyText tokenAdminRoleToText
+
+instance AE.FromJSONKey TokenAdminRole where
+    fromJSONKey = AE.FromJSONKeyTextParser parseTokenAdminRoleFromText
 
 -- | Parse a 'Text' as a 'TokenAdminRole'.
 tokenAdminRoleFromText :: Text -> Maybe TokenAdminRole
@@ -621,6 +626,13 @@ tokenAdminRoleFromText "updateDenyList" = Just RoleUpdateDenyList
 tokenAdminRoleFromText "pause" = Just RolePause
 tokenAdminRoleFromText "updateMetadata" = Just RoleUpdateMetadata
 tokenAdminRoleFromText _ = Nothing
+
+-- | Parse a 'TokenAdminRole' from a 'Text' in a monad that supports 'MonadFail'.
+parseTokenAdminRoleFromText :: (MonadFail m) => Text -> m TokenAdminRole
+{-# INLINE parseTokenAdminRoleFromText #-}
+parseTokenAdminRoleFromText role = case tokenAdminRoleFromText role of
+    Just r -> return r
+    Nothing -> fail $ "Unsupported role: " ++ show role
 
 -- | Encode a 'TokenAdminRole' as 'Text'.
 tokenAdminRoleToText :: TokenAdminRole -> Text
@@ -634,11 +646,7 @@ tokenAdminRoleToText RoleUpdateMetadata = "updateMetadata"
 
 -- | Decode a CBOR-encoded 'TokenAdminRole'.
 decodeTokenAdminRole :: Decoder s TokenAdminRole
-decodeTokenAdminRole = do
-    role <- decodeString
-    case tokenAdminRoleFromText role of
-        Just r -> return r
-        Nothing -> fail $ "Unsupported role: " ++ show role
+decodeTokenAdminRole = decodeString >>= parseTokenAdminRoleFromText
 
 -- | Encode a 'TokenAdminRole' as CBOR.
 encodeTokenAdminRole :: TokenAdminRole -> Encoding
@@ -1233,6 +1241,12 @@ data TokenEvent
       Pause
     | -- | The execution of balance-changing operations was unpaused.
       Unpause
+    | -- | The token metadata reference was updated.
+      UpdateMetadataEvent !TokenMetadataUrl
+    | -- | Admin roles were assigned to an account.
+      AssignAdminRolesEvent !UpdateAdminRolesDetails
+    | -- | Admin roles were revoked from an account.
+      RevokeAdminRolesEvent !UpdateAdminRolesDetails
     deriving (Eq, Show)
 
 -- | CBOR-encode the details for the list update events in the form:
@@ -1282,6 +1296,27 @@ encodeTokenEvent = \case
             { eteType = TokenEventType "unpause",
               eteDetails = emptyEventDetails
             }
+    UpdateMetadataEvent meta ->
+        EncodedTokenEvent
+            { eteType = TokenEventType "updateMetadata",
+              eteDetails =
+                TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
+                    encodeTokenMetadataUrl meta
+            }
+    AssignAdminRolesEvent details ->
+        EncodedTokenEvent
+            { eteType = TokenEventType "assignAdminRoles",
+              eteDetails =
+                TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
+                    encodeUpdateAdminRolesDetails details
+            }
+    RevokeAdminRolesEvent details ->
+        EncodedTokenEvent
+            { eteType = TokenEventType "revokeAdminRoles",
+              eteDetails =
+                TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
+                    encodeUpdateAdminRolesDetails details
+            }
 
 -- | Decoder for the event details of the list update events.
 --  This is the "token-list-update-details" type in the CDDL schema.
@@ -1312,11 +1347,16 @@ decodeTokenEvent EncodedTokenEvent{..} = case tokenEventTypeBytes eteType of
     "removeDenyList" -> RemoveDenyListEvent <$> decodeTarget
     "pause" -> Pause <$ decodePauseUnpause
     "unpause" -> Unpause <$ decodePauseUnpause
+    "updateMetadata" -> UpdateMetadataEvent <$> decodeMetadata
+    "assignAdminRoles" -> AssignAdminRolesEvent <$> decodeRoleUpdate
+    "revokeAdminRoles" -> RevokeAdminRolesEvent <$> decodeRoleUpdate
     unknownType -> Left $ "token-event: unsupported event type: " ++ show unknownType
   where
     detailsLBS = LBS.fromStrict $ BSS.fromShort $ tokenEventDetailsBytes eteDetails
     decodeTarget = decodeFromBytes decodeTokenEventTarget "event details" detailsLBS
     decodePauseUnpause = decodeFromBytes decodeEmptyMap "event details" detailsLBS
+    decodeMetadata = decodeFromBytes decodeTokenMetadataUrl "event details" detailsLBS
+    decodeRoleUpdate = decodeFromBytes decodeUpdateAdminRolesDetails "event details" detailsLBS
 
 -- * Reject reasons
 
@@ -1789,6 +1829,39 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
 --  be consumed in the parsing.
 tokenModuleStateFromBytes :: LBS.ByteString -> Either String TokenModuleState
 tokenModuleStateFromBytes = decodeFromBytes decodeTokenModuleState "token module state"
+
+-- * Token authorizations
+
+-- | The authorizations structure for a PLT.
+newtype TokenAuthorizationsMap = TokenAuthorizationsMap
+    { taMap :: Map.Map TokenAdminRole (Seq.Seq CborAccountAddress)
+    }
+    deriving newtype (Eq, Show, AE.ToJSON, AE.FromJSON)
+
+-- | Encode a 'TokenAuthorizationsMap' as CBOR.
+encodeTokenAuthorizationsMap :: TokenAuthorizationsMap -> Encoding
+encodeTokenAuthorizationsMap (TokenAuthorizationsMap m) =
+    encodeMapDeterministic $
+        Map.mapKeys (makeMapKeyEncoding . encodeTokenAdminRole) $
+            encodeSequence encodeCborAccountAddress <$> m
+
+-- | Decode a CBOR-encoded 'TokenAuthorizationsMap'.
+decodeTokenAuthorizationsMap :: Decoder s TokenAuthorizationsMap
+decodeTokenAuthorizationsMap = decodeMap decodeVal (Right . TokenAuthorizationsMap) Map.empty
+  where
+    decodeVal key = do
+        role <- tokenAdminRoleFromText key
+        return $ mapValueDecoder key (decodeSequence decodeCborAccountAddress) (at role)
+
+-- | Parse a 'TokenAuthorizationsMap' form a 'LBS.ByteString'. The entire bytestring must be
+--  consumed by the parsing.
+tokenAuthorizationsMapFromBytes :: LBS.ByteString -> Either String TokenAuthorizationsMap
+tokenAuthorizationsMapFromBytes =
+    decodeFromBytes decodeTokenAuthorizationsMap "token authorizations"
+
+-- | Encode a 'TokenAuthorizationsMap' as a 'BS.ByteString'.
+tokenAuthorizationsMapToBytes :: TokenAuthorizationsMap -> BS.ByteString
+tokenAuthorizationsMapToBytes = encodeToBytes . encodeTokenAuthorizationsMap
 
 -- * Token account state
 
