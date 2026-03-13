@@ -680,12 +680,12 @@ impl<R: ReadBytesExt, A: Deserial> Get<A> for R {
 /// `sink.put(value)` in contrast to `value.serial(sink)`. It is less important
 /// than `Get`.
 pub trait Put<A> {
-    fn put(&mut self, _v: &A);
+    fn put(&mut self, _v: A);
 }
 
 impl<R: Buffer, A: Serial> Put<A> for R {
     #[inline]
-    fn put(&mut self, v: &A) {
+    fn put(&mut self, v: A) {
         v.serial(self)
     }
 }
