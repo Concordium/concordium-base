@@ -14,6 +14,7 @@ use crate::{
     },
 };
 
+#[allow(dead_code)]
 struct DlogEqual<C: Curve> {
     dlog1: Dlog<C>,
     dlog2: Dlog<C>,
