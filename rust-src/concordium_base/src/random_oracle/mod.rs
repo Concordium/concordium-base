@@ -203,9 +203,7 @@
 
 use crate::{common::*, curve_arithmetic::Curve};
 use sha3::{Digest, Sha3_256};
-use std::convert::Infallible;
-use std::fmt::Arguments;
-use std::io::{IoSlice, Write};
+use std::io::Write;
 
 /// "Legacy" [transcript protocol](TranscriptProtocol) implementation. See [`random_oracle`](self)
 /// and [`TranscriptProtocol`] for how to use it.
@@ -259,20 +257,7 @@ impl Write for RandomOracle {
 
 /// This implementation allows the use of a random oracle without intermediate
 /// allocations of byte buffers.
-impl Buffer for RandomOracle {
-    type Result = sha3::digest::Output<Sha3_256>;
-
-    #[inline(always)]
-    fn start() -> Self {
-        #[allow(deprecated)]
-        RandomOracle::empty()
-    }
-
-    // Compute the result in the given state, consuming the state.
-    fn result(self) -> Self::Result {
-        self.0.finalize()
-    }
-}
+impl Buffer for RandomOracle {}
 
 impl Eq for RandomOracle {}
 
@@ -436,13 +421,13 @@ impl RandomOracle {
     /// the output of the random oracle as a big-endian integer and reduces is
     /// mod field order.
     pub fn result_to_scalar<C: Curve>(self) -> C::Scalar {
-        C::scalar_from_bytes(self.result())
+        C::scalar_from_bytes(self.0.finalize())
     }
 
     /// Get a challenge from the current state, consuming the state.
     pub fn get_challenge(self) -> Challenge {
         Challenge {
-            challenge: self.result().into(),
+            challenge: self.0.finalize().into(),
         }
     }
 
@@ -454,53 +439,20 @@ impl RandomOracle {
     }
 }
 
-/// Implements [`Buffer`] by wrapping a type implementing [`Write`]
-struct BufferAdapter<T>(T);
-
-impl<T: Write> Write for BufferAdapter<T> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0.write(buf)
-    }
-
-    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> std::io::Result<usize> {
-        self.0.write_vectored(bufs)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.0.flush()
-    }
-
-    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
-        self.0.write_all(buf)
-    }
-
-    fn write_fmt(&mut self, args: Arguments<'_>) -> std::io::Result<()> {
-        self.0.write_fmt(args)
-    }
-}
-
-impl<T: Write> Buffer for BufferAdapter<T> {
-    type Result = Infallible;
-
-    fn start() -> Self {
-        unimplemented!()
-    }
-
-    fn result(self) -> Self::Result {
-        unimplemented!()
-    }
-}
+/// Writing to [`Sha3_256`] will never fail, hence we can
+/// let it implement [`Buffer`].
+impl Buffer for Sha3_256 {}
 
 impl TranscriptProtocol for TranscriptProtocolV1 {
     fn append_label(&mut self, label: impl AsRef<[u8]>) {
         let label = label.as_ref();
-        BufferAdapter(&mut self.0).put(&(label.len() as u64));
+        self.0.put(&(label.len() as u64));
         self.0.update(label)
     }
 
     fn append_message(&mut self, label: impl AsRef<[u8]>, message: &impl Serial) {
         self.append_label(label);
-        BufferAdapter(&mut self.0).put(message)
+        self.0.put(message)
     }
 
     fn append_messages<'a, T: Serial + 'a, B: IntoIterator<Item = &'a T>>(
@@ -512,9 +464,9 @@ impl TranscriptProtocol for TranscriptProtocolV1 {
     {
         let messages = messages.into_iter();
         self.append_label(label);
-        BufferAdapter(&mut self.0).put(&(messages.len() as u64));
+        self.0.put(&(messages.len() as u64));
         for message in messages {
-            BufferAdapter(&mut self.0).put(message);
+            self.0.put(message);
         }
     }
 
@@ -532,7 +484,7 @@ impl TranscriptProtocol for TranscriptProtocolV1 {
     {
         let messages = messages.into_iter();
         self.append_label(label);
-        BufferAdapter(&mut self.0).put(&(messages.len() as u64));
+        self.0.put(&(messages.len() as u64));
         for message in messages {
             append_item(self, message);
         }
@@ -588,9 +540,9 @@ mod tests {
             let mut s2 = RandomOracle::empty();
             #[allow(deprecated)]
             s2.extend_from(b"", v1.iter());
-            let res1 = s1.result();
+            let res1 = s1.extract_raw_challenge();
             let ref_res1: &[u8] = res1.as_ref();
-            let res2 = s2.result();
+            let res2 = s2.extract_raw_challenge();
             let ref_res2: &[u8] = res2.as_ref();
             assert_eq!(ref_res1, ref_res2);
         }
@@ -608,10 +560,10 @@ mod tests {
                 *v = csprng.gen::<u8>();
                 s1.put(v);
             }
-            let res1 = s1.result();
+            let res1 = s1.extract_raw_challenge();
             let ref_res1: &[u8] = res1.as_ref();
             s2.add_bytes(&v1);
-            let res2 = s2.result();
+            let res2 = s2.extract_raw_challenge();
             let ref_res2: &[u8] = res2.as_ref();
             assert_eq!(ref_res1, ref_res2);
         }

@@ -5,7 +5,7 @@ use super::{
     SerdeSerialize, Serial,
 };
 use crate::common::Serialize;
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use concordium_contracts_common::{
     self as concordium_std, ContractAddress, ContractName, OwnedContractName, OwnedParameter,
     OwnedReceiveName, Parameter, ReceiveName,
