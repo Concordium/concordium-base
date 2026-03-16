@@ -16,13 +16,11 @@ use crate::{
 use itertools::izip;
 use std::rc::Rc;
 
-#[allow(dead_code)]
 pub struct DlogAndAggregateDlogsEqual<C: Curve> {
     pub dlog: Dlog<C>,
     pub aggregate_dlogs: Vec<AggregateDlog<C>>,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 pub struct Response<C: Curve> {
     #[size_length = 4]
