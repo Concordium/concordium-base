@@ -1,8 +1,4 @@
-use std::collections::HashMap;
-
 use concordium_base_derive::{CborDeserialize, CborSerialize};
-
-use crate::common::cbor::value;
 
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize, Default)]
 ///  The account state represents account-specific information that is
@@ -23,10 +19,6 @@ pub struct TokenModuleAccountState {
     /// Whether the account is on the deny list.
     /// If `None`, the token does not support a deny list.
     pub deny_list: Option<bool>,
-    /// Additional state information may be provided under further text keys,
-    /// the meaning of which are not defined in the present specification.
-    #[cbor(other)]
-    pub additional: HashMap<String, value::Value>,
 }
 
 #[cfg(test)]
@@ -39,7 +31,6 @@ mod test {
         let mut token_module_account_state = TokenModuleAccountState {
             allow_list: Some(true),
             deny_list: None,
-            additional: Default::default(),
         };
 
         let cbor = cbor::cbor_encode(&token_module_account_state);
@@ -56,18 +47,6 @@ mod test {
         token_module_account_state.deny_list = Some(false);
         let cbor = cbor::cbor_encode(&token_module_account_state);
         assert_eq!(hex::encode(&cbor), "a16864656e794c697374f4");
-        let decoded: TokenModuleAccountState = cbor::cbor_decode(cbor).unwrap();
-        assert_eq!(token_module_account_state, decoded);
-
-        token_module_account_state.additional.insert(
-            "customKey".to_string(),
-            value::Value::Text("customValue".to_string()),
-        );
-        let cbor = cbor::cbor_encode(&token_module_account_state);
-        assert_eq!(
-            hex::encode(&cbor),
-            "a26864656e794c697374f469637573746f6d4b65796b637573746f6d56616c7565"
-        );
         let decoded: TokenModuleAccountState = cbor::cbor_decode(cbor).unwrap();
         assert_eq!(token_module_account_state, decoded);
     }

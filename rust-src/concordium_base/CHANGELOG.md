@@ -1,13 +1,14 @@
 ## Unreleased
+
 - Implemented definition for `UpdateMetadata` token operation and token event which allows to update the metadata of a protocol level token.
-- Implemented definition for `TokenAdminRole` which describes the list of supported roles. 
+- Implemented definition for `TokenAdminRole` which describes the list of supported roles.
   Implemented `assignAdminRoles` and `revokeAdminRoles` token operations for RBAC too.
 - Implemented `common::from_bytes_complete` that fails if all bytes are not consumed during deserialization.
 - `cbor::cbor_encode` is now infallible and returns `Vec<u8>` instead of `CborSerializationResult<Vec<u8>>`
-- `&[T]` no longer implements `CborSerialize` in order to avoid ambiguity with `CborSerialize` implementation for `[u8]`. 
+- `&[T]` no longer implements `CborSerialize` in order to avoid ambiguity with `CborSerialize` implementation for `[u8]`.
   To serialize a slice as a CBOR array, wrap it in `ArraySlice`.
   `[u8]` still implements `CborSerialize` and serializes as a CBOR bytestring.
-- Removed the module `upward`. This will be added to Rust SDK crate instead. 
+- Removed the module `upward`. This will be added to Rust SDK crate instead.
 - Changes to `protocol_level_tokens` module:
   - Removed the usage of `Upward` in `TokenOperations` type. To CBOR decode and allow unknown variants,
     the new function `TokenOperationsPayload::decode_operations_maybe_known` can be used instead.
@@ -30,6 +31,8 @@
   - Implemented checks in `serde::Deserialize` implementation on `TokenId` and `TokenModuleCborTypeDiscriminator` that the internal type
     invariants are fulfilled.
   - Implemented limit on pre-allocation in `concordium_base::common::Deserial` implementation on `RawCbor`.
+  - The field `additional` containing dynamic CBOR model has been removed from `TokenModuleState`, `TokenModuleAccountState` and `TokenModuleInitializationParameters`.
+    The field could not contain any data.
 
 - Introduce protocol version 11 variant `ProtocolVersion::P11`.
 - The flag `serde_deprecated` now guards `serde::Serialize` and `serde::Deserialize` implemetations on the following types. The implementations will eventually be removed.

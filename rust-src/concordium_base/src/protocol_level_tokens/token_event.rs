@@ -500,7 +500,6 @@ mod test {
         let event = TokenPauseEventDetails {};
         let cbor = cbor::cbor_encode(&event);
         assert_eq!(hex::encode(&cbor), "a0");
-
         let event_decoded: TokenPauseEventDetails = cbor::cbor_decode(cbor).unwrap();
         assert_eq!(event_decoded, event);
     }

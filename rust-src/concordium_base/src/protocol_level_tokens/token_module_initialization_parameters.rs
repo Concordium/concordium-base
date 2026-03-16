@@ -1,7 +1,6 @@
 use super::{MetadataUrl, TokenAmount};
-use crate::{common::cbor::value, protocol_level_tokens::token_holder::CborHolderAccount};
+use crate::protocol_level_tokens::token_holder::CborHolderAccount;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
-use std::collections::HashMap;
 
 /// These parameters are passed to the token module to initialize the token.
 /// The token initialization update will also include the ticker symbol,
@@ -25,9 +24,6 @@ pub struct TokenModuleInitializationParameters {
     pub mintable: Option<bool>,
     /// Whether the token is burnable.
     pub burnable: Option<bool>,
-    /// Additional fields.
-    #[cbor(other)]
-    pub additional: HashMap<String, value::Value>,
 }
 
 #[cfg(test)]
@@ -60,7 +56,6 @@ mod test {
             initial_supply: Some(TokenAmount::from_raw(10000000, 8)),
             mintable: Some(true),
             burnable: Some(true),
-            additional: Default::default(),
         };
 
         let cbor = cbor::cbor_encode(&token_module_initialization_parameters);
