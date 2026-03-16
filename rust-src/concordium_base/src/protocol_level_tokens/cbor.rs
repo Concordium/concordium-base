@@ -1,4 +1,5 @@
 use crate::common;
+use crate::common::Get;
 
 /// CBOR encoded byte string.
 ///
@@ -60,21 +61,40 @@ impl From<RawCbor> for String {
     }
 }
 
+/// Serial implementation matching the serialization of `TokenParameter`
+/// in the Haskell module `Concordium.Types`.
 impl common::Serial for RawCbor {
     fn serial<B: common::Buffer>(&self, out: &mut B) {
-        u32::try_from(self.bytes.len())
-            .expect("Invariant violation for byte length of RawCbor")
-            .serial(out);
-        out.write_all(&self.bytes)
-            .expect("Writing RawCbor bytes to buffer should not fail");
+        let len = u32::try_from(self.bytes.len())
+            .expect("Invariant violation for byte length of RawCbor");
+        len.serial(out);
+        common::serial_vector_no_length(&self.bytes, out);
     }
 }
 
+/// Deserial implementation matching the serialization of `TokenParameter`
+/// in the Haskell module `Concordium.Types`.
 impl common::Deserial for RawCbor {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> common::ParseResult<Self> {
-        let len = source.read_u32::<byteorder::BE>()?;
-        let mut buf = vec![0u8; len as usize];
-        source.read_exact(&mut buf)?;
-        Ok(buf.into())
+        let len: u32 = source.get()?;
+        let bytes = common::deserial_vector_no_length(source, len as usize)?;
+        Ok(Self { bytes })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    /// Test binary serialization of [`RawCbor`]
+    #[test]
+    fn test_raw_cbor_serialize() {
+        let raw_cbor = RawCbor::from(vec![1, 2, 3, 4]);
+
+        let bytes = common::to_bytes(&raw_cbor);
+        assert_eq!(hex::encode(&bytes), "0000000401020304");
+
+        let deserialized: RawCbor = common::from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(deserialized, raw_cbor);
     }
 }

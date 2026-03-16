@@ -1,82 +1,73 @@
-use super::{cbor::RawCbor, CborHolderAccount, TokenAmount, TokenId};
-use crate::common::upward::{CborUpward, Upward};
-use crate::{
-    common::cbor::{self, CborSerializationResult},
-    transactions::Memo,
-};
+use super::{CborHolderAccount, RawCbor, TokenAmount};
+use crate::common;
+use crate::common::cbor::CborSerializationResult;
+use crate::common::{cbor, Buffer, Deserial, Get, ParseResult, SerdeDeserialize, Serial};
+use crate::transactions::Memo;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
+use serde::de::Error;
+use serde::Deserializer;
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
-/// An event produced from the effect of a token transaction.
-#[derive(Debug, Clone)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
-pub struct TokenEvent {
-    /// The unique symbol of the token, which produced this event.
-    pub token_id: TokenId,
-    /// The type of the event.
-    pub event: TokenEventDetails,
+/// Token module event type
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum TokenModuleEventType {
+    /// An account was added to the allow list of a protocol level token ([`AddAllowListEvent`])
+    AddAllowList,
+    /// An account was removed from the allow list of a protocol level token ([`RemoveAllowListEvent`])
+    RemoveAllowList,
+    /// An account was added to the deny list of a protocol level token ([`AddDenyListEvent`])
+    AddDenyList,
+    /// An account was removed from the deny list of a protocol level token ([`RemoveDenyListEvent`])
+    RemoveDenyList,
+    /// Execution of certain operations on a protocol level token was
+    /// paused ([`PauseEvent`])
+    Pause,
+    /// Execution of certain operations on a protocol level token was
+    /// unpaused ([`UnpauseEvent`])
+    Unpause,
 }
 
-/// The type of the token event.
-#[derive(Debug, Clone)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
-pub enum TokenEventDetails {
-    /// An event emitted by the token module.
-    Module(TokenModuleEvent),
-    /// An event emitted when a transfer of tokens is performed.
-    Transfer(TokenTransferEvent),
-    /// An event emitted when the token supply is updated by minting tokens to a
-    /// token holder.
-    Mint(TokenSupplyUpdateEvent),
-    /// An event emitted when the token supply is updated by burning tokens from
-    /// the balance of a token holder.
-    Burn(TokenSupplyUpdateEvent),
-}
+/// Unknown token module event
+#[derive(Debug, thiserror::Error)]
+#[error("Unknown token module event type: {0}")]
+pub struct UnknownTokenModuleEventTypeError(String);
 
-/// Event produced from the effect of a token transaction.
-#[derive(Debug, Clone)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
-pub struct TokenModuleEvent {
-    /// The type of event produced.
-    #[cfg_attr(feature = "serde_deprecated", serde(rename = "type"))]
-    pub event_type: TokenModuleCborTypeDiscriminator,
-    /// The details of the event produced, in the raw byte encoded form.
-    pub details: RawCbor,
-}
+impl TokenModuleEventType {
+    /// String identifier for the token module event
+    const fn as_str(&self) -> &'static str {
+        match self {
+            TokenModuleEventType::AddAllowList => "addAllowList",
+            TokenModuleEventType::RemoveAllowList => "removeAllowList",
+            TokenModuleEventType::AddDenyList => "addDenyList",
+            TokenModuleEventType::RemoveDenyList => "removeDenyList",
+            TokenModuleEventType::Pause => "pause",
+            TokenModuleEventType::Unpause => "unpause",
+        }
+    }
 
-impl TokenModuleEvent {
-    /// Decode token module event from CBOR
-    pub fn decode_token_module_event(
-        &self,
-    ) -> CborSerializationResult<CborUpward<TokenModuleEventType>> {
-        use TokenModuleEventType::*;
+    /// Convert to the "dynamic" representation of the token module event
+    pub fn to_type_discriminator(&self) -> TokenModuleCborTypeDiscriminator {
+        TokenModuleCborTypeDiscriminator::from_str(self.as_str()).expect("static length")
+    }
 
-        Ok(match self.event_type.as_ref() {
-            "addAllowList" => {
-                Upward::Known(AddAllowList(cbor::cbor_decode(self.details.as_ref())?))
+    /// Convert from "dynamic" representation of the reject reason type to static
+    pub fn try_from_type_discriminator(
+        type_discriminator: &TokenModuleCborTypeDiscriminator,
+    ) -> Result<Self, UnknownTokenModuleEventTypeError> {
+        Ok(match type_discriminator.as_ref() {
+            "addAllowList" => TokenModuleEventType::AddAllowList,
+            "removeAllowList" => TokenModuleEventType::RemoveAllowList,
+            "addDenyList" => TokenModuleEventType::AddDenyList,
+            "removeDenyList" => TokenModuleEventType::RemoveDenyList,
+            "pause" => TokenModuleEventType::Pause,
+            "unpause" => TokenModuleEventType::Unpause,
+            _ => {
+                return Err(UnknownTokenModuleEventTypeError(
+                    type_discriminator.to_string(),
+                ))
             }
-            "removeAllowList" => {
-                Upward::Known(RemoveAllowList(cbor::cbor_decode(self.details.as_ref())?))
-            }
-            "addDenyList" => Upward::Known(AddDenyList(cbor::cbor_decode(self.details.as_ref())?)),
-            "removeDenyList" => {
-                Upward::Known(RemoveDenyList(cbor::cbor_decode(self.details.as_ref())?))
-            }
-            "pause" => Upward::Known(Pause(cbor::cbor_decode(self.details.as_ref())?)),
-            "unpause" => Upward::Known(Unpause(cbor::cbor_decode(self.details.as_ref())?)),
-            _ => Upward::Unknown(cbor::cbor_decode(self.details.as_ref())?),
         })
     }
 }
@@ -88,22 +79,96 @@ impl TokenModuleEvent {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
-pub enum TokenModuleEventType {
+pub enum TokenModuleEvent {
     /// An account was added to the allow list of a protocol level token
-    AddAllowList(TokenListUpdateEventDetails),
+    AddAllowList(AddAllowListEvent),
     /// An account was removed from the allow list of a protocol level token
-    RemoveAllowList(TokenListUpdateEventDetails),
+    RemoveAllowList(RemoveAllowListEvent),
     /// An account was added to the deny list of a protocol level token
-    AddDenyList(TokenListUpdateEventDetails),
+    AddDenyList(AddDenyListEvent),
     /// An account was removed from the deny list of a protocol level token
-    RemoveDenyList(TokenListUpdateEventDetails),
+    RemoveDenyList(RemoveDenyListEvent),
     /// Execution of certain operations on a protocol level token was
     /// paused
-    Pause(TokenPauseEventDetails),
+    Pause(PauseEvent),
     /// Execution of certain operations on a protocol level token was
     /// unpaused
-    Unpause(TokenPauseEventDetails),
+    Unpause(UnpauseEvent),
 }
+
+impl TokenModuleEvent {
+    /// Token module event type
+    pub fn event_type(&self) -> TokenModuleEventType {
+        match self {
+            TokenModuleEvent::AddAllowList(_) => TokenModuleEventType::AddAllowList,
+            TokenModuleEvent::RemoveAllowList(_) => TokenModuleEventType::RemoveAllowList,
+            TokenModuleEvent::AddDenyList(_) => TokenModuleEventType::AddDenyList,
+            TokenModuleEvent::RemoveDenyList(_) => TokenModuleEventType::RemoveDenyList,
+            TokenModuleEvent::Pause(_) => TokenModuleEventType::Pause,
+            TokenModuleEvent::Unpause(_) => TokenModuleEventType::Unpause,
+        }
+    }
+
+    /// Encode event as CBOR. Returns the event type and its CBOR encoding.
+    pub fn encode_event(&self) -> (TokenModuleEventType, RawCbor) {
+        match self {
+            TokenModuleEvent::AddAllowList(event) => (
+                TokenModuleEventType::AddAllowList,
+                RawCbor::from(cbor::cbor_encode(event)),
+            ),
+            TokenModuleEvent::RemoveAllowList(event) => (
+                TokenModuleEventType::RemoveAllowList,
+                RawCbor::from(cbor::cbor_encode(event)),
+            ),
+            TokenModuleEvent::AddDenyList(event) => (
+                TokenModuleEventType::AddDenyList,
+                RawCbor::from(cbor::cbor_encode(event)),
+            ),
+            TokenModuleEvent::RemoveDenyList(event) => (
+                TokenModuleEventType::RemoveDenyList,
+                RawCbor::from(cbor::cbor_encode(event)),
+            ),
+            TokenModuleEvent::Pause(event) => (
+                TokenModuleEventType::Pause,
+                RawCbor::from(cbor::cbor_encode(event)),
+            ),
+            TokenModuleEvent::Unpause(event) => (
+                TokenModuleEventType::Unpause,
+                RawCbor::from(cbor::cbor_encode(event)),
+            ),
+        }
+    }
+
+    /// Decode event from CBOR encoding assuming type given by `event_type`.
+    pub fn decode_event(
+        event_type: TokenModuleEventType,
+        cbor: &RawCbor,
+    ) -> CborSerializationResult<Self> {
+        Ok(match event_type {
+            TokenModuleEventType::AddAllowList => {
+                TokenModuleEvent::AddAllowList(cbor::cbor_decode(cbor)?)
+            }
+            TokenModuleEventType::RemoveAllowList => {
+                TokenModuleEvent::RemoveAllowList(cbor::cbor_decode(cbor)?)
+            }
+            TokenModuleEventType::AddDenyList => {
+                TokenModuleEvent::AddDenyList(cbor::cbor_decode(cbor)?)
+            }
+            TokenModuleEventType::RemoveDenyList => {
+                TokenModuleEvent::RemoveDenyList(cbor::cbor_decode(cbor)?)
+            }
+            TokenModuleEventType::Pause => TokenModuleEvent::Pause(cbor::cbor_decode(cbor)?),
+            TokenModuleEventType::Unpause => TokenModuleEvent::Unpause(cbor::cbor_decode(cbor)?),
+        })
+    }
+}
+
+pub type AddAllowListEvent = TokenListUpdateEventDetails;
+pub type RemoveAllowListEvent = TokenListUpdateEventDetails;
+pub type AddDenyListEvent = TokenListUpdateEventDetails;
+pub type RemoveDenyListEvent = TokenListUpdateEventDetails;
+pub type PauseEvent = TokenPauseEventDetails;
+pub type UnpauseEvent = TokenPauseEventDetails;
 
 /// Details of an event updating the allow or deny list of a protocol level
 /// token
@@ -187,11 +252,41 @@ const TYPE_MAX_BYTE_LEN: usize = 255;
 /// reason type.
 ///
 /// Limited to 255 bytes in length and must be valid UTF-8.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, serde::Serialize)]
 #[serde(try_from = "String", into = "String")]
 #[repr(transparent)]
 pub struct TokenModuleCborTypeDiscriminator {
     value: String,
+}
+
+impl<'de> SerdeDeserialize<'de> for TokenModuleCborTypeDiscriminator {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let string = String::deserialize(deserializer)?;
+
+        Self::try_from(string).map_err(D::Error::custom)
+    }
+}
+
+/// Serial implementation matching the serialization of `TokenEventType`
+/// in the Haskell module `Concordium.Types.Tokens`.
+impl Serial for TokenModuleCborTypeDiscriminator {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        // length is always less or equal to TYPE_MAX_BYTE_LEN which fits into a u8
+        let len = u8::try_from(self.value.len())
+            .expect("Invariant violation for byte length of TokenModuleCborTypeDiscriminator");
+        len.serial(out);
+        common::serial_string(&self.value, out);
+    }
+}
+
+/// Deserial implementation matching the serialization of `TokenEventType`
+/// in the Haskell module `Concordium.Types.Tokens`.
+impl Deserial for TokenModuleCborTypeDiscriminator {
+    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let len: u8 = source.get()?;
+        let value = common::deserial_string(source, len as usize)?;
+        Ok(Self::try_from(value)?)
+    }
 }
 
 /// Error from converting a string into a [`TokenModuleCborTypeDiscriminator`].
@@ -208,6 +303,12 @@ pub struct TypeFromStringError {
 impl AsRef<str> for TokenModuleCborTypeDiscriminator {
     fn as_ref(&self) -> &str {
         self.value.as_str()
+    }
+}
+
+impl Display for TokenModuleCborTypeDiscriminator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.value)
     }
 }
 
@@ -244,129 +345,161 @@ impl From<TokenModuleCborTypeDiscriminator> for String {
 mod test {
     use super::*;
     use crate::{
+        common,
         common::cbor,
         protocol_level_tokens::{token_holder, CborHolderAccount},
     };
 
     #[test]
     fn test_decode_add_allow_list_event_cbor() {
-        let variant = TokenListUpdateEventDetails {
+        let event = TokenListUpdateEventDetails {
             target: CborHolderAccount {
                 address: token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             },
         };
-        let cbor = cbor::cbor_encode(&variant).unwrap();
+        let cbor = cbor::cbor_encode(&event);
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
-        let module_event = TokenModuleEvent {
-            event_type: "addAllowList".to_string().try_into().unwrap(),
-            details: cbor.into(),
-        };
 
-        let module_event_type = module_event.decode_token_module_event().unwrap();
-        assert_eq!(
-            module_event_type,
-            Upward::Known(TokenModuleEventType::AddAllowList(variant))
-        );
+        let event_decoded: TokenListUpdateEventDetails = cbor::cbor_decode(cbor).unwrap();
+        assert_eq!(event_decoded, event);
     }
 
     #[test]
     fn test_decode_remove_allow_list_event_cbor() {
-        let variant = TokenListUpdateEventDetails {
+        let event = TokenListUpdateEventDetails {
             target: CborHolderAccount {
                 address: token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             },
         };
-        let cbor = cbor::cbor_encode(&variant).unwrap();
+        let cbor = cbor::cbor_encode(&event);
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
-        let module_event = TokenModuleEvent {
-            event_type: "removeAllowList".to_string().try_into().unwrap(),
-            details: cbor.into(),
-        };
 
-        let module_event_type = module_event.decode_token_module_event().unwrap();
-        assert_eq!(
-            module_event_type,
-            Upward::Known(TokenModuleEventType::RemoveAllowList(variant))
-        );
+        let event_decoded: TokenListUpdateEventDetails = cbor::cbor_decode(cbor).unwrap();
+        assert_eq!(event_decoded, event);
     }
 
     #[test]
     fn test_decode_add_deny_list_event_cbor() {
-        let variant = TokenListUpdateEventDetails {
+        let event = TokenListUpdateEventDetails {
             target: CborHolderAccount {
                 address: token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             },
         };
-        let cbor = cbor::cbor_encode(&variant).unwrap();
+        let cbor = cbor::cbor_encode(&event);
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
-        let module_event = TokenModuleEvent {
-            event_type: "addDenyList".to_string().try_into().unwrap(),
-            details: cbor.into(),
-        };
 
-        let module_event_type = module_event.decode_token_module_event().unwrap();
-        assert_eq!(
-            module_event_type,
-            Upward::Known(TokenModuleEventType::AddDenyList(variant))
-        );
+        let event_decoded: TokenListUpdateEventDetails = cbor::cbor_decode(cbor).unwrap();
+        assert_eq!(event_decoded, event);
     }
 
     #[test]
     fn test_decode_remove_deny_list_event_cbor() {
-        let variant = TokenListUpdateEventDetails {
+        let event = TokenListUpdateEventDetails {
             target: CborHolderAccount {
                 address: token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             },
         };
-        let cbor = cbor::cbor_encode(&variant).unwrap();
+        let cbor = cbor::cbor_encode(&event);
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
-        let module_event = TokenModuleEvent {
-            event_type: "removeDenyList".to_string().try_into().unwrap(),
-            details: cbor.into(),
-        };
 
-        let module_event_type = module_event.decode_token_module_event().unwrap();
-        assert_eq!(
-            module_event_type,
-            Upward::Known(TokenModuleEventType::RemoveDenyList(variant))
-        );
+        let event_decoded: TokenListUpdateEventDetails = cbor::cbor_decode(cbor).unwrap();
+        assert_eq!(event_decoded, event);
     }
 
     #[test]
     fn test_decode_pause_event_cbor() {
-        let variant = TokenPauseEventDetails {};
-        let cbor = cbor::cbor_encode(&variant).unwrap();
+        let event = TokenPauseEventDetails {};
+        let cbor = cbor::cbor_encode(&event);
         assert_eq!(hex::encode(&cbor), "a0");
-        let module_event = TokenModuleEvent {
-            event_type: "pause".to_string().try_into().unwrap(),
-            details: cbor.into(),
-        };
 
-        let module_event_type = module_event.decode_token_module_event().unwrap();
-        assert_eq!(
-            module_event_type,
-            Upward::Known(TokenModuleEventType::Pause(variant))
-        );
+        let event_decoded: TokenPauseEventDetails = cbor::cbor_decode(cbor).unwrap();
+        assert_eq!(event_decoded, event);
     }
 
     #[test]
     fn test_decode_unpause_event_cbor() {
-        let variant = TokenPauseEventDetails {};
-        let cbor = cbor::cbor_encode(&variant).unwrap();
+        let event = TokenPauseEventDetails {};
+        let cbor = cbor::cbor_encode(&event);
         assert_eq!(hex::encode(&cbor), "a0");
-        let module_event = TokenModuleEvent {
-            event_type: "unpause".to_string().try_into().unwrap(),
-            details: cbor.into(),
-        };
 
-        let module_event_type = module_event.decode_token_module_event().unwrap();
-        assert_eq!(
-            module_event_type,
-            Upward::Known(TokenModuleEventType::Unpause(variant))
+        let event_decoded: TokenPauseEventDetails = cbor::cbor_decode(cbor).unwrap();
+        assert_eq!(event_decoded, event);
+    }
+
+    /// Test `TryFrom<String> for TokenModuleCborTypeDiscriminator`
+    #[test]
+    fn test_token_module_cbor_type_discriminator_try_from_string() {
+        // test simple discriminator
+        let discr =
+            TokenModuleCborTypeDiscriminator::try_from("discr1".to_string()).expect("simple");
+        assert_eq!(discr.as_ref(), "discr1");
+
+        // test max length discriminator
+        let discr = TokenModuleCborTypeDiscriminator::from_str("a".repeat(255).as_str())
+            .expect("max length");
+        assert_eq!(discr.as_ref(), "a".repeat(255));
+
+        // test discriminator above max length
+        let err = TokenModuleCborTypeDiscriminator::try_from("a".repeat(256))
+            .expect_err("above max length");
+        assert!(
+            err.to_string().contains("must be within 255 bytes"),
+            "err: {}",
+            err
+        );
+    }
+
+    /// Test `FromStr for TokenModuleCborTypeDiscriminator`
+    #[test]
+    fn test_token_module_cbor_type_discriminator_from_str() {
+        // test simple discriminator
+        let discr = TokenModuleCborTypeDiscriminator::from_str("discr1").expect("simple");
+        assert_eq!(discr.as_ref(), "discr1");
+
+        // test discriminator above max length
+        let err = TokenModuleCborTypeDiscriminator::from_str("a".repeat(256).as_str())
+            .expect_err("above max length");
+        assert!(
+            err.to_string().contains("must be within 255 bytes"),
+            "err: {}",
+            err
+        );
+    }
+
+    /// Test binary serialization of [`TokenModuleCborTypeDiscriminator`]
+    #[test]
+    fn test_token_module_cbor_type_discriminator_serialize() {
+        let discr: TokenModuleCborTypeDiscriminator = "discr1".parse().unwrap();
+        let bytes = common::to_bytes(&discr);
+        assert_eq!(hex::encode(&bytes), "06646973637231");
+        let discr_deserialized: TokenModuleCborTypeDiscriminator =
+            common::from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(discr_deserialized, discr);
+    }
+
+    /// Test JSON serialization of [`TokenModuleCborTypeDiscriminator`]
+    #[test]
+    fn test_token_module_cbor_type_discriminator_json_serialize() {
+        // test simple discriminator
+        let discr: TokenModuleCborTypeDiscriminator = "discr1".parse().unwrap();
+        let json = serde_json::to_string(&discr).expect("serialize");
+        assert_eq!(json, r#""discr1""#);
+        let discr_deserialized: TokenModuleCborTypeDiscriminator =
+            serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(discr_deserialized, discr);
+
+        // test discriminator above max length
+        let json = format!("\"{}\"", "a".repeat(256));
+        let err = serde_json::from_str::<TokenModuleCborTypeDiscriminator>(&json)
+            .expect_err("deserialize");
+        assert!(
+            err.to_string().contains("must be within 255 bytes"),
+            "err: {}",
+            err
         );
     }
 }

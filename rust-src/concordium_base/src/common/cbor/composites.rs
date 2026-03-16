@@ -51,19 +51,19 @@ mod test {
     #[test]
     fn test_decimal_fraction() {
         let value = DecimalFraction::new(-3, 12345);
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "c48222193039");
         let value_decoded: DecimalFraction = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = DecimalFraction::new(3, 12345);
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "c48203193039");
         let value_decoded: DecimalFraction = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = DecimalFraction::new(3, -12345);
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "c48203393038");
         let value_decoded: DecimalFraction = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -72,25 +72,25 @@ mod test {
     #[test]
     fn test_unsigned_decimal_fraction() {
         let value = UnsignedDecimalFraction::new(0, 0);
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "c4820000");
         let value_decoded: UnsignedDecimalFraction = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = UnsignedDecimalFraction::new(3, 12345);
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "c48203193039");
         let value_decoded: UnsignedDecimalFraction = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = UnsignedDecimalFraction::new(-3, 12345);
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "c48222193039");
         let value_decoded: UnsignedDecimalFraction = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = UnsignedDecimalFraction::new(-3, u64::MAX);
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "c482221bffffffffffffffff");
         let value_decoded: UnsignedDecimalFraction = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);

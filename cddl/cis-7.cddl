@@ -1,12 +1,18 @@
-; Common Types
+; Specification of CCDL related to protocol-level tokens.
+;
+; When changing it, please check the syntax first using
+;   cargo install cddl
+;   cddl compile-cddl --cddl cis-7.cddl
 
-token-id = text .size (1..128) .regexp "[a-zA-Z0-9\-.%]+"
+; Common Types 
+
+token-id = (text .size (1..128)) .regexp "[a-zA-Z0-9\\-.%]+"
 
 token-module-hash = sha256-hash
 
 sha256-hash = bytes .size(32)
 
-token-decimals = int .range (0..255)
+token-decimals = 0..255
 
 token-amount = decfrac
 
@@ -85,8 +91,6 @@ token-initialization-parameters = {
     ? "mintable": bool .default false,
     ; Whether the token is burnable
     ? "burnable": bool .default false,
-    ; Additional fields
-    * text => any
 }
 
 ; Transactions
@@ -99,6 +103,8 @@ token-operation = token-transfer
     / token-update-list
     / token-pause
     / token-unpause
+    / token-update-metadata
+    / token-update-admin-roles
 
 ; A token transfer operation. This transfers a specified amount of tokens from the sender account
 ; (implicit) to the recipient account.
@@ -184,6 +190,50 @@ token-unpause = {
     "unpause": {}
 }
 
+; Update the token metadata of a token. Supported from protocol version 11.
+token-update-metadata = {
+    "updateMetadata": metadata-url
+}
+
+; Assign an admin role to an account. Supported from protocol version 11.
+token-assign-admin-roles = {
+    "assignAdminRoles": token-update-admin-roles-details
+}
+
+; Revoke an admin role from an account. Supported from protocol version 11.
+token-revoke-admin-roles = {
+    "revokeAdminRoles": token-update-admin-roles-details
+}
+
+token-update-admin-roles = token-assign-admin-roles / token-revoke-admin-roles
+
+; The details of the `token-assign-admin-roles` and `token-revoke-admin-roles`
+; operations.
+token-update-admin-roles-details = {
+    ; The admin roles to update.
+    "roles": [ * token-admin-role ],
+    ; The account to update admin for.
+    "account": tagged-account-address
+}
+
+; The different The different admin roles defined for the current token module implementation.
+; Each role gives access to specific administrative operations.
+token-admin-role =
+    ; Gives authority to perform `token-assign-admin-roles` and `token-revoke-admin-roles` operations.
+    "updateAdminRoles" /
+    ; Gives authority to perform `token-mint` operations.
+    "mint" /
+    ; Gives authority to perform `token-burn` operations.
+    "burn" /
+    ; Gives authority to perform `token-add-allow-list` and `token-remove-allow-list` operations.
+    "updateAllowList" /
+    ; Gives authority to perform `token-add-deny-list` and `token-remove-deny-list` operations.
+    "updateDenyList" /
+    ; Gives authority to perform `token-pause` and `token-unpause` operations.
+    "pause" /
+    ; Gives authority to perform `token-update-metadata` operations.
+    "updateMetadata"
+
 ; Events
 
 ; The details of a token "addAllowList" event.
@@ -209,6 +259,19 @@ token-pause-event = {}
 ; The details of a token "unpause" event.
 ; Indicates that the token operations involving balance changes are resumed.
 token-unpause-event = {}
+
+; The details of a token "updateMetadata" event.
+; Indicates that a token had its metadata reference updated.
+token-update-metadata-event = metadata-url
+
+; The details of a token "assignAdminRoles" event.
+; Indicates that the account was assigned the admin role specified.
+token-assign-admin-roles-event = token-update-admin-roles-details
+
+; The details of a token "revokeAdminRoles" event.
+; Indicates that the admin role specified was revoked from the account
+token-revoke-admin-roles-event = token-update-admin-roles-details
+
 
 ; Reject Reasons
 
@@ -283,7 +346,8 @@ token-module-state = {
     ? "name": text,
     ; A URL pointing to the token metadata
     ? "metadata": metadata-url,
-    ; The governance account of the token
+    ; The governance account of the token. When present, this account has complete authority over
+    ; administritive operations for the token.
     ? "governanceAccount": tagged-account-address
     ; Whether the token enforces an allow list.
     ? "allowList": bool,
@@ -295,9 +359,18 @@ token-module-state = {
     ? "burnable": bool,
     ; Whether the token is paused, i.e. operations involving balance changes are suspended.
     ? "paused": bool,
-    ; Additional state information may be provided under further text keys, the meaning
-    ; of which are not defined in the present specification.
-    * text => any
+}
+
+; Describes the authorizations structure for protocol level tokens.
+token-authorizations = {
+    ; A map of admin roles to the accounts that have those roles assigned.
+    * token-admin-role => token-role-authorizations
+}
+
+; Authorizations details applicable to any admin role.
+token-role-authorizations = {
+    ; The accounts that have the role assigned.
+    "accounts": [ * tagged-account-address ]
 }
 
 ; Account state for the token. This contains state per account for the token.
@@ -310,7 +383,4 @@ token-module-account-state = {
     ; This is only present if the token supports a deny list; that is accounts can only
     ; send or receive tokens if they are not on the deny list.
     ? "denyList": bool,
-    ; Additional state information may be provided under further text keys, the meaning
-    ; of which are not defined in the present specification.
-    * text => any
 }
