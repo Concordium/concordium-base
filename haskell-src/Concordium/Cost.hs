@@ -145,6 +145,16 @@ tokenListOperationCost = 50
 tokenPauseUnpauseCost :: Energy
 tokenPauseUnpauseCost = 50
 
+-- | Cost to assign/revoke an admin role of a token.
+--  TODO - this is a placeholder value for now - RBC-26 will investigate the correct energy to use.
+tokenAssignRevokeRolesCost :: Energy
+tokenAssignRevokeRolesCost = 50
+
+-- | Cost to update the token metadata.
+--  TODO - this is a placeholder value for now - RBC-26 will investigate the correct energy to use.
+tokenUpdateTokenMetadataCost :: Energy
+tokenUpdateTokenMetadataCost = 50
+
 -- | C_t for updating account credentials
 updateCredentialsCost ::
     -- | The number of credentials on the account before the update.
