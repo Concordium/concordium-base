@@ -373,3 +373,32 @@ locked-token-and-amount = {
     ; The amount of this token that is controlled by the lock for this account.
     "amount": token-amount
 }
+
+; Account state for the token. This contains state per account for the token.
+token-module-account-state = {
+    ; Whether the account is on the allow list.
+    ; This is only present if the token supports an allow list; that is accounts can only
+    ; send or receive tokens if they are on the allow list.
+    ? "allowList": bool,
+    ; Whether the account is on the deny list.
+    ; This is only present if the token supports a deny list; that is accounts can only
+    ; send or receive tokens if they are not on the deny list.
+    ? "denyList": bool,
+    ; A list of locks that control funds associated with this account.
+    ; Introduced in P11. If absent, no locks control funds associated with the account.
+    ? "locks": [ + account-lock-amount ],
+    ; The total unencumbered balance on the account. This should be the total balance minus
+    ; the total balance controlled by locks. If this field is absent, the unencumbered
+    ; balance is the total balance. Introduced in P11.
+    ? "available": token-amount,
+    ; Additional state information may be provided under further text keys, the meaning
+    ; of which are not defined in the present specification.
+    * text => any
+}
+
+account-lock-amount = {
+    ; The lock controlling the funds.
+    "lock": lock-id,
+    ; The amount of the token controlled by the lock. Should be non-zero.
+    "amount": token-amount
+}
