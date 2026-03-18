@@ -286,28 +286,44 @@ meta-lock-create = {
 }
 
 lock-create-body = (
+    ; The set of accounts that are permitted to receive funds controlled by the lock.
     "recipients": [ * tagged-account-address ],
+    ; The expiry time for the lock.
     "expiry": epoch-time,
-    "controller": lock-controller,
+    ; The initialization parameters for the lock.
+    "controller": lock-controller-init,
 )
 
-lock-controller =
-    lock-controller-simple
+lock-controller-init =
+    lock-controller-simple-init
 
 ; The simple lock controller initialization parameters.
-lock-controller-simple = {
+lock-controller-simple-init = {
     "simpleV0": {
-        ; The set of accounts that may fund the lock.
-        "funders": [ + tagged-account-address ],
-        ; The set of accounts that may return funds from the lock.
-        "returners": [ * tagged-account-address ],
-        ; The set of accounts that may send funds from the lock.
-        "senders": [ * tagged-account-address ],
-        ; The set of accounts that may cancel the lock before its expiry.
-        "cancellers": [ * tagged-account-address ],
-        ; If set, then the lock will only be destroyed by a cancel operation.
-        ? "keepAlive": bool .default false
+        ; The set of capability grants for the simple lock.
+        ; At least one account must be granted the "fund" capability.
+        "grants": [ + lock-controller-simple-grant ],
+        ; If set, then the lock will not be destroyed before expiry except
+        ; by a cancel operation.
+        ? "keepAlive": bool .default false,
+        ; If set, only the specified token types may be held by the lock.
+        ? "tokens": [ + token-id ]
     }
+}
+
+; A capability to perform a certain operation on a lock.
+lock-controller-simple-capability =
+    "fund"      ; Capability to perform "lockFund"
+    / "return"  ; Capability to perform "lockReturn"
+    / "send"    ; Capability to perform "lockSend"
+    / "cancel"  ; Capability to perform "lockCancel" (before expiry)
+
+; Grant capabilities to accounts.
+lock-controller-simple-grant = {
+    ; The set of accounts that are to be granted the capability.
+    "accounts": [ + tagged-account-address ],
+    ; The capabilities that are granted to the given accounts.
+    "roles": [ + lock-controller-simple-capability]
 }
 
 ; Cancel a lock, returning funds to their owners and destroying the lock.
@@ -347,16 +363,47 @@ epoch-time = #6.1(uint)
 
 ; Query support
 
-lock-config = { lock-create-body }
-
 ; Data returned by a GetLockInfo query.
 lock-info = {
     ; The lock identifier
     "lock": lock-id,
-    ; The configuration of the lock.
-    "config": lock-config,
+    ; The lock configuration.
+    lock-config,
     ; The state of funds of the lock.
     "funds": [ * lock-account-fund ]
+}
+
+; Lock configuration. This 
+lock-config = (
+    ; The set of accounts that are permitted to receive funds controlled by the lock.
+    "recipients": [ * tagged-account-address ],
+    ; The expiry time for the lock.
+    "expiry": epoch-time,
+    ; The initialization parameters for the lock.
+    "controller": lock-controller-config,
+)
+
+; Configuration of the lock controller.
+lock-controller-config =
+    lock-controller-config-simple
+
+; The simple lock controller configuration.
+lock-controller-config-simple = {
+    "simpleV0": {
+        ; The set of accounts that may fund the lock.
+        "funders": [ + tagged-account-address ],
+        ; The set of accounts that may return funds from the lock.
+        "returners": [ * tagged-account-address ],
+        ; The set of accounts that may send funds from the lock.
+        "senders": [ * tagged-account-address ],
+        ; The set of accounts that may cancel the lock before its expiry.
+        "cancellers": [ * tagged-account-address ],
+        ; If set, then the lock will only be destroyed by a cancel operation.
+        ? "keepAlive": bool .default false,
+        ; If set, only the specified token types may be held by the lock.
+        ; Otherwise, all PLTs may be held by the lock.
+        ? "tokens": [ + token-id ]
+    }
 }
 
 ; Funds on a particular account that are controlled by a lock.
