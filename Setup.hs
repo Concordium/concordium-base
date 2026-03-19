@@ -23,20 +23,21 @@ type WithEnvAndVerbosity = [(String, String)] -> Verbosity -> IO ()
 --  The first argument chooses whether to build statically with musl or not.
 linuxBuild :: Bool -> WithEnvAndVerbosity
 linuxBuild True env verbosity = do
-    noticeNoWrap verbosity "Static linking."
-    -- the target-feature=-crt-static is needed so that C symbols are not included in the generated rust libraries. For more information check https://rust-lang.github.io/rfcs/1721-crt-static.html
-    let makeLib (libName, libFeatures) = do
-            -- the target-feature=-crt-static is needed so that C symbols are not included in the generated rust libraries. For more information check https://rust-lang.github.io/rfcs/1721-crt-static.html
-            rawSystemExitWithEnv
-                verbosity
-                "cargo"
-                (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--target", "x86_64-unknown-linux-musl", "--crate-type", "staticlib"] ++ libFeatures)
-                (("RUSTFLAGS", "-C target-feature=-crt-static") : env)
-            let source = "../rust-src/target/x86_64-unknown-linux-musl/release/lib" ++ libName ++ ".a"
-                target = "./lib/lib" ++ libName ++ ".a"
-            rawSystemExit verbosity "ln" ["-s", "-f", source, target]
-            noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
-    mapM_ makeLib concordiumLibs
+    fail "static build True: This code path should not be reached unless we compile to musl target"
+    -- noticeNoWrap verbosity "Static linking."
+    -- -- the target-feature=-crt-static is needed so that C symbols are not included in the generated rust libraries. For more information check https://rust-lang.github.io/rfcs/1721-crt-static.html
+    -- let makeLib (libName, libFeatures) = do
+    --         -- the target-feature=-crt-static is needed so that C symbols are not included in the generated rust libraries. For more information check https://rust-lang.github.io/rfcs/1721-crt-static.html
+    --         rawSystemExitWithEnv
+    --             verbosity
+    --             "cargo"
+    --             (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--target", "x86_64-unknown-linux-musl", "--crate-type", "staticlib"] ++ libFeatures)
+    --             (("RUSTFLAGS", "-C target-feature=-crt-static") : env)
+    --         let source = "../rust-src/target/x86_64-unknown-linux-musl/release/lib" ++ libName ++ ".a"
+    --             target = "./lib/lib" ++ libName ++ ".a"
+    --         rawSystemExit verbosity "ln" ["-s", "-f", source, target]
+    --         noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
+    -- mapM_ makeLib concordiumLibs
 linuxBuild False env verbosity = do
     noticeNoWrap verbosity "Dynamic linking."
     let makeLib (libName, libFeatures) = do
