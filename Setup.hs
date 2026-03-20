@@ -16,8 +16,7 @@ concordiumLibs =
 
 type WithEnvAndVerbosity = [(String, String)] -> Verbosity -> IO ()
 
-linuxBuild :: Bool -> WithEnvAndVerbosity
-linuxBuild env verbosity = do
+linuxBuild :: WithEnvAndVerbosity
 linuxBuild env verbosity = do
     let makeLib (libName, libFeatures) = do
             rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--crate-type", "cdylib", "--crate-type", "staticlib"] ++ libFeatures) env
