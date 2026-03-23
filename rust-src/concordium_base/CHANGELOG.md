@@ -1,5 +1,6 @@
 ## Unreleased
 
+- Introduce `TokenAuthorizations` representing the CBOR encoding of the `getTokenAuthorizations` query.
 - Implemented definition for `UpdateMetadata` token operation and token event which allows to update the metadata of a protocol level token.
 - Implemented definition for `TokenAdminRole` which describes the list of supported roles.
   Implemented `assignAdminRoles` and `revokeAdminRoles` token operations for RBAC too.
