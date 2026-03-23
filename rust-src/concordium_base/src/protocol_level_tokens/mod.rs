@@ -1,6 +1,7 @@
 //! Types and functions for working with Protocol Level Tokens (PLT).
 
 mod cbor;
+mod meta_operations;
 mod token_amount;
 mod token_event;
 mod token_holder;
@@ -14,6 +15,7 @@ mod token_operations;
 mod token_reject_reason;
 
 pub use cbor::*;
+pub use meta_operations::*;
 pub use token_amount::*;
 pub use token_event::*;
 pub use token_holder::*;

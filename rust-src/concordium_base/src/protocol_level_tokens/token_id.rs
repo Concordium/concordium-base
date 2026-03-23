@@ -1,4 +1,5 @@
 use crate::common;
+use crate::common::cbor::{self, CborSerializationError};
 use crate::common::{Get, SerdeDeserialize};
 use serde::de::Error;
 use serde::Deserializer;
@@ -107,6 +108,25 @@ impl common::Deserial for TokenId {
     }
 }
 
+impl cbor::CborSerialize for TokenId {
+    fn serialize<C: cbor::CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
+        encoder.encode_text(&self.value)
+    }
+}
+
+impl cbor::CborDeserialize for TokenId {
+    fn deserialize<C: cbor::CborDecoder>(decoder: C) -> cbor::CborSerializationResult<Self>
+    where
+        Self: Sized,
+    {
+        let encoded = decoder.decode_text()?;
+        let string = String::from_utf8(encoded).map_err(CborSerializationError::invalid_data)?;
+        string
+            .try_into()
+            .map_err(CborSerializationError::invalid_data)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,5 +226,47 @@ mod tests {
             "err: {}",
             err
         );
+    }
+
+    /// Test CBOR serialization of [`TokenId`]
+    #[test]
+    fn test_token_id_cbor_serialize() {
+        // test simple token id
+        let token_id: TokenId = "tokenid1".parse().unwrap();
+        let cbor = cbor::cbor_encode(&token_id);
+        assert_eq!(hex::encode(&cbor), "68746f6b656e696431");
+        let token_id_decoded: TokenId = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        assert_eq!(token_id_decoded, token_id);
+
+        // test empty token id
+        let cbor = [0x60]; // empty string
+        let err = cbor::cbor_decode::<TokenId>(&cbor).expect_err("empty string parses");
+        assert!(
+            err.to_string()
+                .contains("TokenId must be between 1 and 128 characters"),
+            "err: {}",
+            err
+        );
+
+        // 129 'a' characters, which is above the max length
+        let cbor = [0x78, 0x81] // text string of length 129
+            .into_iter()
+            .chain("a".repeat(129).as_bytes().to_vec().into_iter())
+            .collect::<Vec<_>>();
+        let err = cbor::cbor_decode::<TokenId>(&cbor).expect_err("deserial");
+        assert!(
+            err.to_string()
+                .contains("TokenId must be between 1 and 128 characters"),
+            "err: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_token_id_cbor_serialize_indef() {
+        // TODO: determine if we actually want to allow indefinite length encoding for TokenId.
+        let cbor = hex::decode("7f647465737463504c54ff").unwrap();
+        let res = cbor::cbor_decode::<TokenId>(&cbor).expect("CBOR deserialize");
+        assert_eq!(res.value, "testPLT");
     }
 }
