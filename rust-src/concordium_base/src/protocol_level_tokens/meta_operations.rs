@@ -6,9 +6,8 @@ use crate::{
 };
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 
-
 /// Payload for meta-update transaction. The transaction is a list of meta-update operations
-/// that can be decoded from CBOR using [`MetaUpdateOperations::decode_operations`].
+/// that can be decoded from CBOR using [`MetaUpdatePayload::decode_operations`].
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "serde_deprecated",
