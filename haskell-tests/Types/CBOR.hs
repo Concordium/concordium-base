@@ -1083,7 +1083,7 @@ testTransactionVectors = do
     checkReject msg = checkDecode (Left msg)
 
 tests :: Spec
-tests = focus {- NOCOMMIT -} $ parallel $ describe "CBOR" $ do
+tests = parallel $ describe "CBOR" $ do
     testInitializationParametersCBOR
     testEncodedInitializationParametersJSON
     testInitializationParametersJSON

@@ -903,6 +903,49 @@ tokenUpdateEventToProto TokenBurn{..} = Right . Proto.make $ do
             )
 tokenUpdateEventToProto _ = Left ()
 
+-- | Convert an event to a 'Proto.MetaEvent'. Returns @Left ()@ if the event type is
+--  not one of the meta event types.
+metaUpdateEventToProto :: Event' s -> Either () Proto.MetaEvent
+metaUpdateEventToProto TokenModuleEvent{..} =
+    Right . Proto.make $
+        PLTFields.moduleEvent
+            .= Proto.make
+                ( do
+                    PLTFields.type' .= toProto etmeType
+                    PLTFields.details .= toProto etmeDetails
+                    PLTFields.tokenId .= toProto etmeTokenId
+                )
+metaUpdateEventToProto TokenTransfer{..} =
+    Right . Proto.make $
+        PLTFields.transferEvent
+            .= Proto.make
+                ( do
+                    PLTFields.from .= toProto ettFrom
+                    PLTFields.to .= toProto ettTo
+                    PLTFields.amount .= toProto ettAmount
+                    PLTFields.maybe'memo .= fmap toProto ettMemo
+                    PLTFields.tokenId .= toProto ettTokenId
+                )
+metaUpdateEventToProto TokenMint{..} =
+    Right . Proto.make $
+        PLTFields.mintEvent
+            .= Proto.make
+                ( do
+                    PLTFields.target .= toProto etmTarget
+                    PLTFields.amount .= toProto etmAmount
+                    PLTFields.tokenId .= toProto etmTokenId
+                )
+metaUpdateEventToProto TokenBurn{..} =
+    Right . Proto.make $
+        PLTFields.burnEvent
+            .= Proto.make
+                ( do
+                    PLTFields.target .= toProto etbTarget
+                    PLTFields.amount .= toProto etbAmount
+                    PLTFields.tokenId .= toProto etbTokenId
+                )
+metaUpdateEventToProto _ = Left ()
+
 instance ToProto TokenHolder where
     type Output TokenHolder = Proto.TokenHolder
     toProto (HolderAccount addr) = Proto.make $ PLTFields.account .= toProto addr
@@ -1684,6 +1727,13 @@ convertAccountTransaction ty cost sender mbSponsorDetails result = case ty of
                             mapM tokenUpdateEventToProto events
                     Right . Proto.make $
                         ProtoFields.tokenUpdateEffect . ProtoFields.events .= protoEvents
+            TTMetaUpdate ->
+                mkSuccess <$> do
+                    protoEvents <-
+                        left (const CEInvalidTransactionResult) $
+                            mapM metaUpdateEventToProto events
+                    Right . Proto.make $
+                        ProtoFields.metaUpdateEffect . ProtoFields.events .= protoEvents
   where
     mkSuccess :: Proto.AccountTransactionEffects -> Proto.AccountTransactionDetails
     mkSuccess effects = Proto.make $ do
@@ -1777,6 +1827,7 @@ instance ToProto TransactionType where
     toProto TTConfigureBaker = Proto.CONFIGURE_BAKER
     toProto TTConfigureDelegation = Proto.CONFIGURE_DELEGATION
     toProto TTTokenUpdate = Proto.TOKEN_UPDATE
+    toProto TTMetaUpdate = Proto.META_UPDATE
 
 instance ToProto Energy where
     type Output Energy = Proto.Energy
