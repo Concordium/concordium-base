@@ -79,6 +79,7 @@ makeRust _ flags _ lbi = do
             Linux -> linuxBuild
     env <- getEnvironment
     rawSystemExit verbosity "mkdir" ["-p", "./lib"]
+    rawSystemExitWithEnv verbosity "rustup" ["show", "active-toolchain"] env
     build env verbosity
 
 -- | On Windows, copy the DLL files to the binary install directory. This is to ensure that they
