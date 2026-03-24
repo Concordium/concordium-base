@@ -905,6 +905,10 @@ tokenUpdateEventToProto _ = Left ()
 
 -- | Convert an event to a 'Proto.MetaEvent'. Returns @Left ()@ if the event type is
 --  not one of the meta event types.
+--
+--  TODO: COR-2302 - support lock create event
+--  TODO: COR-2304 - support lock destroy event
+--  TODO: COR-2305 - support generalized transfer event
 metaUpdateEventToProto :: Event' s -> Either () Proto.MetaEvent
 metaUpdateEventToProto TokenModuleEvent{..} =
     Right . Proto.make $
