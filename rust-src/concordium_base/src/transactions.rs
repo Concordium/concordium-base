@@ -26,7 +26,7 @@ use crate::{
         AccountAddress, AccountCredentialMessage, AccountKeys, CredentialDeploymentInfo,
         CredentialPublicKeys, VerifyKey,
     },
-    protocol_level_tokens::TokenOperationsPayload,
+    protocol_level_tokens::{MetaUpdatePayload, TokenOperationsPayload},
     random_oracle::RandomOracle,
     smart_contracts, updates,
 };
@@ -185,6 +185,8 @@ pub enum TransactionType {
     ConfigureDelegation,
     /// Token update transaction. Introduced in Concordium protocol version 9.
     TokenUpdate,
+    /// Meta update transaction. Introduced in Concordium protocol version 11.
+    MetaUpdate,
 }
 
 /// An error that occurs when trying to convert
@@ -220,6 +222,7 @@ impl TryFrom<i32> for TransactionType {
             19 => Self::ConfigureBaker,
             20 => Self::ConfigureDelegation,
             21 => Self::TokenUpdate,
+            22 => Self::MetaUpdate,
             n => return Err(TransactionTypeConversionError(n)),
         })
     }
@@ -1147,6 +1150,11 @@ pub enum Payload {
         #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
         payload: TokenOperationsPayload,
     },
+    /// Meta-update operations
+    MetaUpdate {
+        #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
+        payload: MetaUpdatePayload,
+    },
 }
 
 impl Payload {
@@ -1182,6 +1190,7 @@ impl Payload {
             Payload::ConfigureBaker { .. } => TransactionType::ConfigureBaker,
             Payload::ConfigureDelegation { .. } => TransactionType::ConfigureDelegation,
             Payload::TokenUpdate { .. } => TransactionType::TokenUpdate,
+            Payload::MetaUpdate { .. } => TransactionType::MetaUpdate,
         }
     }
 }
@@ -1364,6 +1373,10 @@ impl Serial for Payload {
             Payload::TokenUpdate { payload } => {
                 out.put(&27u8);
                 out.put(&payload.token_id);
+                out.put(&payload.operations);
+            }
+            Payload::MetaUpdate { payload } => {
+                out.put(&28u8);
                 out.put(&payload.operations);
             }
         }
@@ -2341,7 +2354,9 @@ pub mod construct {
     use super::*;
     use crate::{
         common::cbor,
-        protocol_level_tokens::{RawCbor, TokenId, TokenOperation, TokenOperations},
+        protocol_level_tokens::{
+            MetaUpdateOperations, RawCbor, TokenId, TokenOperation, TokenOperations,
+        },
     };
 
     /// A transaction that is prepared to be signed.
@@ -2657,6 +2672,25 @@ pub mod construct {
             GivenEnergy::Add { num_sigs, energy },
             payload,
         )
+    }
+
+    /// Construct a meta update transaction consisting of the given meta update
+    /// operations encoded in CBOR.
+    ///
+    /// Update operations can be created using the functions in
+    /// [`meta_operations`](crate::protocol_level_tokens::meta_operations).
+    pub fn meta_update_operations(
+        given_energy: GivenEnergy,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        operations: &MetaUpdateOperations,
+    ) -> PreAccountTransaction {
+        let operations = RawCbor::from(cbor::cbor_encode(operations));
+        let payload = Payload::MetaUpdate {
+            payload: MetaUpdatePayload { operations },
+        };
+        make_transaction(sender, nonce, expiry, given_energy, payload)
     }
 
     /// Make an encrypted transfer. The payload can be constructed using
