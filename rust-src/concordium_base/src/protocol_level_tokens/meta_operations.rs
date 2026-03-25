@@ -63,7 +63,10 @@ pub mod meta_operations {
     }
 
     /// Construct a PLT remove-deny-list meta-update operation.
-    pub fn remove_token_deny_list(token_id: TokenId, target: AccountAddress) -> MetaUpdateOperation {
+    pub fn remove_token_deny_list(
+        token_id: TokenId,
+        target: AccountAddress,
+    ) -> MetaUpdateOperation {
         (token_id, operations::remove_token_deny_list(target)).into()
     }
 
@@ -74,7 +77,7 @@ pub mod meta_operations {
 
     /// Construct an unpause meta-update operation.
     pub fn unpause(token_id: TokenId) -> MetaUpdateOperation {
-        MetaUpdateOperation::Unpause(MetaTokenPauseDetails {token: token_id})
+        MetaUpdateOperation::Unpause(MetaTokenPauseDetails { token: token_id })
     }
 }
 
