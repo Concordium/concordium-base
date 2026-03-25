@@ -235,3 +235,16 @@ data TokenAuthorizations = TokenAuthorizations
       -- | The CBOR encoded authorizations details
       taDetails :: !BS.ByteString
     }
+
+-- | Define the serialization matching the one in the node on the rust side.
+-- This is internal and only meant to be used when passed across FFI in the node.
+instance Serialize TokenAuthorizations where
+    put TokenAuthorizations{..} = do
+        put taTokenId
+        putWord32be (fromIntegral (BS.length taDetails))
+        putByteString taDetails
+    get = do
+        taTokenId <- get
+        detailsLen <- getWord32be
+        taDetails <- getByteString (fromIntegral detailsLen)
+        return TokenAuthorizations{..}
