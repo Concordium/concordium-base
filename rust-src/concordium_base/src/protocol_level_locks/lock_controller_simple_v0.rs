@@ -1,6 +1,6 @@
 use crate::common::cbor::{
-    CborDecoder, CborDeserialize, CborEncoder, CborMapDecoder, CborMapEncoder,
-    CborSerializationError, CborSerializationResult, CborSerialize, MapKey, MapKeyRef,
+    CborDecoder, CborDeserialize, CborEncoder, CborSerializationError, CborSerializationResult,
+    CborSerialize,
 };
 use crate::protocol_level_tokens::{CborHolderAccount, CborMemo, TokenId};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
@@ -91,7 +91,7 @@ pub struct LockControllerSimpleV0Grant {
 ///
 /// Contains the list of capability grants, which tokens are affected,
 /// a keep-alive flag, and an optional memo.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
 #[cfg_attr(
     feature = "serde_deprecated",
     derive(serde::Serialize, serde::Deserialize)
@@ -105,6 +105,7 @@ pub struct LockControllerSimpleV0 {
     /// Whether the lock should be kept alive after all funds are
     /// returned. Defaults to `false` when omitted from CBOR.
     #[cfg_attr(feature = "serde_deprecated", serde(default))]
+    #[cbor(default)]
     pub keep_alive: bool,
     /// Optional memo attached to the lock.
     #[cfg_attr(
@@ -112,70 +113,6 @@ pub struct LockControllerSimpleV0 {
         serde(skip_serializing_if = "Option::is_none")
     )]
     pub memo: Option<CborMemo>,
-}
-
-impl CborSerialize for LockControllerSimpleV0 {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
-        let mut map_encoder = encoder.encode_map()?;
-        map_encoder.serialize_entry(&MapKeyRef::Text("grants"), &self.grants)?;
-        map_encoder.serialize_entry(&MapKeyRef::Text("tokens"), &self.tokens)?;
-        // Always serialize keep_alive (even when false), matching normal CBOR
-        // map behavior for non-optional fields.
-        map_encoder.serialize_entry(&MapKeyRef::Text("keepAlive"), &self.keep_alive)?;
-        if !CborSerialize::is_null(&self.memo) {
-            map_encoder.serialize_entry(&MapKeyRef::Text("memo"), &self.memo)?;
-        }
-        map_encoder.end()?;
-        Ok(())
-    }
-}
-
-impl CborDeserialize for LockControllerSimpleV0 {
-    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
-    where
-        Self: Sized,
-    {
-        let mut grants = None;
-        let mut tokens = None;
-        let mut keep_alive = None;
-        let mut memo: Option<Option<CborMemo>> = None;
-
-        let mut map_decoder = decoder.decode_map()?;
-        while let Some(map_key) = CborMapDecoder::deserialize_key::<MapKey>(&mut map_decoder)? {
-            match map_key.as_ref() {
-                MapKeyRef::Text("grants") => {
-                    grants = Some(CborMapDecoder::deserialize_value(&mut map_decoder)?);
-                }
-                MapKeyRef::Text("tokens") => {
-                    tokens = Some(CborMapDecoder::deserialize_value(&mut map_decoder)?);
-                }
-                MapKeyRef::Text("keepAlive") => {
-                    keep_alive = Some(CborMapDecoder::deserialize_value(&mut map_decoder)?);
-                }
-                MapKeyRef::Text("memo") => {
-                    memo = Some(CborMapDecoder::deserialize_value(&mut map_decoder)?);
-                }
-                _ => {
-                    CborMapDecoder::skip_value(&mut map_decoder)?;
-                }
-            }
-        }
-
-        let grants = grants
-            .ok_or_else(|| CborSerializationError::map_value_missing(MapKeyRef::Text("grants")))?;
-        let tokens = tokens
-            .ok_or_else(|| CborSerializationError::map_value_missing(MapKeyRef::Text("tokens")))?;
-        // Default to false when omitted from CBOR.
-        let keep_alive = keep_alive.unwrap_or(false);
-        let memo = memo.unwrap_or(None);
-
-        Ok(LockControllerSimpleV0 {
-            grants,
-            tokens,
-            keep_alive,
-            memo,
-        })
-    }
 }
 
 #[cfg(test)]
