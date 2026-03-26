@@ -261,7 +261,7 @@ pub struct TokenUpdateAdminRolesEventDetails {
     feature = "serde_deprecated",
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde_deprecated", serde(transparent))]
 pub struct TokenUpdateMetadataEventDetails {
     pub metadata_url: MetadataUrl,
 }
