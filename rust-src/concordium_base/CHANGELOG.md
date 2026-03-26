@@ -8,6 +8,9 @@
   - `LockControllerSimpleV0Grant`
   - `LockControllerSimpleV0Capability`
 - Added CBOR serialization for `TransactionTime` and `TokenId`.
+- Added support for `#[cbor(default)]` field attribute in the `CborDeserialize` derive macro.
+  When a CBOR map key is absent, the field is initialized with `Default::default()` instead of
+  producing a deserialization error.
 - Implemented `common::from_bytes_complete` that fails if all bytes are not consumed during deserialization.
 - `cbor::cbor_encode` is now infallible and returns `Vec<u8>` instead of `CborSerializationResult<Vec<u8>>`
 - `&[T]` no longer implements `CborSerialize` in order to avoid ambiguity with `CborSerialize` implementation for `[u8]`. 
