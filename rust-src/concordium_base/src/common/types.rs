@@ -6,6 +6,7 @@ use super::{
 };
 use crate::common::Serialize;
 use byteorder::{BigEndian, ReadBytesExt};
+use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::{
     self as concordium_std, ContractAddress, ContractName, OwnedContractName, OwnedParameter,
     OwnedReceiveName, Parameter, ReceiveName,
@@ -479,11 +480,27 @@ impl Deserial for TransactionSignaturesV1 {
     }
 }
 
+/// CBOR tag for epoch-based date/time, see
+/// <https://www.rfc-editor.org/rfc/rfc8949.html#name-standard-date-time-string>
+const EPOCH_TIME_TAG: u64 = 1;
+
 /// Datatype used to indicate transaction expiry.
 #[derive(
-    SerdeDeserialize, SerdeSerialize, PartialEq, Eq, Debug, Serialize, Clone, Copy, PartialOrd, Ord,
+    SerdeDeserialize,
+    SerdeSerialize,
+    PartialEq,
+    Eq,
+    Debug,
+    Serialize,
+    Clone,
+    Copy,
+    PartialOrd,
+    Ord,
+    CborSerialize,
+    CborDeserialize,
 )]
 #[serde(transparent)]
+#[cbor(transparent, tag = EPOCH_TIME_TAG)]
 pub struct TransactionTime {
     /// Seconds since the unix epoch.
     pub seconds: u64,
@@ -707,6 +724,45 @@ mod tests {
         assert!(
             serde_json::from_str::<Amount>(r#""12345612312315415123123""#).is_err(),
             "Parsed overflowing amount, but should not."
+        );
+    }
+
+    /// Round-trip test for [`TransactionTime`] CBOR encoding:
+    /// encode then decode produces the identical value.
+    #[test]
+    fn transaction_time_cbor_round_trip() {
+        use crate::common::cbor;
+
+        let tt = TransactionTime::from_seconds(1804806000);
+        let encoded = cbor::cbor_encode(&tt);
+        let decoded: TransactionTime = cbor::cbor_decode(&encoded).unwrap();
+        assert_eq!(tt, decoded, "round-trip failed for TransactionTime");
+
+        // Also test with 0 and u64::MAX as edge cases
+        for seconds in [0u64, 1u64, u64::MAX] {
+            let tt = TransactionTime::from_seconds(seconds);
+            let encoded = cbor::cbor_encode(&tt);
+            let decoded: TransactionTime = cbor::cbor_decode(&encoded).unwrap();
+            assert_eq!(tt, decoded, "round-trip failed for seconds={}", seconds);
+        }
+    }
+
+    /// Fixture test: known [`TransactionTime`] value produces an expected CBOR
+    /// hex string. This guards against accidental encoding changes.
+    ///
+    /// `TransactionTime::from_seconds(1804806000)` → `c11a6b932770`
+    ///   - `c1`         = CBOR tag 1 (epoch-time)
+    ///   - `1a6b932770` = CBOR uint 1804806000 (4-byte encoding, 0x6b932770)
+    #[test]
+    fn transaction_time_cbor_fixture() {
+        use crate::common::cbor;
+
+        let tt = TransactionTime::from_seconds(1804806000);
+        let encoded = cbor::cbor_encode(&tt);
+        assert_eq!(
+            hex::encode(&encoded),
+            "c11a6b932770",
+            "CBOR encoding of TransactionTime(1804806000) does not match expected fixture"
         );
     }
 }
