@@ -451,6 +451,34 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
                 }
             };
 
+            let field_missing_key_handling: TokenStream = cbor_fields
+                .0
+                .iter()
+                .filter(|f| !f.opts.other)
+                .zip(field_vars.iter())
+                .zip(field_map_keys.iter())
+                .map(|((field, field_var), field_map_key)| {
+                    if field.opts.default {
+                        quote! {
+                            let #field_var = match #field_var {
+                                None => Default::default(),
+                                Some(#field_var) => #field_var,
+                            };
+                        }
+                    } else {
+                        quote! {
+                            let #field_var = match #field_var {
+                                None => match #cbor_module::CborDeserialize::null() {
+                                    None => return Err(#cbor_module::CborSerializationError::map_value_missing(#field_map_key)),
+                                    Some(null_value) => null_value,
+                                },
+                                Some(#field_var) => #field_var,
+                            };
+                        }
+                    }
+                })
+                .collect();
+
             quote! {
                 let options = decoder.options();
                 #(let mut #field_vars = None;)*
@@ -471,15 +499,7 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
                     }
                 }
 
-                #(
-                    let #field_vars = match #field_vars {
-                        None => match #cbor_module::CborDeserialize::null() {
-                            None => return Err(#cbor_module::CborSerializationError::map_value_missing(#field_map_keys)),
-                            Some(null_value) => null_value,
-                        },
-                        Some(#field_vars) => #field_vars,
-                    };
-                )*
+                #field_missing_key_handling
 
                 Ok(#self_construct)
             }
