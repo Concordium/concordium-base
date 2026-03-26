@@ -1,4 +1,13 @@
 ## Unreleased
+
+- Added `protocol_level_locks` module with types for PLT locks:
+  - `LockId`
+  - `LockConfig`
+  - `LockController`
+  - `LockControllerSimpleV0`
+  - `LockControllerSimpleV0Grant`
+  - `LockControllerSimpleV0Capability`
+- Added CBOR serialization for `TransactionTime` and `TokenId`.
 - Implemented `common::from_bytes_complete` that fails if all bytes are not consumed during deserialization.
 - `cbor::cbor_encode` is now infallible and returns `Vec<u8>` instead of `CborSerializationResult<Vec<u8>>`
 - `&[T]` no longer implements `CborSerialize` in order to avoid ambiguity with `CborSerialize` implementation for `[u8]`. 
