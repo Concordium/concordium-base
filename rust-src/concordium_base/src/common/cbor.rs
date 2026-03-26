@@ -202,6 +202,22 @@
 //!
 //! In this example, entries in the CBOR map that are not present in the struct
 //! are each deserialized into an entry in the map in the field `unknown`.
+//!
+//! #### `cbor(default)`
+//! For struct fields deserialized from a CBOR map, uses [`Default::default()`]
+//! when the map key is absent instead of producing a deserialization error.
+//! This attribute only affects deserialization; serialization is unchanged.
+//! The field type must implement the [`Default`] trait (enforced at compile
+//! time by the generated code).
+//!
+//! ```ignore
+//! #[derive(CborSerialize, CborDeserialize)]
+//! struct TestStruct {
+//!     name: String,
+//!     #[cbor(default)]
+//!     active: bool, // defaults to `false` when the key is absent
+//! }
+//! ```
 
 mod composites;
 /// CBOR serialization of types from `concordium-contracts-common`
@@ -1671,5 +1687,126 @@ mod test {
         let cbor = hex::decode("f4f4").unwrap();
         let err = cbor_decode::<bool>(&cbor).unwrap_err().to_string();
         assert!(err.contains("data remaining after parse"), "err: {}", err);
+    }
+
+    /// Test that a field annotated with `#[cbor(default)]` receives
+    /// `Default::default()` when its map key is absent from the CBOR input.
+    #[test]
+    fn test_cbor_default_missing_key() {
+        #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct WithDefault {
+            name: String,
+            #[cbor(default)]
+            active: bool,
+        }
+
+        // Encode a struct that only has the `name` field, producing a CBOR map
+        // without the `active` key.
+        #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct NameOnly {
+            name: String,
+        }
+
+        let name_only = NameOnly {
+            name: "Alice".to_string(),
+        };
+        let cbor = cbor_encode(&name_only);
+
+        let decoded: WithDefault = cbor_decode(&cbor).unwrap();
+        assert_eq!(decoded.name, "Alice");
+        assert_eq!(decoded.active, false);
+    }
+
+    /// Test round-trip: encode a struct with a `#[cbor(default)]` field
+    /// present, then decode and verify equality.
+    #[test]
+    fn test_cbor_default_round_trip() {
+        #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct WithDefault {
+            name: String,
+            #[cbor(default)]
+            active: bool,
+        }
+
+        let value = WithDefault {
+            name: "Bob".to_string(),
+            active: true,
+        };
+        let cbor = cbor_encode(&value);
+        let decoded: WithDefault = cbor_decode(&cbor).unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    /// Test mixed fields: a required field (no `#[cbor(default)]`) and a
+    /// default field. The default field should get its `Default` value when
+    /// missing, while a missing required field should produce an error.
+    #[test]
+    fn test_cbor_default_mixed_fields() {
+        #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct Mixed {
+            required: u64,
+            #[cbor(default)]
+            flag: bool,
+        }
+
+        // Encode a struct with only the `required` field.
+        #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct RequiredOnly {
+            required: u64,
+        }
+
+        let required_only = RequiredOnly { required: 42 };
+        let cbor = cbor_encode(&required_only);
+
+        let decoded: Mixed = cbor_decode(&cbor).unwrap();
+        assert_eq!(decoded.required, 42);
+        assert_eq!(decoded.flag, false);
+
+        // Encoding a struct with only the `flag` field should fail when
+        // decoded as `Mixed`, because `required` is not a default field.
+        #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct FlagOnly {
+            flag: bool,
+        }
+
+        let flag_only = FlagOnly { flag: true };
+        let cbor_flag_only = cbor_encode(&flag_only);
+
+        let err = cbor_decode::<Mixed>(&cbor_flag_only)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("not present"),
+            "expected missing-key error, got: {}",
+            err
+        );
+    }
+
+    /// Test `#[cbor(default)]` on an `Option<T>` field. The `Default` impl
+    /// for `Option<T>` returns `None`, so this should work even though it is
+    /// redundant with the `null()` path.
+    #[test]
+    fn test_cbor_default_on_option() {
+        #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct WithOptional {
+            name: String,
+            #[cbor(default)]
+            value: Option<u64>,
+        }
+
+        // Encode a struct with only the `name` field.
+        #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct NameOnly2 {
+            name: String,
+        }
+
+        let name_only = NameOnly2 {
+            name: "Charlie".to_string(),
+        };
+        let cbor = cbor_encode(&name_only);
+
+        let decoded: WithOptional = cbor_decode(&cbor).unwrap();
+        assert_eq!(decoded.name, "Charlie");
+        assert_eq!(decoded.value, None);
     }
 }
