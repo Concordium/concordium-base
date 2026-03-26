@@ -43,6 +43,9 @@ pub struct CborFieldOpts {
     /// to the field with this attribute.
     #[darling(default)]
     other: bool,
+    /// Use `Default::default()` when the key is absent from the CBOR map.
+    #[darling(default)]
+    default: bool,
 }
 
 #[derive(Debug, Default, FromVariant)]
@@ -166,6 +169,28 @@ impl CborFields {
             return Err(syn::Error::new(
                 Span::call_site(),
                 "cbor(other) can only be specified on a at most a single field",
+            ));
+        }
+
+        if this
+            .0
+            .iter()
+            .any(|field| field.opts.default && field.opts.other)
+        {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "cbor(default) and cbor(other) cannot both be specified on the same field",
+            ));
+        }
+
+        if this
+            .0
+            .iter()
+            .any(|field| field.opts.default && matches!(field.member, Member::Unnamed(_)))
+        {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "cbor(default) is only valid on named struct fields, not on tuple struct fields",
             ));
         }
 
