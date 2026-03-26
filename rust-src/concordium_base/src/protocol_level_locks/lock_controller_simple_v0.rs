@@ -2,6 +2,8 @@ use crate::common::cbor::{
     CborDecoder, CborDeserialize, CborEncoder, CborSerializationError, CborSerializationResult,
     CborSerialize,
 };
+use crate::protocol_level_tokens::CborHolderAccount;
+use concordium_base_derive::{CborDeserialize, CborSerialize};
 
 /// Capability that can be granted to an account for a SimpleV0 lock
 /// controller.
@@ -66,10 +68,30 @@ impl CborDeserialize for LockControllerSimpleV0Capability {
     }
 }
 
+/// A grant of capabilities to a specific account for a SimpleV0 lock
+/// controller.
+///
+/// Each grant assigns one or more [`LockControllerSimpleV0Capability`] roles
+/// to the given account, authorizing it to perform the corresponding lock
+/// operations.
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+pub struct LockControllerSimpleV0Grant {
+    /// The account receiving the grant.
+    pub account: CborHolderAccount,
+    /// The capabilities granted to the account.
+    pub roles: Vec<LockControllerSimpleV0Capability>,
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::common::cbor;
+    use crate::protocol_level_tokens::test_fixtures::ADDRESS;
 
     /// Round-trip test for all `LockControllerSimpleV0Capability` variants.
     #[test]
@@ -114,5 +136,68 @@ mod test {
     fn test_capability_cbor_fixture_cancel() {
         let encoded = cbor::cbor_encode(&LockControllerSimpleV0Capability::Cancel);
         assert_eq!(hex::encode(&encoded), "6663616e63656c");
+    }
+
+    /// Round-trip test for `LockControllerSimpleV0Grant` with an account and
+    /// multiple roles.
+    #[test]
+    fn test_grant_cbor_round_trip() {
+        let grant = LockControllerSimpleV0Grant {
+            account: CborHolderAccount::from(ADDRESS),
+            roles: vec![
+                LockControllerSimpleV0Capability::Fund,
+                LockControllerSimpleV0Capability::Send,
+            ],
+        };
+        let encoded = cbor::cbor_encode(&grant);
+        let decoded: LockControllerSimpleV0Grant =
+            cbor::cbor_decode(&encoded).expect("CBOR decode failed");
+        assert_eq!(decoded, grant);
+    }
+
+    /// Fixture test for `LockControllerSimpleV0Grant` with a known account
+    /// address and roles `[Fund, Cancel]`.
+    ///
+    /// Expected CBOR structure (diagnostic notation):
+    /// ```text
+    /// {
+    ///   "roles": ["fund", "cancel"],
+    ///   "account": 40307({1: 40305({1: 919}), 3: h'0102...1f20'})
+    /// }
+    /// ```
+    ///
+    /// Note: CBOR map keys are ordered by length (deterministic encoding),
+    /// so `"roles"` (5 bytes) appears before `"account"` (7 bytes).
+    #[test]
+    fn test_grant_cbor_fixture() {
+        let grant = LockControllerSimpleV0Grant {
+            account: CborHolderAccount::from(ADDRESS),
+            roles: vec![
+                LockControllerSimpleV0Capability::Fund,
+                LockControllerSimpleV0Capability::Cancel,
+            ],
+        };
+        let encoded = cbor::cbor_encode(&grant);
+        // Build expected hex:
+        // Map(2) with text keys "account" and "roles"
+        // "account" value: CborHolderAccount(ADDRESS) with coin_info = Some(CCD)
+        //   Known encoding: d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20
+        // "roles" value: Array(2) ["fund", "cancel"]
+        //   "fund" = 6466756e64, "cancel" = 6663616e63656c
+        //   Array(2): 82 6466756e64 6663616e63656c
+        //
+        // Map(2): a2
+        //   key "account" (7 bytes): 67 6163636f756e74
+        //   key "roles" (5 bytes):   65 726f6c6573
+        let expected = concat!(
+            "a2",                                                                 // map(2)
+            "65726f6c6573",                                                       // text "roles"
+            "82",                                                                 // array(2)
+            "6466756e64",                                                         // text "fund"
+            "6663616e63656c",                                                     // text "cancel"
+            "676163636f756e74",                                                   // text "account"
+            "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20", // CborHolderAccount
+        );
+        assert_eq!(hex::encode(&encoded), expected);
     }
 }
