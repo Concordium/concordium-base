@@ -80,6 +80,7 @@ impl CborDeserialize for LockId {
 mod test {
     use super::*;
     use crate::common::cbor;
+    use crate::common::{serialize_deserialize, to_bytes};
 
     fn example_lock_id() -> LockId {
         LockId {
@@ -114,6 +115,35 @@ mod test {
         let lock_id = example_lock_id();
         let encoded = cbor::cbor_encode(&lock_id);
         assert_eq!(hex::encode(&encoded), "d99fd8831927110500");
+    }
+
+    /// Round-trip test: binary (`Serial`/`Deserial`) encoding of `LockId`
+    /// produces the same value.
+    #[test]
+    fn test_lock_id_serial_round_trip() {
+        let lock_id = example_lock_id();
+        let result = serialize_deserialize(&lock_id).expect("Serial round-trip should succeed");
+        assert_eq!(result, lock_id);
+    }
+
+    /// Fixture test: verify the exact binary (`Serial`) encoding of `LockId`.
+    ///
+    /// `LockId { account_index: 10001, sequence_number: 5, creation_order: 0
+    /// }`:
+    /// - `account_index.index` = 10001 = `0x0000000000002711` (8 bytes BE u64)
+    /// - `sequence_number.nonce` = 5 = `0x0000000000000005` (8 bytes BE u64)
+    /// - `creation_order` = 0 = `0x0000000000000000` (8 bytes BE u64)
+    ///
+    /// Total 24 bytes:
+    /// `000000000000271100000000000000050000000000000000`
+    #[test]
+    fn test_lock_id_serial_fixture() {
+        let lock_id = example_lock_id();
+        let bytes = to_bytes(&lock_id);
+        assert_eq!(
+            hex::encode(&bytes),
+            "000000000000271100000000000000050000000000000000"
+        );
     }
 
     /// Test with zero values.

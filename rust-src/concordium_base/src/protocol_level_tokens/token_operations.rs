@@ -287,7 +287,10 @@ impl From<CborMemo> for Memo {
 pub mod test {
     use super::*;
     use crate::{
-        common::cbor::{self, value},
+        common::{
+            cbor::{self, value},
+            serialize_deserialize, to_bytes,
+        },
         protocol_level_tokens::{token_holder::test_fixtures::ADDRESS, CborHolderAccount},
     };
     use assert_matches::assert_matches;
@@ -495,5 +498,50 @@ pub mod test {
             .collect();
         let operations_decoded = payload.decode_operations_maybe_known().unwrap();
         assert_eq!(operations_decoded, operations_known);
+    }
+
+    /// Round-trip test for `CborMemo::Raw` and `CborMemo::Cbor` variants using
+    /// binary (`Serial`/`Deserial`) encoding.
+    #[test]
+    fn test_cbor_memo_serial_round_trip() {
+        let raw = CborMemo::Raw(Memo::try_from(vec![0x01, 0x02, 0x03]).unwrap());
+        let result = serialize_deserialize(&raw).expect("Serial round-trip should succeed");
+        assert_eq!(result, raw);
+
+        let cbor_memo = CborMemo::Cbor(Memo::try_from(vec![0xAA, 0xBB]).unwrap());
+        let result = serialize_deserialize(&cbor_memo).expect("Serial round-trip should succeed");
+        assert_eq!(result, cbor_memo);
+    }
+
+    /// Fixture test: `CborMemo::Raw(Memo([0x01, 0x02, 0x03]))` binary (`Serial`)
+    /// encoding.
+    ///
+    /// Expected encoding:
+    /// - tag: `00` (Raw = variant 0)
+    /// - memo length prefix: `0003` (u16 BE, 3 bytes)
+    /// - memo bytes: `010203`
+    ///
+    /// Full: `000003010203`
+    #[test]
+    fn test_cbor_memo_serial_fixture_raw() {
+        let memo = CborMemo::Raw(Memo::try_from(vec![0x01, 0x02, 0x03]).unwrap());
+        let bytes = to_bytes(&memo);
+        assert_eq!(hex::encode(&bytes), "000003010203");
+    }
+
+    /// Fixture test: `CborMemo::Cbor(Memo([0xAA, 0xBB]))` binary (`Serial`)
+    /// encoding.
+    ///
+    /// Expected encoding:
+    /// - tag: `01` (Cbor = variant 1)
+    /// - memo length prefix: `0002` (u16 BE, 2 bytes)
+    /// - memo bytes: `aabb`
+    ///
+    /// Full: `010002aabb`
+    #[test]
+    fn test_cbor_memo_serial_fixture_cbor() {
+        let memo = CborMemo::Cbor(Memo::try_from(vec![0xAA, 0xBB]).unwrap());
+        let bytes = to_bytes(&memo);
+        assert_eq!(hex::encode(&bytes), "010002aabb");
     }
 }

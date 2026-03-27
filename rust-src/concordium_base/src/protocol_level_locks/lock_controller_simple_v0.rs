@@ -121,6 +121,7 @@ pub struct LockControllerSimpleV0 {
 mod test {
     use super::*;
     use crate::common::cbor;
+    use crate::common::{serialize_deserialize, to_bytes};
     use crate::protocol_level_tokens::test_fixtures::ADDRESS;
     use crate::transactions::Memo;
 
@@ -387,5 +388,49 @@ mod test {
             "80",             // array(0)
         );
         assert_eq!(hex::encode(&encoded), expected);
+    }
+
+    /// Round-trip test for all `LockControllerSimpleV0Capability` variants
+    /// using binary (`Serial`/`Deserial`) encoding.
+    #[test]
+    fn test_capability_serial_round_trip() {
+        let variants = [
+            LockControllerSimpleV0Capability::Fund,
+            LockControllerSimpleV0Capability::Return,
+            LockControllerSimpleV0Capability::Send,
+            LockControllerSimpleV0Capability::Cancel,
+        ];
+        for variant in &variants {
+            let result = serialize_deserialize(variant).expect("Serial round-trip should succeed");
+            assert_eq!(&result, variant);
+        }
+    }
+
+    /// Fixture test: `LockControllerSimpleV0Capability` binary (`Serial`)
+    /// encoding.
+    ///
+    /// Enum tags are single bytes, 0-indexed by declaration order:
+    /// - `Fund`   → `00`
+    /// - `Return` → `01`
+    /// - `Send`   → `02`
+    /// - `Cancel` → `03`
+    #[test]
+    fn test_capability_serial_fixture() {
+        assert_eq!(
+            hex::encode(to_bytes(&LockControllerSimpleV0Capability::Fund)),
+            "00"
+        );
+        assert_eq!(
+            hex::encode(to_bytes(&LockControllerSimpleV0Capability::Return)),
+            "01"
+        );
+        assert_eq!(
+            hex::encode(to_bytes(&LockControllerSimpleV0Capability::Send)),
+            "02"
+        );
+        assert_eq!(
+            hex::encode(to_bytes(&LockControllerSimpleV0Capability::Cancel)),
+            "03"
+        );
     }
 }
