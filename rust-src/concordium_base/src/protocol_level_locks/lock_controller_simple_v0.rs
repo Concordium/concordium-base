@@ -3,14 +3,14 @@ use crate::common::cbor::{
     CborSerializationError, CborSerializationResult, CborSerialize, MapKey, MapKeyRef,
 };
 use crate::protocol_level_tokens::{CborHolderAccount, CborMemo, TokenId};
-use concordium_base_derive::{CborDeserialize, CborSerialize};
+use concordium_base_derive::{CborDeserialize, CborSerialize, Serialize};
 
 /// Capability that can be granted to an account for a SimpleV0 lock
 /// controller.
 ///
 /// Each capability authorizes the grantee to perform the corresponding lock
 /// operation.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize)]
 #[cfg_attr(
     feature = "serde_deprecated",
     derive(serde::Serialize, serde::Deserialize)

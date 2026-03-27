@@ -1,8 +1,11 @@
 use crate::{
     base::{AccountIndex, Nonce},
-    common::cbor::{
-        CborArrayDecoder, CborArrayEncoder, CborDecoder, CborDeserialize, CborEncoder,
-        CborSerializationResult, CborSerialize,
+    common::{
+        cbor::{
+            CborArrayDecoder, CborArrayEncoder, CborDecoder, CborDeserialize, CborEncoder,
+            CborSerializationResult, CborSerialize,
+        },
+        Serialize,
     },
 };
 use anyhow::anyhow;
@@ -14,7 +17,7 @@ const LOCK_ID_TAG: u64 = 40920;
 const LOCK_ID_ARRAY_SIZE: usize = 3;
 
 /// Unique identifier for a PLT lock.
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize)]
 #[cfg_attr(
     feature = "serde_deprecated",
     derive(serde::Serialize, serde::Deserialize)

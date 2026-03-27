@@ -4,7 +4,7 @@ use crate::{
     protocol_level_tokens::{CborHolderAccount, CoinInfo, RawCbor, TokenAmount, TokenId},
     transactions::Memo,
 };
-use concordium_base_derive::{CborDeserialize, CborSerialize};
+use concordium_base_derive::{CborDeserialize, CborSerialize, Serialize};
 use concordium_contracts_common::AccountAddress;
 
 /// Module that implements easy construction of protocol level token operations.
@@ -259,7 +259,7 @@ pub struct TokenTransfer {
 }
 
 /// Memo attached to a protocol level token transfer
-#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize, Serialize)]
 #[cfg_attr(
     feature = "serde_deprecated",
     derive(serde::Serialize, serde::Deserialize)
