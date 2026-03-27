@@ -196,11 +196,10 @@ impl From<(TokenId, TokenOperation)> for MetaUpdateOperation {
 /// dispatching to the appropriate operation handler.
 pub enum MetaUpdateOperationKind {
     /// A [`TokenOperation`] for a specific [`TokenId`].
-    Token((TokenId, TokenOperation))
+    Token((TokenId, TokenOperation)),
 }
 
 impl From<MetaUpdateOperation> for MetaUpdateOperationKind {
-
     fn from(value: MetaUpdateOperation) -> Self {
         match value {
             MetaUpdateOperation::Transfer(details) => {
