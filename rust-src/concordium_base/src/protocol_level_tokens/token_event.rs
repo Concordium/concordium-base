@@ -33,7 +33,7 @@ pub enum TokenModuleEventType {
     /// Revoke admin roles from an Account for a protocol level token.
     RevokeAdminRoles,
     /// Update token metadata for a protocol level token.
-    UpdateMetada,
+    UpdateMetadata,
 }
 
 /// Unknown token module event
@@ -53,7 +53,7 @@ impl TokenModuleEventType {
             TokenModuleEventType::Unpause => "unpause",
             TokenModuleEventType::AssignAdminRoles => "assignAdminRoles",
             TokenModuleEventType::RevokeAdminRoles => "revokeAdminRoles",
-            TokenModuleEventType::UpdateMetada => "updateMetadata",
+            TokenModuleEventType::UpdateMetadata => "updateMetadata",
         }
     }
 
@@ -75,7 +75,7 @@ impl TokenModuleEventType {
             "unpause" => TokenModuleEventType::Unpause,
             "assignAdminRoles" => TokenModuleEventType::AssignAdminRoles,
             "revokeAdminRoles" => TokenModuleEventType::RevokeAdminRoles,
-            "updateMetadata" => TokenModuleEventType::UpdateMetada,
+            "updateMetadata" => TokenModuleEventType::UpdateMetadata,
             _ => {
                 return Err(UnknownTokenModuleEventTypeError(
                     type_discriminator.to_string(),
@@ -127,7 +127,7 @@ impl TokenModuleEvent {
             TokenModuleEvent::Unpause(_) => TokenModuleEventType::Unpause,
             TokenModuleEvent::AssignAdminRoles(_) => TokenModuleEventType::AssignAdminRoles,
             TokenModuleEvent::RevokeAdminRoles(_) => TokenModuleEventType::RevokeAdminRoles,
-            TokenModuleEvent::UpdateMetadata(_) => TokenModuleEventType::UpdateMetada,
+            TokenModuleEvent::UpdateMetadata(_) => TokenModuleEventType::UpdateMetadata,
         }
     }
 
@@ -167,7 +167,7 @@ impl TokenModuleEvent {
                 RawCbor::from(cbor::cbor_encode(event)),
             ),
             TokenModuleEvent::UpdateMetadata(event) => (
-                TokenModuleEventType::UpdateMetada,
+                TokenModuleEventType::UpdateMetadata,
                 RawCbor::from(cbor::cbor_encode(event)),
             ),
         }
@@ -199,7 +199,7 @@ impl TokenModuleEvent {
             TokenModuleEventType::RevokeAdminRoles => {
                 TokenModuleEvent::RevokeAdminRoles(cbor::cbor_decode(cbor)?)
             }
-            TokenModuleEventType::UpdateMetada => {
+            TokenModuleEventType::UpdateMetadata => {
                 TokenModuleEvent::UpdateMetadata(cbor::cbor_decode(cbor)?)
             }
         })
@@ -256,11 +256,12 @@ pub struct TokenUpdateAdminRolesEventDetails {
 /// An event emitted when there are updates to the token metadata for a
 /// protocol level token.
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
+#[cbor(transparent)]
 #[cfg_attr(
     feature = "serde_deprecated",
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde_deprecated", serde(transparent))]
 pub struct TokenUpdateMetadataEventDetails {
     pub metadata_url: MetadataUrl,
 }
@@ -562,7 +563,7 @@ mod test {
         let cbor = cbor::cbor_encode(&event);
         assert_eq!(
             hex::encode(&cbor),
-            "a16b6d6574616461746155726ca16375726c72687474703a2f2f736f6d6555726c2e636f6d"
+            "a16375726c72687474703a2f2f736f6d6555726c2e636f6d"
         );
 
         let event_decoded: TokenUpdateMetadataEventDetails = cbor::cbor_decode(cbor).unwrap();
