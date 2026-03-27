@@ -2223,6 +2223,9 @@ pub mod cost {
     /// operations
     pub const PLT_OPERATIONS_TRANSACTIONS: Energy = Energy { energy: 300 };
 
+    /// Additional cost of a transaction consisting of meta-update operations.
+    pub const META_UPDATE_TRANSACTIONS: Energy = Energy { energy: 300 };
+
     /// Additional cost of a PLT transfer
     pub const PLT_TRANSFER: Energy = Energy { energy: 100 };
 

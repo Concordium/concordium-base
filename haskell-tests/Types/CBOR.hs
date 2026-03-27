@@ -121,6 +121,7 @@ genTokenTransaction =
         <$> listOf genTokenOperation
 
 -- | Generator for 'MetaUpdateOperation'.
+genMetaUpdateOperation :: Gen MetaUpdateOperation
 genMetaUpdateOperation =
     oneof
         [ MetaTokenUpdate <$> genTokenId <*> genTokenOperation

@@ -192,46 +192,52 @@ impl From<(TokenId, TokenOperation)> for MetaUpdateOperation {
     }
 }
 
-impl TryFrom<MetaUpdateOperation> for (TokenId, TokenOperation) {
-    type Error = ();
+/// A discriminated version of [`MetaUpdateOperation`] for the purpose of
+/// dispatching to the appropriate operation handler.
+pub enum MetaUpdateOperationKind {
+    /// A [`TokenOperation`] for a specific [`TokenId`].
+    Token((TokenId, TokenOperation))
+}
 
-    fn try_from(value: MetaUpdateOperation) -> Result<Self, Self::Error> {
+impl From<MetaUpdateOperation> for MetaUpdateOperationKind {
+
+    fn from(value: MetaUpdateOperation) -> Self {
         match value {
             MetaUpdateOperation::Transfer(details) => {
                 let (token_id, details) = details.into();
-                Ok((token_id, TokenOperation::Transfer(details)))
+                Self::Token((token_id, TokenOperation::Transfer(details)))
             }
             MetaUpdateOperation::Mint(details) => {
                 let (token_id, details) = details.into();
-                Ok((token_id, TokenOperation::Mint(details)))
+                Self::Token((token_id, TokenOperation::Mint(details)))
             }
             MetaUpdateOperation::Burn(details) => {
                 let (token_id, details) = details.into();
-                Ok((token_id, TokenOperation::Burn(details)))
+                Self::Token((token_id, TokenOperation::Burn(details)))
             }
             MetaUpdateOperation::AddAllowList(details) => {
                 let (token_id, details) = details.into();
-                Ok((token_id, TokenOperation::AddAllowList(details)))
+                Self::Token((token_id, TokenOperation::AddAllowList(details)))
             }
             MetaUpdateOperation::RemoveAllowList(details) => {
                 let (token_id, details) = details.into();
-                Ok((token_id, TokenOperation::RemoveAllowList(details)))
+                Self::Token((token_id, TokenOperation::RemoveAllowList(details)))
             }
             MetaUpdateOperation::AddDenyList(details) => {
                 let (token_id, details) = details.into();
-                Ok((token_id, TokenOperation::AddDenyList(details)))
+                Self::Token((token_id, TokenOperation::AddDenyList(details)))
             }
             MetaUpdateOperation::RemoveDenyList(details) => {
                 let (token_id, details) = details.into();
-                Ok((token_id, TokenOperation::RemoveDenyList(details)))
+                Self::Token((token_id, TokenOperation::RemoveDenyList(details)))
             }
             MetaUpdateOperation::Pause(details) => {
                 let (token_id, details) = details.into();
-                Ok((token_id, TokenOperation::Pause(details)))
+                Self::Token((token_id, TokenOperation::Pause(details)))
             }
             MetaUpdateOperation::Unpause(details) => {
                 let (token_id, details) = details.into();
-                Ok((token_id, TokenOperation::Unpause(details)))
+                Self::Token((token_id, TokenOperation::Unpause(details)))
             }
         }
     }
