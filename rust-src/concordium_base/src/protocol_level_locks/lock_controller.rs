@@ -39,7 +39,7 @@ mod test {
                 ],
             }],
             tokens: vec!["CCD".parse().unwrap()],
-            keep_alive: false,
+            keep_alive: None,
             memo: None,
         });
         let encoded = cbor::cbor_encode(&controller);
@@ -54,7 +54,7 @@ mod test {
         let controller = LockController::SimpleV0(LockControllerSimpleV0 {
             grants: vec![],
             tokens: vec![],
-            keep_alive: false,
+            keep_alive: None,
             memo: None,
         });
         let encoded = cbor::cbor_encode(&controller);
@@ -67,34 +67,34 @@ mod test {
     ///
     /// Expected CBOR structure (diagnostic notation):
     /// ```text
-    /// {"simpleV0": {"grants": [], "tokens": [], "keepAlive": false}}
+    /// {"simpleV0": {"grants": [], "tokens": []}}
     /// ```
     ///
     /// Map(1): a1
     ///   key "simpleV0" (8 bytes): 6873696d706c655630
-    ///   value: Map(3) for LockControllerSimpleV0 with empty grants/tokens
+    ///   value: Map(2) for LockControllerSimpleV0 with empty grants/tokens
     ///     "grants" (6): 666772616e7473, value []: 80
     ///     "tokens" (6): 66746f6b656e73, value []: 80
-    ///     "keepAlive" (9): 696b656570416c697665, value false: f4
+    ///
+    /// Note: `keep_alive: None` and `memo: None` are omitted by the derive
+    /// macro.
     #[test]
     fn test_lock_controller_cbor_fixture() {
         let controller = LockController::SimpleV0(LockControllerSimpleV0 {
             grants: vec![],
             tokens: vec![],
-            keep_alive: false,
+            keep_alive: None,
             memo: None,
         });
         let encoded = cbor::cbor_encode(&controller);
         let expected = concat!(
-            "a1",                   // map(1)
-            "6873696d706c655630",   // text "simpleV0"
-            "a3",                   // map(3) — inner LockControllerSimpleV0
-            "666772616e7473",       // text "grants"
-            "80",                   // array(0)
-            "66746f6b656e73",       // text "tokens"
-            "80",                   // array(0)
-            "696b656570416c697665", // text "keepAlive"
-            "f4",                   // false
+            "a1",                 // map(1)
+            "6873696d706c655630", // text "simpleV0"
+            "a2",                 // map(2) — inner LockControllerSimpleV0
+            "666772616e7473",     // text "grants"
+            "80",                 // array(0)
+            "66746f6b656e73",     // text "tokens"
+            "80",                 // array(0)
         );
         assert_eq!(hex::encode(&encoded), expected);
     }

@@ -45,7 +45,7 @@ mod test {
                     ],
                 }],
                 tokens: vec!["CCD".parse().unwrap()],
-                keep_alive: false,
+                keep_alive: None,
                 memo: None,
             }),
         }
@@ -86,7 +86,7 @@ mod test {
     /// ```text
     /// {
     ///   "expiry": 1(1804806000),
-    ///   "controller": {"simpleV0": {"grants": [], "tokens": [], "keepAlive": false}},
+    ///   "controller": {"simpleV0": {"grants": [], "tokens": []}},
     ///   "recipients": [40307({1: 40305({1: 919}), 3: h'0102...1f20'})]
     /// }
     /// ```
@@ -96,6 +96,9 @@ mod test {
     /// - "controller" (10 bytes)
     /// - "recipients" (10 bytes) — same length as "controller", sorted
     ///   lexicographically
+    ///
+    /// Note: `keep_alive: None` and `memo: None` are omitted by the derive
+    /// macro, so the inner `LockControllerSimpleV0` map has only 2 entries.
     #[test]
     fn test_lock_config_cbor_fixture() {
         let config = LockConfig {
@@ -104,7 +107,7 @@ mod test {
             controller: LockController::SimpleV0(LockControllerSimpleV0 {
                 grants: vec![],
                 tokens: vec![],
-                keep_alive: false,
+                keep_alive: None,
                 memo: None,
             }),
         };
@@ -114,19 +117,18 @@ mod test {
         // Map(3): a3
         //
         // Keys sorted by encoded byte length, then lexicographically:
-        // "expiry" (6 bytes) → 666578706972790
+        // "expiry" (6 bytes) → 66657870697279
         // "controller" (10 bytes) → 6a636f6e74726f6c6c6572
         // "recipients" (10 bytes) → 6a726563697069656e7473
         //
         // Values:
         // expiry: 1(1804806000) → c11a6b932770
-        // controller: {"simpleV0": {grants: [], tokens: [], keepAlive: false}}
+        // controller: {"simpleV0": {grants: [], tokens: []}}
         //   Map(1): a1
         //     "simpleV0" (8): 6873696d706c655630
-        //     Map(3): a3
+        //     Map(2): a2
         //       "grants" (6): 666772616e7473, []: 80
         //       "tokens" (6): 66746f6b656e73, []: 80
-        //       "keepAlive" (9): 696b656570416c697665, false: f4
         // recipients: [CborHolderAccount]
         //   Array(1): 81
         //   CborHolderAccount: d99d73a201d99d71a1011903970358200102...1f20
@@ -137,13 +139,11 @@ mod test {
             "6a636f6e74726f6c6c6572",   // text "controller"
             "a1",                       // map(1) — LockController
             "6873696d706c655630",       // text "simpleV0"
-            "a3",                       // map(3) — LockControllerSimpleV0
+            "a2",                       // map(2) — LockControllerSimpleV0
             "666772616e7473",           // text "grants"
             "80",                       // array(0)
             "66746f6b656e73",           // text "tokens"
             "80",                       // array(0)
-            "696b656570416c697665",     // text "keepAlive"
-            "f4",                       // false
             "6a726563697069656e7473",   // text "recipients"
             "81",                       // array(1)
             "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20", // CborHolderAccount

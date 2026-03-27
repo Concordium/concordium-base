@@ -1,6 +1,6 @@
 use crate::common::cbor::{
-    CborDecoder, CborDeserialize, CborEncoder, CborMapDecoder, CborMapEncoder,
-    CborSerializationError, CborSerializationResult, CborSerialize, MapKey, MapKeyRef,
+    CborDecoder, CborDeserialize, CborEncoder, CborSerializationError, CborSerializationResult,
+    CborSerialize,
 };
 use crate::protocol_level_tokens::{CborHolderAccount, CborMemo, TokenId};
 use concordium_base_derive::{CborDeserialize, CborSerialize, Serialize};
@@ -91,7 +91,7 @@ pub struct LockControllerSimpleV0Grant {
 ///
 /// Contains the list of capability grants, which tokens are affected,
 /// a keep-alive flag, and an optional memo.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
 #[cfg_attr(
     feature = "serde_deprecated",
     derive(serde::Serialize, serde::Deserialize)
@@ -103,79 +103,18 @@ pub struct LockControllerSimpleV0 {
     /// Tokens affected by this lock controller.
     pub tokens: Vec<TokenId>,
     /// Whether the lock should be kept alive after all funds are
-    /// returned. Defaults to `false` when omitted from CBOR.
-    #[cfg_attr(feature = "serde_deprecated", serde(default))]
-    pub keep_alive: bool,
+    /// returned. Interpreted as `false` when omitted.
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(skip_serializing_if = "Option::is_none")
+    )]
+    pub keep_alive: Option<bool>,
     /// Optional memo attached to the lock.
     #[cfg_attr(
         feature = "serde_deprecated",
         serde(skip_serializing_if = "Option::is_none")
     )]
     pub memo: Option<CborMemo>,
-}
-
-impl CborSerialize for LockControllerSimpleV0 {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
-        let mut map_encoder = encoder.encode_map()?;
-        map_encoder.serialize_entry(&MapKeyRef::Text("grants"), &self.grants)?;
-        map_encoder.serialize_entry(&MapKeyRef::Text("tokens"), &self.tokens)?;
-        // Always serialize keep_alive (even when false), matching normal CBOR
-        // map behavior for non-optional fields.
-        map_encoder.serialize_entry(&MapKeyRef::Text("keepAlive"), &self.keep_alive)?;
-        if !CborSerialize::is_null(&self.memo) {
-            map_encoder.serialize_entry(&MapKeyRef::Text("memo"), &self.memo)?;
-        }
-        map_encoder.end()?;
-        Ok(())
-    }
-}
-
-impl CborDeserialize for LockControllerSimpleV0 {
-    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
-    where
-        Self: Sized,
-    {
-        let mut grants = None;
-        let mut tokens = None;
-        let mut keep_alive = None;
-        let mut memo: Option<Option<CborMemo>> = None;
-
-        let mut map_decoder = decoder.decode_map()?;
-        while let Some(map_key) = CborMapDecoder::deserialize_key::<MapKey>(&mut map_decoder)? {
-            match map_key.as_ref() {
-                MapKeyRef::Text("grants") => {
-                    grants = Some(CborMapDecoder::deserialize_value(&mut map_decoder)?);
-                }
-                MapKeyRef::Text("tokens") => {
-                    tokens = Some(CborMapDecoder::deserialize_value(&mut map_decoder)?);
-                }
-                MapKeyRef::Text("keepAlive") => {
-                    keep_alive = Some(CborMapDecoder::deserialize_value(&mut map_decoder)?);
-                }
-                MapKeyRef::Text("memo") => {
-                    memo = Some(CborMapDecoder::deserialize_value(&mut map_decoder)?);
-                }
-                _ => {
-                    CborMapDecoder::skip_value(&mut map_decoder)?;
-                }
-            }
-        }
-
-        let grants = grants
-            .ok_or_else(|| CborSerializationError::map_value_missing(MapKeyRef::Text("grants")))?;
-        let tokens = tokens
-            .ok_or_else(|| CborSerializationError::map_value_missing(MapKeyRef::Text("tokens")))?;
-        // Default to false when omitted from CBOR.
-        let keep_alive = keep_alive.unwrap_or(false);
-        let memo = memo.unwrap_or(None);
-
-        Ok(LockControllerSimpleV0 {
-            grants,
-            tokens,
-            keep_alive,
-            memo,
-        })
-    }
 }
 
 #[cfg(test)]
@@ -306,7 +245,7 @@ mod test {
                 ],
             }],
             tokens: vec!["CCD".parse().unwrap()],
-            keep_alive: true,
+            keep_alive: true.into(),
             memo: Some(CborMemo::Raw(
                 Memo::try_from(vec![0x01, 0x02, 0x03]).unwrap(),
             )),
@@ -324,32 +263,13 @@ mod test {
         let controller = LockControllerSimpleV0 {
             grants: vec![],
             tokens: vec![],
-            keep_alive: false,
+            keep_alive: None,
             memo: None,
         };
         let encoded = cbor::cbor_encode(&controller);
         let decoded: LockControllerSimpleV0 =
             cbor::cbor_decode(&encoded).expect("CBOR decode failed");
         assert_eq!(decoded, controller);
-    }
-
-    /// Test that `keep_alive` defaults to `false` when the key is missing
-    /// from the CBOR map.
-    #[test]
-    fn test_simple_v0_cbor_keep_alive_default() {
-        // Manually construct CBOR map without "keepAlive" key:
-        // {"grants": [], "tokens": []}
-        //
-        // Map(2): a2
-        // "grants" sorted before "tokens" (both 6-char keys, "g" < "t"):
-        //   "grants": 666772616e7473, value []: 80
-        //   "tokens": 66746f6b656e73, value []: 80
-        let cbor_hex = "a2666772616e74738066746f6b656e7380";
-        let cbor_bytes = hex::decode(cbor_hex).expect("valid hex");
-        let decoded: LockControllerSimpleV0 = cbor::cbor_decode(&cbor_bytes)
-            .expect("CBOR decode should succeed with missing keepAlive");
-        assert!(!decoded.keep_alive, "keep_alive should default to false");
-        assert!(decoded.memo.is_none(), "memo should be None when omitted");
     }
 
     /// Fixture test for `LockControllerSimpleV0` with a known configuration.
@@ -373,7 +293,7 @@ mod test {
     /// - "tokens" (6 bytes) — same length as "grants", sorted lexicographically
     /// - "keepAlive" (9 bytes)
     #[test]
-    fn test_simple_v0_cbor_fixture() {
+    fn test_simple_v0_cbor_fixture_full() {
         let controller = LockControllerSimpleV0 {
             grants: vec![LockControllerSimpleV0Grant {
                 account: CborHolderAccount::from(ADDRESS),
@@ -383,7 +303,7 @@ mod test {
                 ],
             }],
             tokens: vec!["CCD".parse().unwrap()],
-            keep_alive: true,
+            keep_alive: true.into(),
             memo: Some(CborMemo::Raw(
                 Memo::try_from(vec![0x01, 0x02, 0x03]).unwrap(),
             )),
@@ -430,6 +350,41 @@ mod test {
             "63434344",               // text "CCD"
             "696b656570416c697665",   // text "keepAlive"
             "f5",                     // true
+        );
+        assert_eq!(hex::encode(&encoded), expected);
+    }
+
+    /// Fixture test for `LockControllerSimpleV0` with a minimal configuration.
+    ///
+    /// `keep_alive: None` and `memo: None` are omitted by the derive macro,
+    /// so the CBOR map contains only `"grants"` and `"tokens"` (both empty
+    /// arrays).
+    ///
+    /// Expected CBOR structure (diagnostic notation):
+    /// ```text
+    /// {"grants": [], "tokens": []}
+    /// ```
+    ///
+    /// Map keys sorted by encoded byte length (both 6 bytes), then
+    /// lexicographically: `"grants"` < `"tokens"`.
+    #[test]
+    fn test_simple_v0_cbor_fixture_minimal() {
+        let controller = LockControllerSimpleV0 {
+            grants: vec![],
+            tokens: vec![],
+            keep_alive: None,
+            memo: None,
+        };
+        let encoded = cbor::cbor_encode(&controller);
+        // Map(2): a2
+        //   "grants" (6 bytes): 666772616e7473, []: 80
+        //   "tokens" (6 bytes): 66746f6b656e73, []: 80
+        let expected = concat!(
+            "a2",             // map(2)
+            "666772616e7473", // text "grants"
+            "80",             // array(0)
+            "66746f6b656e73", // text "tokens"
+            "80",             // array(0)
         );
         assert_eq!(hex::encode(&encoded), expected);
     }
