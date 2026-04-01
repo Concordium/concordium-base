@@ -28,8 +28,10 @@ pub fn safe_with_capacity<T>(capacity: usize) -> Vec<T> {
 
 /// Trait for types which can be recovered from byte sources.
 pub trait Deserial: Sized {
-    /// Deserialize value from the given reader. Deserialization is expected to
-    /// read exactly the bytes that defines the serialized value, and no more bytes,
+    /// Deserialize value from the given reader.
+    ///
+    /// Deserialization is expected to read exactly the
+    /// bytes that defines the serialized value, and no more bytes,
     /// since following bytes may be the serialization of subsequent values.
     /// It is as such not an error, that there are bytes left in the reader after
     /// deserialization. It is up to the caller to decide, if this is considered an error.
@@ -312,6 +314,7 @@ impl Buffer for sha2::Sha512 {}
 /// The intention is that the encoding is binary and not human readable.
 pub trait Serial {
     /// Serialize value to given buffer.
+    ///
     /// The trait [`Buffer`] is used to signal that the write functions on the given writer
     /// will never return errors (notice that [`Buffer`] extends [`Write`]).
     /// This allows implementers of [`Serial::serial`] to handle write errors
