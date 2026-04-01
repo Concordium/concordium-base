@@ -32,7 +32,6 @@ use std::sync::LazyLock;
 
 use crate::v0::ffi::slice_from_c_bytes;
 
-use crate::v1::trie::state_dump::shared;
 use crate::v1::trie::state_dump::shared::{
     NodeId, OutputFilesPaths, StateDumpBuilder, StateDumpContext,
 };
@@ -809,7 +808,7 @@ extern "C" fn persistent_state_v1_lookup(
 /// used for testing.**
 extern "C" fn generate_persistent_state_from_seed(seed: u64, len: u64) -> *mut PersistentState {
     let res = std::panic::catch_unwind(|| {
-        let mut mutable = PersistentState::Empty.thaw();
+        let mut mutable = PersistentState::empty().thaw();
         let mut loader = trie::Loader::new(&[]);
         {
             let mut state_lock = mutable.get_inner(&mut loader).lock();
@@ -850,7 +849,7 @@ unsafe extern "C" fn is_legacy_artifact(
 /// Allocate empty persistent state.
 #[no_mangle]
 unsafe extern "C" fn empty_persistent_state() -> *mut PersistentState {
-    let state = PersistentState::Empty;
+    let state = PersistentState::empty();
     Box::into_raw(Box::new(state))
 }
 
@@ -942,7 +941,9 @@ unsafe extern "C" fn insert_entry_value_mutable_state(
 /// # Arguments
 ///
 /// - `load_callback` External function to call for loading bytes a reference from the blob store.
-/// - `tree` The persistent state tree.
+/// - `persistent_state` The persistent state tree.
+/// - `location` The blob store location the tree is stored at
+/// - `parent_node` The parent node in the state graph
 /// - `state_graph_file_path` Shared pointer to state graph file path bytes.
 /// - `state_graph_file_path_len` Byte length of state graph file path bytes.
 /// - `state_data_file_path` Shared pointer to state data file path bytes.
@@ -1003,4 +1004,4 @@ extern "C" fn ffi_dump_persistent_state(
 
 /// Static context. Ideally we create a context per block state dump.
 static STATE_DUMP_CONTEXT: LazyLock<StateDumpContext> =
-    LazyLock::new(|| StateDumpContext::new(NodeId(1_000_000)));
+    LazyLock::new(|| StateDumpContext::new(NodeId(2_000_000)));

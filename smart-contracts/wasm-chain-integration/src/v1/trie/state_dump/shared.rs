@@ -1,12 +1,9 @@
-
-
+use crate::v1::trie::{Hash, Reference};
 use std::collections::HashMap;
-use std::fmt::{Arguments, Debug, Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::fs::File;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
-use concordium_contracts_common::hashes::Hash;
-use crate::v1::trie::Reference;
 
 #[derive(Debug, Clone, Copy)]
 pub struct NodeId(pub u64);
@@ -60,6 +57,8 @@ pub struct OutputFilesPaths {
     pub state_data_file_path: String,
 }
 
+const HASH_DISPLAY_LENGTH: usize = 6;
+
 impl StateDumpBuilder {
     pub fn new(context: StateDumpContext, output_paths: OutputFilesPaths) -> Self {
         let files = open_output_files(&output_paths);
@@ -67,18 +66,13 @@ impl StateDumpBuilder {
         Self { files, context }
     }
 
-    pub fn build_state_data(
-        &mut self,
-        blob_ref: Reference,
-        hash: Hash,
-        data: impl Debug,
-    ) {
+    pub fn build_state_data(&mut self, blob_ref: Reference, hash: Hash, data: impl Debug) {
         writeln!(
             &mut self.files.state_data_file,
-            "{}/{}:\n{:#?}",
+            "{}/{:?}:\n{:#?}",
             blob_ref, hash, data
         )
-            .expect("write data data");
+        .expect("write data data");
         writeln!(&mut self.files.state_data_file).expect("write data data");
     }
 
@@ -108,16 +102,22 @@ impl StateDumpBuilder {
                 .insert(blob_ref, (node_id, hash));
 
             let node_label = if let Some(hash) = hash {
-                format!("{}/{:?}", escape_quotes(label), hash)
+                let hash_hex = format!("{:?}", hash);
+                format!(
+                    "{}/{:.width$}",
+                    escape_quotes(label),
+                    hash_hex,
+                    width = HASH_DISPLAY_LENGTH
+                )
             } else {
                 escape_quotes(label)
             };
-            write!(
+            writeln!(
                 self.files.state_graph_file,
                 "    {}  [label=\"{}\"]",
                 node_id, node_label
             )
-                .expect("write to graph data file");
+            .expect("write to graph data file");
 
             (node_id, true)
         }
@@ -129,16 +129,22 @@ impl StateDumpBuilder {
         nodes_guard.next_node_id.0 += 1;
 
         let node_label = if let Some(hash) = hash {
-            format!("{}/{:?}", escape_quotes(label), hash)
+            let hash_hex = format!("{:?}", hash);
+            format!(
+                "{}/{:.width$}",
+                escape_quotes(label),
+                hash_hex,
+                width = HASH_DISPLAY_LENGTH
+            )
         } else {
             escape_quotes(label)
         };
-        write!(
+        writeln!(
             self.files.state_graph_file,
             "    {}  [label=\"{}\"]",
             node_id, node_label
         )
-            .expect("write to graph data file");
+        .expect("write to graph data file");
 
         node_id
     }
@@ -151,29 +157,29 @@ impl StateDumpBuilder {
         blob_ref: Reference,
     ) {
         let edge_label = format_args!("{}{}", label, blob_ref);
-        write!(
+        writeln!(
             self.files.state_graph_file,
             "    {} -> {} [label=\"{}\"]",
             source, target, edge_label
         )
-            .expect("write to graph data file");
+        .expect("write to graph data file");
     }
 
     pub fn build_comp_edge(&mut self, label: &str, source: NodeId, target: NodeId) {
         let edge_label = label;
-        write!(
+        writeln!(
             self.files.state_graph_file,
             "    {} -> {} [arrowhead=\"none\" label=\"{}\"]",
             source, target, edge_label
         )
-            .expect("write to graph data file");
+        .expect("write to graph data file");
     }
 
     pub fn build_blob_ref_node(
         &mut self,
         parent: NodeId,
-        node_label: &str,
         edge_label: &str,
+        node_label: &str,
         blob_ref: Reference,
         hash: Option<Hash>,
     ) -> Option<NodeId> {
@@ -185,8 +191,8 @@ impl StateDumpBuilder {
     pub fn build_comp_node(
         &mut self,
         parent: NodeId,
-        node_label: &str,
         edge_label: &str,
+        node_label: &str,
         hash: Option<Hash>,
     ) -> NodeId {
         let node_id = self.build_comp_node_no_edge(node_label, hash);
