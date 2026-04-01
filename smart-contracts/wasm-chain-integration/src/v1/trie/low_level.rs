@@ -895,7 +895,7 @@ impl<'a> StemIter<'a> {
 /// A wrapper around u8 that indicates an N-bit value. N must be between 1 and
 /// 8.
 pub struct Chunk<const N: usize> {
-    value: u8,
+    pub value: u8,
 }
 
 impl LowerHex for Chunk<4> {
