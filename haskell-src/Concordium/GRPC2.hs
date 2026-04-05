@@ -673,6 +673,12 @@ instance ToProto TokenInfo where
         ProtoFields.tokenId .= toProto tiTokenId
         ProtoFields.tokenState .= toProto tiTokenState
 
+instance ToProto TokenAuthorizations where
+    type Output TokenAuthorizations = Proto.TokenAuthorizations
+    toProto TokenAuthorizations{..} = Proto.make $ do
+        ProtoFields.tokenId .= toProto taTokenId
+        ProtoFields.details .= Proto.make (PLTFields.value .= taDetails)
+
 instance ToProto Wasm.Parameter where
     type Output Wasm.Parameter = Proto.Parameter
     toProto Wasm.Parameter{..} = Proto.make $ ProtoFields.value .= BSS.fromShort parameter
