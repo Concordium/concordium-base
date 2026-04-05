@@ -558,7 +558,7 @@ mod tests {
             let mut s2 = s1.split();
             for v in v1.iter_mut() {
                 *v = csprng.gen::<u8>();
-                s1.put(v);
+                s1.put(*v);
             }
             let res1 = s1.extract_raw_challenge();
             let ref_res1: &[u8] = res1.as_ref();
