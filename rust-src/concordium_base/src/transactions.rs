@@ -1587,6 +1587,11 @@ impl Deserial for Payload {
                 };
                 Ok(Payload::TokenUpdate { payload })
             }
+            28 => {
+                let operations = source.get()?;
+                let payload = MetaUpdatePayload { operations };
+                Ok(Payload::MetaUpdate { payload })
+            }
             _ => {
                 anyhow::bail!("Unsupported transaction payload tag {}", tag)
             }

@@ -197,11 +197,10 @@ impl From<(TokenId, TokenOperation)> for MetaUpdateOperation {
 #[derive(PartialEq, Debug)]
 pub enum MetaUpdateOperationKind {
     /// A [`TokenOperation`] for a specific [`TokenId`].
-    Token((TokenId, TokenOperation))
+    Token((TokenId, TokenOperation)),
 }
 
 impl From<MetaUpdateOperation> for MetaUpdateOperationKind {
-
     fn from(value: MetaUpdateOperation) -> Self {
         match value {
             MetaUpdateOperation::Transfer(details) => {
