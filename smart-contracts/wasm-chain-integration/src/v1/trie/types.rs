@@ -13,7 +13,7 @@ use thiserror::Error;
 #[derive(Default, Debug, Clone, Copy, Eq, PartialEq, From, Into)]
 /// Reference to a storage location where an item may be retrieved.
 pub struct Reference {
-    pub(crate) reference: u64,
+    pub reference: u64,
 }
 
 impl Reference {
@@ -366,7 +366,7 @@ impl<V: Loadable> Loadable for Hashed<V> {
 #[derive(Clone, Copy, AsRef, From, PartialEq, Eq, Ord, PartialOrd)]
 /// A SHA256 hash.
 pub struct Hash {
-    hash: [u8; 32],
+    pub hash: [u8; 32],
 }
 
 impl AsRef<[u8]> for Hash {
