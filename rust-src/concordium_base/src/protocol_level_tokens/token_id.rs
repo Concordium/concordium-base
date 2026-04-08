@@ -121,10 +121,7 @@ impl cbor::CborDeserialize for TokenId {
     where
         Self: Sized,
     {
-        let text_bytes = decoder.decode_text()?;
-        let text = String::from_utf8(text_bytes).map_err(|_| {
-            CborSerializationError::invalid_data(format_args!("TokenId text is not valid UTF-8"))
-        })?;
+        let text = <String as common::cbor::CborDeserialize>::deserialize(decoder)?;
         text.try_into()
             .map_err(|e| CborSerializationError::invalid_data(format_args!("{}", e)))
     }

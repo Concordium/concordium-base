@@ -11,11 +11,6 @@ use concordium_base_derive::{CborDeserialize, CborSerialize, Serialize};
 /// Each capability authorizes the grantee to perform the corresponding lock
 /// operation.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub enum LockControllerSimpleV0Capability {
     Fund,
     Return,
@@ -75,11 +70,6 @@ impl CborDeserialize for LockControllerSimpleV0Capability {
 /// to the given account, authorizing it to perform the corresponding lock
 /// operations.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct LockControllerSimpleV0Grant {
     /// The account receiving the grant.
     pub account: CborHolderAccount,
@@ -92,11 +82,6 @@ pub struct LockControllerSimpleV0Grant {
 /// Contains the list of capability grants, which tokens are affected,
 /// a keep-alive flag, and an optional memo.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct LockControllerSimpleV0 {
     /// Capability grants to accounts.
     pub grants: Vec<LockControllerSimpleV0Grant>,
@@ -104,16 +89,8 @@ pub struct LockControllerSimpleV0 {
     pub tokens: Vec<TokenId>,
     /// Whether the lock should be kept alive after all funds are
     /// returned. Interpreted as `false` when omitted.
-    #[cfg_attr(
-        feature = "serde_deprecated",
-        serde(skip_serializing_if = "Option::is_none")
-    )]
     pub keep_alive: Option<bool>,
     /// Optional memo attached to the lock.
-    #[cfg_attr(
-        feature = "serde_deprecated",
-        serde(skip_serializing_if = "Option::is_none")
-    )]
     pub memo: Option<CborMemo>,
 }
 

@@ -8,11 +8,6 @@ use concordium_base_derive::{CborDeserialize, CborSerialize};
 /// Contains the list of recipients, the expiry time, and the controller
 /// configuration for a lock.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct LockConfig {
     /// Accounts that can receive funds from this lock.
     pub recipients: Vec<CborHolderAccount>,

@@ -18,11 +18,6 @@ const LOCK_ID_ARRAY_SIZE: usize = 3;
 
 /// Unique identifier for a PLT lock.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct LockId {
     /// Index of the account that created the lock.
     pub account_index: AccountIndex,

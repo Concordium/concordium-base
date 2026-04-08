@@ -6,11 +6,6 @@ use concordium_base_derive::{CborDeserialize, CborSerialize};
 /// Each variant represents a different controller version.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
 #[cbor(map)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub enum LockController {
     /// SimpleV0 lock controller configuration.
     SimpleV0(LockControllerSimpleV0),
