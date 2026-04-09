@@ -97,7 +97,7 @@ pub trait AllocCounter<V> {
 
 /// A [counter](TraversalCounter) that does not count anything, and always
 /// returns `Ok(())`.
-pub(crate) struct EmptyCounter;
+pub struct EmptyCounter;
 #[derive(Debug, Copy, Clone, Error)]
 /// An error that cannot happen, i.e., this type is not inhabited and is used as
 /// an error type of an operation that cannot fail.
