@@ -80,7 +80,7 @@ pub(crate) const INLINE_STEM_LENGTH: usize = 0b0011_1111;
 
 /// A trait that supports keeping track of resources during tree traversal, to
 /// make sure that resource bounds are not exceeded.
-pub(crate) trait TraversalCounter {
+pub trait TraversalCounter {
     type Err: std::fmt::Debug;
     /// Count for traversing the given number of chunks of the key.
     /// See [MutableTrie::next](super::low_level::MutableTrie::next) for details
