@@ -23,6 +23,7 @@ opt-level = 3
 [features]
 nodejs = ["nodejs-sys"]
 csharp = []
+go = []
 
 [dependencies]
 anyhow = "1.0"

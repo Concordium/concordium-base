@@ -1,18 +1,24 @@
 use anyhow::Context;
+#[cfg(any(feature = "csharp", feature = "nodejs"))]
 use concordium_base::{
-    common::{base16_decode_string, types::TransactionTime, Versioned, VERSION_0},
+    common::types::TransactionTime,
+    id::identity_provider::{
+        create_initial_cdi, sign_identity_object, validate_request as ip_validate_request,
+    },
+    ps_sig,
+};
+use concordium_base::{
+    common::{base16_decode_string, Versioned, VERSION_0},
     curve_arithmetic::*,
     id,
     id::{
         constants::{ArCurve, AttributeKind, IpPairing},
         identity_provider::{
-            create_initial_cdi, sign_identity_object, sign_identity_object_v1,
-            validate_id_recovery_request, validate_request as ip_validate_request,
+            sign_identity_object_v1, validate_id_recovery_request,
             validate_request_v1 as ip_validate_request_v1,
         },
         types::*,
     },
-    ps_sig,
 };
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 #[cfg(feature = "nodejs")]
@@ -63,6 +69,7 @@ fn parse_exact_versioned_global_context(
     }
 }
 
+#[cfg(any(feature = "csharp", feature = "nodejs"))]
 fn parse_exact_versioned_pio_from_request(
     bytes: &[u8],
 ) -> anyhow::Result<PreIdentityObject<Bls12, ExampleCurve>> {
@@ -119,6 +126,7 @@ fn parse_exact_versioned_recovery_request(
 }
 
 /// Validate a request
+#[cfg(any(feature = "csharp", feature = "nodejs"))]
 fn validate_request(
     global_context_bytes: &[u8],
     ip_info_bytes: &[u8],
@@ -187,6 +195,7 @@ pub struct IdentityCreationV1 {
 
 /// Create an identity object, the anonymity revocation record, and the initial
 /// account object.
+#[cfg(any(feature = "csharp", feature = "nodejs"))]
 fn create_identity_object(
     ip_info_bytes: &[u8],
     request_bytes: &[u8],
@@ -326,6 +335,9 @@ fn validate_recovery_request(
 
 #[cfg(feature = "csharp")]
 mod cs_exports;
+
+#[cfg(feature = "go")]
+mod go_exports;
 
 #[cfg(feature = "nodejs")]
 mod nodejs_exports;
