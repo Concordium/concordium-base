@@ -194,6 +194,7 @@ impl From<(TokenId, TokenOperation)> for MetaUpdateOperation {
 
 /// A discriminated version of [`MetaUpdateOperation`] for the purpose of
 /// dispatching to the appropriate operation handler.
+#[derive(PartialEq, Debug)]
 pub enum MetaUpdateOperationKind {
     /// A [`TokenOperation`] for a specific [`TokenId`].
     Token((TokenId, TokenOperation)),
@@ -564,8 +565,8 @@ mod tests {
             meta_transfer
         );
         assert_eq!(
-            (token_id.clone(), token_transfer),
-            meta_transfer.try_into().unwrap(),
+            MetaUpdateOperationKind::Token((token_id.clone(), token_transfer)),
+            meta_transfer.into(),
         );
 
         let token_mint = TokenOperation::Mint(super::super::TokenSupplyUpdateDetails { amount });
@@ -578,8 +579,8 @@ mod tests {
             meta_mint
         );
         assert_eq!(
-            (token_id.clone(), token_mint),
-            meta_mint.try_into().unwrap(),
+            MetaUpdateOperationKind::Token((token_id.clone(), token_mint)),
+            meta_mint.into(),
         );
 
         let token_burn = TokenOperation::Burn(super::super::TokenSupplyUpdateDetails { amount });
@@ -592,8 +593,8 @@ mod tests {
             meta_burn
         );
         assert_eq!(
-            (token_id.clone(), token_burn),
-            meta_burn.try_into().unwrap(),
+            MetaUpdateOperationKind::Token((token_id.clone(), token_burn)),
+            meta_burn.into(),
         );
 
         let token_add_allow_list =
@@ -609,8 +610,8 @@ mod tests {
             meta_add_allow_list
         );
         assert_eq!(
-            (token_id.clone(), token_add_allow_list),
-            meta_add_allow_list.try_into().unwrap(),
+            MetaUpdateOperationKind::Token((token_id.clone(), token_add_allow_list)),
+            meta_add_allow_list.into(),
         );
 
         let token_remove_allow_list =
@@ -627,8 +628,8 @@ mod tests {
             meta_remove_allow_list
         );
         assert_eq!(
-            (token_id.clone(), token_remove_allow_list),
-            meta_remove_allow_list.try_into().unwrap(),
+            MetaUpdateOperationKind::Token((token_id.clone(), token_remove_allow_list)),
+            meta_remove_allow_list.into(),
         );
 
         let token_add_deny_list =
@@ -644,8 +645,8 @@ mod tests {
             meta_add_deny_list
         );
         assert_eq!(
-            (token_id.clone(), token_add_deny_list),
-            meta_add_deny_list.try_into().unwrap(),
+            MetaUpdateOperationKind::Token((token_id.clone(), token_add_deny_list)),
+            meta_add_deny_list.into(),
         );
 
         let token_remove_deny_list =
@@ -662,8 +663,8 @@ mod tests {
             meta_remove_deny_list
         );
         assert_eq!(
-            (token_id.clone(), token_remove_deny_list),
-            meta_remove_deny_list.try_into().unwrap(),
+            MetaUpdateOperationKind::Token((token_id.clone(), token_remove_deny_list)),
+            meta_remove_deny_list.into(),
         );
 
         let token_pause = TokenOperation::Pause(super::super::TokenPauseDetails {});
@@ -675,8 +676,8 @@ mod tests {
             meta_pause
         );
         assert_eq!(
-            (token_id.clone(), token_pause),
-            meta_pause.try_into().unwrap(),
+            MetaUpdateOperationKind::Token((token_id.clone(), token_pause)),
+            meta_pause.into(),
         );
 
         let token_unpause = TokenOperation::Unpause(super::super::TokenPauseDetails {});
@@ -688,8 +689,8 @@ mod tests {
             meta_unpause
         );
         assert_eq!(
-            (token_id.clone(), token_unpause),
-            meta_unpause.try_into().unwrap(),
+            MetaUpdateOperationKind::Token((token_id.clone(), token_unpause)),
+            meta_unpause.into(),
         );
     }
 }
