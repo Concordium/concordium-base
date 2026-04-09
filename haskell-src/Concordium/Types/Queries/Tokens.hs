@@ -9,6 +9,7 @@ module Concordium.Types.Queries.Tokens (
     TokenAccountState (..),
     TokenState (..),
     TokenInfo (..),
+    TokenAuthorizations (..),
 ) where
 
 import Data.Aeson as AE
@@ -225,3 +226,25 @@ instance Serialize TokenInfo where
         tiTokenId <- get
         tiTokenState <- get
         return TokenInfo{..}
+
+-- | Role based authorizations structure for a given token. The authorizations are CBOR encoded
+-- inside the 'taDetails' field
+data TokenAuthorizations = TokenAuthorizations
+    { -- | The symbol uniquely identifying the protocol-level token.
+      taTokenId :: !TokenId,
+      -- | The CBOR encoded authorizations details
+      taDetails :: !BS.ByteString
+    }
+
+-- | Define the serialization matching the one in the node on the rust side.
+-- This is internal and only meant to be used when passed across FFI in the node.
+instance Serialize TokenAuthorizations where
+    put TokenAuthorizations{..} = do
+        put taTokenId
+        putWord32be (fromIntegral (BS.length taDetails))
+        putByteString taDetails
+    get = do
+        taTokenId <- get
+        detailsLen <- getWord32be
+        taDetails <- getByteString (fromIntegral detailsLen)
+        return TokenAuthorizations{..}
