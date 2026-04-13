@@ -160,6 +160,12 @@ pub enum MetaUpdateOperation {
     /// Operation that unpauses execution of any balance changing operations for
     /// a protocol-level token
     Unpause(MetaTokenPauseDetails),
+    /// Operation to assign roles to an account for a protocol-level token.
+    AssignAdminRoles(MetaTokenUpdateAdminRolesDetails),
+    /// Operation to revoke roles for an account for a protocol-level token.
+    RevokeAdminRoles(MetaTokenUpdateAdminRolesDetails),
+    /// Operation to update token metadata
+    UpdateMetadata(MetaMetadataUrlDetails),
 }
 
 impl From<(TokenId, TokenOperation)> for MetaUpdateOperation {
@@ -187,6 +193,15 @@ impl From<(TokenId, TokenOperation)> for MetaUpdateOperation {
             }
             TokenOperation::Unpause(details) => {
                 MetaUpdateOperation::Unpause((token_id, details).into())
+            }
+            TokenOperation::AssignAdminRoles(details) => {
+                MetaUpdateOperation::AssignAdminRoles((token_id, details).into())
+            }
+            TokenOperation::RevokeAdminRoles(details) => {
+                MetaUpdateOperation::RevokeAdminRoles((token_id, details).into())
+            }
+            TokenOperation::UpdateMetadata(details) => {
+                MetaUpdateOperation::UpdateMetadata((token_id, details).into())
             }
         }
     }
@@ -238,6 +253,18 @@ impl From<MetaUpdateOperation> for MetaUpdateOperationKind {
             MetaUpdateOperation::Unpause(details) => {
                 let (token_id, details) = details.into();
                 Self::Token((token_id, TokenOperation::Unpause(details)))
+            }
+            MetaUpdateOperation::AssignAdminRoles(details) => {
+                let (token_id, details) = details.into();
+                Self::Token((token_id, TokenOperation::AssignAdminRoles(details)))
+            }
+            MetaUpdateOperation::RevokeAdminRoles(details) => {
+                let (token_id, details) = details.into();
+                Self::Token((token_id, TokenOperation::RevokeAdminRoles(details)))
+            }
+            MetaUpdateOperation::UpdateMetadata(details) => {
+                let (token_id, details) = details.into();
+                Self::Token((token_id, TokenOperation::UpdateMetadata(details)))
             }
         }
     }
@@ -338,6 +365,45 @@ impl From<MetaTokenListUpdateDetails> for (TokenId, super::TokenListUpdateDetail
     }
 }
 
+/// Details of an operation to assign or revoke roles for an account
+/// for a protocol-level token.
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+pub struct MetaTokenUpdateAdminRolesDetails {
+    /// Token the operation applies to.
+    pub token: TokenId,
+    /// Roles to be assigned or revoked.
+    pub roles: Vec<super::TokenAdminRole>,
+    /// Account that that will be assigned or revoked roles.
+    pub account: CborHolderAccount,
+}
+
+impl From<(TokenId, super::TokenUpdateAdminRolesDetails)> for MetaTokenUpdateAdminRolesDetails {
+    fn from((token, details): (TokenId, super::TokenUpdateAdminRolesDetails)) -> Self {
+        MetaTokenUpdateAdminRolesDetails {
+            token,
+            roles: details.roles,
+            account: details.account,
+        }
+    }
+}
+
+impl From<MetaTokenUpdateAdminRolesDetails> for (TokenId, super::TokenUpdateAdminRolesDetails) {
+    fn from(value: MetaTokenUpdateAdminRolesDetails) -> Self {
+        (
+            value.token,
+            super::TokenUpdateAdminRolesDetails {
+                roles: value.roles,
+                account: value.account,
+            },
+        )
+    }
+}
+
 /// Protocol-level token transfer
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
 #[cfg_attr(
@@ -384,12 +450,41 @@ impl From<MetaTokenTransfer> for (TokenId, super::TokenTransfer) {
     }
 }
 
+/// Details of an operation to update token metadata.
+#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+pub struct MetaMetadataUrlDetails {
+    /// Token to update.
+    pub token: TokenId,
+    /// New metadata URL.
+    pub metadata_url: super::MetadataUrl,
+}
+
+impl From<(TokenId, super::MetadataUrl)> for MetaMetadataUrlDetails {
+    fn from((token, metadata_url): (TokenId, super::MetadataUrl)) -> Self {
+        MetaMetadataUrlDetails {
+            token,
+            metadata_url,
+        }
+    }
+}
+
+impl From<MetaMetadataUrlDetails> for (TokenId, super::MetadataUrl) {
+    fn from(value: MetaMetadataUrlDetails) -> Self {
+        (value.token, value.metadata_url)
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
     use super::*;
     use crate::common::cbor;
-    use crate::protocol_level_tokens::test_fixtures::ADDRESS;
+    use crate::protocol_level_tokens::{test_fixtures::ADDRESS, MetadataUrl, TokenAdminRole};
     use crate::transactions::Memo;
 
     #[test]
@@ -532,6 +627,64 @@ mod tests {
         assert_eq!(
             hex::encode(&cbor),
             "a167756e7061757365a165746f6b656e6774657374504c54"
+        );
+        let operation_decoded: MetaUpdateOperation =
+            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_meta_operation_cbor_assign_admin_roles() {
+        let operation = MetaUpdateOperation::AssignAdminRoles(MetaTokenUpdateAdminRolesDetails {
+            token: "testPLT".parse().unwrap(),
+            roles: vec![TokenAdminRole::Mint, TokenAdminRole::Pause],
+            account: CborHolderAccount::from(ADDRESS),
+        });
+        let cbor = cbor::cbor_encode(&operation);
+        assert_eq!(
+            hex::encode(&cbor),
+            "a17061737369676e41646d696e526f6c6573a365726f6c657382646d696e7465706175736565746f6b656e6774657374504c54676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+        );
+        let operation_decoded: MetaUpdateOperation =
+            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_meta_operation_cbor_revoke_admin_roles() {
+        let operation = MetaUpdateOperation::RevokeAdminRoles(MetaTokenUpdateAdminRolesDetails {
+            token: "testPLT".parse().unwrap(),
+            roles: vec![
+                TokenAdminRole::UpdateAdminRoles,
+                TokenAdminRole::Burn,
+                TokenAdminRole::UpdateMetadata,
+            ],
+            account: CborHolderAccount::from(ADDRESS),
+        });
+        let cbor = cbor::cbor_encode(&operation);
+        assert_eq!(
+            hex::encode(&cbor),
+            "a1707265766f6b6541646d696e526f6c6573a365726f6c6573837075706461746541646d696e526f6c6573646275726e6e7570646174654d6574616461746165746f6b656e6774657374504c54676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+        );
+        let operation_decoded: MetaUpdateOperation =
+            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_meta_operation_cbor_update_metadata() {
+        let operation = MetaUpdateOperation::UpdateMetadata(MetaMetadataUrlDetails {
+            token: "testPLT".parse().unwrap(),
+            metadata_url: MetadataUrl {
+                url: "https://example.com/metadata.json".to_string(),
+                checksum_sha_256: Some([255u8; 32].into()),
+                additional: Default::default(),
+            },
+        });
+        let cbor = cbor::cbor_encode(&operation);
+        assert_eq!(
+            hex::encode(&cbor),
+            "a16e7570646174654d65746164617461a265746f6b656e6774657374504c546b6d6574616461746155726ca26375726c782168747470733a2f2f6578616d706c652e636f6d2f6d657461646174612e6a736f6e6e636865636b73756d5368613235365820ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         );
         let operation_decoded: MetaUpdateOperation =
             cbor::cbor_decode(&cbor).expect("CBOR deserialize");
@@ -691,6 +844,69 @@ mod tests {
         assert_eq!(
             MetaUpdateOperationKind::Token((token_id.clone(), token_unpause)),
             meta_unpause.into(),
+        );
+
+        let assign_roles = vec![TokenAdminRole::Mint, TokenAdminRole::Pause];
+        let token_assign_admin_roles =
+            TokenOperation::AssignAdminRoles(super::super::TokenUpdateAdminRolesDetails {
+                roles: assign_roles.clone(),
+                account: account.clone(),
+            });
+        let meta_assign_admin_roles = MetaUpdateOperation::AssignAdminRoles(MetaTokenUpdateAdminRolesDetails {
+            token: token_id.clone(),
+            roles: assign_roles.clone(),
+            account: account.clone(),
+        });
+        assert_eq!(
+            MetaUpdateOperation::from((token_id.clone(), token_assign_admin_roles.clone())),
+            meta_assign_admin_roles
+        );
+        assert_eq!(
+            MetaUpdateOperationKind::Token((token_id.clone(), token_assign_admin_roles)),
+            meta_assign_admin_roles.into(),
+        );
+
+        let revoke_roles = vec![
+            TokenAdminRole::Burn,
+            TokenAdminRole::UpdateMetadata,
+            TokenAdminRole::UpdateDenyList,
+        ];
+        let token_revoke_admin_roles =
+            TokenOperation::RevokeAdminRoles(super::super::TokenUpdateAdminRolesDetails {
+                roles: revoke_roles.clone(),
+                account: account.clone(),
+            });
+        let meta_revoke_admin_roles = MetaUpdateOperation::RevokeAdminRoles(MetaTokenUpdateAdminRolesDetails {
+            token: token_id.clone(),
+            roles: revoke_roles.clone(),
+            account: account.clone(),
+        });
+        assert_eq!(
+            MetaUpdateOperation::from((token_id.clone(), token_revoke_admin_roles.clone())),
+            meta_revoke_admin_roles
+        );
+        assert_eq!(
+            MetaUpdateOperationKind::Token((token_id.clone(), token_revoke_admin_roles)),
+            meta_revoke_admin_roles.into(),
+        );
+
+        let metadata_url = MetadataUrl {
+            url: "https://example.com/metadata.json".to_string(),
+            checksum_sha_256: Some([0u8; 32].into()),
+            additional: Default::default(),
+        };
+        let token_update_metadata = TokenOperation::UpdateMetadata(metadata_url.clone());
+        let meta_update_metadata = MetaUpdateOperation::UpdateMetadata(MetaMetadataUrlDetails {
+            token: token_id.clone(),
+            metadata_url: metadata_url.clone(),
+        });
+        assert_eq!(
+            MetaUpdateOperation::from((token_id.clone(), token_update_metadata.clone())),
+            meta_update_metadata
+        );
+        assert_eq!(
+            MetaUpdateOperationKind::Token((token_id.clone(), token_update_metadata)),
+            meta_update_metadata.into(),
         );
     }
 }

@@ -253,6 +253,20 @@ encodeAdditionalMapCbor additional =
         | (key, val) <- Map.toList additional
         ]
 
+-- * Token ID
+
+-- | Decode a CBOR-encoded 'TokenId'.
+decodeTokenId :: Decoder s TokenId
+decodeTokenId = do
+    tid <- decodeStringCanonical
+    case makeTokenId (BSS.toShort $ TextEncoding.encodeUtf8 tid) of
+        Left e -> fail $ "Invalid token ID: " ++ e
+        Right tokenId -> return tokenId
+
+-- | Encode a 'TokenId' as CBOR.
+encodeTokenId :: TokenId -> Encoding
+encodeTokenId (TokenId tid) = encodeString (TextEncoding.decodeUtf8 $ BSS.fromShort tid)
+
 -- * Token holder parameters
 
 -- | Coin info that indicates the type of the address. Only Concordium addresses are supported.
@@ -1250,6 +1264,8 @@ instance AE.FromJSON MetaUpdateOperation where
         muoTokenOperation <- AE.parseJSON (AE.Object o)
         return MetaTokenUpdate{..}
 
+-- | Builder for constructing a 'MetaUpdateOperation'. This is parametrised by
+--  the builder for the particular operation.
 data MetaUpdateBuilder b = MetaUpdateBuilder
     { _mubToken :: Maybe TokenId,
       _mubOperationBuilder :: b
@@ -1257,22 +1273,9 @@ data MetaUpdateBuilder b = MetaUpdateBuilder
 
 makeLenses ''MetaUpdateBuilder
 
+-- | Empty 'MetaUpdateBuilder'.
 emptyMetaUpdateBuilder :: b -> MetaUpdateBuilder b
 emptyMetaUpdateBuilder = MetaUpdateBuilder Nothing
-
--- TODO: Move
-
--- | Decode a CBOR-encoded 'TokenId'.
-decodeTokenId :: Decoder s TokenId
-decodeTokenId = do
-    tid <- decodeStringCanonical
-    case makeTokenId (BSS.toShort $ TextEncoding.encodeUtf8 tid) of
-        Left e -> fail $ "Invalid token ID: " ++ e
-        Right tokenId -> return tokenId
-
--- | Encode a 'TokenId' as CBOR.
-encodeTokenId :: TokenId -> Encoding
-encodeTokenId (TokenId tid) = encodeString (TextEncoding.decodeUtf8 $ BSS.fromShort tid)
 
 -- | Decode a CBOR-encoded 'MetaUpdateOperation'.
 decodeMetaUpdateOperation :: Decoder s MetaUpdateOperation
@@ -1293,6 +1296,9 @@ decodeMetaUpdateOperation = do
         "removeDenyList" -> decodeListTarget TokenRemoveDenyList opType
         "pause" -> decodeSimpleOp TokenPause opType
         "unpause" -> decodeSimpleOp TokenUnpause opType
+        "assignAdminRoles" -> decodeUpdateAdminRoles TokenAssignAdminRoles opType
+        "revokeAdminRoles" -> decodeUpdateAdminRoles TokenRevokeAdminRoles opType
+        "updateMetadata" -> decodeSimpleOp TokenUpdateMetadata opType
         _ -> fail $ "token-operation: unsupported operation type: " ++ show opType
     when (isNothing maybeMapLen) $ do
         isEnd <- decodeBreakOr
@@ -1336,6 +1342,15 @@ decodeMetaUpdateOperation = do
                 Left $
                     "token-operation (" ++ Text.unpack opType ++ "): missing token"
         decodeMap valDecoder build Nothing
+    decodeUpdateAdminRoles constr opType = do
+        let valDecoder k@"token" = Just (mapValueDecoder k decodeTokenId mubToken)
+            valDecoder k@"account" = Just (mapValueDecoder k decodeCborAccountAddress (mubOperationBuilder . uardbAccount))
+            valDecoder k@"roles" = Just (mapValueDecoder k (decodeSequence decodeTokenAdminRole) (mubOperationBuilder . uardbRoles))
+            valDecoder _ = Nothing
+        decodeMap
+            valDecoder
+            (liftBuild buildUpdateAdminRolesDetails)
+            (emptyMetaUpdateBuilder emptyUpdateAdminRolesDetailsBuilder)
 
 -- | Encode a 'MetaUpdateOperation' as CBOR.
 encodeMetaUpdateOperation :: MetaUpdateOperation -> Encoding
@@ -1363,7 +1378,19 @@ encodeMetaUpdateOperation MetaTokenUpdate{..} = do
                 baseMap & k "target" ?~ encodeCborAccountAddress target
         TokenPause -> enc "pause" baseMap
         TokenUnpause -> enc "unpause" baseMap
+        TokenAssignAdminRoles details -> enc "assignAdminRoles" $ rolesMap details
+        TokenRevokeAdminRoles details -> enc "revokeAdminRoles" $ rolesMap details
+        TokenUpdateMetadata TokenMetadataUrl{..} ->
+            enc "updateMetadata" $
+                (encodeAdditionalMapCbor tmAdditional)
+                    & k "token" ?~ encodeTokenId muoToken
+                    & k "url" ?~ encodeString tmUrl
+                    & k "checksumSha256" .~ (encodeSha256Hash <$> tmChecksumSha256)
   where
+    rolesMap UpdateAdminRolesDetails{..} =
+        baseMap
+            & k "account" ?~ encodeCborAccountAddress uardAccount
+            & k "roles" ?~ encodeSequence encodeTokenAdminRole uardRoles
     baseMap = Map.singleton (makeMapKeyEncoding $ encodeString "token") (encodeTokenId muoToken)
     k = at . makeMapKeyEncoding . encodeString
     enc opType body =
