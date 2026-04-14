@@ -8,7 +8,7 @@ use concordium_base_derive::{CborDeserialize, CborSerialize};
 
 pub mod meta_operations {
     use super::*;
-    use crate::protocol_level_tokens::operations;
+    use crate::protocol_level_tokens::{operations, MetadataUrl, TokenAdminRole};
     use concordium_contracts_common::AccountAddress;
 
     /// Construct a PLT transfer meta-update operation.
@@ -78,6 +78,32 @@ pub mod meta_operations {
     /// Construct an unpause meta-update operation.
     pub fn unpause(token_id: TokenId) -> MetaUpdateOperation {
         MetaUpdateOperation::Unpause(MetaTokenPauseDetails { token: token_id })
+    }
+
+    /// Construct an operation to assign admin roles to an address
+    /// for a protocol-level token.
+    pub fn assign_admin_roles(
+        token_id: TokenId,
+        account: AccountAddress,
+        roles: Vec<TokenAdminRole>,
+    ) -> MetaUpdateOperation {
+        (token_id, operations::assign_admin_roles(account, roles)).into()
+    }
+
+    /// Construct an operation to revoke admin roles from an address
+    /// for a protocol-level token.
+    pub fn revoke_admin_roles(
+        token_id: TokenId,
+        account: AccountAddress,
+        roles: Vec<TokenAdminRole>,
+    ) -> MetaUpdateOperation {
+        (token_id, operations::revoke_admin_roles(account, roles)).into()
+    }
+
+    /// Construct an operation to update token metadata for a
+    /// protocol-level token.
+    pub fn update_metadata(token_id: TokenId, metadata_url: MetadataUrl) -> MetaUpdateOperation {
+        (token_id, operations::update_metadata(metadata_url)).into()
     }
 }
 
@@ -697,10 +723,13 @@ mod tests {
         // - construct a meta-update operation with some test data
         // - construct the corresponding token operation with the same test data
         // - convert in each direction and check that the result matches the original
+        // - construct the meta-update operation using the `meta_operations` helper function
+        //   and check that it matches the original
         let token_id: TokenId = "tokenid1".parse().unwrap();
         let amount = TokenAmount::from_raw(100000, 2);
         let account = CborHolderAccount::from(ADDRESS);
-        let memo = Some(CborMemo::Raw(Memo::try_from(vec![1, 2, 3, 4]).unwrap()));
+        let cbor_memo = CborMemo::Raw(Memo::try_from(vec![1, 2, 3, 4]).unwrap());
+        let memo = Some(cbor_memo.clone());
 
         let token_transfer = TokenOperation::Transfer(super::super::TokenTransfer {
             amount,
@@ -713,6 +742,15 @@ mod tests {
             recipient: account.clone(),
             memo: memo.clone(),
         });
+        assert_eq!(
+            meta_operations::transfer_tokens_with_memo(
+                token_id.clone(),
+                ADDRESS,
+                amount,
+                cbor_memo.clone()
+            ),
+            meta_transfer
+        );
         assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_transfer.clone())),
             meta_transfer
@@ -728,6 +766,10 @@ mod tests {
             amount,
         });
         assert_eq!(
+            meta_operations::mint_tokens(token_id.clone(), amount),
+            meta_mint
+        );
+        assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_mint.clone())),
             meta_mint
         );
@@ -741,6 +783,10 @@ mod tests {
             token: token_id.clone(),
             amount,
         });
+        assert_eq!(
+            meta_operations::burn_tokens(token_id.clone(), amount),
+            meta_burn
+        );
         assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_burn.clone())),
             meta_burn
@@ -758,6 +804,10 @@ mod tests {
             token: token_id.clone(),
             target: account.clone(),
         });
+        assert_eq!(
+            meta_operations::add_token_allow_list(token_id.clone(), ADDRESS),
+            meta_add_allow_list
+        );
         assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_add_allow_list.clone())),
             meta_add_allow_list
@@ -777,6 +827,10 @@ mod tests {
                 target: account.clone(),
             });
         assert_eq!(
+            meta_operations::remove_token_allow_list(token_id.clone(), ADDRESS),
+            meta_remove_allow_list
+        );
+        assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_remove_allow_list.clone())),
             meta_remove_allow_list
         );
@@ -793,6 +847,10 @@ mod tests {
             token: token_id.clone(),
             target: account.clone(),
         });
+        assert_eq!(
+            meta_operations::add_token_deny_list(token_id.clone(), ADDRESS),
+            meta_add_deny_list
+        );
         assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_add_deny_list.clone())),
             meta_add_deny_list
@@ -812,6 +870,10 @@ mod tests {
                 target: account.clone(),
             });
         assert_eq!(
+            meta_operations::remove_token_deny_list(token_id.clone(), ADDRESS),
+            meta_remove_deny_list
+        );
+        assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_remove_deny_list.clone())),
             meta_remove_deny_list
         );
@@ -825,6 +887,10 @@ mod tests {
             token: token_id.clone(),
         });
         assert_eq!(
+            meta_operations::pause(token_id.clone()),
+            meta_pause
+        );
+        assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_pause.clone())),
             meta_pause
         );
@@ -837,6 +903,10 @@ mod tests {
         let meta_unpause = MetaUpdateOperation::Unpause(MetaTokenPauseDetails {
             token: token_id.clone(),
         });
+        assert_eq!(
+            meta_operations::unpause(token_id.clone()),
+            meta_unpause
+        );
         assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_unpause.clone())),
             meta_unpause
@@ -858,6 +928,10 @@ mod tests {
                 roles: assign_roles.clone(),
                 account: account.clone(),
             });
+        assert_eq!(
+            meta_operations::assign_admin_roles(token_id.clone(), ADDRESS, assign_roles.clone()),
+            meta_assign_admin_roles
+        );
         assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_assign_admin_roles.clone())),
             meta_assign_admin_roles
@@ -884,6 +958,10 @@ mod tests {
                 account: account.clone(),
             });
         assert_eq!(
+            meta_operations::revoke_admin_roles(token_id.clone(), ADDRESS, revoke_roles.clone()),
+            meta_revoke_admin_roles
+        );
+        assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_revoke_admin_roles.clone())),
             meta_revoke_admin_roles
         );
@@ -902,6 +980,10 @@ mod tests {
             token: token_id.clone(),
             metadata_url: metadata_url.clone(),
         });
+        assert_eq!(
+            meta_operations::update_metadata(token_id.clone(), metadata_url.clone()),
+            meta_update_metadata
+        );
         assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_update_metadata.clone())),
             meta_update_metadata
