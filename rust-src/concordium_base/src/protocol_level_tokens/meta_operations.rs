@@ -852,11 +852,12 @@ mod tests {
                 roles: assign_roles.clone(),
                 account: account.clone(),
             });
-        let meta_assign_admin_roles = MetaUpdateOperation::AssignAdminRoles(MetaTokenUpdateAdminRolesDetails {
-            token: token_id.clone(),
-            roles: assign_roles.clone(),
-            account: account.clone(),
-        });
+        let meta_assign_admin_roles =
+            MetaUpdateOperation::AssignAdminRoles(MetaTokenUpdateAdminRolesDetails {
+                token: token_id.clone(),
+                roles: assign_roles.clone(),
+                account: account.clone(),
+            });
         assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_assign_admin_roles.clone())),
             meta_assign_admin_roles
@@ -876,11 +877,12 @@ mod tests {
                 roles: revoke_roles.clone(),
                 account: account.clone(),
             });
-        let meta_revoke_admin_roles = MetaUpdateOperation::RevokeAdminRoles(MetaTokenUpdateAdminRolesDetails {
-            token: token_id.clone(),
-            roles: revoke_roles.clone(),
-            account: account.clone(),
-        });
+        let meta_revoke_admin_roles =
+            MetaUpdateOperation::RevokeAdminRoles(MetaTokenUpdateAdminRolesDetails {
+                token: token_id.clone(),
+                roles: revoke_roles.clone(),
+                account: account.clone(),
+            });
         assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_revoke_admin_roles.clone())),
             meta_revoke_admin_roles

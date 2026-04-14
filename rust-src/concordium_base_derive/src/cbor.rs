@@ -486,8 +486,8 @@ fn cbor_deserialize_enum_body(
     if opts.tuple {
         return Err(syn::Error::new(
             Span::call_site(),
-            "#[cbor(tuple)] only valid for structs"
-        ))
+            "#[cbor(tuple)] only valid for structs",
+        ));
     }
 
     if opts.map && opts.tagged {
@@ -813,8 +813,8 @@ fn cbor_serialize_enum_body(
     if opts.tuple {
         return Err(syn::Error::new(
             Span::call_site(),
-            "#[cbor(tuple)] only valid for structs"
-        ))
+            "#[cbor(tuple)] only valid for structs",
+        ));
     }
 
     if opts.map && opts.tagged {
