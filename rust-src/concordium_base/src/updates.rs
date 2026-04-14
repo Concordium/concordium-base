@@ -828,7 +828,7 @@ pub enum UpdatePayload {
     CreatePlt(CreatePlt),
 }
 
-#[derive(Debug, Clone, common::Serialize)]
+#[derive(Debug, Clone, PartialEq, common::Serialize)]
 #[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
 #[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct CreatePlt {
