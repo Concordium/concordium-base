@@ -1296,9 +1296,21 @@ decodeMetaUpdateOperation = do
         "removeDenyList" -> decodeListTarget TokenRemoveDenyList opType
         "pause" -> decodeSimpleOp TokenPause opType
         "unpause" -> decodeSimpleOp TokenUnpause opType
-        "assignAdminRoles" -> decodeUpdateAdminRoles TokenAssignAdminRoles opType
-        "revokeAdminRoles" -> decodeUpdateAdminRoles TokenRevokeAdminRoles opType
-        "updateMetadata" -> decodeSimpleOp TokenUpdateMetadata opType
+        "assignAdminRoles" -> decodeUpdateAdminRoles TokenAssignAdminRoles
+        "revokeAdminRoles" -> decodeUpdateAdminRoles TokenRevokeAdminRoles
+        "updateMetadata" -> do
+            TokenMetadataUrl{..} <- decodeTokenMetadataUrl
+            token <- case Map.lookup "token" tmAdditional of
+                Nothing -> fail $ "token-operation (updateMetdata): missing token"
+                Just (CBOR.TString tid) ->
+                    case makeTokenId (BSS.toShort $ TextEncoding.encodeUtf8 tid) of
+                        Left e -> fail $ "Invalid token ID: " ++ e
+                        Right tokenId -> return tokenId
+                Just _ -> fail $ "token-operation (updateMetadata - token): Expected string"
+            let op =
+                    TokenUpdateMetadata
+                        TokenMetadataUrl{tmAdditional = Map.delete "token" tmAdditional, ..}
+            return MetaTokenUpdate{muoToken = token, muoTokenOperation = op}
         _ -> fail $ "token-operation: unsupported operation type: " ++ show opType
     when (isNothing maybeMapLen) $ do
         isEnd <- decodeBreakOr
@@ -1342,14 +1354,14 @@ decodeMetaUpdateOperation = do
                 Left $
                     "token-operation (" ++ Text.unpack opType ++ "): missing token"
         decodeMap valDecoder build Nothing
-    decodeUpdateAdminRoles constr opType = do
+    decodeUpdateAdminRoles constr = do
         let valDecoder k@"token" = Just (mapValueDecoder k decodeTokenId mubToken)
             valDecoder k@"account" = Just (mapValueDecoder k decodeCborAccountAddress (mubOperationBuilder . uardbAccount))
             valDecoder k@"roles" = Just (mapValueDecoder k (decodeSequence decodeTokenAdminRole) (mubOperationBuilder . uardbRoles))
             valDecoder _ = Nothing
         decodeMap
             valDecoder
-            (liftBuild buildUpdateAdminRolesDetails)
+            (liftBuild constr buildUpdateAdminRolesDetails)
             (emptyMetaUpdateBuilder emptyUpdateAdminRolesDetailsBuilder)
 
 -- | Encode a 'MetaUpdateOperation' as CBOR.
@@ -1397,6 +1409,7 @@ encodeMetaUpdateOperation MetaTokenUpdate{..} = do
         encodeMapLen 1
             <> encodeString opType
             <> encodeMapDeterministic body
+    encodeSha256Hash (SHA256.Hash h) = encodeBytes (FBS.toByteString h)
 
 -- | A token transaction consists of a sequence of token operations.
 newtype MetaUpdateTransaction = MetaUpdateTransaction
