@@ -24,6 +24,7 @@ opt-level = 3
 nodejs = ["nodejs-sys"]
 csharp = []
 go = []
+wasm = []
 
 [dependencies]
 anyhow = "1.0"
@@ -42,6 +43,9 @@ optional = true
 [dependencies.concordium_base]
 path = "../rust-src/concordium_base"
 features = ["ffi"]
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
 
 [build-dependencies]
 napi-build = "*"

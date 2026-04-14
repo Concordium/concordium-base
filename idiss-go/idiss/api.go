@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Concordium/concordium-base/idiss-go/internal/native"
+	"github.com/Concordium/concordium-base/idiss-go/internal/backend"
 )
 
 // TimestampDelta is the accepted timestamp window for recovery requests.
@@ -38,7 +38,7 @@ func ValidateRequestV1(
 	if err != nil {
 		return fmt.Errorf("marshal request: %w", err)
 	}
-	if err := native.ValidateRequestV1(globalBytes, ipInfoBytes, arsInfosBytes, requestBytes); err != nil {
+	if err := backend.ValidateRequestV1(globalBytes, ipInfoBytes, arsInfosBytes, requestBytes); err != nil {
 		return fmt.Errorf("validate request v1: %w", err)
 	}
 	return nil
@@ -64,7 +64,7 @@ func CreateIdentityObjectV1(
 		return IdentityCreationV1{}, fmt.Errorf("marshal request: %w", err)
 	}
 
-	responseBytes, err := native.CreateIdentityObjectV1(ipInfoBytes, attributeBytes, requestBytes, []byte(ipPrivateKey))
+	responseBytes, err := backend.CreateIdentityObjectV1(ipInfoBytes, attributeBytes, requestBytes, []byte(ipPrivateKey))
 	if err != nil {
 		return IdentityCreationV1{}, fmt.Errorf("create identity object v1: %w", err)
 	}
@@ -99,7 +99,7 @@ func ValidateRecoveryRequest(
 	if err != nil {
 		return fmt.Errorf("marshal request: %w", err)
 	}
-	if err := native.ValidateRecoveryRequest(globalBytes, ipInfoBytes, requestBytes); err != nil {
+	if err := backend.ValidateRecoveryRequest(globalBytes, ipInfoBytes, requestBytes); err != nil {
 		return fmt.Errorf("validate recovery request: %w", err)
 	}
 	return nil

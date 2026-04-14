@@ -3,7 +3,8 @@
 This package provides a streamlined API for the identity provider usable from non-Rust languages.
 The core of the library is [src/lib.rs](src/lib.rs) file which defines five functions, `validate_request`, `create_identity_object`, `validate_request_v1`, `create_identity_object_v1` and `validate_recovery_request`.
 In addition to this we provide `nodejs`, `C#`, and `Go` exports (optionally) via [src/nodejs_exports.rs](src/nodejs_exports.rs), [src/cs_exports.rs](src/cs_exports.rs), and [src/go_exports.rs](src/go_exports.rs), respectively.
-These can be enabled/disabled via the features `nodejs`, `csharp`, and `go`, respectively.
+We also provide a Wasm export surface for the Go wrapper in [src/wasm_exports.rs](src/wasm_exports.rs).
+These can be enabled/disabled via the features `nodejs`, `csharp`, `go`, and `wasm`, respectively.
 
 **If you need to use the identity issuer functionality from a Rust project this is not the library you want.**
 In such a case it is much better to use the [../rust-src/id](../rust-src/id) crate directly since it provides support for serialization of all the relevant values.
@@ -150,7 +151,16 @@ To build the Go exports, do instead
 - These are intended to be used by the Go wrapper in `../idiss-go`. See
   `../idiss-go/README.md` for the Go API and build instructions.
 
-All of the above will build the library and produce artifacts in `./target/release/`.
+To build the Wasm exports for the Go wrapper, do instead
+  ```
+  cargo build --release --target wasm32-wasip1 --features=wasm
+  ```
+- This produces a Wasm module intended to be consumed by the Go wrapper in
+  `../idiss-go` at `target/wasm32-wasip1/release/idiss.wasm`. See
+  `../idiss-go/README.md` for the backend selection and runtime-loading
+  instructions.
+
+All of the above will build the library and produce artifacts under `./target/`.
 
 # Javascript API
 
@@ -319,3 +329,7 @@ present before calling into Rust.
 
 For the full Go API, types, examples, and build instructions, see
 `../idiss-go/README.md`.
+
+When using the Wasm backend, the Go wrapper loads
+`idiss/target/wasm32-wasip1/release/idiss.wasm` by default and supports
+overriding that path with the `IDISS_WASM_PATH` environment variable.

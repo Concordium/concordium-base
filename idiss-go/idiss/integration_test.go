@@ -1,4 +1,4 @@
-//go:build cgo && idissnative
+//go:build (cgo && idissnative) || idisswasm
 
 package idiss_test
 

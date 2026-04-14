@@ -339,5 +339,8 @@ mod cs_exports;
 #[cfg(feature = "go")]
 mod go_exports;
 
+#[cfg(feature = "wasm")]
+mod wasm_exports;
+
 #[cfg(feature = "nodejs")]
 mod nodejs_exports;

@@ -1,9 +1,10 @@
 # idiss-go - Concordium Identity Issuance library for Go
 
-Here, a Go library `idiss` for identity issuance is provided. The library uses
-three Go-specific C functions `validate_request_v1_go`,
-`create_identity_object_v1_go`, and `validate_recovery_request_go` that are
-exported by the Rust library `idiss` in `concordium-base`.
+Here, a Go library `idiss` for identity issuance is provided. The library can
+use either:
+
+- native Go-specific exports from the Rust library `idiss`
+- a Wasm module produced by the same Rust library
 
 The Go package intentionally exposes only the
 non-deprecated flows:
@@ -14,18 +15,18 @@ non-deprecated flows:
 
 Deprecated v0 issuance APIs are intentionally omitted.
 
-To build make sure to have Go, Rust, Cargo, and a C toolchain for `cgo`
-installed. The build process for this library does not build the Rust library
-automatically.
+To build make sure to have Go, Rust, and Cargo installed. If you want to use
+the native backend you also need a C toolchain for `cgo`. The build process for
+this library does not build the Rust artifacts automatically.
 
-## Api
+## Prerequisites
 
 - Go 1.21+
 - Rust toolchain with Cargo
-- A C toolchain for `cgo`
+- a C toolchain for `cgo` when using the native backend
 
-`idiss-go` does not invoke Cargo automatically. You must build the Rust shared
-library explicitly before using the native Go bindings.
+`idiss-go` does not invoke Cargo automatically. You must build the Rust native
+library or Wasm module explicitly before using the corresponding Go backend.
 
 ## API
 
@@ -104,7 +105,8 @@ used by the Rust library:
 
 ## Building
 
-To build the Rust library, step inside the repository root and do
+To build the native Rust library for the `idissnative` backend, step inside the
+repository root and do
 
 ```sh
 cargo build --manifest-path idiss/Cargo.toml --release --features go
@@ -116,19 +118,35 @@ This produces the native library in `idiss/target/release/`:
 - Linux: `libidiss.so`
 - Windows: `idiss.dll`
 
-By default, `idiss-go` uses a stub native layer so the module compiles even if
-the Rust library has not been built.
+To build the Wasm module for the `idisswasm` backend, step inside the
+repository root and do
 
-To enable the real native bindings, build or test with the `idissnative` tag:
+```sh
+cargo build --manifest-path idiss/Cargo.toml --target wasm32-wasip1 --release --features wasm
+```
+
+This produces `idiss/target/wasm32-wasip1/release/idiss.wasm`.
+
+By default, `idiss-go` uses a stub backend so the module compiles even if no
+Rust artifact has been built.
+
+To enable the native backend, build or test with the `idissnative` tag:
 
 ```sh
 go test -tags idissnative ./...
 go run -tags idissnative ./examples/basic
 ```
 
+To enable the Wasm backend, build or test with the `idisswasm` tag:
+
+```sh
+go test -tags idisswasm ./...
+go run -tags idisswasm ./examples/basic
+```
+
 The native Go binding code lives behind both `cgo` and `idissnative`.
 
-## Runtime Library Loading
+## Runtime Artifact Loading
 
 The Go native build links against `idiss/target/release`.
 
@@ -143,6 +161,21 @@ The current Go linker setup adds an `rpath` for macOS and Linux pointing at the
 repository-local `idiss/target/release` directory. On Windows, the DLL still
 needs to be discoverable via the normal DLL search path.
 
+The native backend currently uses that repository-local shared library path at
+link time. Unlike the Wasm backend, it does not currently support overriding the
+native library path with an environment variable.
+
+The Go Wasm backend loads the repository-local Wasm artifact from
+`idiss/target/wasm32-wasip1/release/idiss.wasm` by default. This path can be
+overridden with the `IDISS_WASM_PATH` environment variable.
+
+For example:
+
+```sh
+IDISS_WASM_PATH=/path/to/idiss.wasm go test -tags idisswasm ./...
+IDISS_WASM_PATH=/path/to/idiss.wasm go run -tags idisswasm ./examples/basic
+```
+
 ## Example
 
 In `examples/basic`, there is an example that uses the fixture data from the
@@ -153,6 +186,13 @@ To run the example, step inside the `idiss-go` directory and do
 ```sh
 cargo build --manifest-path idiss/Cargo.toml --release --features go
 go run -tags idissnative ./examples/basic
+```
+
+To run the same example through the Wasm backend, do instead
+
+```sh
+cargo build --manifest-path idiss/Cargo.toml --target wasm32-wasip1 --release --features wasm
+go run -tags idisswasm ./examples/basic
 ```
 
 If the example is successful, it prints a few values derived from the validated
@@ -179,12 +219,22 @@ cargo build --manifest-path idiss/Cargo.toml --release --features go
 go test -tags idissnative ./...
 ```
 
+To run the Wasm integration tests, step inside the `idiss-go` directory and do
+
+```sh
+cargo build --manifest-path idiss/Cargo.toml --target wasm32-wasip1 --release --features wasm
+go test -tags idisswasm ./...
+```
+
 ## Notes
 
 - `cgo` and `unsafe` are intentionally isolated to `internal/native`.
+- Wasm runtime integration is intentionally isolated to `internal/wasm`.
 - The Go package returns Go values and `error` values instead of exposing the
   Rust JSON ABI directly.
 - The package layout is:
 - `idiss/`: public typed API
+- `internal/backend/`: build-tag based backend selection
 - `internal/native/`: `cgo`, `unsafe`, and Rust buffer ownership handling
+- `internal/wasm/`: Wasm module loading and memory handling via `wazero`
 - `examples/basic/`: minimal runnable example using fixture data
