@@ -733,7 +733,7 @@ mod tests {
             memo: memo.clone(),
         });
         assert_eq!(
-            meta_operations::transfer_tokens_with_memo(
+            transfer_tokens_with_memo(
                 token_id.clone(),
                 ADDRESS,
                 amount,
@@ -756,7 +756,7 @@ mod tests {
             amount,
         });
         assert_eq!(
-            meta_operations::mint_tokens(token_id.clone(), amount),
+            mint_tokens(token_id.clone(), amount),
             meta_mint
         );
         assert_eq!(
@@ -774,7 +774,7 @@ mod tests {
             amount,
         });
         assert_eq!(
-            meta_operations::burn_tokens(token_id.clone(), amount),
+            burn_tokens(token_id.clone(), amount),
             meta_burn
         );
         assert_eq!(
@@ -795,7 +795,7 @@ mod tests {
             target: account.clone(),
         });
         assert_eq!(
-            meta_operations::add_token_allow_list(token_id.clone(), ADDRESS),
+            add_token_allow_list(token_id.clone(), ADDRESS),
             meta_add_allow_list
         );
         assert_eq!(
@@ -817,7 +817,7 @@ mod tests {
                 target: account.clone(),
             });
         assert_eq!(
-            meta_operations::remove_token_allow_list(token_id.clone(), ADDRESS),
+            remove_token_allow_list(token_id.clone(), ADDRESS),
             meta_remove_allow_list
         );
         assert_eq!(
@@ -838,7 +838,7 @@ mod tests {
             target: account.clone(),
         });
         assert_eq!(
-            meta_operations::add_token_deny_list(token_id.clone(), ADDRESS),
+            add_token_deny_list(token_id.clone(), ADDRESS),
             meta_add_deny_list
         );
         assert_eq!(
@@ -860,7 +860,7 @@ mod tests {
                 target: account.clone(),
             });
         assert_eq!(
-            meta_operations::remove_token_deny_list(token_id.clone(), ADDRESS),
+            remove_token_deny_list(token_id.clone(), ADDRESS),
             meta_remove_deny_list
         );
         assert_eq!(
@@ -876,7 +876,7 @@ mod tests {
         let meta_pause = MetaUpdateOperation::Pause(MetaTokenPauseDetails {
             token: token_id.clone(),
         });
-        assert_eq!(meta_operations::pause(token_id.clone()), meta_pause);
+        assert_eq!(pause(token_id.clone()), meta_pause);
         assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_pause.clone())),
             meta_pause
@@ -890,7 +890,7 @@ mod tests {
         let meta_unpause = MetaUpdateOperation::Unpause(MetaTokenPauseDetails {
             token: token_id.clone(),
         });
-        assert_eq!(meta_operations::unpause(token_id.clone()), meta_unpause);
+        assert_eq!(unpause(token_id.clone()), meta_unpause);
         assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_unpause.clone())),
             meta_unpause
@@ -913,7 +913,7 @@ mod tests {
                 account: account.clone(),
             });
         assert_eq!(
-            meta_operations::assign_admin_roles(token_id.clone(), ADDRESS, assign_roles.clone()),
+            assign_admin_roles(token_id.clone(), ADDRESS, assign_roles.clone()),
             meta_assign_admin_roles
         );
         assert_eq!(
@@ -942,7 +942,7 @@ mod tests {
                 account: account.clone(),
             });
         assert_eq!(
-            meta_operations::revoke_admin_roles(token_id.clone(), ADDRESS, revoke_roles.clone()),
+            revoke_admin_roles(token_id.clone(), ADDRESS, revoke_roles.clone()),
             meta_revoke_admin_roles
         );
         assert_eq!(
@@ -965,7 +965,7 @@ mod tests {
             metadata_url: metadata_url.clone(),
         });
         assert_eq!(
-            meta_operations::update_metadata(token_id.clone(), metadata_url.clone()),
+            update_metadata(token_id.clone(), metadata_url.clone()),
             meta_update_metadata
         );
         assert_eq!(
