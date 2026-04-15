@@ -1,110 +1,100 @@
 use crate::{
     common::cbor::{self, CborSerializationResult},
     protocol_level_tokens::{
-        CborHolderAccount, CborMemo, RawCbor, TokenAmount, TokenId, TokenOperation,
+        operations, CborHolderAccount, CborMemo, MetadataUrl, RawCbor, TokenAdminRole, TokenAmount,
+        TokenId, TokenOperation,
     },
 };
 use concordium_base_derive::{CborDeserialize, CborSerialize};
+use concordium_contracts_common::AccountAddress;
 
-pub mod meta_operations {
-    use super::*;
-    use crate::protocol_level_tokens::{operations, MetadataUrl, TokenAdminRole};
-    use concordium_contracts_common::AccountAddress;
+/// Construct a PLT transfer meta-update operation.
+pub fn transfer_tokens(
+    token_id: TokenId,
+    receiver: AccountAddress,
+    amount: TokenAmount,
+) -> MetaUpdateOperation {
+    (token_id, operations::transfer_tokens(receiver, amount)).into()
+}
 
-    /// Construct a PLT transfer meta-update operation.
-    pub fn transfer_tokens(
-        token_id: TokenId,
-        receiver: AccountAddress,
-        amount: TokenAmount,
-    ) -> MetaUpdateOperation {
-        (token_id, operations::transfer_tokens(receiver, amount)).into()
-    }
+/// Construct a PLT transfer meta-update operation with a memo.
+pub fn transfer_tokens_with_memo(
+    token_id: TokenId,
+    receiver: AccountAddress,
+    amount: TokenAmount,
+    memo: CborMemo,
+) -> MetaUpdateOperation {
+    (
+        token_id,
+        operations::transfer_tokens_with_memo(receiver, amount, memo),
+    )
+        .into()
+}
 
-    /// Construct a PLT transfer meta-update operation with a memo.
-    pub fn transfer_tokens_with_memo(
-        token_id: TokenId,
-        receiver: AccountAddress,
-        amount: TokenAmount,
-        memo: CborMemo,
-    ) -> MetaUpdateOperation {
-        (
-            token_id,
-            operations::transfer_tokens_with_memo(receiver, amount, memo),
-        )
-            .into()
-    }
+/// Construct a PLT mint meta-update operation.
+pub fn mint_tokens(token_id: TokenId, amount: TokenAmount) -> MetaUpdateOperation {
+    (token_id, operations::mint_tokens(amount)).into()
+}
 
-    /// Construct a PLT mint meta-update operation.
-    pub fn mint_tokens(token_id: TokenId, amount: TokenAmount) -> MetaUpdateOperation {
-        (token_id, operations::mint_tokens(amount)).into()
-    }
+/// Consturct a PLT burn meta-update operation.
+pub fn burn_tokens(token_id: TokenId, amount: TokenAmount) -> MetaUpdateOperation {
+    (token_id, operations::burn_tokens(amount)).into()
+}
 
-    /// Consturct a PLT burn meta-update operation.
-    pub fn burn_tokens(token_id: TokenId, amount: TokenAmount) -> MetaUpdateOperation {
-        (token_id, operations::burn_tokens(amount)).into()
-    }
+/// Construct a PLT add-allow-list meta-update operation.
+pub fn add_token_allow_list(token_id: TokenId, target: AccountAddress) -> MetaUpdateOperation {
+    (token_id, operations::add_token_allow_list(target)).into()
+}
 
-    /// Construct a PLT add-allow-list meta-update operation.
-    pub fn add_token_allow_list(token_id: TokenId, target: AccountAddress) -> MetaUpdateOperation {
-        (token_id, operations::add_token_allow_list(target)).into()
-    }
+/// Construct a PLT remove-allow-list meta-update operation.
+pub fn remove_token_allow_list(token_id: TokenId, target: AccountAddress) -> MetaUpdateOperation {
+    (token_id, operations::remove_token_allow_list(target)).into()
+}
 
-    /// Construct a PLT remove-allow-list meta-update operation.
-    pub fn remove_token_allow_list(
-        token_id: TokenId,
-        target: AccountAddress,
-    ) -> MetaUpdateOperation {
-        (token_id, operations::remove_token_allow_list(target)).into()
-    }
+/// Construct a PLT add-deny-list meta-update operation.
+pub fn add_token_deny_list(token_id: TokenId, target: AccountAddress) -> MetaUpdateOperation {
+    (token_id, operations::add_token_deny_list(target)).into()
+}
 
-    /// Construct a PLT add-deny-list meta-update operation.
-    pub fn add_token_deny_list(token_id: TokenId, target: AccountAddress) -> MetaUpdateOperation {
-        (token_id, operations::add_token_deny_list(target)).into()
-    }
+/// Construct a PLT remove-deny-list meta-update operation.
+pub fn remove_token_deny_list(token_id: TokenId, target: AccountAddress) -> MetaUpdateOperation {
+    (token_id, operations::remove_token_deny_list(target)).into()
+}
 
-    /// Construct a PLT remove-deny-list meta-update operation.
-    pub fn remove_token_deny_list(
-        token_id: TokenId,
-        target: AccountAddress,
-    ) -> MetaUpdateOperation {
-        (token_id, operations::remove_token_deny_list(target)).into()
-    }
+/// Construct a pause meta-update operation.
+pub fn pause(token_id: TokenId) -> MetaUpdateOperation {
+    MetaUpdateOperation::Pause(MetaTokenPauseDetails { token: token_id })
+}
 
-    /// Construct a pause meta-update operation.
-    pub fn pause(token_id: TokenId) -> MetaUpdateOperation {
-        MetaUpdateOperation::Pause(MetaTokenPauseDetails { token: token_id })
-    }
+/// Construct an unpause meta-update operation.
+pub fn unpause(token_id: TokenId) -> MetaUpdateOperation {
+    MetaUpdateOperation::Unpause(MetaTokenPauseDetails { token: token_id })
+}
 
-    /// Construct an unpause meta-update operation.
-    pub fn unpause(token_id: TokenId) -> MetaUpdateOperation {
-        MetaUpdateOperation::Unpause(MetaTokenPauseDetails { token: token_id })
-    }
+/// Construct an operation to assign admin roles to an address
+/// for a protocol-level token.
+pub fn assign_admin_roles(
+    token_id: TokenId,
+    account: AccountAddress,
+    roles: Vec<TokenAdminRole>,
+) -> MetaUpdateOperation {
+    (token_id, operations::assign_admin_roles(account, roles)).into()
+}
 
-    /// Construct an operation to assign admin roles to an address
-    /// for a protocol-level token.
-    pub fn assign_admin_roles(
-        token_id: TokenId,
-        account: AccountAddress,
-        roles: Vec<TokenAdminRole>,
-    ) -> MetaUpdateOperation {
-        (token_id, operations::assign_admin_roles(account, roles)).into()
-    }
+/// Construct an operation to revoke admin roles from an address
+/// for a protocol-level token.
+pub fn revoke_admin_roles(
+    token_id: TokenId,
+    account: AccountAddress,
+    roles: Vec<TokenAdminRole>,
+) -> MetaUpdateOperation {
+    (token_id, operations::revoke_admin_roles(account, roles)).into()
+}
 
-    /// Construct an operation to revoke admin roles from an address
-    /// for a protocol-level token.
-    pub fn revoke_admin_roles(
-        token_id: TokenId,
-        account: AccountAddress,
-        roles: Vec<TokenAdminRole>,
-    ) -> MetaUpdateOperation {
-        (token_id, operations::revoke_admin_roles(account, roles)).into()
-    }
-
-    /// Construct an operation to update token metadata for a
-    /// protocol-level token.
-    pub fn update_metadata(token_id: TokenId, metadata_url: MetadataUrl) -> MetaUpdateOperation {
-        (token_id, operations::update_metadata(metadata_url)).into()
-    }
+/// Construct an operation to update token metadata for a
+/// protocol-level token.
+pub fn update_metadata(token_id: TokenId, metadata_url: MetadataUrl) -> MetaUpdateOperation {
+    (token_id, operations::update_metadata(metadata_url)).into()
 }
 
 /// Payload for meta-update transaction. The transaction is a list of meta-update operations

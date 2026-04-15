@@ -16,7 +16,6 @@ mod token_operations;
 mod token_reject_reason;
 
 pub use cbor::*;
-pub use meta_operations::*;
 pub use token_amount::*;
 pub use token_authorizations::*;
 pub use token_event::*;

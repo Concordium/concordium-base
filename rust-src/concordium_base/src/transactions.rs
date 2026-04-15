@@ -26,7 +26,7 @@ use crate::{
         AccountAddress, AccountCredentialMessage, AccountKeys, CredentialDeploymentInfo,
         CredentialPublicKeys, VerifyKey,
     },
-    protocol_level_tokens::{MetaUpdatePayload, TokenOperationsPayload},
+    protocol_level_tokens::{meta_operations::MetaUpdatePayload, TokenOperationsPayload},
     random_oracle::RandomOracle,
     smart_contracts, updates,
 };
@@ -2371,7 +2371,8 @@ pub mod construct {
     use crate::{
         common::cbor,
         protocol_level_tokens::{
-            MetaUpdateOperations, RawCbor, TokenId, TokenOperation, TokenOperations,
+            meta_operations::MetaUpdateOperations, RawCbor, TokenId, TokenOperation,
+            TokenOperations,
         },
     };
 
