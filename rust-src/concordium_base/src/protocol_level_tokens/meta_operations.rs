@@ -886,10 +886,7 @@ mod tests {
         let meta_pause = MetaUpdateOperation::Pause(MetaTokenPauseDetails {
             token: token_id.clone(),
         });
-        assert_eq!(
-            meta_operations::pause(token_id.clone()),
-            meta_pause
-        );
+        assert_eq!(meta_operations::pause(token_id.clone()), meta_pause);
         assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_pause.clone())),
             meta_pause
@@ -903,10 +900,7 @@ mod tests {
         let meta_unpause = MetaUpdateOperation::Unpause(MetaTokenPauseDetails {
             token: token_id.clone(),
         });
-        assert_eq!(
-            meta_operations::unpause(token_id.clone()),
-            meta_unpause
-        );
+        assert_eq!(meta_operations::unpause(token_id.clone()), meta_unpause);
         assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_unpause.clone())),
             meta_unpause

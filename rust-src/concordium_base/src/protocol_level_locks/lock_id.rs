@@ -3,7 +3,19 @@ use concordium_base_derive::{CborDeserialize, CborSerialize};
 /// This tag ident
 const LOCK_ID_TAG: u64 = 40920;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, CborSerialize, CborDeserialize, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Clone,
+    CborSerialize,
+    CborDeserialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 #[cbor(tag = LOCK_ID_TAG, tuple)]
 #[serde(rename_all = "camelCase")]
 pub struct LockId {
