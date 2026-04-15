@@ -7,6 +7,7 @@ import qualified Codec.CBOR.Term as CBOR
 import Codec.CBOR.Write
 import qualified Codec.CBOR.Write as CBOR
 import qualified Concordium.Crypto.SHA256 as SHA256
+import Control.Monad
 import qualified Data.Aeson as AE
 import qualified Data.Aeson.KeyMap as AE
 import qualified Data.ByteString as BS
@@ -99,6 +100,42 @@ genTaggableMemo =
           CBORMemo <$> genMemo
         ]
 
+-- | A list of all 'TokenAdminRole's.
+allTokenAdminRoles :: [TokenAdminRole]
+allTokenAdminRoles =
+    [ RoleUpdateAdminRoles,
+      RoleMint,
+      RoleBurn,
+      RoleUpdateAllowList,
+      RoleUpdateDenyList,
+      RolePause,
+      RoleUpdateMetadata
+    ]
+
+-- | Generator for 'TokenAdminRole'.
+genTokenAdminRole :: Gen TokenAdminRole
+genTokenAdminRole = elements allTokenAdminRoles
+
+-- | Generate a 'TokenAuthorizationsMap' where each role may or may not be present
+--  with an arbitrary list of accounts.
+genTokenAuthorizationsMap :: Gen TokenAuthorizationsMap
+genTokenAuthorizationsMap = TokenAuthorizationsMap <$> foldM f Map.empty allTokenAdminRoles
+  where
+    f m role =
+        oneof
+            [ return m,
+              do
+                accts <- Seq.fromList <$> listOf genCborAccountAddress
+                return $ Map.insert role accts m
+            ]
+
+-- | Generator for 'UpdateAdminRolesDetails'.
+genUpdateAdminRolesDetails :: Gen UpdateAdminRolesDetails
+genUpdateAdminRolesDetails = do
+    uardAccount <- genCborAccountAddress
+    uardRoles <- Seq.fromList <$> listOf genTokenAdminRole
+    return UpdateAdminRolesDetails{..}
+
 -- | Generator for 'TokenGovernanceOperation'.
 genTokenOperation :: Gen TokenOperation
 genTokenOperation =
@@ -111,7 +148,10 @@ genTokenOperation =
           TokenAddDenyList <$> genCborAccountAddress,
           TokenRemoveDenyList <$> genCborAccountAddress,
           pure TokenPause,
-          pure TokenUnpause
+          pure TokenUnpause,
+          TokenAssignAdminRoles <$> genUpdateAdminRolesDetails,
+          TokenRevokeAdminRoles <$> genUpdateAdminRolesDetails,
+          TokenUpdateMetadata <$> genTokenMetadataUrlSimple
         ]
 
 -- | Generator for 'TokenGovernanceOperation'.
@@ -178,7 +218,10 @@ genTokenEvent =
           AddDenyListEvent <$> genCborAccountAddress,
           RemoveDenyListEvent <$> genCborAccountAddress,
           pure Pause,
-          pure Unpause
+          pure Unpause,
+          UpdateMetadataEvent <$> genTokenMetadataUrlSimple,
+          AssignAdminRolesEvent <$> genUpdateAdminRolesDetails,
+          RevokeAdminRolesEvent <$> genUpdateAdminRolesDetails
         ]
 
 -- | Generator for 'TokenRejectReason'.
@@ -414,6 +457,56 @@ encTops1 =
                 CBOR.toStrictByteString $
                     encodeTokenUpdateTransaction tops1
 
+-- | Another example 'TokenUpdateTransaction', which tests new operations introduced in P11.
+tops2 :: TokenUpdateTransaction
+tops2 =
+    TokenUpdateTransaction $
+        Seq.fromList
+            [ TokenAssignAdminRoles
+                UpdateAdminRolesDetails
+                    { uardAccount = cborHolder,
+                      uardRoles = Seq.fromList [RoleUpdateAdminRoles, RoleMint, RoleBurn]
+                    },
+              TokenRevokeAdminRoles
+                UpdateAdminRolesDetails
+                    { uardAccount = cborHolder,
+                      uardRoles = Seq.fromList [RoleUpdateAllowList, RoleUpdateDenyList, RolePause, RoleUpdateMetadata]
+                    },
+              TokenUpdateMetadata
+                TokenMetadataUrl
+                    { tmUrl = "https://example.plt",
+                      tmChecksumSha256 = Nothing,
+                      tmAdditional = Map.empty
+                    },
+              TokenUpdateMetadata
+                TokenMetadataUrl
+                    { tmUrl = "https://example2.plt",
+                      tmChecksumSha256 = Just emptyStringHash,
+                      tmAdditional = Map.empty
+                    }
+            ]
+  where
+    cborHolder =
+        CborAccountAddress
+            { chaAccount =
+                AccountAddress $
+                    FBS.pack (replicate 32 1),
+              chaCoinInfo = Just CoinInfoConcordium
+            }
+
+-- | Expected encoding of 'tops2'.
+tops2ExpectedCbor :: BS.ByteString
+tops2ExpectedCbor = BS16.decodeLenient "84a17061737369676e41646d696e526f6c6573a265726f6c6573837075706461746541646d696e526f6c6573646d696e74646275726e676163636f756e74d99d73a201d99d71a1011903970358200101010101010101010101010101010101010101010101010101010101010101a1707265766f6b6541646d696e526f6c6573a265726f6c6573846f757064617465416c6c6f774c6973746e75706461746544656e794c6973746570617573656e7570646174654d65746164617461676163636f756e74d99d73a201d99d71a1011903970358200101010101010101010101010101010101010101010101010101010101010101a16e7570646174654d65746164617461a16375726c7368747470733a2f2f6578616d706c652e706c74a16e7570646174654d65746164617461a26375726c7468747470733a2f2f6578616d706c65322e706c746e636865636b73756d5368613235365820e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+-- | Actual encoding of 'tops2'.
+encTops2 :: EncodedTokenOperations
+encTops2 =
+    EncodedTokenOperations $
+        TokenParameter $
+            BSS.toShort $
+                CBOR.toStrictByteString $
+                    encodeTokenUpdateTransaction tops1
+
 -- | A dummy 'CborAccountAddress' value.
 dummyCborHolder :: CborAccountAddress
 dummyCborHolder =
@@ -437,6 +530,31 @@ tevents1 =
       RemoveDenyListEvent dummyCborHolder,
       Pause,
       Unpause
+    ]
+
+-- | Example 'TokenEvent's introduced in P11.
+tevents2 :: [TokenEvent]
+tevents2 =
+    [ UpdateMetadataEvent $
+        TokenMetadataUrl
+            { tmUrl = "https://example.com/token-metadata",
+              tmChecksumSha256 = Just (SHA256.Hash (FBS.fromByteString "1234567890abcdef1234567890abcdef")),
+              tmAdditional =
+                Map.fromList
+                    [ ("key1", CBOR.TString "extravalue1"),
+                      ("key2", CBOR.TString "extravalue2")
+                    ]
+            },
+      AssignAdminRolesEvent $
+        UpdateAdminRolesDetails
+            { uardAccount = dummyCborHolder,
+              uardRoles = Seq.fromList [RoleMint, RoleBurn]
+            },
+      RevokeAdminRolesEvent $
+        UpdateAdminRolesDetails
+            { uardAccount = dummyCborHolder,
+              uardRoles = Seq.fromList [RoleUpdateAllowList, RoleUpdateDenyList]
+            }
     ]
 
 -- | Encoded 'TokenHolderTransaction' that cannot be successfully CBOR decoded
@@ -463,6 +581,21 @@ testEncodedTokenOperationsJSON = describe "EncodedTokenOperations JSON serializa
                 _ -> assertFailure "Does not encode to JSON object"
             _ -> assertFailure "Does not encode to JSON array"
 
+    it "Serialize/Deserialize roundtrip success (P11 ops)" $
+        assertEqual
+            "Deserialized"
+            (Just encTops2)
+            ( AE.decode $
+                AE.encode
+                    encTops2
+            )
+    it "Serializes to expected JSON object (P11 ops)" $
+        case AE.toJSON encTops2 of
+            AE.Array v -> case V.head v of
+                AE.Object o -> assertBool "Does not contain field amount" $ AE.member "transfer" o
+                _ -> assertFailure "Does not encode to JSON object"
+            _ -> assertFailure "Does not encode to JSON array"
+
     it "Serialize/Deserialize roundtrip where CBOR is not a valid TokenUpdateTransaction" $
         assertEqual
             "Deserialized"
@@ -484,6 +617,16 @@ testTokenOperationsCBOR = describe "EncodedTokenOperations CBOR serialization" $
             "CBOR serialized"
             (tokenUpdateTransactionToBytes tops1)
             tops1ExpectedCbor
+    it "Serialize/Deserialize roundtrip (P11 ops)" $
+        assertEqual
+            "Deserialized"
+            (tokenUpdateTransactionFromBytes $ B8.fromStrict $ tokenUpdateTransactionToBytes tops2)
+            (Right tops2)
+    it "Serializes to expected CBOR bytestring (P11 ops)" $
+        assertEqual
+            "CBOR serialized"
+            (tokenUpdateTransactionToBytes tops2)
+            tops2ExpectedCbor
 
 testEncodedTokenEvents :: Spec
 testEncodedTokenEvents = describe "TokenEvents CBOR serialization" $ do
@@ -492,6 +635,11 @@ testEncodedTokenEvents = describe "TokenEvents CBOR serialization" $ do
             "Deserialized"
             (map (decodeTokenEvent . encodeTokenEvent) tevents1)
             (map Right tevents1)
+    it "Serialize/Deserialize roundtrip (P11)" $
+        assertEqual
+            "Deserialized"
+            (map (decodeTokenEvent . encodeTokenEvent) tevents2)
+            (map Right tevents2)
     it "Serializes to expected CBOR bytestring" $ do
         assertEqual
             "Serialized to expected CBOR bytestring"
@@ -521,6 +669,36 @@ testEncodedTokenEvents = describe "TokenEvents CBOR serialization" $ do
                 }
             ]
             (map encodeTokenEvent tevents1)
+    it "Serializes to expected CBOR bytestring (P11)" $ do
+        assertEqual
+            "Serialized to expected CBOR bytestring"
+            [ EncodedTokenEvent
+                { eteType = TokenEventType "updateMetadata",
+                  eteDetails =
+                    TokenEventDetails . BSS.toShort . BS16.decodeLenient $
+                        "a46375726c782268747470733a2f2f6578616d706c652e636f6d2f746f6b656e\
+                        \2d6d65746164617461646b6579316b657874726176616c756531646b6579326b\
+                        \657874726176616c7565326e636865636b73756d536861323536582031323334\
+                        \35363738393061626364656631323334353637383930616263646566"
+                },
+              EncodedTokenEvent
+                { eteType = TokenEventType "assignAdminRoles",
+                  eteDetails =
+                    TokenEventDetails . BSS.toShort . BS16.decodeLenient $
+                        "a265726f6c657382646d696e74646275726e676163636f756e74d99d73a201d9\
+                        \9d71a10119039703582001010101010101010101010101010101010101010101\
+                        \01010101010101010101"
+                },
+              EncodedTokenEvent
+                { eteType = TokenEventType "revokeAdminRoles",
+                  eteDetails =
+                    TokenEventDetails . BSS.toShort . BS16.decodeLenient $
+                        "a265726f6c6573826f757064617465416c6c6f774c6973746e75706461746544\
+                        \656e794c697374676163636f756e74d99d73a201d99d71a10119039703582001\
+                        \01010101010101010101010101010101010101010101010101010101010101"
+                }
+            ]
+            (map encodeTokenEvent tevents2)
 
 emptyStringHash :: Hash.Hash
 emptyStringHash = Hash.hash ""
@@ -940,6 +1118,71 @@ testTokenMetadataUrlCBOR = describe "TokenMetadataUrl CBOR serialization" $ do
                 "\xA4\x63\x75\x72\x6C\x76\x68\x74\x74\x70\x73\x3A\x2F\x2F\x61\x62\x63\x2E\x74\x6F\x6B\x65\x6E\x2F\x6D\x65\x74\x61\x6E\x63\x68\x65\x63\x6B\x73\x75\x6D\x53\x68\x61\x32\x35\x36\x58\x20\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\x64\x6B\x65\x79\x31\x18\x2A\x64\x6B\x65\x79\x32\x6B\x65\x78\x74\x72\x61\x20\x76\x61\x6C\x75\x65"
             )
 
+-- | An example 'TokenAuthorizationsMap'.
+exampleTokenAuthorizationsMap :: TokenAuthorizationsMap
+exampleTokenAuthorizationsMap =
+    TokenAuthorizationsMap $
+        Map.fromList
+            [ (RoleUpdateAdminRoles, Seq.empty),
+              (RolePause, Seq.fromList [accountTokenHolder acc1, accountTokenHolderShort acc2])
+            ]
+  where
+    acc1 = AccountAddress $ FBS.pack $ repeat 0
+    acc2 = AccountAddress $ FBS.pack $ repeat 1
+
+-- | The Base-16 CBOR encoding of 'exampleTokenAuthorizationsMap'.
+exampleTokenAuthorizationsMapCBOR :: BS.ByteString
+exampleTokenAuthorizationsMapCBOR =
+    "a265706175736582d99d73a201d99d71a1011903970358200000000000000000\
+    \000000000000000000000000000000000000000000000000d99d73a103582001\
+    \0101010101010101010101010101010101010101010101010101010101010170\
+    \75706461746541646d696e526f6c657380"
+
+-- | The JSON encoding of 'exampleTokenAuthorizationsMap'.
+exampleTokenAuthorizationsMapJSON :: B8.ByteString
+exampleTokenAuthorizationsMapJSON =
+    "{\"updateAdminRoles\":[],\
+    \\"pause\":[\
+    \{\"address\":\"2wkBET2rRgE8pahuaczxKbmv7ciehqsne57F9gtzf1PVdr2VP3\",\
+    \\"coinInfo\":\"CCD\",\"type\":\"account\"},\
+    \{\"address\":\"2xBpaHottqhwFZURMZW4uZduQvpxNDSy46iXMYs9kceNGaPpZX\",\"type\":\"account\"}]}"
+
+-- | Test the CBOR encoding and decoding of 'TokenAuthorizationsMap'.
+testTokenAuthorizationsMapCBOR :: Spec
+testTokenAuthorizationsMapCBOR = describe "TokenAuthorizationsMap CBOR" $ do
+    it "Encode example" $
+        assertEqual
+            "Encoded"
+            exampleTokenAuthorizationsMapCBOR
+            (BS16.encode $ tokenAuthorizationsMapToBytes exampleTokenAuthorizationsMap)
+    it "Decode example" $
+        assertEqual
+            "Decoded"
+            (Right exampleTokenAuthorizationsMap)
+            ( tokenAuthorizationsMapFromBytes . BS.fromStrict . BS16.decodeLenient $
+                exampleTokenAuthorizationsMapCBOR
+            )
+    it "Random examples" $ withMaxSuccess 1000 $ forAll genTokenAuthorizationsMap $ \tam ->
+        Right tam
+            === tokenAuthorizationsMapFromBytes (BS.fromStrict $ tokenAuthorizationsMapToBytes tam)
+
+-- | Test the JSON encoding and decoding of 'TokenAuthorizationsMap'.
+testTokenAuthorizationsMapJSON :: Spec
+testTokenAuthorizationsMapJSON = describe "TokenAuthorizationsMap JSON" $ do
+    it "Serialize example" $
+        assertEqual
+            "Serialized"
+            exampleTokenAuthorizationsMapJSON
+            (AE.encode exampleTokenAuthorizationsMap)
+    it "Deserialize example" $
+        assertEqual
+            "Deserialized"
+            (Just exampleTokenAuthorizationsMap)
+            (AE.decode exampleTokenAuthorizationsMapJSON)
+    it "Random examples" $ withMaxSuccess 1000 $ forAll genTokenAuthorizationsMap $ \tam ->
+        Just tam
+            === AE.decode (AE.encode tam)
+
 -- | A set of test vectors for CBOR decoding that use non-canonical representations.
 testTransactionVectors :: Spec
 testTransactionVectors = do
@@ -1066,6 +1309,8 @@ tests = parallel $ describe "CBOR" $ do
     testTokenModuleAccountStateJSON
     testTokenStateJSON
     testTokenModuleAccountStateCBOR
+    testTokenAuthorizationsMapCBOR
+    testTokenAuthorizationsMapJSON
     describe "UpdateTransaction test vectors" $ testTransactionVectors
     it "JSON (de-)serialization roundtrip for TokenState (simple)" $ withMaxSuccess 1000 $ forAll genTokenStateSimple $ \tt ->
         assertEqual
