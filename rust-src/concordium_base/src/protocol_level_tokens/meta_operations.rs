@@ -733,12 +733,7 @@ mod tests {
             memo: memo.clone(),
         });
         assert_eq!(
-            transfer_tokens_with_memo(
-                token_id.clone(),
-                ADDRESS,
-                amount,
-                cbor_memo.clone()
-            ),
+            transfer_tokens_with_memo(token_id.clone(), ADDRESS, amount, cbor_memo.clone()),
             meta_transfer
         );
         assert_eq!(
@@ -755,10 +750,7 @@ mod tests {
             token: token_id.clone(),
             amount,
         });
-        assert_eq!(
-            mint_tokens(token_id.clone(), amount),
-            meta_mint
-        );
+        assert_eq!(mint_tokens(token_id.clone(), amount), meta_mint);
         assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_mint.clone())),
             meta_mint
@@ -773,10 +765,7 @@ mod tests {
             token: token_id.clone(),
             amount,
         });
-        assert_eq!(
-            burn_tokens(token_id.clone(), amount),
-            meta_burn
-        );
+        assert_eq!(burn_tokens(token_id.clone(), amount), meta_burn);
         assert_eq!(
             MetaUpdateOperation::from((token_id.clone(), token_burn.clone())),
             meta_burn
