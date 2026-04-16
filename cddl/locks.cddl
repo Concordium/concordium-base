@@ -304,7 +304,9 @@ lock-controller-simple-init = {
         ; At least one account must be granted the "fund" capability.
         "grants": [ + lock-controller-simple-grant ],
         ; If set, then the lock will not be destroyed before expiry except
-        ; by a cancel operation.
+        ; by a cancel operation. Note: specifying "keepAlive" with a value of
+        ; false is a non-canonical encoding; the canonical encoding would
+        ; omit the field.
         ? "keepAlive": bool .default false,
         ; If set, only the specified token types may be held by the lock.
         ? "tokens": [ + token-id ]
@@ -342,23 +344,22 @@ lock-cancel-body = (
 ; the chain.
 lock-id = #6.40920(raw-lock-id)
 
-raw-lock-id = uint
-
-; A local lock reference identifies a lock that was created in the current
-; transaction in creation order. That is, #6.40921(0) refers to the first
-; lock created in the current transaction, #6.40921(1) refers to the second
-; lock created in the transaction, and so on. Local references support
-; (safely) interacting with a lock in the same transaction as the lock is
-; created. Since the lock-id cannot generally be known before creation, it
-; would not otherwise be possible to (for example) create a lock and fund it
-; in a single transaction.
-lock-local-ref = #6.40921(raw-lock-local-ref)
-
-raw-lock-local-ref = uint
+; A lock identifier is a tuple of three numbers that together uniquely
+; identify a lock within the chain.
+raw-lock-id = [
+    ; Index of the account that created the lock.
+    account-index: uint,
+    ; Sequence number of the transaction that created the lock.
+    sequence-number: uint,
+    ; 0-based creation order of the lock within the transaction that
+    ; created it.
+    creation-order: uint
+]
 
 ; A reference to a lock used to identify it in a transaction.
-lock-ref = lock-id / lock-local-ref
+lock-ref = lock-id
 
+; A time specified in seconds since the UNIX epoch.
 epoch-time = #6.1(uint)
 
 ; Query support
