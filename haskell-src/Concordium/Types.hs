@@ -186,6 +186,7 @@ module Concordium.Types (
     makeTokenId,
     unsafeGetTokenId,
     TokenParameter (..),
+    MetaUpdateParameter (..),
     TokenModuleRef (..),
     TokenEventDetails (..),
     TokenEventType (..),
@@ -200,6 +201,7 @@ module Concordium.Types (
     cpltInitializationParameters,
     EncodedTokenOperations (..),
     EncodedTokenInitializationParameters (..),
+    EncodedMetaUpdateOperations (..),
 ) where
 
 import Data.Data (Data, Typeable)
@@ -1190,6 +1192,12 @@ instance S.Serialize TokenParameter where
         S.putWord32be (fromIntegral (BSS.length parameter))
         S.putShortByteString parameter
 
+-- | Parameter for a Token-update operation.
+--  Must be at most 2^16 bytes.
+newtype MetaUpdateParameter = MetaUpdateParameter {mupBytes :: BSS.ShortByteString}
+    deriving (Eq, AE.ToJSON, AE.FromJSON, Show) via BSH.ShortByteStringHex
+    deriving (S.Serialize) via TokenParameter
+
 -- | Details provided by the token module in the event of rejecting a transaction.
 data TokenModuleRejectReason = TokenModuleRejectReason
     { -- | The token symbol.
@@ -1354,6 +1362,27 @@ instance AE.FromJSON EncodedTokenOperations where
                         CBOR.tokenUpdateTransactionToBytes tip
     parseJSON v@(AE.String _) = EncodedTokenOperations <$> AE.parseJSON v
     parseJSON _ = fail "EncodedTokenOperations JSON must be either an array or a string"
+
+newtype EncodedMetaUpdateOperations = EncodedMetaUpdateOperations MetaUpdateParameter
+    deriving newtype (Eq, Show)
+
+instance AE.ToJSON EncodedMetaUpdateOperations where
+    toJSON (EncodedMetaUpdateOperations tp@(MetaUpdateParameter sbs)) =
+        case CBOR.metaUpdateTransactionFromBytes
+            (BSBuilder.toLazyByteString $ BSBuilder.shortByteString sbs) of
+            Left _ -> AE.toJSON tp
+            Right v -> AE.toJSON v
+
+instance AE.FromJSON EncodedMetaUpdateOperations where
+    parseJSON v@(AE.Array _) = do
+        tip <- AE.parseJSON v
+        return $
+            EncodedMetaUpdateOperations $
+                MetaUpdateParameter $
+                    BSS.toShort $
+                        CBOR.metaUpdateTransactionToBytes tip
+    parseJSON v@(AE.String _) = EncodedMetaUpdateOperations <$> AE.parseJSON v
+    parseJSON _ = fail "EncodedMetaUpdateOperations JSON must be either an array or a string"
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
