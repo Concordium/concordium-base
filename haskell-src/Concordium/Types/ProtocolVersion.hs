@@ -300,6 +300,7 @@ module Concordium.Types.ProtocolVersion (
     supportsAccountSignatureChecks,
     supportsContractInspectionQueries,
     supportsEncryptedTransfers,
+    supportsMetaUpdate,
 
     -- * Defunctionalisation symbols
     P1Sym0,
@@ -1023,3 +1024,19 @@ supportsEncryptedTransfers = \case
     SP9 -> False
     SP10 -> False
     SP11 -> False
+
+-- | Whether the protocol version supports the meta-update transaction type.
+--  (Enabled from 'P11' and onwards.)
+supportsMetaUpdate :: SProtocolVersion pv -> Bool
+supportsMetaUpdate = \case
+    SP1 -> False
+    SP2 -> False
+    SP3 -> False
+    SP4 -> False
+    SP5 -> False
+    SP6 -> False
+    SP7 -> False
+    SP8 -> False
+    SP9 -> False
+    SP10 -> False
+    SP11 -> True
