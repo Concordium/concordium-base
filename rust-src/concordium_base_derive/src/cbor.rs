@@ -43,6 +43,10 @@ pub struct CborFieldOpts {
     /// to the field with this attribute.
     #[darling(default)]
     other: bool,
+    /// Default value expression to use when deserializing and the key is
+    /// missing from the map. When serializing, if the value equals this
+    /// default, the key is omitted from the serialized map.
+    default: Option<Expr>,
 }
 
 #[derive(Debug, Default, FromVariant)]
@@ -148,6 +152,16 @@ impl CborFields {
                 }
             })
             .collect())
+    }
+
+    /// Get default value expressions for the fields (if any), in the same
+    /// order as `members()` and `cbor_map_keys()`.
+    fn default_values(&self) -> Vec<Option<Expr>> {
+        self.0
+            .iter()
+            .filter(|field| !field.opts.other)
+            .map(|field| field.opts.default.clone())
+            .collect()
     }
 }
 
@@ -404,6 +418,7 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
         }
         CborContainer::Map => {
             let field_map_keys = cbor_fields.cbor_map_keys()?;
+            let field_defaults = cbor_fields.default_values();
 
             let other_field_declare = if let Some((ty, other_ident)) = cbor_fields.other_member() {
                 quote! {
@@ -430,6 +445,32 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
                 }
             };
 
+            let missing_field_handling: Vec<TokenStream> = field_vars
+                .iter()
+                .zip(field_map_keys.iter())
+                .zip(field_defaults.iter())
+                .map(|((field_var, map_key), default_val)| {
+                    if let Some(default_expr) = default_val {
+                        quote! {
+                            let #field_var = match #field_var {
+                                None => #default_expr,
+                                Some(#field_var) => #field_var,
+                            };
+                        }
+                    } else {
+                        quote! {
+                            let #field_var = match #field_var {
+                                None => match #cbor_module::CborDeserialize::null() {
+                                    None => return Err(#cbor_module::CborSerializationError::map_value_missing(#map_key)),
+                                    Some(null_value) => null_value,
+                                },
+                                Some(#field_var) => #field_var,
+                            };
+                        }
+                    }
+                })
+                .collect();
+
             quote! {
                 let options = decoder.options();
                 #(let mut #field_vars = None;)*
@@ -450,15 +491,7 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
                     }
                 }
 
-                #(
-                    let #field_vars = match #field_vars {
-                        None => match #cbor_module::CborDeserialize::null() {
-                            None => return Err(#cbor_module::CborSerializationError::map_value_missing(#field_map_keys)),
-                            Some(null_value) => null_value,
-                        },
-                        Some(#field_vars) => #field_vars,
-                    };
-                )*
+                #(#missing_field_handling)*
 
                 Ok(#self_construct)
             }
@@ -773,17 +806,35 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
         }
         CborContainer::Map => {
             let field_map_keys = cbor_fields.cbor_map_keys()?;
+            let field_defaults = cbor_fields.default_values();
 
             let other_ident = cbor_fields.other_member().into_iter().map(|other| other.1);
+
+            let serialize_entries: Vec<TokenStream> = field_idents
+                .iter()
+                .zip(field_map_keys.iter())
+                .zip(field_defaults.iter())
+                .map(|((field_ident, map_key), default_val)| {
+                    if let Some(default_expr) = default_val {
+                        quote! {
+                            if self.#field_ident != #default_expr {
+                                #cbor_module::CborMapEncoder::serialize_entry(&mut map_encoder, &#map_key, &self.#field_ident)?;
+                            }
+                        }
+                    } else {
+                        quote! {
+                            if !#cbor_module::CborSerialize::is_null(&self.#field_ident) {
+                                #cbor_module::CborMapEncoder::serialize_entry(&mut map_encoder, &#map_key, &self.#field_ident)?;
+                            }
+                        }
+                    }
+                })
+                .collect();
 
             quote! {
                 let mut map_encoder = #cbor_module::CborEncoder::encode_map(encoder)?;
 
-                #(
-                    if !#cbor_module::CborSerialize::is_null(&self.#field_idents) {
-                        #cbor_module::CborMapEncoder::serialize_entry(&mut map_encoder, &#field_map_keys, &self.#field_idents)?;
-                    }
-                )*
+                #(#serialize_entries)*
 
                 #(
                     for (key, value) in self.#other_ident.iter() {

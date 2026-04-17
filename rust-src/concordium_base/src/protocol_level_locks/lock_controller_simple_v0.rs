@@ -88,8 +88,9 @@ pub struct LockControllerSimpleV0 {
     /// Tokens affected by this lock controller.
     pub tokens: Vec<TokenId>,
     /// Whether the lock should be kept alive after all funds are
-    /// returned. Interpreted as `false` when omitted.
-    pub keep_alive: Option<bool>,
+    /// returned. Interpreted as `false` when omitted from the serialization.
+    #[cbor(default = false)]
+    pub keep_alive: bool,
     /// Optional memo attached to the lock.
     pub memo: Option<CborMemo>,
 }
@@ -223,7 +224,7 @@ mod test {
                 ],
             }],
             tokens: vec!["CCD".parse().unwrap()],
-            keep_alive: true.into(),
+            keep_alive: true,
             memo: Some(CborMemo::Raw(
                 Memo::try_from(vec![0x01, 0x02, 0x03]).unwrap(),
             )),
@@ -241,7 +242,7 @@ mod test {
         let controller = LockControllerSimpleV0 {
             grants: vec![],
             tokens: vec![],
-            keep_alive: None,
+            keep_alive: false,
             memo: None,
         };
         let encoded = cbor::cbor_encode(&controller);
@@ -281,7 +282,7 @@ mod test {
                 ],
             }],
             tokens: vec!["CCD".parse().unwrap()],
-            keep_alive: true.into(),
+            keep_alive: true,
             memo: Some(CborMemo::Raw(
                 Memo::try_from(vec![0x01, 0x02, 0x03]).unwrap(),
             )),
@@ -350,7 +351,7 @@ mod test {
         let controller = LockControllerSimpleV0 {
             grants: vec![],
             tokens: vec![],
-            keep_alive: None,
+            keep_alive: false,
             memo: None,
         };
         let encoded = cbor::cbor_encode(&controller);

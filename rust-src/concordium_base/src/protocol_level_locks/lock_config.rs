@@ -40,7 +40,7 @@ mod test {
                     ],
                 }],
                 tokens: vec!["CCD".parse().unwrap()],
-                keep_alive: None,
+                keep_alive: false,
                 memo: None,
             }),
         }
@@ -102,7 +102,7 @@ mod test {
             controller: LockController::SimpleV0(LockControllerSimpleV0 {
                 grants: vec![],
                 tokens: vec![],
-                keep_alive: None,
+                keep_alive: false,
                 memo: None,
             }),
         };
