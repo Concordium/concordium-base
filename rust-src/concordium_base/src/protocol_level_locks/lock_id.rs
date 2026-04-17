@@ -8,21 +8,14 @@ use concordium_base_derive::{CborDeserialize, CborSerialize};
 const LOCK_ID_TAG: u64 = 40920;
 
 #[derive(
-    Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Clone,
-    CborSerialize,
-    CborDeserialize,
-    serde::Serialize,
-    serde::Deserialize,
-    Serialize,
+    Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, CborSerialize, CborDeserialize, Serialize,
 )]
 #[cbor(tag = LOCK_ID_TAG, tuple)]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct LockId {
     /// The account index of the account that created the lock.
     pub account_index: u64,
