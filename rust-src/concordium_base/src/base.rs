@@ -330,7 +330,9 @@ pub struct Round {
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, FromStr, Display, From, Into,
+)]
 /// A sequence number ordering transactions from a specific account. The initial
 /// sequence number is `1`, and a transaction with sequence number `m` must be
 /// followed by a transaction with sequence number `m+1`.
@@ -552,7 +554,9 @@ impl AbsoluteBlockHeight {
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, FromStr, Display, From, Into,
+)]
 /// Index of the account in the account table. These are assigned sequentially
 /// in the order of creation of accounts. The first account has index 0.
 pub struct AccountIndex {

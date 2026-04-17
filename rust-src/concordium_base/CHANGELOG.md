@@ -1,10 +1,26 @@
 ## Unreleased
+
+- Added `protocol_level_locks` module with types for PLT locks:
+  - `LockId`
+  - `LockConfig`
+  - `LockController`
+  - `LockControllerSimpleV0`
+  - `LockControllerSimpleV0Grant`
+  - `LockControllerSimpleV0Capability`
+- Added CBOR serialization for `TransactionTime` and `TokenId`.
+
+- Introduce `TokenAuthorizations` representing the CBOR encoding of the `getTokenAuthorizations` query.
+- Implemented definition for `UpdateMetadata` token operation and token event which allows to update the metadata of a protocol level token.
+- Implemented definition for `TokenAdminRole` which describes the list of supported roles.
+  Implemented `assignAdminRoles` and `revokeAdminRoles` token operations for RBAC too.
+
 - Implemented `common::from_bytes_complete` that fails if all bytes are not consumed during deserialization.
 - `cbor::cbor_encode` is now infallible and returns `Vec<u8>` instead of `CborSerializationResult<Vec<u8>>`
-- `&[T]` no longer implements `CborSerialize` in order to avoid ambiguity with `CborSerialize` implementation for `[u8]`. 
+- `&[T]` no longer implements `CborSerialize` in order to avoid ambiguity with `CborSerialize` implementation for `[u8]`.
   To serialize a slice as a CBOR array, wrap it in `ArraySlice`.
   `[u8]` still implements `CborSerialize` and serializes as a CBOR bytestring.
-- Removed the module `upward`. This will be added to Rust SDK crate instead. 
+- Removed the module `upward`. This will be added to Rust SDK crate instead.
+
 - Changes to `protocol_level_tokens` module:
   - Removed the usage of `Upward` in `TokenOperations` type. To CBOR decode and allow unknown variants,
     the new function `TokenOperationsPayload::decode_operations_maybe_known` can be used instead.
@@ -107,6 +123,9 @@
   - `encrypted_transfers::types::SecToPubAmountTransferData`
   - `encrypted_transfers::types::AggregatedDecryptedAmount`
 - Memory pre allocation is capped to `MAX_PRE_ALLOCATED_SIZE=4096` when cbor decoding vectors and maps.
+- In V1 identity based verifiable presentations, it has been changed such that the same attribute 
+  can be used both in set membership and range proofs, and at the same time being revealed. It was already possible
+  for account credentials.
 
 ## 10.0.0 (2026-01-09)
 
