@@ -111,9 +111,13 @@ pub struct MetaUpdatePayload {
 }
 
 impl MetaUpdatePayload {
-    /// Decode meta-update operations from CBOR
+    /// Decode meta-update operations from CBOR. This disallows extraneous fields
+    /// in the encoded CBOR.
     pub fn decode_operations(&self) -> CborSerializationResult<MetaUpdateOperations> {
-        cbor::cbor_decode(&self.operations)
+        let decode_options = cbor::SerializationOptions {
+            unknown_map_keys: cbor::UnknownMapKeys::Fail,
+        };
+        cbor::cbor_decode_with_options(&self.operations, decode_options)
     }
 }
 
