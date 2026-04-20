@@ -1957,7 +1957,7 @@ decodeLockControllerSimpleV0GrantHelper term = do
 data LockControllerSimpleV0 = LockControllerSimpleV0
     { lcsv0Grants :: !(Seq.Seq LockControllerSimpleV0Grant),
       lcsv0Tokens :: !(Seq.Seq TokenId),
-      lcsv0KeepAlive :: !(Maybe Bool),
+      lcsv0KeepAlive :: !Bool,
       lcsv0Memo :: !(Maybe TaggableMemo)
     }
     deriving (Eq, Show)
@@ -1968,7 +1968,7 @@ encodeLockControllerSimpleV0 LockControllerSimpleV0{..} =
         Map.empty
             & k "grants" ?~ encodeSequence encodeLockControllerSimpleV0Grant lcsv0Grants
             & k "tokens" ?~ encodeSequence encodeString (TextEncoding.decodeUtf8 . BSS.fromShort . tokenId <$> lcsv0Tokens)
-            & k "keepAlive" .~ (encodeBool <$> lcsv0KeepAlive)
+            & k "keepAlive" .~ (if lcsv0KeepAlive then Just (encodeBool True) else Nothing)
             & k "memo" .~ (encodeTaggableMemo <$> lcsv0Memo)
   where
     k = at . makeMapKeyEncoding . encodeString
@@ -1978,7 +1978,7 @@ decodeLockControllerSimpleV0Helper term = do
     m <- decodeTextKeyMap "lock-controller-simple-v0" term
     lcsv0Grants <- requireField "grants" (convertSequence convertLockControllerSimpleV0Grant) m
     lcsv0Tokens <- requireField "tokens" (convertSequence convertTokenId) m
-    let lcsv0KeepAlive = optionalField "keepAlive" convertBool m
+    let lcsv0KeepAlive = orDefault (optionalField "keepAlive" convertBool m) False
     let lcsv0Memo = optionalField "memo" convertTaggableMemo m
     return LockControllerSimpleV0{..}
 

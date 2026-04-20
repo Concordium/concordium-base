@@ -1210,7 +1210,7 @@ exampleLockInfoPayload =
                                                 ]
                                         },
                               lcsv0Tokens = Seq.singleton ccdTokenId,
-                              lcsv0KeepAlive = Nothing,
+                              lcsv0KeepAlive = False,
                               lcsv0Memo = Nothing
                             }
                 },

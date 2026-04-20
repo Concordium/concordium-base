@@ -34,7 +34,7 @@ mod test {
                 ],
             }],
             tokens: vec!["CCD".parse().unwrap()],
-            keep_alive: None,
+            keep_alive: false,
             memo: None,
         });
         let encoded = cbor::cbor_encode(&controller);
@@ -49,7 +49,7 @@ mod test {
         let controller = LockController::SimpleV0(LockControllerSimpleV0 {
             grants: vec![],
             tokens: vec![],
-            keep_alive: None,
+            keep_alive: false,
             memo: None,
         });
         let encoded = cbor::cbor_encode(&controller);
@@ -71,14 +71,14 @@ mod test {
     ///     "grants" (6): 666772616e7473, value []: 80
     ///     "tokens" (6): 66746f6b656e73, value []: 80
     ///
-    /// Note: `keep_alive: None` and `memo: None` are omitted by the derive
-    /// macro.
+    /// Note: `keep_alive: false` and `memo: None` are omitted from the CBOR
+    /// map.
     #[test]
     fn test_lock_controller_cbor_fixture() {
         let controller = LockController::SimpleV0(LockControllerSimpleV0 {
             grants: vec![],
             tokens: vec![],
-            keep_alive: None,
+            keep_alive: false,
             memo: None,
         });
         let encoded = cbor::cbor_encode(&controller);

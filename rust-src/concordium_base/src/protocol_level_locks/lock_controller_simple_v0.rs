@@ -1,6 +1,7 @@
 use crate::common::cbor::{
-    CborDecoder, CborDeserialize, CborEncoder, CborSerializationError, CborSerializationResult,
-    CborSerialize,
+    CborDecoder, CborDeserialize, CborEncoder, CborMapDecoder, CborMapEncoder,
+    CborSerializationError, CborSerializationResult, CborSerialize, MapKey, MapKeyRef,
+    UnknownMapKeys,
 };
 use crate::protocol_level_tokens::{CborHolderAccount, CborMemo, TokenId};
 use concordium_base_derive::{CborDeserialize, CborSerialize, Serialize};
@@ -81,17 +82,74 @@ pub struct LockControllerSimpleV0Grant {
 ///
 /// Contains the list of capability grants, which tokens are affected,
 /// a keep-alive flag, and an optional memo.
-#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct LockControllerSimpleV0 {
     /// Capability grants to accounts.
     pub grants: Vec<LockControllerSimpleV0Grant>,
     /// Tokens affected by this lock controller.
     pub tokens: Vec<TokenId>,
     /// Whether the lock should be kept alive after all funds are
-    /// returned. Interpreted as `false` when omitted.
-    pub keep_alive: Option<bool>,
+    /// returned. Encoded only when `true` and defaults to `false` when
+    /// omitted.
+    pub keep_alive: bool,
     /// Optional memo attached to the lock.
     pub memo: Option<CborMemo>,
+}
+
+impl CborSerialize for LockControllerSimpleV0 {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
+        let mut map_encoder = encoder.encode_map()?;
+        map_encoder.serialize_entry(&"grants", &self.grants)?;
+        map_encoder.serialize_entry(&"tokens", &self.tokens)?;
+        if self.keep_alive {
+            map_encoder.serialize_entry(&"keepAlive", &self.keep_alive)?;
+        }
+        if let Some(memo) = &self.memo {
+            map_encoder.serialize_entry(&"memo", memo)?;
+        }
+        map_encoder.end()?;
+        Ok(())
+    }
+}
+
+impl CborDeserialize for LockControllerSimpleV0 {
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
+    where
+        Self: Sized,
+    {
+        let options = decoder.options();
+        let mut grants = None;
+        let mut tokens = None;
+        let mut keep_alive = None;
+        let mut memo = None;
+        let mut map_decoder = decoder.decode_map()?;
+
+        while let Some(map_key) = map_decoder.deserialize_key::<MapKey>()? {
+            match map_key.as_ref() {
+                MapKeyRef::Text("grants") => grants = Some(map_decoder.deserialize_value()?),
+                MapKeyRef::Text("tokens") => tokens = Some(map_decoder.deserialize_value()?),
+                MapKeyRef::Text("keepAlive") => keep_alive = Some(map_decoder.deserialize_value()?),
+                MapKeyRef::Text("memo") => memo = Some(map_decoder.deserialize_value()?),
+                _ => match options.unknown_map_keys {
+                    UnknownMapKeys::Fail => {
+                        return Err(CborSerializationError::unknown_map_key(map_key.as_ref()))
+                    }
+                    UnknownMapKeys::Ignore => map_decoder.skip_value()?,
+                },
+            }
+        }
+
+        Ok(Self {
+            grants: grants.ok_or_else(|| {
+                CborSerializationError::map_value_missing(MapKeyRef::Text("grants"))
+            })?,
+            tokens: tokens.ok_or_else(|| {
+                CborSerializationError::map_value_missing(MapKeyRef::Text("tokens"))
+            })?,
+            keep_alive: keep_alive.unwrap_or(false),
+            memo: memo.unwrap_or(None),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -223,7 +281,7 @@ mod test {
                 ],
             }],
             tokens: vec!["CCD".parse().unwrap()],
-            keep_alive: true.into(),
+            keep_alive: true,
             memo: Some(CborMemo::Raw(
                 Memo::try_from(vec![0x01, 0x02, 0x03]).unwrap(),
             )),
@@ -241,7 +299,7 @@ mod test {
         let controller = LockControllerSimpleV0 {
             grants: vec![],
             tokens: vec![],
-            keep_alive: None,
+            keep_alive: false,
             memo: None,
         };
         let encoded = cbor::cbor_encode(&controller);
@@ -281,7 +339,7 @@ mod test {
                 ],
             }],
             tokens: vec!["CCD".parse().unwrap()],
-            keep_alive: true.into(),
+            keep_alive: true,
             memo: Some(CborMemo::Raw(
                 Memo::try_from(vec![0x01, 0x02, 0x03]).unwrap(),
             )),
@@ -334,7 +392,7 @@ mod test {
 
     /// Fixture test for `LockControllerSimpleV0` with a minimal configuration.
     ///
-    /// `keep_alive: None` and `memo: None` are omitted by the derive macro,
+    /// `keep_alive: false` and `memo: None` are omitted from the CBOR map,
     /// so the CBOR map contains only `"grants"` and `"tokens"` (both empty
     /// arrays).
     ///
@@ -350,7 +408,7 @@ mod test {
         let controller = LockControllerSimpleV0 {
             grants: vec![],
             tokens: vec![],
-            keep_alive: None,
+            keep_alive: false,
             memo: None,
         };
         let encoded = cbor::cbor_encode(&controller);

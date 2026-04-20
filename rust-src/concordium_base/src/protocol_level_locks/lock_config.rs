@@ -40,7 +40,7 @@ mod test {
                     ],
                 }],
                 tokens: vec!["CCD".parse().unwrap()],
-                keep_alive: None,
+                keep_alive: false,
                 memo: None,
             }),
         }
@@ -92,8 +92,8 @@ mod test {
     /// - "recipients" (10 bytes) — same length as "controller", sorted
     ///   lexicographically
     ///
-    /// Note: `keep_alive: None` and `memo: None` are omitted by the derive
-    /// macro, so the inner `LockControllerSimpleV0` map has only 2 entries.
+    /// Note: `keep_alive: false` and `memo: None` are omitted from the CBOR
+    /// map, so the inner `LockControllerSimpleV0` map has only 2 entries.
     #[test]
     fn test_lock_config_cbor_fixture() {
         let config = LockConfig {
@@ -102,7 +102,7 @@ mod test {
             controller: LockController::SimpleV0(LockControllerSimpleV0 {
                 grants: vec![],
                 tokens: vec![],
-                keep_alive: None,
+                keep_alive: false,
                 memo: None,
             }),
         };

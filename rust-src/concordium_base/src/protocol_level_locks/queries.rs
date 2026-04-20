@@ -78,7 +78,7 @@ mod test {
                     ],
                 }],
                 tokens: vec!["CCD".parse().unwrap()],
-                keep_alive: None,
+                keep_alive: false,
                 memo: None,
             }),
         }
