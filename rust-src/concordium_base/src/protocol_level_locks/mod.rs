@@ -29,8 +29,10 @@ mod lock_config;
 mod lock_controller;
 mod lock_controller_simple_v0;
 mod lock_id;
+mod queries;
 
 pub use lock_config::*;
 pub use lock_controller::*;
 pub use lock_controller_simple_v0::*;
 pub use lock_id::*;
+pub use queries::*;

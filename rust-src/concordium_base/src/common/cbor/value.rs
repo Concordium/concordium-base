@@ -33,6 +33,22 @@ pub enum Value {
     Float(f64),
 }
 
+impl Value {
+    pub fn data_item_type(&self) -> cbor::DataItemType {
+        match self {
+            Value::Positive(_) => cbor::DataItemType::Positive,
+            Value::Negative(_) => cbor::DataItemType::Negative,
+            Value::Bytes(_) => cbor::DataItemType::Bytes,
+            Value::Text(_) => cbor::DataItemType::Text,
+            Value::Array(_) => cbor::DataItemType::Array,
+            Value::Map(_) => cbor::DataItemType::Map,
+            Value::Tag(_, _) => cbor::DataItemType::Tag,
+            Value::Bool(_) | Value::Null | Value::Simple(_) => cbor::DataItemType::Simple,
+            Value::Float(_) => cbor::DataItemType::Float,
+        }
+    }
+}
+
 impl CborSerialize for Value {
     fn serialize<C: CborEncoder>(&self, mut encoder: C) -> Result<(), C::WriteError> {
         match self {
