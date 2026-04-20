@@ -79,6 +79,9 @@ pub struct CborOpts {
     /// untagged.
     #[darling(default)]
     tagged: bool,
+    /// Serialize struct as an array instead of a map.
+    #[darling(default)]
+    tuple: bool,
 }
 
 #[derive(Debug)]
@@ -377,6 +380,7 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
     };
 
     let cbor_container = match fields {
+        _ if opts.tuple => CborContainer::Array,
         Fields::Named(_) => CborContainer::Map,
         Fields::Unnamed(_) => CborContainer::Array,
         Fields::Unit => CborContainer::Map,
@@ -476,6 +480,13 @@ fn cbor_deserialize_enum_body(
         return Err(syn::Error::new(
             Span::call_site(),
             "#[cbor(transparent)] only valid for structs",
+        ));
+    }
+
+    if opts.tuple {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "#[cbor(tuple)] only valid for structs",
         ));
     }
 
@@ -740,6 +751,7 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
     }
 
     let cbor_container = match fields {
+        _ if opts.tuple => CborContainer::Array,
         Fields::Named(_) => CborContainer::Map,
         Fields::Unnamed(_) => CborContainer::Array,
         Fields::Unit => CborContainer::Map,
@@ -795,6 +807,13 @@ fn cbor_serialize_enum_body(
         return Err(syn::Error::new(
             Span::call_site(),
             "#[cbor(transparent)] only valid for structs",
+        ));
+    }
+
+    if opts.tuple {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "#[cbor(tuple)] only valid for structs",
         ));
     }
 
