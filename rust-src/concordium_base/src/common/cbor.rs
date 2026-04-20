@@ -1234,6 +1234,29 @@ mod test {
     }
 
     #[test]
+    fn test_struct_default_derived() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct {
+            field1: u64,
+            #[cbor(default = 5)]
+            field2: u64,
+        }
+
+        let value = TestStruct { field1: 3, field2: 5 };
+
+        let cbor = cbor_encode(&value);
+        assert_eq!(hex::encode(&cbor), "a1666669656c643103");
+        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let value2 = TestStruct { field1: 5, field2: 6 };
+        let cbor = cbor_encode(&value2);
+        assert_eq!(hex::encode(&cbor), "a2666669656c643105666669656c643206");
+        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value2);
+    }
+
+    #[test]
     fn test_enum_as_map_derived() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         #[cbor(map)]
