@@ -368,6 +368,45 @@ mod test {
         assert_eq!(hex::encode(&encoded), expected);
     }
 
+    #[test]
+    fn test_simple_v0_cbor_fixture_noncanonical() {
+        // This test verifies that the CBOR decoder accepts non-canonical
+        // encodings of LockControllerSimpleV0. In particular, the `keepAlive` field is encoded as
+        // `false` (0xf4) instead of being omitted.
+        // Additionaly, the fields are not in deterministic order.
+        // {
+        //     "tokens": ["CCD"],
+        //     "keepAlive": false,
+        //     "grants": [
+        //         {
+        //             "account": 40307_1({
+        //                 1: 40305_1({1: 919_2}),
+        //                 3: h'0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20',
+        //             }),
+        //             "roles": ["fund", "cancel"],
+        //         },
+        //     ],
+        // }
+        let encoding = "a366746f6b656e738163434344696b656570416c697665f4666772616e747381a2676163636f756e74d99d73a201d99d71a1011a000003970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2065726f6c6573826466756e646663616e63656c";
+        let bytes = hex::decode(encoding).expect("invalid hex in test fixture");
+        let decoded: LockControllerSimpleV0 =
+            cbor::cbor_decode(&bytes).expect("CBOR decode failed");
+
+        let expect = LockControllerSimpleV0 {
+            grants: vec![LockControllerSimpleV0Grant {
+                account: CborHolderAccount::from(ADDRESS),
+                roles: vec![
+                    LockControllerSimpleV0Capability::Fund,
+                    LockControllerSimpleV0Capability::Cancel,
+                ],
+            }],
+            tokens: vec!["CCD".parse().unwrap()],
+            keep_alive: false,
+            memo: None,
+        };
+        assert_eq!(decoded, expect);
+    }
+
     /// Round-trip test for all `LockControllerSimpleV0Capability` variants
     /// using binary (`Serial`/`Deserial`) encoding.
     #[test]
