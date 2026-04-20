@@ -682,7 +682,7 @@ instance ToProto TokenAuthorizations where
 instance ToProto LockInfo where
     type Output LockInfo = Proto.LockInfo
     toProto LockInfo{..} = Proto.make $ do
-        ProtoFields.lockInfo .= Proto.make (PLTFields.value .= liPayload)
+        ProtoFields.lockInfo .= Proto.make (PLTFields.value .= liLockInfo)
 
 instance ToProto Wasm.Parameter where
     type Output Wasm.Parameter = Proto.Parameter

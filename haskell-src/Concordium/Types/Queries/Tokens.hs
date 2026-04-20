@@ -254,16 +254,5 @@ instance Serialize TokenAuthorizations where
 -- The payload is the raw CBOR encoding of the `lock-info` structure.
 data LockInfo = LockInfo
     { -- | The CBOR encoded lock-info payload.
-      liPayload :: !BS.ByteString
+      liLockInfo :: !BS.ByteString
     }
-
--- | Define the serialization matching the one in the node on the rust side.
--- This is internal and only meant to be used when passed across FFI in the node.
-instance Serialize LockInfo where
-    put LockInfo{..} = do
-        putWord32be (fromIntegral (BS.length liPayload))
-        putByteString liPayload
-    get = do
-        payloadLen <- getWord32be
-        liPayload <- getByteString (fromIntegral payloadLen)
-        return LockInfo{..}

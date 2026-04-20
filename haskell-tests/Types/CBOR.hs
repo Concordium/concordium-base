@@ -1183,9 +1183,9 @@ testTokenAuthorizationsMapJSON = describe "TokenAuthorizationsMap JSON" $ do
         Just tam
             === AE.decode (AE.encode tam)
 
-exampleLockInfoPayload :: LockInfoPayload
-exampleLockInfoPayload =
-    LockInfoPayload
+exampleLockInfoDetails :: LockInfoDetails
+exampleLockInfoDetails =
+    LockInfoDetails
         { lipLock =
             LockId
                 { liAccountIndex = 10001,
@@ -1232,8 +1232,8 @@ exampleLockInfoPayload =
         Left err -> error err
         Right tid -> tid
 
-exampleLockInfoPayloadCBOR :: BS.ByteString
-exampleLockInfoPayloadCBOR =
+exampleLockInfoDetailsCBOR :: BS.ByteString
+exampleLockInfoDetailsCBOR =
     mconcat
         [ "a5",
           "646c6f636b",
@@ -1273,19 +1273,19 @@ exampleLockInfoPayloadCBOR =
           "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
         ]
 
--- | Test the CBOR encoding and decoding of 'LockInfoPayload'.
-testLockInfoPayloadCBOR :: Spec
-testLockInfoPayloadCBOR = describe "LockInfoPayload CBOR" $ do
+-- | Test the CBOR encoding and decoding of 'LockInfoDetails'.
+testLockInfoDetailsCBOR :: Spec
+testLockInfoDetailsCBOR = describe "LockInfoDetails CBOR" $ do
     it "Encode example" $
         assertEqual
             "Encoded"
-            exampleLockInfoPayloadCBOR
-            (BS16.encode $ lockInfoToBytes exampleLockInfoPayload)
+            exampleLockInfoDetailsCBOR
+            (BS16.encode $ lockInfoToBytes exampleLockInfoDetails)
     it "Decode example" $
         assertEqual
             "Decoded"
-            (Right exampleLockInfoPayload)
-            (lockInfoFromBytes . BS.fromStrict . BS16.decodeLenient $ exampleLockInfoPayloadCBOR)
+            (Right exampleLockInfoDetails)
+            (lockInfoFromBytes . BS.fromStrict . BS16.decodeLenient $ exampleLockInfoDetailsCBOR)
 
 -- | A set of test vectors for CBOR decoding that use non-canonical representations.
 testTransactionVectors :: Spec
@@ -1415,7 +1415,7 @@ tests = parallel $ describe "CBOR" $ do
     testTokenModuleAccountStateCBOR
     testTokenAuthorizationsMapCBOR
     testTokenAuthorizationsMapJSON
-    testLockInfoPayloadCBOR
+    testLockInfoDetailsCBOR
     describe "UpdateTransaction test vectors" $ testTransactionVectors
     it "JSON (de-)serialization roundtrip for TokenState (simple)" $ withMaxSuccess 1000 $ forAll genTokenStateSimple $ \tt ->
         assertEqual

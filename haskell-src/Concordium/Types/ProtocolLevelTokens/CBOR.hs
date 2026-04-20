@@ -4,7 +4,101 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Concordium.Types.ProtocolLevelTokens.CBOR where
+module Concordium.Types.ProtocolLevelTokens.CBOR (
+    decodeFromBytes,
+    encodeToBytes,
+    cborTermToHex,
+    hexToCborTerm,
+    MapValueDecoder,
+    mapValueDecoder,
+    decodeMap,
+    decodeEmptyMap,
+    decodeDecimalFraction,
+    decodeSequence,
+    decodeAdditionalMapJson,
+    MapKeyEncoding (..),
+    makeMapKeyEncoding,
+    encodeMapDeterministic,
+    encodeAdditionalMapJson,
+    encodeAdditionalMapCbor,
+    CoinInfo (..),
+    decodeCoinInfo,
+    encodeCoinInfo,
+    CborAccountAddress (..),
+    accountTokenHolder,
+    accountTokenHolderShort,
+    decodeAccountAddress,
+    encodeAccountAddress,
+    decodeCborAccountAddress,
+    encodeCborAccountAddress,
+    decodeTokenAmount,
+    encodeTokenAmount,
+    encodeSequence,
+    TokenMetadataUrl (..),
+    decodeTokenMetadataUrl,
+    encodeTokenMetadataUrl,
+    tokenMetadataUrlFromBytes,
+    tokenMetadataUrlToBytes,
+    TokenAdminRole (..),
+    decodeTokenAdminRole,
+    encodeTokenAdminRole,
+    UpdateAdminRolesDetails (..),
+    decodeUpdateAdminRolesDetails,
+    encodeUpdateAdminRolesDetails,
+    TokenInitializationParameters (..),
+    decodeTokenInitializationParameters,
+    tokenInitializationParametersFromBytes,
+    encodeTokenInitializationParameters,
+    tokenInitializationParametersToBytes,
+    TaggableMemo (..),
+    decodeTaggableMemo,
+    encodeTaggableMemo,
+    TokenTransferBody (..),
+    decodeTokenTransfer,
+    encodeTokenTransfer,
+    TokenOperation (..),
+    decodeTokenOperation,
+    encodeTokenOperation,
+    TokenUpdateTransaction (..),
+    decodeTokenUpdateTransaction,
+    tokenUpdateTransactionFromBytes,
+    encodeTokenUpdateTransaction,
+    tokenUpdateTransactionToBytes,
+    EncodedTokenEvent (..),
+    TokenEvent (..),
+    encodeTokenEvent,
+    decodeTokenEvent,
+    EncodedTokenRejectReason (..),
+    TokenRejectReason (..),
+    encodeTokenRejectReason,
+    decodeTokenRejectReason,
+    TokenModuleState (..),
+    encodeTokenModuleState,
+    tokenModuleStateToBytes,
+    decodeTokenModuleState,
+    tokenModuleStateFromBytes,
+    TokenAuthorizationsMap (..),
+    encodeTokenAuthorizationsMap,
+    decodeTokenAuthorizationsMap,
+    tokenAuthorizationsMapFromBytes,
+    tokenAuthorizationsMapToBytes,
+    LockId (..),
+    LockControllerSimpleV0Capability (..),
+    LockControllerSimpleV0Grant (..),
+    LockControllerSimpleV0 (..),
+    LockController (..),
+    LockConfig (..),
+    LockedTokenAmount (..),
+    LockAccountFunds (..),
+    LockInfoDetails (..),
+    lockInfoFromBytes,
+    lockInfoToBytes,
+    TokenModuleAccountState (..),
+    encodeTokenModuleAccountState,
+    tokenModuleAccountStateToBytes,
+    decodeTokenModuleAccountState,
+    tokenModuleAccountStateFromBytes,
+) where
 
 import qualified Codec.CBOR.ByteArray as BA
 import qualified Codec.CBOR.ByteArray.Sliced as SBA
@@ -2077,26 +2171,26 @@ decodeLockAccountFundsHelper term = do
     return LockAccountFunds{..}
 
 -- | Structured representation of the CBOR payload returned by `GetLockInfo`.
-data LockInfoPayload = LockInfoPayload
+data LockInfoDetails = LockInfoDetails
     { lipLock :: !LockId,
       lipConfig :: !LockConfig,
       lipFunds :: !(Seq.Seq LockAccountFunds)
     }
     deriving (Eq, Show)
 
-lockInfoFromBytes :: LBS.ByteString -> Either String LockInfoPayload
-lockInfoFromBytes = decodeFromBytes decodeLockInfoPayload "lock info"
+lockInfoFromBytes :: LBS.ByteString -> Either String LockInfoDetails
+lockInfoFromBytes = decodeFromBytes decodeLockInfoDetails "lock info"
 
-lockInfoToBytes :: LockInfoPayload -> BS.ByteString
-lockInfoToBytes = encodeToBytes . encodeLockInfoPayload
+lockInfoToBytes :: LockInfoDetails -> BS.ByteString
+lockInfoToBytes = encodeToBytes . encodeLockInfoDetails
 
-decodeLockInfoPayload :: Decoder s LockInfoPayload
-decodeLockInfoPayload = do
+decodeLockInfoDetails :: Decoder s LockInfoDetails
+decodeLockInfoDetails = do
     term <- CBOR.decodeTerm
-    either fail return $ decodeLockInfoPayloadHelper term
+    either fail return $ decodeLockInfoDetailsHelper term
 
-encodeLockInfoPayload :: LockInfoPayload -> Encoding
-encodeLockInfoPayload LockInfoPayload{..} =
+encodeLockInfoDetails :: LockInfoDetails -> Encoding
+encodeLockInfoDetails LockInfoDetails{..} =
     encodeMapDeterministic $
         Map.empty
             & k "lock" ?~ encodeLockId lipLock
@@ -2107,15 +2201,15 @@ encodeLockInfoPayload LockInfoPayload{..} =
   where
     k = at . makeMapKeyEncoding . encodeString
 
-decodeLockInfoPayloadHelper :: CBOR.Term -> Either String LockInfoPayload
-decodeLockInfoPayloadHelper term = do
+decodeLockInfoDetailsHelper :: CBOR.Term -> Either String LockInfoDetails
+decodeLockInfoDetailsHelper term = do
     m <- decodeTextKeyMap "lock-info" term
     lipLock <- requireField "lock" convertLockId m
     lcRecipients <- requireField "recipients" (convertSequence (termToMaybe decodeCborAccountAddressHelper)) m
     lcExpiry <- requireField "expiry" convertEpochTime m
     lcController <- requireField "controller" convertLockController m
     lipFunds <- requireField "funds" (convertSequence convertLockAccountFunds) m
-    return LockInfoPayload{lipConfig = LockConfig{..}, ..}
+    return LockInfoDetails{lipConfig = LockConfig{..}, ..}
 
 termToMaybe :: (CBOR.Term -> Either String a) -> CBOR.Term -> Maybe a
 termToMaybe = (either (const Nothing) Just .)
