@@ -84,6 +84,7 @@ library
       Concordium.Types.AnonymityRevokers
       Concordium.Types.Block
       Concordium.Types.Conditionally
+      Concordium.Types.Common
       Concordium.Types.DummyData
       Concordium.Types.Execution
       Concordium.Types.Execution.TH

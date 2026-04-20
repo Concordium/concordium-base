@@ -7,9 +7,13 @@
   - `LockControllerSimpleV0`
   - `LockControllerSimpleV0Grant`
   - `LockControllerSimpleV0Capability`
+  - `LockInfo`
+  - `LockAccountFunds`
+  - `LockedTokenAmount`
 - Added CBOR serialization for `TransactionTime` and `TokenId`.
 
 - Introduce `TokenAuthorizations` representing the CBOR encoding of the `getTokenAuthorizations` query.
+- Introduce lock query boundary types representing the CBOR encoding of the `getLockInfo` query.
 - Implemented definition for `UpdateMetadata` token operation and token event which allows to update the metadata of a protocol level token.
 - Implemented definition for `TokenAdminRole` which describes the list of supported roles.
   Implemented `assignAdminRoles` and `revokeAdminRoles` token operations for RBAC too.

@@ -1183,6 +1183,110 @@ testTokenAuthorizationsMapJSON = describe "TokenAuthorizationsMap JSON" $ do
         Just tam
             === AE.decode (AE.encode tam)
 
+exampleLockInfoPayload :: LockInfoPayload
+exampleLockInfoPayload =
+    LockInfoPayload
+        { lipLock =
+            LockId
+                { liAccountIndex = 10001,
+                  liSequenceNumber = 5,
+                  liCreationOrder = 0
+                },
+          lipConfig =
+            LockConfig
+                { lcRecipients = Seq.singleton $ accountTokenHolder acc,
+                  lcExpiry = TransactionTime 1804806000,
+                  lcController =
+                    LockControllerSimpleV0Variant
+                        LockControllerSimpleV0
+                            { lcsv0Grants =
+                                Seq.singleton
+                                    LockControllerSimpleV0Grant
+                                        { lcsv0gAccount = accountTokenHolder acc,
+                                          lcsv0gRoles =
+                                            Seq.fromList
+                                                [ LockControllerSimpleV0Fund,
+                                                  LockControllerSimpleV0Send
+                                                ]
+                                        },
+                              lcsv0Tokens = Seq.singleton ccdTokenId,
+                              lcsv0KeepAlive = Nothing,
+                              lcsv0Memo = Nothing
+                            }
+                },
+          lipFunds =
+            Seq.singleton
+                LockAccountFunds
+                    { lafAccount = accountTokenHolder acc,
+                      lafAmounts =
+                        Seq.singleton
+                            LockedTokenAmount
+                                { ltaToken = ccdTokenId,
+                                  ltaAmount = TokenAmount (TokenRawAmount 12300) 3
+                                }
+                    }
+        }
+  where
+    acc = AccountAddress $ FBS.pack [1 .. 32]
+    ccdTokenId = case makeTokenId (BSS.toShort "CCD") of
+        Left err -> error err
+        Right tid -> tid
+
+exampleLockInfoPayloadCBOR :: BS.ByteString
+exampleLockInfoPayloadCBOR =
+    mconcat
+        [ "a5",
+          "646c6f636b",
+          "d99fd8831927110500",
+          "6566756e6473",
+          "81",
+          "a2",
+          "676163636f756e74",
+          "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+          "67616d6f756e7473",
+          "81",
+          "a2",
+          "65746f6b656e",
+          "63434344",
+          "66616d6f756e74",
+          "c4822219300c",
+          "66657870697279",
+          "c11a6b932770",
+          "6a636f6e74726f6c6c6572",
+          "a1",
+          "6873696d706c655630",
+          "a2",
+          "666772616e7473",
+          "81",
+          "a2",
+          "65726f6c6573",
+          "82",
+          "6466756e64",
+          "6473656e64",
+          "676163636f756e74",
+          "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+          "66746f6b656e73",
+          "81",
+          "63434344",
+          "6a726563697069656e7473",
+          "81",
+          "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+        ]
+
+-- | Test the CBOR encoding and decoding of 'LockInfoPayload'.
+testLockInfoPayloadCBOR :: Spec
+testLockInfoPayloadCBOR = describe "LockInfoPayload CBOR" $ do
+    it "Encode example" $
+        assertEqual
+            "Encoded"
+            exampleLockInfoPayloadCBOR
+            (BS16.encode $ lockInfoToBytes exampleLockInfoPayload)
+    it "Decode example" $
+        assertEqual
+            "Decoded"
+            (Right exampleLockInfoPayload)
+            (lockInfoFromBytes . BS.fromStrict . BS16.decodeLenient $ exampleLockInfoPayloadCBOR)
+
 -- | A set of test vectors for CBOR decoding that use non-canonical representations.
 testTransactionVectors :: Spec
 testTransactionVectors = do
@@ -1311,6 +1415,7 @@ tests = parallel $ describe "CBOR" $ do
     testTokenModuleAccountStateCBOR
     testTokenAuthorizationsMapCBOR
     testTokenAuthorizationsMapJSON
+    testLockInfoPayloadCBOR
     describe "UpdateTransaction test vectors" $ testTransactionVectors
     it "JSON (de-)serialization roundtrip for TokenState (simple)" $ withMaxSuccess 1000 $ forAll genTokenStateSimple $ \tt ->
         assertEqual

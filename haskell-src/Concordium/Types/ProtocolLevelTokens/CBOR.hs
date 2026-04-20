@@ -38,6 +38,7 @@ import Lens.Micro.Platform
 
 import qualified Concordium.Crypto.SHA256 as SHA256
 import Concordium.ID.Types
+import Concordium.Types.Common (TransactionTime (..))
 import Concordium.Types.Memo
 import Concordium.Types.Tokens
 import qualified Data.FixedByteString as FBS
@@ -1815,9 +1816,6 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
     convertText (CBOR.TStringI t) = Just (LazyText.toStrict t)
     convertText _ = Nothing
 
-    convertBool (CBOR.TBool b) = Just b
-    convertBool _ = Nothing
-
     -- Convert CBOR to TokenMetadataUrl
     convertTokenMetadataUrl :: CBOR.Term -> Maybe TokenMetadataUrl
     convertTokenMetadataUrl = either (const Nothing) Just . decodeTokenMetadataUrlHelper
@@ -1862,6 +1860,314 @@ tokenAuthorizationsMapFromBytes =
 -- | Encode a 'TokenAuthorizationsMap' as a 'BS.ByteString'.
 tokenAuthorizationsMapToBytes :: TokenAuthorizationsMap -> BS.ByteString
 tokenAuthorizationsMapToBytes = encodeToBytes . encodeTokenAuthorizationsMap
+
+-- * Lock identifiers
+
+-- | Lock identifier: a trio of numbers that together uniquely identify a lock.
+data LockId = LockId
+    { liAccountIndex :: !Word64,
+      liSequenceNumber :: !Word64,
+      liCreationOrder :: !Word64
+    }
+    deriving (Eq, Show)
+
+-- | CBOR tag used for the standalone 'LockId' encoding.
+--
+-- This is the lock identifier tag in general, not just the tag for the
+-- embedded `lock` field inside `lock-info`.
+lockIdTag :: Word
+lockIdTag = 40920
+
+encodeLockId :: LockId -> Encoding
+encodeLockId LockId{..} =
+    encodeTag lockIdTag
+        <> encodeListLen 3
+        <> encodeWord64 liAccountIndex
+        <> encodeWord64 liSequenceNumber
+        <> encodeWord64 liCreationOrder
+
+convertLockId :: CBOR.Term -> Maybe LockId
+convertLockId = termToMaybe decodeLockIdHelper
+
+decodeLockIdHelper :: CBOR.Term -> Either String LockId
+decodeLockIdHelper = \case
+    CBOR.TTagged tag term
+        | tag == fromIntegral lockIdTag ->
+            case term of
+                CBOR.TList [accountIndex, sequenceNumber, creationOrder] ->
+                    LockId <$> convertWord64 accountIndex <*> convertWord64 sequenceNumber <*> convertWord64 creationOrder
+                CBOR.TListI [accountIndex, sequenceNumber, creationOrder] ->
+                    LockId <$> convertWord64 accountIndex <*> convertWord64 sequenceNumber <*> convertWord64 creationOrder
+                _ -> Left "lock-id: Expected array of length 3"
+        | otherwise -> Left $ "lock-id: Expected tag 40920 but found " ++ show tag
+    other -> Left $ "lock-id: Unexpected term constructor: " ++ show other
+
+-- * Lock configuration
+
+-- | Capabilities supported by the simple lock controller.
+data LockControllerSimpleV0Capability
+    = LockControllerSimpleV0Fund
+    | LockControllerSimpleV0Return
+    | LockControllerSimpleV0Send
+    | LockControllerSimpleV0Cancel
+    deriving (Eq, Show)
+
+encodeLockControllerSimpleV0Capability :: LockControllerSimpleV0Capability -> Encoding
+encodeLockControllerSimpleV0Capability = encodeString . \case
+    LockControllerSimpleV0Fund -> "fund"
+    LockControllerSimpleV0Return -> "return"
+    LockControllerSimpleV0Send -> "send"
+    LockControllerSimpleV0Cancel -> "cancel"
+
+convertLockControllerSimpleV0Capability :: CBOR.Term -> Maybe LockControllerSimpleV0Capability
+convertLockControllerSimpleV0Capability = \case
+    CBOR.TString "fund" -> Just LockControllerSimpleV0Fund
+    CBOR.TString "return" -> Just LockControllerSimpleV0Return
+    CBOR.TString "send" -> Just LockControllerSimpleV0Send
+    CBOR.TString "cancel" -> Just LockControllerSimpleV0Cancel
+    _ -> Nothing
+
+-- | Grant of simple lock controller capabilities to an account.
+data LockControllerSimpleV0Grant = LockControllerSimpleV0Grant
+    { lcsv0gAccount :: !CborAccountAddress,
+      lcsv0gRoles :: !(Seq.Seq LockControllerSimpleV0Capability)
+    }
+    deriving (Eq, Show)
+
+encodeLockControllerSimpleV0Grant :: LockControllerSimpleV0Grant -> Encoding
+encodeLockControllerSimpleV0Grant LockControllerSimpleV0Grant{..} =
+    encodeMapDeterministic $
+        Map.empty
+            & k "account" ?~ encodeCborAccountAddress lcsv0gAccount
+            & k "roles" ?~ encodeSequence encodeLockControllerSimpleV0Capability lcsv0gRoles
+  where
+    k = at . makeMapKeyEncoding . encodeString
+
+convertLockControllerSimpleV0Grant :: CBOR.Term -> Maybe LockControllerSimpleV0Grant
+convertLockControllerSimpleV0Grant = termToMaybe decodeLockControllerSimpleV0GrantHelper
+
+decodeLockControllerSimpleV0GrantHelper :: CBOR.Term -> Either String LockControllerSimpleV0Grant
+decodeLockControllerSimpleV0GrantHelper term = do
+    m <- decodeTextKeyMap "lock-controller-simple-v0-grant" term
+    lcsv0gAccount <- requireField "account" (termToMaybe decodeCborAccountAddressHelper) m
+    lcsv0gRoles <- requireField "roles" (convertSequence convertLockControllerSimpleV0Capability) m
+    return LockControllerSimpleV0Grant{..}
+
+-- | Simple lock controller configuration.
+data LockControllerSimpleV0 = LockControllerSimpleV0
+    { lcsv0Grants :: !(Seq.Seq LockControllerSimpleV0Grant),
+      lcsv0Tokens :: !(Seq.Seq TokenId),
+      lcsv0KeepAlive :: !(Maybe Bool),
+      lcsv0Memo :: !(Maybe TaggableMemo)
+    }
+    deriving (Eq, Show)
+
+encodeLockControllerSimpleV0 :: LockControllerSimpleV0 -> Encoding
+encodeLockControllerSimpleV0 LockControllerSimpleV0{..} =
+    encodeMapDeterministic $
+        Map.empty
+            & k "grants" ?~ encodeSequence encodeLockControllerSimpleV0Grant lcsv0Grants
+            & k "tokens" ?~ encodeSequence encodeString (TextEncoding.decodeUtf8 . BSS.fromShort . tokenId <$> lcsv0Tokens)
+            & k "keepAlive" .~ (encodeBool <$> lcsv0KeepAlive)
+            & k "memo" .~ (encodeTaggableMemo <$> lcsv0Memo)
+  where
+    k = at . makeMapKeyEncoding . encodeString
+
+decodeLockControllerSimpleV0Helper :: CBOR.Term -> Either String LockControllerSimpleV0
+decodeLockControllerSimpleV0Helper term = do
+    m <- decodeTextKeyMap "lock-controller-simple-v0" term
+    lcsv0Grants <- requireField "grants" (convertSequence convertLockControllerSimpleV0Grant) m
+    lcsv0Tokens <- requireField "tokens" (convertSequence convertTokenId) m
+    let lcsv0KeepAlive = optionalField "keepAlive" convertBool m
+    let lcsv0Memo = optionalField "memo" convertTaggableMemo m
+    return LockControllerSimpleV0{..}
+
+-- | Lock controller configuration.
+data LockController
+    = LockControllerSimpleV0Variant !LockControllerSimpleV0
+    deriving (Eq, Show)
+
+encodeLockController :: LockController -> Encoding
+encodeLockController = \case
+    LockControllerSimpleV0Variant cfg ->
+        encodeMapDeterministic $ Map.singleton (makeMapKeyEncoding (encodeString "simpleV0")) (encodeLockControllerSimpleV0 cfg)
+
+convertLockController :: CBOR.Term -> Maybe LockController
+convertLockController = termToMaybe decodeLockControllerHelper
+
+decodeLockControllerHelper :: CBOR.Term -> Either String LockController
+decodeLockControllerHelper term = do
+    m <- decodeTextKeyMap "lock-controller" term
+    cfg <- requireField "simpleV0" (termToMaybe decodeLockControllerSimpleV0Helper) m
+    return $ LockControllerSimpleV0Variant cfg
+
+-- | Static configuration of a lock.
+data LockConfig = LockConfig
+    { lcRecipients :: !(Seq.Seq CborAccountAddress),
+      lcExpiry :: !TransactionTime,
+      lcController :: !LockController
+    }
+    deriving (Eq, Show)
+
+encodeEpochTime :: TransactionTime -> Encoding
+encodeEpochTime (TransactionTime t) = encodeTag 1 <> encodeWord64 t
+
+convertEpochTime :: CBOR.Term -> Maybe TransactionTime
+convertEpochTime = termToMaybe decodeEpochTimeHelper
+
+decodeEpochTimeHelper :: CBOR.Term -> Either String TransactionTime
+decodeEpochTimeHelper = \case
+    CBOR.TTagged tag term
+        | tag == 1 -> TransactionTime <$> convertWord64 term
+        | otherwise -> Left $ "epoch-time: Expected tag 1 but found " ++ show tag
+    other -> Left $ "epoch-time: Unexpected term constructor: " ++ show other
+
+-- * Lock info
+
+-- | Locked amount for a token.
+data LockedTokenAmount = LockedTokenAmount
+    { ltaToken :: !TokenId,
+      ltaAmount :: !TokenAmount
+    }
+    deriving (Eq, Show)
+
+encodeLockedTokenAmount :: LockedTokenAmount -> Encoding
+encodeLockedTokenAmount LockedTokenAmount{..} =
+    encodeMapDeterministic $
+        Map.empty
+            & k "token" ?~ encodeString (TextEncoding.decodeUtf8 $ BSS.fromShort $ tokenId ltaToken)
+            & k "amount" ?~ encodeTokenAmount ltaAmount
+  where
+    k = at . makeMapKeyEncoding . encodeString
+
+convertLockedTokenAmount :: CBOR.Term -> Maybe LockedTokenAmount
+convertLockedTokenAmount = termToMaybe decodeLockedTokenAmountHelper
+
+decodeLockedTokenAmountHelper :: CBOR.Term -> Either String LockedTokenAmount
+decodeLockedTokenAmountHelper term = do
+    m <- decodeTextKeyMap "locked-token-and-amount" term
+    ltaToken <- requireField "token" convertTokenId m
+    ltaAmount <- requireField "amount" convertTokenAmountTerm m
+    return LockedTokenAmount{..}
+
+-- | Locked funds for one account.
+data LockAccountFunds = LockAccountFunds
+    { lafAccount :: !CborAccountAddress,
+      lafAmounts :: !(Seq.Seq LockedTokenAmount)
+    }
+    deriving (Eq, Show)
+
+encodeLockAccountFunds :: LockAccountFunds -> Encoding
+encodeLockAccountFunds LockAccountFunds{..} =
+    encodeMapDeterministic $
+        Map.empty
+            & k "account" ?~ encodeCborAccountAddress lafAccount
+            & k "amounts" ?~ encodeSequence encodeLockedTokenAmount lafAmounts
+  where
+    k = at . makeMapKeyEncoding . encodeString
+
+convertLockAccountFunds :: CBOR.Term -> Maybe LockAccountFunds
+convertLockAccountFunds = termToMaybe decodeLockAccountFundsHelper
+
+decodeLockAccountFundsHelper :: CBOR.Term -> Either String LockAccountFunds
+decodeLockAccountFundsHelper term = do
+    m <- decodeTextKeyMap "lock-account-fund" term
+    lafAccount <- requireField "account" (termToMaybe decodeCborAccountAddressHelper) m
+    lafAmounts <- requireField "amounts" (convertSequence convertLockedTokenAmount) m
+    return LockAccountFunds{..}
+
+-- | Structured representation of the CBOR payload returned by `GetLockInfo`.
+data LockInfoPayload = LockInfoPayload
+    { lipLock :: !LockId,
+      lipConfig :: !LockConfig,
+      lipFunds :: !(Seq.Seq LockAccountFunds)
+    }
+    deriving (Eq, Show)
+
+lockInfoFromBytes :: LBS.ByteString -> Either String LockInfoPayload
+lockInfoFromBytes = decodeFromBytes decodeLockInfoPayload "lock info"
+
+lockInfoToBytes :: LockInfoPayload -> BS.ByteString
+lockInfoToBytes = encodeToBytes . encodeLockInfoPayload
+
+decodeLockInfoPayload :: Decoder s LockInfoPayload
+decodeLockInfoPayload = do
+    term <- CBOR.decodeTerm
+    either fail return $ decodeLockInfoPayloadHelper term
+
+encodeLockInfoPayload :: LockInfoPayload -> Encoding
+encodeLockInfoPayload LockInfoPayload{..} =
+    encodeMapDeterministic $
+        Map.empty
+            & k "lock" ?~ encodeLockId lipLock
+            & k "recipients" ?~ encodeSequence encodeCborAccountAddress (lcRecipients lipConfig)
+            & k "expiry" ?~ encodeEpochTime (lcExpiry lipConfig)
+            & k "controller" ?~ encodeLockController (lcController lipConfig)
+            & k "funds" ?~ encodeSequence encodeLockAccountFunds lipFunds
+  where
+    k = at . makeMapKeyEncoding . encodeString
+
+decodeLockInfoPayloadHelper :: CBOR.Term -> Either String LockInfoPayload
+decodeLockInfoPayloadHelper term = do
+    m <- decodeTextKeyMap "lock-info" term
+    lipLock <- requireField "lock" convertLockId m
+    lcRecipients <- requireField "recipients" (convertSequence (termToMaybe decodeCborAccountAddressHelper)) m
+    lcExpiry <- requireField "expiry" convertEpochTime m
+    lcController <- requireField "controller" convertLockController m
+    lipFunds <- requireField "funds" (convertSequence convertLockAccountFunds) m
+    return LockInfoPayload{lipConfig = LockConfig{..}, ..}
+
+termToMaybe :: (CBOR.Term -> Either String a) -> CBOR.Term -> Maybe a
+termToMaybe = (either (const Nothing) Just .)
+
+convertTokenAmountTerm :: CBOR.Term -> Maybe TokenAmount
+convertTokenAmountTerm term =
+    either (const Nothing) Just $ decodeFromBytes decodeTokenAmount "token amount" (CBOR.toLazyByteString $ CBOR.encodeTerm term)
+
+convertTaggableMemo :: CBOR.Term -> Maybe TaggableMemo
+convertTaggableMemo term =
+    either (const Nothing) Just $ decodeFromBytes decodeTaggableMemo "memo" (CBOR.toLazyByteString $ CBOR.encodeTerm term)
+
+convertTokenId :: CBOR.Term -> Maybe TokenId
+convertTokenId = \case
+    CBOR.TString txt -> either (const Nothing) Just $ makeTokenId (BSS.toShort $ TextEncoding.encodeUtf8 txt)
+    _ -> Nothing
+
+convertBool :: CBOR.Term -> Maybe Bool
+convertBool = \case
+    CBOR.TBool b -> Just b
+    _ -> Nothing
+
+convertWord64 :: CBOR.Term -> Either String Word64
+convertWord64 = \case
+    CBOR.TInt i
+        | i >= 0 -> Right (fromIntegral i)
+        | otherwise -> Left "expected non-negative integer"
+    _ -> Left "expected non-negative integer"
+
+convertSequence :: (CBOR.Term -> Maybe a) -> CBOR.Term -> Maybe (Seq.Seq a)
+convertSequence convert = \case
+    CBOR.TList xs -> Seq.fromList <$> mapM convert xs
+    CBOR.TListI xs -> Seq.fromList <$> mapM convert xs
+    _ -> Nothing
+
+decodeTextKeyMap :: String -> CBOR.Term -> Either String (Map.Map Text CBOR.Term)
+decodeTextKeyMap label = \case
+    CBOR.TMap kvs -> build kvs
+    CBOR.TMapI kvs -> build kvs
+    _ -> Left $ label ++ ": Expected a map"
+  where
+    build = fmap Map.fromList . mapM toPair
+    toPair (CBOR.TString key, value) = Right (key, value)
+    toPair _ = Left $ label ++ ": Expected text keys"
+
+requireField :: Text -> (CBOR.Term -> Maybe a) -> Map.Map Text CBOR.Term -> Either String a
+requireField key convert m = do
+    term <- Map.lookup key m `orFail` (Text.unpack key ++ ": missing field")
+    convert term `orFail` (Text.unpack key ++ ": invalid field")
+
+optionalField :: Text -> (CBOR.Term -> Maybe a) -> Map.Map Text CBOR.Term -> Maybe a
+optionalField key convert m = Map.lookup key m >>= convert
 
 -- * Token account state
 
@@ -1934,8 +2240,6 @@ decodeTokenModuleAccountState = decodeMap decodeVal build Map.empty
         let (maybeTerm, m') = m & at key <<.~ Nothing
         maybeVal <- forM maybeTerm $ \term -> convert term `orFail` ("Invalid " ++ show key)
         return (maybeVal, m')
-    convertBool (CBOR.TBool b) = Just b
-    convertBool _ = Nothing
 
 -- | Parse a 'TokenModuleAccountState' from a 'LBS.ByteString'. The entire bytestring must
 --  be consumed in the parsing.

@@ -38,7 +38,6 @@ module Concordium.Types (
     -- * Time units
     Duration (..),
     durationToNominalDiffTime,
-    getTransactionTime,
     Timestamp (..),
     timestampToUTCTime,
     utcTimeToTimestamp,
@@ -46,11 +45,7 @@ module Concordium.Types (
     addDuration,
     DurationSeconds (..),
     addDurationSeconds,
-    TransactionTime (..),
-    TransactionExpiryTime,
-    utcTimeToTransactionTime,
-    transactionTimeToTimestamp,
-    transactionExpired,
+    module Concordium.Types.Common,
     transactionTimeToSlot,
     isTimestampBefore,
 
@@ -218,6 +213,7 @@ import Concordium.Crypto.SignatureScheme (SchemeId)
 import qualified Concordium.Crypto.VRF as VRF
 import Concordium.ID.Types
 import Concordium.Types.Block
+import Concordium.Types.Common
 import Concordium.Types.HashableTo
 import Concordium.Types.Memo
 import qualified Concordium.Types.ProtocolLevelTokens.CBOR as CBOR
@@ -243,9 +239,6 @@ import Data.Word
 
 import Data.Aeson as AE
 import Data.Aeson.TH
-
-import Data.Time
-import Data.Time.Clock.POSIX
 
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -782,33 +775,6 @@ instance S.Serialize Address where
 instance Show Address where
     show (AddressAccount a) = show a
     show (AddressContract a) = show a
-
--- | Time in seconds since the unix epoch
-newtype TransactionTime = TransactionTime {ttsSeconds :: Word64}
-    deriving (Show, Read, Eq, Num, Ord, Real, FromJSON, ToJSON, Enum, Integral) via Word64
-
-instance S.Serialize TransactionTime where
-    put = P.putWord64be . ttsSeconds
-    get = TransactionTime <$> G.getWord64be
-
--- | Get time in seconds since the unix epoch.
-getTransactionTime :: IO TransactionTime
-getTransactionTime = utcTimeToTransactionTime <$> getCurrentTime
-
-utcTimeToTransactionTime :: UTCTime -> TransactionTime
-utcTimeToTransactionTime = floor . utcTimeToPOSIXSeconds
-
--- | Expiry time of a transaction in seconds since the epoch
-type TransactionExpiryTime = TransactionTime
-
--- | Convert a 'TransactionTime' (seconds since epoch) to a
--- 'Timestamp' (milliseconds since epoch).
-transactionTimeToTimestamp :: TransactionTime -> Timestamp
-transactionTimeToTimestamp (TransactionTime x) = Timestamp (1000 * x)
-
--- | Check if a transaction expiry time precedes a given timestamp.
-transactionExpired :: TransactionExpiryTime -> Timestamp -> Bool
-transactionExpired (TransactionTime x) (Timestamp t) = 1000 * x < t
 
 -- | Type representing a difference between amounts.
 newtype AmountDelta = AmountDelta {amountDelta :: Integer}
