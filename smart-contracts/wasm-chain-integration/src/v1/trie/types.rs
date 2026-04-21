@@ -13,7 +13,7 @@ use thiserror::Error;
 #[derive(Default, Debug, Clone, Copy, Eq, PartialEq, From, Into)]
 /// Reference to a storage location where an item may be retrieved.
 pub struct Reference {
-    pub(crate) reference: u64,
+    pub reference: u64,
 }
 
 impl Reference {
@@ -80,7 +80,7 @@ pub(crate) const INLINE_STEM_LENGTH: usize = 0b0011_1111;
 
 /// A trait that supports keeping track of resources during tree traversal, to
 /// make sure that resource bounds are not exceeded.
-pub(crate) trait TraversalCounter {
+pub trait TraversalCounter {
     type Err: std::fmt::Debug;
     /// Count for traversing the given number of chunks of the key.
     /// See [MutableTrie::next](super::low_level::MutableTrie::next) for details
@@ -97,7 +97,7 @@ pub trait AllocCounter<V> {
 
 /// A [counter](TraversalCounter) that does not count anything, and always
 /// returns `Ok(())`.
-pub(crate) struct EmptyCounter;
+pub struct EmptyCounter;
 #[derive(Debug, Copy, Clone, Error)]
 /// An error that cannot happen, i.e., this type is not inhabited and is used as
 /// an error type of an operation that cannot fail.
@@ -366,7 +366,7 @@ impl<V: Loadable> Loadable for Hashed<V> {
 #[derive(Clone, Copy, AsRef, From, PartialEq, Eq, Ord, PartialOrd)]
 /// A SHA256 hash.
 pub struct Hash {
-    hash: [u8; 32],
+    pub hash: [u8; 32],
 }
 
 impl AsRef<[u8]> for Hash {
