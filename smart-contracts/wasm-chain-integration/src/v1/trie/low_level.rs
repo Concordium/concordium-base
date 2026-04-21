@@ -2270,6 +2270,8 @@ impl MutableTrie {
         }
     }
 
+    /// Create iterator of the entries in the trie with prefix `key`.
+    /// Returning `None` is equivalent to an iterator with no items.
     pub fn iter(
         &mut self,
         loader: &mut impl BackingStoreLoad,
