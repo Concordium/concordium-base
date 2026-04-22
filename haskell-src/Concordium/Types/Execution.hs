@@ -385,6 +385,11 @@ data Payload
           -- | The CBOR-encoded operations to perform.
           tuOperations :: !TokenParameter
         }
+    | -- | A meta-update transaction, which may perform PLT and lock operations.
+      MetaUpdate
+        { -- | The CBOR-encoded operations to perform.
+          muOperations :: !MetaUpdateParameter
+        }
     deriving (Eq, Show)
 
 -- Define `TransactionType`  and relevant conversion function to convert from/to `Payload`.
@@ -422,6 +427,7 @@ instance S.Serialize TransactionType where
         TTConfigureBaker -> S.putWord8 19
         TTConfigureDelegation -> S.putWord8 20
         TTTokenUpdate -> S.putWord8 21
+        TTMetaUpdate -> S.putWord8 22
 
     get =
         S.getWord8 >>= \case
@@ -447,6 +453,7 @@ instance S.Serialize TransactionType where
             19 -> return TTConfigureBaker
             20 -> return TTConfigureDelegation
             21 -> return TTTokenUpdate
+            22 -> return TTMetaUpdate
             n -> fail $ "Unrecognized TransactionType tag: " ++ show n
 
 instance AE.ToJSON Payload where
@@ -575,6 +582,9 @@ instance AE.ToJSON Payload where
               "operations" AE..= EncodedTokenOperations tuOperations,
               "transactionType" AE..= AE.String "tokenUpdate"
             ]
+    toJSON MetaUpdate{..} =
+        AE.object
+            ["operations" AE..= EncodedMetaUpdateOperations muOperations]
 
 instance AE.FromJSON Payload where
     parseJSON = AE.withObject "payload" $ \obj -> do
@@ -830,6 +840,9 @@ putPayload TokenUpdate{..} = do
     S.putWord8 27
     S.put tuTokenId
     S.put tuOperations
+putPayload MetaUpdate{..} = do
+    S.putWord8 28
+    S.put muOperations
 
 -- | Set the given bit if the value is a 'Just'.
 bitFor :: (Bits b) => Int -> Maybe a -> b
@@ -999,6 +1012,9 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 tuTokenId <- S.get
                 tuOperations <- S.get
                 return TokenUpdate{..}
+            28 | supportMetaUpdate -> S.label "MetaUpdate" $ do
+                muOperations <- S.get
+                return MetaUpdate{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
     supportMemo = supportsMemo spv
     supportDelegation = protocolSupportsDelegation spv
@@ -1009,6 +1025,7 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
         | otherwise = 0b0000000011111111
     configureDelegationBitMask = 0b0000000000000111
     supportProtocolLevelTokens = protocolSupportsPLT spv
+    supportMetaUpdate = supportsMetaUpdate spv
 
 -- | Builds a set from a list of ascending elements.
 --  Fails if the elements are not ordered or a duplicate is encountered.

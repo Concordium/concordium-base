@@ -1,88 +1,81 @@
 use crate::{
     base::{AccountIndex, Nonce},
-    common::{
-        cbor::{
-            CborArrayDecoder, CborArrayEncoder, CborDecoder, CborDeserialize, CborEncoder,
-            CborSerializationResult, CborSerialize,
-        },
-        Serialize,
-    },
+    common::Serialize,
 };
-use anyhow::anyhow;
+use concordium_base_derive::{CborDeserialize, CborSerialize};
 
-/// CBOR tag for [`LockId`]
+/// CBOR tag identifying a Lock ID.
 const LOCK_ID_TAG: u64 = 40920;
 
-/// Number of elements in the CBOR array encoding of a [`LockId`].
-const LOCK_ID_ARRAY_SIZE: usize = 3;
-
-/// Unique identifier for a PLT lock.
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize)]
+#[derive(
+    Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, CborSerialize, CborDeserialize, Serialize,
+)]
+#[cbor(tag = LOCK_ID_TAG, tuple)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct LockId {
-    /// Index of the account that created the lock.
-    pub account_index: AccountIndex,
-    /// Account sequence number at the time of lock creation.
-    pub sequence_number: Nonce,
-    /// Order of lock creation within the transaction.
+    /// The account index of the account that created the lock.
+    pub account_index: u64,
+    /// The sequence number of the transaction that created the lock.
+    pub sequence_number: u64,
+    /// The 0-based creation order of the lock within the transaction that
+    /// created it.
     pub creation_order: u64,
 }
 
-impl CborSerialize for LockId {
-    fn serialize<C: CborEncoder>(&self, mut encoder: C) -> Result<(), C::WriteError> {
-        encoder.encode_tag(LOCK_ID_TAG)?;
-        let mut array_encoder = encoder.encode_array()?;
-        array_encoder.serialize_element(&self.account_index.index)?;
-        array_encoder.serialize_element(&self.sequence_number.nonce)?;
-        array_encoder.serialize_element(&self.creation_order)?;
-        array_encoder.end()?;
-        Ok(())
-    }
-}
-
-impl CborDeserialize for LockId {
-    fn deserialize<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self>
-    where
-        Self: Sized,
-    {
-        decoder.decode_tag_expect(LOCK_ID_TAG)?;
-        let mut array_decoder = decoder.decode_array_expect_size(LOCK_ID_ARRAY_SIZE)?;
-
-        let Some(account_index_raw) =
-            CborArrayDecoder::deserialize_element::<u64>(&mut array_decoder)?
-        else {
-            return Err(anyhow!("expected account_index element in LockId array").into());
-        };
-        let Some(sequence_number_raw) =
-            CborArrayDecoder::deserialize_element::<u64>(&mut array_decoder)?
-        else {
-            return Err(anyhow!("expected sequence_number element in LockId array").into());
-        };
-        let Some(creation_order) =
-            CborArrayDecoder::deserialize_element::<u64>(&mut array_decoder)?
-        else {
-            return Err(anyhow!("expected creation_order element in LockId array").into());
-        };
-
-        Ok(LockId {
-            account_index: account_index_raw.into(),
-            sequence_number: sequence_number_raw.into(),
+impl LockId {
+    #[inline(always)]
+    pub fn new(
+        account_index: impl Into<AccountIndex>,
+        sequence_number: impl Into<Nonce>,
+        creation_order: u64,
+    ) -> Self {
+        LockId {
+            account_index: account_index.into().index,
+            sequence_number: sequence_number.into().nonce,
             creation_order,
-        })
+        }
+    }
+
+    /// Get the account index of the lock ID.
+    #[inline(always)]
+    pub fn account_index(&self) -> AccountIndex {
+        AccountIndex {
+            index: self.account_index,
+        }
+    }
+
+    /// Get the sequence number of the lock ID.
+    #[inline(always)]
+    pub fn sequence_number(&self) -> Nonce {
+        Nonce {
+            nonce: self.sequence_number,
+        }
     }
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use crate::common::cbor;
+
+    /// Test CBOR serialization of [`LockId`]
+    #[test]
+    fn test_lock_id_cbor_serialize() {
+        let lock_id: LockId = LockId::new(99812, 33345, 17);
+        let cbor = cbor::cbor_encode(&lock_id);
+        assert_eq!(hex::encode(&cbor), "d99fd8831a000185e419824111");
+        let lock_id_decoded: LockId = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        assert_eq!(lock_id_decoded, lock_id);
+    }
+
     use crate::common::{serialize_deserialize, to_bytes};
 
     fn example_lock_id() -> LockId {
-        LockId {
-            account_index: AccountIndex { index: 10001 },
-            sequence_number: Nonce { nonce: 5 },
-            creation_order: 0,
-        }
+        LockId::new(AccountIndex { index: 10001 }, Nonce { nonce: 5 }, 0)
     }
 
     /// Round-trip test: encode then decode produces the same `LockId`.
@@ -144,11 +137,7 @@ mod test {
     /// Test with zero values.
     #[test]
     fn test_lock_id_cbor_zero_values() {
-        let lock_id = LockId {
-            account_index: AccountIndex { index: 0 },
-            sequence_number: Nonce { nonce: 0 },
-            creation_order: 0,
-        };
+        let lock_id = LockId::new(0, 0, 0);
         let encoded = cbor::cbor_encode(&lock_id);
         let decoded: LockId = cbor::cbor_decode(&encoded).expect("CBOR decode failed");
         assert_eq!(decoded, lock_id);
@@ -157,11 +146,7 @@ mod test {
     /// Test with max u64 values.
     #[test]
     fn test_lock_id_cbor_max_values() {
-        let lock_id = LockId {
-            account_index: AccountIndex { index: u64::MAX },
-            sequence_number: Nonce { nonce: u64::MAX },
-            creation_order: u64::MAX,
-        };
+        let lock_id = LockId::new(u64::MAX, u64::MAX, u64::MAX);
         let encoded = cbor::cbor_encode(&lock_id);
         let decoded: LockId = cbor::cbor_decode(&encoded).expect("CBOR decode failed");
         assert_eq!(decoded, lock_id);

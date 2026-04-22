@@ -160,6 +160,19 @@ genTokenTransaction =
     TokenUpdateTransaction . Seq.fromList
         <$> listOf genTokenOperation
 
+-- | Generator for 'MetaUpdateOperation'.
+genMetaUpdateOperation :: Gen MetaUpdateOperation
+genMetaUpdateOperation =
+    oneof
+        [ MetaTokenUpdate <$> genTokenId <*> genTokenOperation
+        ]
+
+-- | Generator for 'MetaUpdateTransaction'.
+genMetaUpdateTransaction :: Gen MetaUpdateTransaction
+genMetaUpdateTransaction =
+    MetaUpdateTransaction . Seq.fromList
+        <$> listOf genMetaUpdateOperation
+
 genTokenModuleStateSimple :: Gen TokenModuleState
 genTokenModuleStateSimple = do
     tmsName <- oneof [pure Nothing, Just <$> genText]
@@ -627,6 +640,27 @@ testTokenOperationsCBOR = describe "EncodedTokenOperations CBOR serialization" $
             "CBOR serialized"
             (tokenUpdateTransactionToBytes tops2)
             tops2ExpectedCbor
+
+mops1 :: MetaUpdateTransaction
+mops1 = MetaUpdateTransaction $ MetaTokenUpdate tok <$> tokenOperations tops1
+  where
+    tok = TokenId "tTEST"
+
+mops1ExpectedCBOR :: BS.ByteString
+mops1ExpectedCBOR = BS16.decodeLenient "89A1687472616E73666572A4646D656D6F440102030465746F6B656E65745445535466616D6F756E74C4822419303969726563697069656E74D99D73A201D99D71A1011903970358200101010101010101010101010101010101010101010101010101010101010101A1646D696E74A265746F6B656E65745445535466616D6F756E74C48224193039A1646275726EA265746F6B656E65745445535466616D6F756E74C48224193039A16C616464416C6C6F774C697374A265746F6B656E65745445535466746172676574D99D73A201D99D71A1011903970358200101010101010101010101010101010101010101010101010101010101010101A16F72656D6F7665416C6C6F774C697374A265746F6B656E65745445535466746172676574D99D73A201D99D71A1011903970358200101010101010101010101010101010101010101010101010101010101010101A16B61646444656E794C697374A265746F6B656E65745445535466746172676574D99D73A201D99D71A1011903970358200101010101010101010101010101010101010101010101010101010101010101A16E72656D6F766544656E794C697374A265746F6B656E65745445535466746172676574D99D73A201D99D71A1011903970358200101010101010101010101010101010101010101010101010101010101010101A1657061757365A165746F6B656E657454455354A167756E7061757365A165746F6B656E657454455354"
+
+testMetaUpdateOperationsCBOR :: Spec
+testMetaUpdateOperationsCBOR = describe "MetaUpdateTransaction CBOR serialization" $ do
+    it "Serialize/deserialize roundtrip" $
+        assertEqual
+            "Deserialized"
+            (metaUpdateTransactionFromBytes $ B8.fromStrict $ metaUpdateTransactionToBytes mops1)
+            (Right mops1)
+    it "Serializes to expected CBOR bytestring" $
+        assertEqual
+            "CBOR serialized"
+            (metaUpdateTransactionToBytes mops1)
+            mops1ExpectedCBOR
 
 testEncodedTokenEvents :: Spec
 testEncodedTokenEvents = describe "TokenEvents CBOR serialization" $ do
@@ -1403,6 +1437,7 @@ tests = parallel $ describe "CBOR" $ do
     testInitializationParametersJSON
     testEncodedTokenOperationsJSON
     testTokenOperationsCBOR
+    testMetaUpdateOperationsCBOR
     testEncodedTokenEvents
     testTokenMetadataUrlJSON
     testTokenMetadataUrlCBOR
@@ -1494,3 +1529,13 @@ tests = parallel $ describe "CBOR" $ do
         Right tt === decodeTokenEvent (encodeTokenEvent tt)
     it "Encode and decode TokenRejectReason" $ withMaxSuccess 1000 $ forAll genTokenRejectReason $ \tt ->
         Right tt === decodeTokenRejectReason (encodeTokenRejectReason tt)
+    it "CBOR encode and decode MetaUpdateTransaction" $
+        withMaxSuccess 1000 $
+            forAll genMetaUpdateTransaction $ \tr ->
+                Right tr
+                    === metaUpdateTransactionFromBytes
+                        (B8.fromStrict $ metaUpdateTransactionToBytes tr)
+    it "JSON encode and decode MetaUpdateTransaction" $
+        withMaxSuccess 1000 $
+            forAll genMetaUpdateTransaction $
+                \tr -> Right tr == AE.eitherDecode (AE.encode tr)
