@@ -4,19 +4,6 @@ use crate::protocol_level_tokens::{CborHolderAccount, TokenAmount, TokenId};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 
 /// CBOR-encoded result of the `GetLockInfo` query.
-///
-/// The CBOR representation flattens the [`LockConfig`] fields into the
-/// top-level map so the encoded shape is:
-///
-/// ```text
-/// {
-///   "lock": lock-id,
-///   "recipients": [...],
-///   "expiry": epoch-time,
-///   "controller": lock-controller,
-///   "funds": [...]
-/// }
-/// ```
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
 pub struct LockInfo {
     /// The lock identifier.
@@ -52,7 +39,6 @@ pub struct LockedTokenAmount {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::base::{AccountIndex, Nonce};
     use crate::common::cbor;
     use crate::common::types::TransactionTime;
     use crate::protocol_level_locks::{
@@ -63,8 +49,8 @@ mod test {
 
     fn example_lock_id() -> LockId {
         LockId {
-            account_index: AccountIndex { index: 10001 },
-            sequence_number: Nonce { nonce: 5 },
+            account_index: 10001,
+            sequence_number: 5,
             creation_order: 0,
         }
     }
