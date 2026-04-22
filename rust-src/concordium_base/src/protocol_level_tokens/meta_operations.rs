@@ -1,5 +1,6 @@
 use crate::{
     common::cbor::{self, CborSerializationResult},
+    protocol_level_locks::{LockConfig, LockId},
     protocol_level_tokens::{
         operations, CborHolderAccount, CborMemo, MetadataUrl, RawCbor, TokenAdminRole, TokenAmount,
         TokenId, TokenOperation,
@@ -182,6 +183,16 @@ pub enum MetaUpdateOperation {
     RevokeAdminRoles(MetaTokenUpdateAdminRolesDetails),
     /// Operation to update token metadata
     UpdateMetadata(MetaMetadataUrlDetails),
+    /// Operation to fund a lock.
+    LockFund(MetaLockFundDetails),
+    /// Operation to send funds controlled by a lock.
+    LockSend(MetaLockSendDetails),
+    /// Operation to return funds controlled by a lock to the owner.
+    LockReturn(MetaLockReturnDetails),
+    /// Operation to create a lock.
+    LockCreate(MetaLockCreateDetails),
+    /// Operation to cancel a lock.
+    LockCancel(MetaLockCancelDetails),
 }
 
 impl From<(TokenId, TokenOperation)> for MetaUpdateOperation {
@@ -223,12 +234,29 @@ impl From<(TokenId, TokenOperation)> for MetaUpdateOperation {
     }
 }
 
+/// Lock operations.
+#[derive(PartialEq, Debug, Clone)]
+pub enum LockOperation {
+    /// Operation to fund a lock.
+    Fund(MetaLockFundDetails),
+    /// Operation to send funds controlled by a lock.
+    Send(MetaLockSendDetails),
+    /// Operation to return funds controlled by a lock to the owner.
+    Return(MetaLockReturnDetails),
+    /// Operation to create a lock.
+    Create(MetaLockCreateDetails),
+    /// Operation to cancel a lock.
+    Cancel(MetaLockCancelDetails),
+}
+
 /// A discriminated version of [`MetaUpdateOperation`] for the purpose of
 /// dispatching to the appropriate operation handler.
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum MetaUpdateOperationKind {
     /// A [`TokenOperation`] for a specific [`TokenId`].
     Token((TokenId, TokenOperation)),
+    /// A [`LockOperation`].
+    Lock(LockOperation),
 }
 
 impl From<MetaUpdateOperation> for MetaUpdateOperationKind {
@@ -282,6 +310,11 @@ impl From<MetaUpdateOperation> for MetaUpdateOperationKind {
                 let (token_id, details) = details.into();
                 Self::Token((token_id, TokenOperation::UpdateMetadata(details)))
             }
+            MetaUpdateOperation::LockFund(details) => Self::Lock(LockOperation::Fund(details)),
+            MetaUpdateOperation::LockSend(details) => Self::Lock(LockOperation::Send(details)),
+            MetaUpdateOperation::LockReturn(details) => Self::Lock(LockOperation::Return(details)),
+            MetaUpdateOperation::LockCreate(details) => Self::Lock(LockOperation::Create(details)),
+            MetaUpdateOperation::LockCancel(details) => Self::Lock(LockOperation::Cancel(details)),
         }
     }
 }
@@ -495,11 +528,123 @@ impl From<MetaMetadataUrlDetails> for (TokenId, super::MetadataUrl) {
     }
 }
 
+/// Fund a lock by locking the specified amount on the sender account under the
+/// control of the specified lock.
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+pub struct MetaLockFundDetails {
+    /// Token to fund the lock with.
+    pub token: TokenId,
+    /// The lock that will control the funds.
+    pub lock: LockId,
+    /// The amount to lock.
+    pub amount: TokenAmount,
+    /// An optional memo.
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(skip_serializing_if = "Option::is_none")
+    )]
+    pub memo: Option<CborMemo>,
+}
+
+/// Send funds under the control of a lock from a source account to a recipient.
+/// The funds will be transferred to the available balance of the recipient.
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+pub struct MetaLockSendDetails {
+    /// Token to send.
+    pub token: TokenId,
+    /// The lock that controls the funds.
+    pub lock: LockId,
+    /// The account holding the funds.
+    pub source: CborHolderAccount,
+    /// The amount of tokens to transfer.
+    pub amount: TokenAmount,
+    /// The recipient of the funds.
+    pub recipient: CborHolderAccount,
+    /// An optional memo.
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(skip_serializing_if = "Option::is_none")
+    )]
+    pub memo: Option<CborMemo>,
+}
+
+/// Return funds under the control of a lock to the owner account.
+/// The funds are moved from the locked balance to the available balance
+/// of the owner.
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+pub struct MetaLockReturnDetails {
+    /// The token the operation applies to.
+    pub token: TokenId,
+    /// The lock controlling the funds.
+    pub lock: LockId,
+    /// The account holding the funds.
+    pub source: CborHolderAccount,
+    /// The amount of tokens to return.
+    pub amount: TokenAmount,
+    /// An optional memo.
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(skip_serializing_if = "Option::is_none")
+    )]
+    pub memo: Option<CborMemo>,
+}
+
+/// Create a lock with the specified configuration.
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(transparent),
+    serde(rename_all = "camelCase")
+)]
+#[cbor(transparent)]
+pub struct MetaLockCreateDetails {
+    pub config: LockConfig,
+}
+
+/// Cancel a lock, returning funds to their owners and destroying the lock.
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+pub struct MetaLockCancelDetails {
+    /// The lock to cancel.
+    pub lock: LockId,
+    /// An optional memo.
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(skip_serializing_if = "Option::is_none")
+    )]
+    pub memo: Option<CborMemo>,
+}
+
 #[cfg(test)]
 mod tests {
 
     use super::*;
     use crate::common::cbor;
+    use crate::common::types::TransactionTime;
+    use crate::protocol_level_locks::{
+        LockController, LockControllerSimpleV0, LockControllerSimpleV0Capability,
+        LockControllerSimpleV0Grant,
+    };
     use crate::protocol_level_tokens::{test_fixtures::ADDRESS, MetadataUrl, TokenAdminRole};
     use crate::transactions::Memo;
 
@@ -701,6 +846,115 @@ mod tests {
         assert_eq!(
             hex::encode(&cbor),
             "a16e7570646174654d65746164617461a265746f6b656e6774657374504c546b6d6574616461746155726ca26375726c782168747470733a2f2f6578616d706c652e636f6d2f6d657461646174612e6a736f6e6e636865636b73756d5368613235365820ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        );
+        let operation_decoded: MetaUpdateOperation =
+            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_meta_operation_cbor_lock_fund() {
+        let operation = MetaUpdateOperation::LockFund(MetaLockFundDetails {
+            token: "testPLT".parse().unwrap(),
+            lock: LockId::new(20, 7, 0),
+            amount: TokenAmount::from_raw(5000, 0),
+            memo: Some(CborMemo::Cbor(Memo::try_from(vec![0xa0]).unwrap())),
+        });
+        let cbor = cbor::cbor_encode(&operation);
+        assert_eq!(
+            hex::encode(&cbor),
+            "a1686c6f636b46756e64a4646c6f636bd99fd883140700646d656d6fd81841a065746f6b656e6774657374504c5466616d6f756e74c48200191388"
+        );
+        let operation_decoded: MetaUpdateOperation =
+            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_meta_operation_cbor_lock_send() {
+        let operation = MetaUpdateOperation::LockSend(MetaLockSendDetails {
+            token: "testPLT".parse().unwrap(),
+            lock: LockId::new(20, 7, 0),
+            source: CborHolderAccount::from(ADDRESS),
+            amount: TokenAmount::from_raw(5000, 2),
+            recipient: CborHolderAccount::from(AccountAddress([0x11; 32])),
+            memo: None,
+        });
+        let cbor = cbor::cbor_encode(&operation);
+        assert_eq!(
+            hex::encode(&cbor),
+            "a1686c6f636b53656e64a5646c6f636bd99fd88314070065746f6b656e6774657374504c5466616d6f756e74c4822119138866736f75726365d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2069726563697069656e74d99d73a201d99d71a1011903970358201111111111111111111111111111111111111111111111111111111111111111"
+        );
+        let operation_decoded: MetaUpdateOperation =
+            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_meta_operation_cbor_lock_return() {
+        let operation = MetaUpdateOperation::LockReturn(MetaLockReturnDetails {
+            token: "testPLT".parse().unwrap(),
+            lock: LockId::new(20, 7, 0),
+            source: CborHolderAccount::from(ADDRESS),
+            amount: TokenAmount::from_raw(5000, 0),
+            memo: None,
+        });
+        let cbor = cbor::cbor_encode(&operation);
+        assert_eq!(
+            hex::encode(&cbor),
+            "a16a6c6f636b52657475726ea4646c6f636bd99fd88314070065746f6b656e6774657374504c5466616d6f756e74c4820019138866736f75726365d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+        );
+        let operation_decoded: MetaUpdateOperation =
+            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_meta_operation_cbor_lock_create() {
+        let operation = MetaUpdateOperation::LockCreate(MetaLockCreateDetails {
+            config: LockConfig {
+                recipients: vec![CborHolderAccount::from(ADDRESS)],
+                expiry: TransactionTime::from_seconds(1_000_000),
+                controller: LockController::SimpleV0(LockControllerSimpleV0 {
+                    grants: vec![
+                        LockControllerSimpleV0Grant {
+                            account: CborHolderAccount::from(ADDRESS),
+                            roles: vec![
+                                LockControllerSimpleV0Capability::Fund,
+                                LockControllerSimpleV0Capability::Cancel,
+                            ],
+                        },
+                        LockControllerSimpleV0Grant {
+                            account: CborHolderAccount::from(AccountAddress([0x11; 32])),
+                            roles: vec![LockControllerSimpleV0Capability::Send],
+                        },
+                    ],
+                    tokens: vec!["testPLT".parse().unwrap(), "TKN".parse().unwrap()],
+                    keep_alive: false,
+                    memo: None,
+                }),
+            },
+        });
+        let cbor = cbor::cbor_encode(&operation);
+        assert_eq!(
+            hex::encode(&cbor),
+            "a16a6c6f636b437265617465a366657870697279c11a000f42406a636f6e74726f6c6c6572a16873696d706c655630a2666772616e747382a265726f6c6573826466756e646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20a265726f6c6573816473656e64676163636f756e74d99d73a201d99d71a101190397035820111111111111111111111111111111111111111111111111111111111111111166746f6b656e73826774657374504c5463544b4e6a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+        );
+        let operation_decoded: MetaUpdateOperation =
+            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_meta_operation_cbor_lock_cancel() {
+        let operation = MetaUpdateOperation::LockCancel(MetaLockCancelDetails {
+            lock: LockId::new(20, 7, 0),
+            memo: Some(CborMemo::Cbor(Memo::try_from(vec![0xa0]).unwrap())),
+        });
+        let cbor = cbor::cbor_encode(&operation);
+        assert_eq!(
+            hex::encode(&cbor),
+            "a16a6c6f636b43616e63656ca2646c6f636bd99fd883140700646d656d6fd81841a0"
         );
         let operation_decoded: MetaUpdateOperation =
             cbor::cbor_decode(&cbor).expect("CBOR deserialize");

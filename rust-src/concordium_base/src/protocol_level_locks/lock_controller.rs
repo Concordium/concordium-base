@@ -6,6 +6,11 @@ use concordium_base_derive::{CborDeserialize, CborSerialize};
 /// Each variant represents a different controller version.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
 #[cbor(map)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "camelCase")
+)]
 pub enum LockController {
     /// SimpleV0 lock controller configuration.
     SimpleV0(LockControllerSimpleV0),
@@ -92,5 +97,27 @@ mod test {
             "80",                 // array(0)
         );
         assert_eq!(hex::encode(&encoded), expected);
+    }
+
+    #[test]
+    #[cfg(feature = "serde_deprecated")]
+    fn test_lock_controller_json() {
+        let controller = LockController::SimpleV0(LockControllerSimpleV0 {
+            grants: vec![LockControllerSimpleV0Grant {
+                account: CborHolderAccount::from(ADDRESS),
+                roles: vec![
+                    LockControllerSimpleV0Capability::Fund,
+                    LockControllerSimpleV0Capability::Send,
+                ],
+            }],
+            tokens: vec!["XX".parse().unwrap()],
+            keep_alive: false,
+            memo: None,
+        });
+        let json = serde_json::to_string(&controller).unwrap();
+        let expected = r#"{"simpleV0":{"grants":[{"account":{"coinInfo":"CCD","address":"2xBvQb4QFBzCDcRdyuGzPDcWSMvDDisfMUnXeRnNJFdWqBBmK7"},"roles":["fund","send"]}],"tokens":["XX"],"keepAlive":false}}"#;
+        assert_eq!(json, expected);
+        let decoded: LockController = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded, controller);
     }
 }
