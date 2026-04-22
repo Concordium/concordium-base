@@ -2188,6 +2188,21 @@ data LockId = LockId
     }
     deriving (Eq, Show)
 
+instance AE.ToJSON LockId where
+    toJSON LockId{..} =
+        AE.object
+            [ "accountIndex" AE..= liAccountIndex,
+              "sequenceNumber" AE..= liSequenceNumber,
+              "creationOrder" AE..= liCreationOrder
+            ]
+
+instance AE.FromJSON LockId where
+    parseJSON = AE.withObject "LockId" $ \o -> do
+        liAccountIndex <- o AE..: "accountIndex"
+        liSequenceNumber <- o AE..: "sequenceNumber"
+        liCreationOrder <- o AE..: "creationOrder"
+        return LockId{..}
+
 -- | CBOR tag used for the standalone 'LockId' encoding.
 --
 -- This is the lock identifier tag in general, not just the tag for the
