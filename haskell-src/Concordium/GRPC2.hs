@@ -71,6 +71,7 @@ import Concordium.Types.Execution
 import qualified Concordium.Types.InvokeContract as InvokeContract
 import qualified Concordium.Types.Parameters as Parameters
 import qualified Concordium.Types.Queries.KonsensusV1 as KonsensusV1
+import Concordium.Types.Queries.Locks
 import Concordium.Types.Queries.Tokens
 import Concordium.Types.Tokens (TokenRawAmount (..))
 import qualified Concordium.Types.Updates as Updates
@@ -2763,3 +2764,10 @@ instance ToProto TokenId where
     type Output TokenId = Proto.TokenId
     toProto (TokenId bss) = Proto.make $ do
         PLTFields.value .= decodeUtf8 (BSS.fromShort bss)
+
+instance ToProto LockId where
+    type Output LockId = Proto.LockId
+    toProto LockId{..} = Proto.make $ do
+        PLTFields.accountIndex .= liAccountIndex
+        PLTFields.sequenceNumber .= liSequenceNumber
+        PLTFields.creationOrder .= liCreationOrder

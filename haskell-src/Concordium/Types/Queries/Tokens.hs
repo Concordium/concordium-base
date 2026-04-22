@@ -10,7 +10,6 @@ module Concordium.Types.Queries.Tokens (
     TokenState (..),
     TokenInfo (..),
     TokenAuthorizations (..),
-    LockInfo (..),
 ) where
 
 import Data.Aeson as AE
@@ -249,10 +248,3 @@ instance Serialize TokenAuthorizations where
         detailsLen <- getWord32be
         taDetails <- getByteString (fromIntegral detailsLen)
         return TokenAuthorizations{..}
-
--- | Result of a `GetLockInfo` query.
--- The payload is the raw CBOR encoding of the `lock-info` structure.
-data LockInfo = LockInfo
-    { -- | The CBOR encoded lock-info payload.
-      liLockInfo :: !BS.ByteString
-    }
