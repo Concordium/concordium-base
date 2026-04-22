@@ -4,6 +4,8 @@
 //! NB: This module is not used by the rest of the project and is only here for
 //! demonstration purposes.
 //! If it becomes necessary to use it, the code needs to be thoroughly reviewed.
+#![allow(dead_code)]
+
 use crate::random_oracle::TranscriptProtocol;
 use crate::{
     curve_arithmetic::Curve,

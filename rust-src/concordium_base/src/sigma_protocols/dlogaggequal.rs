@@ -5,6 +5,7 @@
 //! NB:
 //! This module is currently not used, and is only here as a reference.
 //! When using the code needs to be thoroughly reviewed.
+#![allow(dead_code)]
 
 use crate::random_oracle::TranscriptProtocol;
 use crate::{

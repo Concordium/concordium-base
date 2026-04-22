@@ -437,7 +437,7 @@ impl<V: Loadable> CachedRef<V> {
     /// Get a reference to the contained value. In case the value is only on
     /// disk this will load it.
     #[inline]
-    pub fn get<L: BackingStoreLoad>(&self, loader: &mut L) -> MaybeOwned<V> {
+    pub fn get<L: BackingStoreLoad>(&self, loader: &mut L) -> MaybeOwned<'_, V> {
         match self {
             CachedRef::Disk { reference } => {
                 let loaded = V::load_from_location(loader, *reference).unwrap();
@@ -707,7 +707,7 @@ impl Stem {
     }
 
     /// Return an iterator over the chunks of the stem.
-    pub fn iter(&self) -> StemIter {
+    pub fn iter(&self) -> StemIter<'_> {
         StemIter {
             data: &self.data,
             pos: 0,
@@ -969,7 +969,7 @@ impl InlineOrHashed {
     #[inline(always)]
     /// Get a reference to the contained value. In case the value is only on
     /// disk it is loaded using the provided loader.
-    pub(crate) fn get(&self, loader: &mut impl BackingStoreLoad) -> ByteSlice {
+    pub(crate) fn get(&self, loader: &mut impl BackingStoreLoad) -> ByteSlice<'_> {
         match self {
             InlineOrHashed::Inline { len, data } => {
                 MaybeOwned::Borrowed(&data[0..usize::from(*len)])
@@ -991,7 +991,7 @@ impl InlineOrHashed {
     pub(crate) fn get_ref_and_hash(
         &self,
         loader: &mut impl BackingStoreLoad,
-    ) -> (Option<&Hash>, ByteSlice) {
+    ) -> (Option<&Hash>, ByteSlice<'_>) {
         match self {
             InlineOrHashed::Inline { len, data } => {
                 (None, MaybeOwned::Borrowed(&data[0..usize::from(*len)]))
