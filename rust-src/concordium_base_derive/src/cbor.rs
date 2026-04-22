@@ -43,10 +43,6 @@ pub struct CborFieldOpts {
     /// to the field with this attribute.
     #[darling(default)]
     other: bool,
-    /// Flatten the fields of an embedded CBOR map struct into the enclosing
-    /// CBOR map.
-    #[darling(default)]
-    flatten: bool,
 }
 
 #[derive(Debug, Default, FromVariant)]
@@ -83,6 +79,9 @@ pub struct CborOpts {
     /// untagged.
     #[darling(default)]
     tagged: bool,
+    /// Serialize struct as an array instead of a map.
+    #[darling(default)]
+    tuple: bool,
 }
 
 #[derive(Debug)]
@@ -105,26 +104,6 @@ impl CborFields {
             .collect()
     }
 
-    fn non_flatten_members(&self) -> Vec<Member> {
-        self.0
-            .iter()
-            .filter(|field| !field.opts.other && !field.opts.flatten)
-            .map(|field| field.member.clone())
-            .collect()
-    }
-
-    fn flatten_members(&self) -> Vec<Member> {
-        self.0
-            .iter()
-            .filter(|field| !field.opts.other && field.opts.flatten)
-            .map(|field| field.member.clone())
-            .collect()
-    }
-
-    fn has_flatten_fields(&self) -> bool {
-        self.0.iter().any(|field| field.opts.flatten)
-    }
-
     /// Identifier for "other" variant
     fn other_member(&self) -> Option<(Type, Member)> {
         self.0
@@ -141,7 +120,7 @@ impl CborFields {
         Ok(self
             .0
             .iter()
-            .filter(|field| !field.opts.other && !field.opts.flatten)
+            .filter(|field| !field.opts.other)
             .map(|field| {
                 if let Some(key) = field.opts.key.as_ref() {
                     match key {
@@ -170,42 +149,6 @@ impl CborFields {
             })
             .collect())
     }
-
-    fn cbor_map_owned_keys(&self) -> syn::Result<Vec<TokenStream>> {
-        let cbor_module = get_cbor_module()?;
-
-        Ok(self
-            .0
-            .iter()
-            .filter(|field| !field.opts.other && !field.opts.flatten)
-            .map(|field| {
-                if let Some(key) = field.opts.key.as_ref() {
-                    match key {
-                        CborKey::Text(expr) => {
-                            quote!(#cbor_module::MapKey::Text((#expr).to_string()))
-                        }
-                        CborKey::Positive(expr) => {
-                            quote!(#cbor_module::MapKey::Positive(#expr))
-                        }
-                    }
-                } else {
-                    match &field.member {
-                        Member::Named(ident) => {
-                            let lit = LitStr::new(
-                                &ident.to_string().to_case(Case::Camel),
-                                field.member.span(),
-                            );
-                            quote!(#cbor_module::MapKey::Text((#lit).to_string()))
-                        }
-                        Member::Unnamed(index) => {
-                            let index = index.index as u64;
-                            quote!(#cbor_module::MapKey::Positive(#index))
-                        }
-                    }
-                }
-            })
-            .collect())
-    }
 }
 
 impl CborFields {
@@ -226,26 +169,6 @@ impl CborFields {
             return Err(syn::Error::new(
                 Span::call_site(),
                 "cbor(other) can only be specified on a at most a single field",
-            ));
-        }
-        if this
-            .0
-            .iter()
-            .any(|field| field.opts.flatten && field.opts.other)
-        {
-            return Err(syn::Error::new(
-                Span::call_site(),
-                "cbor(flatten) cannot be combined with cbor(other)",
-            ));
-        }
-        if this
-            .0
-            .iter()
-            .any(|field| field.opts.flatten && field.opts.key.is_some())
-        {
-            return Err(syn::Error::new(
-                Span::call_site(),
-                "cbor(flatten) cannot be combined with cbor(key = ...)",
             ));
         }
 
@@ -393,220 +316,6 @@ enum CborContainer {
     Map,
 }
 
-/// Build local variable names used while deserializing struct fields.
-///
-/// Named fields reuse their field identifier, while tuple-style fields get a
-/// synthetic binding such as `tmp0`.
-fn cbor_member_binding_vars(members: &[Member]) -> Vec<Ident> {
-    members
-        .iter()
-        .map(|member| match member {
-            Member::Named(ident) => ident.clone(),
-            Member::Unnamed(index) => format_ident!("tmp{}", index),
-        })
-        .collect()
-}
-
-/// Generate the local declaration for a `#[cbor(other)]` field, if present.
-///
-/// The generated variable accumulates unknown map entries during
-/// deserialization and is initialized with `Default`.
-fn cbor_other_field_declare_tokens(cbor_fields: &CborFields) -> TokenStream {
-    if let Some((ty, other_ident)) = cbor_fields.other_member() {
-        quote! {
-            let mut #other_ident = <#ty>::default();
-        }
-    } else {
-        quote! {}
-    }
-}
-
-/// Generate the final unknown-key handling for flattened map decoding.
-///
-/// In the flattened case we first collect the full map into a temporary
-/// `HashMap`, remove all known keys, and then either:
-/// - move the remaining entries into the `#[cbor(other)]` field, or
-/// - reject the first leftover key when unknown keys are configured to fail.
-fn cbor_flattened_unknown_key_finish_tokens(
-    cbor_fields: &CborFields,
-    cbor_module: &TokenStream,
-) -> TokenStream {
-    if let Some((_, other_ident)) = cbor_fields.other_member() {
-        quote! {
-            #other_ident.extend(map_values.into_iter().map(|(key, value)| {
-                Ok((
-                    #cbor_module::__private::anyhow::Context::context(key.try_into(), "cannot convert MapKey to declared key")?,
-                    value,
-                ))
-            }).collect::<#cbor_module::CborSerializationResult<Vec<_>>>()?);
-        }
-    } else {
-        quote! {
-            if let #cbor_module::UnknownMapKeys::Fail = options.unknown_map_keys {
-                if let Some((unknown_key, _)) = map_values.iter().next() {
-                    return Err(#cbor_module::CborSerializationError::unknown_map_key(unknown_key.as_ref()));
-                }
-            }
-        }
-    }
-}
-
-/// Generate per-entry unknown-key handling for regular map decoding.
-///
-/// This path streams entries directly from the CBOR decoder, so unknown keys
-/// are handled immediately as each unmatched key is encountered.
-fn cbor_regular_unknown_key_deserialize_tokens(
-    cbor_fields: &CborFields,
-    cbor_module: &TokenStream,
-) -> TokenStream {
-    if let Some((_, other_ident)) = cbor_fields.other_member() {
-        quote! {
-            #other_ident.extend(Some((
-                #cbor_module::__private::anyhow::Context::context(map_key.try_into(), "cannot convert MapKey to declared key")?,
-                #cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?
-            )));
-        }
-    } else {
-        quote! {
-            match options.unknown_map_keys {
-                #cbor_module::UnknownMapKeys::Fail => return Err(#cbor_module::CborSerializationError::unknown_map_key(map_key.as_ref())),
-                #cbor_module::UnknownMapKeys::Ignore => #cbor_module::CborMapDecoder::skip_value(&mut map_decoder)?,
-            }
-        }
-    }
-}
-
-/// Generate deserialization code for a named struct map that contains one or
-/// more `#[cbor(flatten)]` fields.
-///
-/// This path materializes the whole CBOR map as `Value::Map` first so known
-/// keys can be removed before delegating the remaining entries to flattened
-/// nested structs.
-fn cbor_deserialize_flattened_map_struct_body(
-    cbor_fields: &CborFields,
-    self_construct: &TokenStream,
-    cbor_module: &TokenStream,
-) -> syn::Result<TokenStream> {
-    let field_map_keys = cbor_fields.cbor_map_keys()?;
-    let field_map_owned_keys = cbor_fields.cbor_map_owned_keys()?;
-    let non_flatten_members = cbor_fields.non_flatten_members();
-    let non_flatten_field_vars = cbor_member_binding_vars(&non_flatten_members);
-    let flatten_members = cbor_fields.flatten_members();
-    let other_field_declare = cbor_other_field_declare_tokens(cbor_fields);
-    let unknown_key_finish = cbor_flattened_unknown_key_finish_tokens(cbor_fields, cbor_module);
-
-    Ok(quote! {
-        let options = decoder.options();
-        // Flattened decoding needs ownership of the full map so we can peel off
-        // top-level known keys and then hand the remainder to nested structs.
-        let map_value = #cbor_module::value::Value::deserialize(decoder)?;
-        let #cbor_module::value::Value::Map(map_entries) = map_value else {
-            return Err(#cbor_module::CborSerializationError::expected_data_item(
-                #cbor_module::DataItemType::Map,
-                map_value.data_item_type(),
-            ));
-        };
-
-        // Normalize map keys into `MapKey` so lookups/removals use the same
-        // representation regardless of the original CBOR key encoding.
-        let mut map_values = std::collections::HashMap::with_capacity(map_entries.len());
-        for (map_key_value, map_value) in map_entries {
-            let map_key = match map_key_value {
-                #cbor_module::value::Value::Positive(value) => #cbor_module::MapKey::Positive(value),
-                #cbor_module::value::Value::Text(value) => #cbor_module::MapKey::Text(value),
-                other => {
-                    return Err(#cbor_module::CborSerializationError::invalid_data(format_args!(
-                        "expected map key of type text or positive, was {:?}",
-                        other.data_item_type(),
-                    )));
-                }
-            };
-            if map_values.insert(map_key.clone(), map_value).is_some() {
-                return Err(#cbor_module::CborSerializationError::invalid_data(format_args!(
-                    "duplicate map key {:?}",
-                    map_key.as_ref(),
-                )));
-            }
-        }
-
-        #other_field_declare
-
-        #(
-            let #non_flatten_field_vars = match map_values.remove(&#field_map_owned_keys) {
-                None => match #cbor_module::CborDeserialize::null() {
-                    None => return Err(#cbor_module::CborSerializationError::map_value_missing(#field_map_keys)),
-                    Some(null_value) => null_value,
-                },
-                Some(value) => #cbor_module::__private::decode_cbor_from_value(value, options)?,
-            };
-        )*
-
-        #(
-            // Each flattened field consumes the subset of entries that belong
-            // to the nested struct from the shared map of remaining values.
-            let #flatten_members = #cbor_module::__private::StructMapCbor::cbor_deserialize_fields(&mut map_values, options)?;
-        )*
-
-        #unknown_key_finish
-
-        Ok(#self_construct)
-    })
-}
-
-/// Generate deserialization code for a named struct map without flattened
-/// fields.
-///
-/// This path can stream the CBOR map directly because every supported field is
-/// matched independently and no nested struct needs access to the remaining
-/// entries as a whole.
-fn cbor_deserialize_regular_map_struct_body(
-    cbor_fields: &CborFields,
-    self_construct: &TokenStream,
-    cbor_module: &TokenStream,
-) -> syn::Result<TokenStream> {
-    let field_map_keys = cbor_fields.cbor_map_keys()?;
-    let non_flatten_members = cbor_fields.non_flatten_members();
-    let non_flatten_field_vars = cbor_member_binding_vars(&non_flatten_members);
-    let field_vars = cbor_member_binding_vars(&cbor_fields.members());
-    let other_field_declare = cbor_other_field_declare_tokens(cbor_fields);
-    let unknown_key_deserialize =
-        cbor_regular_unknown_key_deserialize_tokens(cbor_fields, cbor_module);
-
-    Ok(quote! {
-        let options = decoder.options();
-        // Track seen values per field while streaming the map decoder.
-        #(let mut #non_flatten_field_vars = None;)*
-        let mut map_decoder = #cbor_module::CborDecoder::decode_map(decoder)?;
-
-        #other_field_declare
-
-        while let Some(map_key) = #cbor_module::CborMapDecoder::deserialize_key::<#cbor_module::MapKey>(&mut map_decoder)? {
-            match map_key.as_ref() {
-                #(
-                    #field_map_keys => {
-                        #non_flatten_field_vars = Some(#cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?);
-                    }
-                )*
-                _ => {
-                    #unknown_key_deserialize
-                }
-            }
-        }
-
-        #(
-            let #non_flatten_field_vars = match #non_flatten_field_vars {
-                None => match #cbor_module::CborDeserialize::null() {
-                    None => return Err(#cbor_module::CborSerializationError::map_value_missing(#field_map_keys)),
-                    Some(null_value) => null_value,
-                },
-                Some(#field_vars) => #field_vars,
-            };
-        )*
-
-        Ok(#self_construct)
-    })
-}
-
 fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<TokenStream> {
     if opts.map {
         return Err(syn::Error::new(
@@ -645,7 +354,13 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
         });
     }
 
-    let field_vars = cbor_member_binding_vars(&field_idents);
+    let field_vars: Vec<_> = field_idents
+        .iter()
+        .map(|member| match member {
+            Member::Named(ident) => ident.clone(),
+            Member::Unnamed(index) => format_ident!("tmp{}", index),
+        })
+        .collect();
 
     let self_construct = match fields {
         Fields::Named(_) => {
@@ -665,6 +380,7 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
     };
 
     let cbor_container = match fields {
+        _ if opts.tuple => CborContainer::Array,
         Fields::Named(_) => CborContainer::Map,
         Fields::Unnamed(_) => CborContainer::Array,
         Fields::Unit => CborContainer::Map,
@@ -687,20 +403,64 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
             }
         }
         CborContainer::Map => {
-            // Flattened map fields require a whole-map strategy, while regular
-            // named structs can be decoded in a streaming fashion.
-            if cbor_fields.has_flatten_fields() {
-                cbor_deserialize_flattened_map_struct_body(
-                    &cbor_fields,
-                    &self_construct,
-                    &cbor_module,
-                )?
+            let field_map_keys = cbor_fields.cbor_map_keys()?;
+
+            let other_field_declare = if let Some((ty, other_ident)) = cbor_fields.other_member() {
+                quote! {
+                    let mut #other_ident = <#ty>::default();
+                }
             } else {
-                cbor_deserialize_regular_map_struct_body(
-                    &cbor_fields,
-                    &self_construct,
-                    &cbor_module,
-                )?
+                quote! {}
+            };
+
+            let unknown_key_deserialize = if let Some((_, other_ident)) = cbor_fields.other_member()
+            {
+                quote! {
+                    #other_ident.extend(Some((
+                        #cbor_module::__private::anyhow::Context::context(map_key.try_into(), "cannot convert MapKey to declared key")?,
+                        #cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?
+                    )));
+                }
+            } else {
+                quote! {
+                    match options.unknown_map_keys {
+                        #cbor_module::UnknownMapKeys::Fail => return Err(#cbor_module::CborSerializationError::unknown_map_key(map_key.as_ref())),
+                        #cbor_module::UnknownMapKeys::Ignore => #cbor_module::CborMapDecoder::skip_value(&mut map_decoder)?,
+                    }
+                }
+            };
+
+            quote! {
+                let options = decoder.options();
+                #(let mut #field_vars = None;)*
+                let mut map_decoder = #cbor_module::CborDecoder::decode_map(decoder)?;
+
+                #other_field_declare
+
+                while let Some(map_key) = #cbor_module::CborMapDecoder::deserialize_key::<#cbor_module::MapKey>(&mut map_decoder)? {
+                    match map_key.as_ref() {
+                        #(
+                            #field_map_keys => {
+                                #field_vars = Some(#cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?);
+                            }
+                        )*
+                        _ => {
+                            #unknown_key_deserialize
+                        }
+                    }
+                }
+
+                #(
+                    let #field_vars = match #field_vars {
+                        None => match #cbor_module::CborDeserialize::null() {
+                            None => return Err(#cbor_module::CborSerializationError::map_value_missing(#field_map_keys)),
+                            Some(null_value) => null_value,
+                        },
+                        Some(#field_vars) => #field_vars,
+                    };
+                )*
+
+                Ok(#self_construct)
             }
         }
     })
@@ -720,6 +480,13 @@ fn cbor_deserialize_enum_body(
         return Err(syn::Error::new(
             Span::call_site(),
             "#[cbor(transparent)] only valid for structs",
+        ));
+    }
+
+    if opts.tuple {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "#[cbor(tuple)] only valid for structs",
         ));
     }
 
@@ -942,112 +709,9 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
         )*
     };
 
-    let flatten_impl = match &ast.data {
-        Data::Struct(DataStruct {
-            fields: Fields::Named(fields),
-            ..
-        }) if !opts.transparent => Some({
-            let cbor_fields = CborFields::try_from_fields(&Fields::Named(fields.clone()))?;
-            let field_idents = cbor_fields.members();
-            let non_flatten_members = cbor_fields.non_flatten_members();
-            let field_vars: Vec<_> = non_flatten_members
-                .iter()
-                .map(|member| match member {
-                    Member::Named(ident) => ident.clone(),
-                    Member::Unnamed(index) => format_ident!("tmp{}", index),
-                })
-                .collect();
-            let field_map_keys = cbor_fields.cbor_map_keys()?;
-            let field_map_owned_keys = cbor_fields.cbor_map_owned_keys()?;
-            let flatten_members = cbor_fields.flatten_members();
-            let other_member = cbor_fields.other_member();
-            let other_field_declare = if let Some((ty, other_ident)) = &other_member {
-                quote! { let mut #other_ident = <#ty>::default(); }
-            } else {
-                quote! {}
-            };
-            let other_field_finish = if let Some((_, other_ident)) = &other_member {
-                quote! {
-                    #other_ident.extend(map_values.drain().map(|(key, value)| {
-                        Ok((
-                            #cbor_module::__private::anyhow::Context::context(key.try_into(), "cannot convert MapKey to declared key")?,
-                            value,
-                        ))
-                    }).collect::<#cbor_module::CborSerializationResult<Vec<_>>>()?);
-                }
-            } else {
-                quote! {
-                    if let #cbor_module::UnknownMapKeys::Fail = options.unknown_map_keys {
-                        if let Some((unknown_key, _)) = map_values.iter().next() {
-                            return Err(#cbor_module::CborSerializationError::unknown_map_key(unknown_key.as_ref()));
-                        }
-                    }
-                }
-            };
-            let self_construct = {
-                let mut members = field_idents.clone();
-                if let Some((_, other_ident)) = &other_member {
-                    members.push(other_ident.clone());
-                }
-                quote! { Self { #(#members),* } }
-            };
-            let other_ident = other_member.iter().map(|(_, member)| member);
-            quote! {
-                impl #impl_generics #cbor_module::__private::StructMapCbor for #name #ty_generics #where_clauses {
-                    fn cbor_serialize_fields<C: #cbor_module::CborMapEncoder>(
-                        &self,
-                        map_encoder: &mut C,
-                    ) -> std::result::Result<(), C::WriteError> {
-                        #(
-                            if !#cbor_module::CborSerialize::is_null(&self.#non_flatten_members) {
-                                #cbor_module::CborMapEncoder::serialize_entry(map_encoder, &#field_map_keys, &self.#non_flatten_members)?;
-                            }
-                        )*
-                        #(
-                            #cbor_module::__private::StructMapCbor::cbor_serialize_fields(&self.#flatten_members, map_encoder)?;
-                        )*
-                        #(
-                            for (key, value) in self.#other_ident.iter() {
-                                #cbor_module::CborMapEncoder::serialize_entry(map_encoder, key, value)?;
-                            }
-                        )*
-                        Ok(())
-                    }
-
-                    fn cbor_deserialize_fields(
-                        map_values: &mut std::collections::HashMap<#cbor_module::MapKey, #cbor_module::value::Value>,
-                        options: #cbor_module::SerializationOptions,
-                    ) -> #cbor_module::CborSerializationResult<Self> {
-                        #other_field_declare
-                        #(
-                            let #field_vars = match map_values.remove(&#field_map_owned_keys) {
-                                None => match #cbor_module::CborDeserialize::null() {
-                                    None => return Err(#cbor_module::CborSerializationError::map_value_missing(#field_map_keys)),
-                                    Some(null_value) => null_value,
-                                },
-                                Some(value) => #cbor_module::__private::decode_cbor_from_value(value, options)?,
-                            };
-                        )*
-                        #(
-                            let #flatten_members = #cbor_module::__private::StructMapCbor::cbor_deserialize_fields(map_values, options)?;
-                        )*
-                        #other_field_finish
-                        Ok(#self_construct)
-                    }
-                }
-            }
-        }),
-        _ => None,
-    };
-
-    let flatten_impl = flatten_impl.into_iter();
-
     let all_impls = quote! {
         #trait_impl
         #type_impl
-        #(
-            #flatten_impl
-        )*
     };
 
     Ok(all_impls)
@@ -1087,6 +751,7 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
     }
 
     let cbor_container = match fields {
+        _ if opts.tuple => CborContainer::Array,
         Fields::Named(_) => CborContainer::Map,
         Fields::Unnamed(_) => CborContainer::Array,
         Fields::Unit => CborContainer::Map,
@@ -1108,21 +773,16 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
         }
         CborContainer::Map => {
             let field_map_keys = cbor_fields.cbor_map_keys()?;
-            let non_flatten_members = cbor_fields.non_flatten_members();
-            let flatten_members = cbor_fields.flatten_members();
+
             let other_ident = cbor_fields.other_member().into_iter().map(|other| other.1);
 
             quote! {
                 let mut map_encoder = #cbor_module::CborEncoder::encode_map(encoder)?;
 
                 #(
-                    if !#cbor_module::CborSerialize::is_null(&self.#non_flatten_members) {
-                        #cbor_module::CborMapEncoder::serialize_entry(&mut map_encoder, &#field_map_keys, &self.#non_flatten_members)?;
+                    if !#cbor_module::CborSerialize::is_null(&self.#field_idents) {
+                        #cbor_module::CborMapEncoder::serialize_entry(&mut map_encoder, &#field_map_keys, &self.#field_idents)?;
                     }
-                )*
-
-                #(
-                    #cbor_module::__private::StructMapCbor::cbor_serialize_fields(&self.#flatten_members, &mut map_encoder)?;
                 )*
 
                 #(
@@ -1147,6 +807,13 @@ fn cbor_serialize_enum_body(
         return Err(syn::Error::new(
             Span::call_site(),
             "#[cbor(transparent)] only valid for structs",
+        ));
+    }
+
+    if opts.tuple {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "#[cbor(tuple)] only valid for structs",
         ));
     }
 

@@ -279,25 +279,6 @@ pub mod __private {
             }
         }
     }
-
-    pub trait StructMapCbor: Sized {
-        fn cbor_serialize_fields<C: CborMapEncoder>(
-            &self,
-            map_encoder: &mut C,
-        ) -> Result<(), C::WriteError>;
-
-        fn cbor_deserialize_fields(
-            map_values: &mut std::collections::HashMap<MapKey, value::Value>,
-            options: SerializationOptions,
-        ) -> CborSerializationResult<Self>;
-    }
-
-    pub fn decode_cbor_from_value<T: CborDeserialize>(
-        value: value::Value,
-        options: SerializationOptions,
-    ) -> CborSerializationResult<T> {
-        super::cbor_decode_with_options(super::cbor_encode(&value), options)
-    }
 }
 
 /// How to handle unknown keys in decoded CBOR maps.
@@ -962,175 +943,6 @@ mod test {
     }
 
     #[test]
-    fn test_struct_as_map_derived_flatten() {
-        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
-        struct Inner {
-            field3: u64,
-            field2: String,
-        }
-
-        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
-        struct Outer {
-            field1: u64,
-            #[cbor(flatten)]
-            inner: Inner,
-        }
-
-        let value = Outer {
-            field1: 3,
-            inner: Inner {
-                field2: "abcd".to_string(),
-                field3: 5,
-            },
-        };
-
-        let cbor = cbor_encode(&value);
-        assert_eq!(
-            hex::encode(&cbor),
-            "a3666669656c643103666669656c64326461626364666669656c643305"
-        );
-        let value_decoded: Outer = cbor_decode(&cbor).unwrap();
-        assert_eq!(value_decoded, value);
-    }
-
-    #[test]
-    fn test_struct_as_map_derived_flatten_deterministic_field_order() {
-        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
-        struct Inner {
-            zebra: u64,
-            #[cbor(key = 1)]
-            first: u64,
-            beta: String,
-        }
-
-        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
-        struct Outer {
-            gamma: u64,
-            #[cbor(flatten)]
-            inner: Inner,
-            alpha: u64,
-        }
-
-        let value = Outer {
-            gamma: 7,
-            inner: Inner {
-                zebra: 5,
-                first: 1,
-                beta: "abcd".to_string(),
-            },
-            alpha: 9,
-        };
-
-        let cbor = cbor_encode(&value);
-        assert_eq!(
-            hex::encode(&cbor),
-            "a501016462657461646162636465616c706861096567616d6d6107657a6562726105"
-        );
-        let value_decoded: Outer = cbor_decode(&cbor).unwrap();
-        assert_eq!(value_decoded, value);
-    }
-
-    #[test]
-    fn test_struct_as_map_derived_flatten_unknown_field() {
-        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
-        struct Inner {
-            field2: String,
-        }
-
-        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
-        struct Encoded {
-            field1: u64,
-            #[cbor(flatten)]
-            inner: Inner,
-            extra: u64,
-        }
-
-        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
-        struct Decoded {
-            field1: u64,
-            #[cbor(flatten)]
-            inner: Inner,
-        }
-
-        let value = Encoded {
-            field1: 3,
-            inner: Inner {
-                field2: "abcd".to_string(),
-            },
-            extra: 5,
-        };
-        let cbor = cbor_encode(&value);
-
-        let value_decoded: Decoded = cbor_decode_with_options(
-            &cbor,
-            SerializationOptions::default().unknown_map_keys(UnknownMapKeys::Ignore),
-        )
-        .unwrap();
-        assert_eq!(
-            value_decoded,
-            Decoded {
-                field1: 3,
-                inner: Inner {
-                    field2: "abcd".to_string(),
-                },
-            }
-        );
-
-        let err = cbor_decode_with_options::<Decoded>(
-            &cbor,
-            SerializationOptions::default().unknown_map_keys(UnknownMapKeys::Fail),
-        )
-        .unwrap_err()
-        .to_string();
-        assert!(err.contains("unknown map key"), "err: {}", err);
-    }
-
-    #[test]
-    fn test_struct_as_map_derived_flatten_other_field() {
-        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
-        struct Inner {
-            field2: String,
-        }
-
-        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
-        struct Encoded {
-            field1: u64,
-            #[cbor(flatten)]
-            inner: Inner,
-            extra: u64,
-        }
-
-        #[derive(Debug, PartialEq, CborSerialize, CborDeserialize)]
-        struct Decoded {
-            field1: u64,
-            #[cbor(flatten)]
-            inner: Inner,
-            #[cbor(other)]
-            unknown: HashMap<MapKey, value::Value>,
-        }
-
-        let value = Encoded {
-            field1: 3,
-            inner: Inner {
-                field2: "abcd".to_string(),
-            },
-            extra: 5,
-        };
-        let cbor = cbor_encode(&value);
-        let value_decoded: Decoded = cbor_decode(&cbor).unwrap();
-        let expected = Decoded {
-            field1: 3,
-            inner: Inner {
-                field2: "abcd".to_string(),
-            },
-            unknown: [(MapKey::Text("extra".to_string()), value::Value::Positive(5))]
-                .into_iter()
-                .collect(),
-        };
-        assert_eq!(value_decoded, expected);
-    }
-
-    #[test]
     fn test_struct_as_map_derived_explicit_keys() {
         const KEY: u64 = 2;
 
@@ -1781,7 +1593,8 @@ mod test {
         let err = cbor_decode::<Vec<u64>>(&cbor).unwrap_err();
         assert!(
             err.to_string().contains("failed to fill whole buffer"),
-            "message: {err}",
+            "message: {}",
+            err.to_string()
         );
     }
 
@@ -1803,7 +1616,8 @@ mod test {
         let err = cbor_decode::<HashMap<u64, u64>>(&cbor).unwrap_err();
         assert!(
             err.to_string().contains("failed to fill whole buffer"),
-            "message: {err}",
+            "message: {}",
+            err.to_string()
         );
     }
 

@@ -1,4 +1,5 @@
-use super::{LockConfig, LockId};
+use super::{LockController, LockId};
+use crate::common::types::TransactionTime;
 use crate::protocol_level_tokens::{CborHolderAccount, TokenAmount, TokenId};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 
@@ -20,9 +21,12 @@ use concordium_base_derive::{CborDeserialize, CborSerialize};
 pub struct LockInfo {
     /// The lock identifier.
     pub lock: LockId,
-    /// The static configuration of the lock.
-    #[cbor(flatten)]
-    pub config: LockConfig,
+    /// Accounts that can receive funds from this lock.
+    pub recipients: Vec<CborHolderAccount>,
+    /// Expiry time of the lock (seconds since epoch).
+    pub expiry: TransactionTime,
+    /// Controller configuration for the lock.
+    pub controller: LockController,
     /// The locked balances currently controlled by the lock.
     pub funds: Vec<LockAccountFunds>,
 }
@@ -65,8 +69,9 @@ mod test {
         }
     }
 
-    fn example_lock_config() -> LockConfig {
-        LockConfig {
+    fn example_lock_info() -> LockInfo {
+        LockInfo {
+            lock: example_lock_id(),
             recipients: vec![CborHolderAccount::from(ADDRESS)],
             expiry: TransactionTime::from_seconds(1804806000),
             controller: LockController::SimpleV0(LockControllerSimpleV0 {
@@ -81,13 +86,6 @@ mod test {
                 keep_alive: false,
                 memo: None,
             }),
-        }
-    }
-
-    fn example_lock_info() -> LockInfo {
-        LockInfo {
-            lock: example_lock_id(),
-            config: example_lock_config(),
             funds: vec![LockAccountFunds {
                 account: CborHolderAccount::from(ADDRESS),
                 amounts: vec![LockedTokenAmount {
