@@ -1625,7 +1625,7 @@ pub fn compute_transaction_sign_hash(
     let mut hasher = sha2::Sha256::new();
     hasher.put(header);
     payload.encode_to_buffer(&mut hasher);
-    hashes::HashBytes::new(hasher.result())
+    hashes::HashBytes::new(hasher.finalize().into())
 }
 
 // The transaction header prefix for v1.
@@ -1641,7 +1641,7 @@ pub fn compute_transaction_sign_hash_v1(
     hasher.put(&TRANSACTION_HEADER_PREFIX_V1);
     hasher.put(header);
     payload.encode_to_buffer(&mut hasher);
-    hashes::HashBytes::new(hasher.result())
+    hashes::HashBytes::new(hasher.finalize().into())
 }
 
 /// Abstraction of private keys.
@@ -2052,7 +2052,7 @@ impl<PayloadType> BlockItem<PayloadType> {
     {
         let mut hasher = sha2::Sha256::new();
         hasher.put(&self);
-        hashes::HashBytes::new(hasher.result())
+        hashes::HashBytes::new(hasher.finalize().into())
     }
 }
 
