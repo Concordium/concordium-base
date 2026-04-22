@@ -181,7 +181,7 @@
 //! }
 //! ```
 //!
-//! Note: this differs from the (CDDL specification)[https://datatracker.ietf.org/doc/html/rfc8610#section-3.8.6]
+//! Note: this differs from the [CDDL specification](https://datatracker.ietf.org/doc/html/rfc8610#section-3.8.6)
 //! of the `.default` control operator in that this implementation permits the
 //! field to appear with the default value in the CBOR map, while the CDDL
 //! specification requires the field to be omitted from the CBOR map.
