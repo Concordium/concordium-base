@@ -8,11 +8,6 @@ use concordium_base_derive::{CborDeserialize, CborSerialize};
 /// Contains the list of recipients, the expiry time, and the controller
 /// configuration for a lock.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(rename_all = "camelCase")
-)]
 pub struct LockConfig {
     /// Accounts that can receive funds from this lock.
     pub recipients: Vec<CborHolderAccount>,
@@ -149,16 +144,5 @@ mod test {
             "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20", // CborHolderAccount
         );
         assert_eq!(hex::encode(&encoded), expected);
-    }
-
-    #[test]
-    #[cfg(feature = "serde_deprecated")]
-    fn test_lock_config_json() {
-        let config = example_lock_config();
-        let json = serde_json::to_string(&config).unwrap();
-        let expected = r#"{"recipients":[{"coinInfo":"CCD","address":"2xBvQb4QFBzCDcRdyuGzPDcWSMvDDisfMUnXeRnNJFdWqBBmK7"}],"expiry":1804806000,"controller":{"simpleV0":{"grants":[{"account":{"coinInfo":"CCD","address":"2xBvQb4QFBzCDcRdyuGzPDcWSMvDDisfMUnXeRnNJFdWqBBmK7"},"roles":["fund","send"]}],"tokens":["CCD"],"keepAlive":false}}}"#;
-        assert_eq!(json, expected);
-        let decoded: LockConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(decoded, config);
     }
 }

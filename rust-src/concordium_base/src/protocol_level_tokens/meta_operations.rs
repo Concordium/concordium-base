@@ -98,6 +98,70 @@ pub fn update_metadata(token_id: TokenId, metadata_url: MetadataUrl) -> MetaUpda
     (token_id, operations::update_metadata(metadata_url)).into()
 }
 
+/// Construct an operation to fund a lock.
+pub fn lock_fund(
+    token_id: TokenId,
+    lock_id: LockId,
+    amount: TokenAmount,
+    memo: Option<CborMemo>,
+) -> MetaUpdateOperation {
+    MetaUpdateOperation::LockFund(MetaLockFundDetails {
+        token: token_id,
+        lock: lock_id,
+        amount,
+        memo,
+    })
+}
+
+/// Construct an operation to send funds controlled by a lock.
+pub fn lock_send(
+    token_id: TokenId,
+    lock_id: LockId,
+    source: AccountAddress,
+    recipient: AccountAddress,
+    amount: TokenAmount,
+    memo: Option<CborMemo>,
+) -> MetaUpdateOperation {
+    MetaUpdateOperation::LockSend(MetaLockSendDetails {
+        token: token_id,
+        lock: lock_id,
+        source: CborHolderAccount::from(source),
+        recipient: CborHolderAccount::from(recipient),
+        amount,
+        memo,
+    })
+}
+
+/// Construct an operation to return funds controlled by a lock to the owner.
+pub fn lock_return(
+    token_id: TokenId,
+    lock_id: LockId,
+    source: AccountAddress,
+    amount: TokenAmount,
+    memo: Option<CborMemo>,
+) -> MetaUpdateOperation {
+    MetaUpdateOperation::LockReturn(MetaLockReturnDetails {
+        token: token_id,
+        lock: lock_id,
+        source: CborHolderAccount::from(source),
+        amount,
+        memo,
+    })
+}
+
+/// Construct an operation to create a lock.
+pub fn lock_create(config: LockConfig) -> MetaUpdateOperation {
+    MetaUpdateOperation::LockCreate(MetaLockCreateDetails { config })
+}
+
+/// Construct an operation to cancel a lock.
+pub fn lock_cancel(lock_id: LockId, memo: Option<CborMemo>) -> MetaUpdateOperation {
+    MetaUpdateOperation::LockCancel(MetaLockCancelDetails {
+        lock: lock_id,
+        memo,
+    })
+}
+
 /// Payload for meta-update transaction. The transaction is a list of meta-update operations
 /// that can be decoded from CBOR using [`MetaUpdatePayload::decode_operations`].
 #[derive(Debug, Clone)]
@@ -321,11 +385,6 @@ impl From<MetaUpdateOperation> for MetaUpdateOperationKind {
 
 /// Details of an operation that changes a protocol-level token supply.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct MetaTokenSupplyUpdateDetails {
     /// Token the operation applies to.
     pub token: TokenId,
@@ -357,11 +416,6 @@ impl From<MetaTokenSupplyUpdateDetails> for (TokenId, super::TokenSupplyUpdateDe
 /// Details of an operation that changes the `paused` state of a protocol level
 /// token.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct MetaTokenPauseDetails {
     /// Token the operation applies to.
     pub token: TokenId,
@@ -382,11 +436,6 @@ impl From<MetaTokenPauseDetails> for (TokenId, super::TokenPauseDetails) {
 /// Details of an operation that adds or removes an account from
 /// an allow or deny list.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct MetaTokenListUpdateDetails {
     /// Token the operation applies to.
     pub token: TokenId,
@@ -417,11 +466,6 @@ impl From<MetaTokenListUpdateDetails> for (TokenId, super::TokenListUpdateDetail
 /// Details of an operation to assign or revoke roles for an account
 /// for a protocol-level token.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct MetaTokenUpdateAdminRolesDetails {
     /// Token the operation applies to.
     pub token: TokenId,
@@ -455,11 +499,6 @@ impl From<MetaTokenUpdateAdminRolesDetails> for (TokenId, super::TokenUpdateAdmi
 
 /// Protocol-level token transfer
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct MetaTokenTransfer {
     /// Token the operation applies to.
     pub token: TokenId,
@@ -468,10 +507,6 @@ pub struct MetaTokenTransfer {
     /// The recipient account.
     pub recipient: CborHolderAccount,
     /// An optional memo.
-    #[cfg_attr(
-        feature = "serde_deprecated",
-        serde(skip_serializing_if = "Option::is_none")
-    )]
     pub memo: Option<CborMemo>,
 }
 
@@ -501,11 +536,6 @@ impl From<MetaTokenTransfer> for (TokenId, super::TokenTransfer) {
 
 /// Details of an operation to update token metadata.
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct MetaMetadataUrlDetails {
     /// Token to update.
     pub token: TokenId,
@@ -531,11 +561,6 @@ impl From<MetaMetadataUrlDetails> for (TokenId, super::MetadataUrl) {
 /// Fund a lock by locking the specified amount on the sender account under the
 /// control of the specified lock.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct MetaLockFundDetails {
     /// Token to fund the lock with.
     pub token: TokenId,
@@ -544,21 +569,12 @@ pub struct MetaLockFundDetails {
     /// The amount to lock.
     pub amount: TokenAmount,
     /// An optional memo.
-    #[cfg_attr(
-        feature = "serde_deprecated",
-        serde(skip_serializing_if = "Option::is_none")
-    )]
     pub memo: Option<CborMemo>,
 }
 
 /// Send funds under the control of a lock from a source account to a recipient.
 /// The funds will be transferred to the available balance of the recipient.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct MetaLockSendDetails {
     /// Token to send.
     pub token: TokenId,
@@ -571,10 +587,6 @@ pub struct MetaLockSendDetails {
     /// The recipient of the funds.
     pub recipient: CborHolderAccount,
     /// An optional memo.
-    #[cfg_attr(
-        feature = "serde_deprecated",
-        serde(skip_serializing_if = "Option::is_none")
-    )]
     pub memo: Option<CborMemo>,
 }
 
@@ -582,11 +594,6 @@ pub struct MetaLockSendDetails {
 /// The funds are moved from the locked balance to the available balance
 /// of the owner.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct MetaLockReturnDetails {
     /// The token the operation applies to.
     pub token: TokenId,
@@ -597,21 +604,11 @@ pub struct MetaLockReturnDetails {
     /// The amount of tokens to return.
     pub amount: TokenAmount,
     /// An optional memo.
-    #[cfg_attr(
-        feature = "serde_deprecated",
-        serde(skip_serializing_if = "Option::is_none")
-    )]
     pub memo: Option<CborMemo>,
 }
 
 /// Create a lock with the specified configuration.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(transparent),
-    serde(rename_all = "camelCase")
-)]
 #[cbor(transparent)]
 pub struct MetaLockCreateDetails {
     pub config: LockConfig,
@@ -619,19 +616,10 @@ pub struct MetaLockCreateDetails {
 
 /// Cancel a lock, returning funds to their owners and destroying the lock.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct MetaLockCancelDetails {
     /// The lock to cancel.
     pub lock: LockId,
     /// An optional memo.
-    #[cfg_attr(
-        feature = "serde_deprecated",
-        serde(skip_serializing_if = "Option::is_none")
-    )]
     pub memo: Option<CborMemo>,
 }
 

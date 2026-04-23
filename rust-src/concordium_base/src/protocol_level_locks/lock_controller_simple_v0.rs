@@ -11,11 +11,6 @@ use concordium_base_derive::{CborDeserialize, CborSerialize, Serialize};
 /// Each capability authorizes the grantee to perform the corresponding lock
 /// operation.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(rename_all = "camelCase")
-)]
 pub enum LockControllerSimpleV0Capability {
     Fund,
     Return,
@@ -75,11 +70,6 @@ impl CborDeserialize for LockControllerSimpleV0Capability {
 /// to the given account, authorizing it to perform the corresponding lock
 /// operations.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(rename_all = "camelCase")
-)]
 pub struct LockControllerSimpleV0Grant {
     /// The account receiving the grant.
     pub account: CborHolderAccount,
@@ -92,11 +82,6 @@ pub struct LockControllerSimpleV0Grant {
 /// Contains the list of capability grants, which tokens are affected,
 /// a keep-alive flag, and an optional memo.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(rename_all = "camelCase")
-)]
 pub struct LockControllerSimpleV0 {
     /// Capability grants to accounts.
     pub grants: Vec<LockControllerSimpleV0Grant>,
@@ -107,10 +92,6 @@ pub struct LockControllerSimpleV0 {
     #[cbor(default = false)]
     pub keep_alive: bool,
     /// Optional memo attached to the lock.
-    #[cfg_attr(
-        feature = "serde_deprecated",
-        serde(skip_serializing_if = "Option::is_none")
-    )]
     pub memo: Option<CborMemo>,
 }
 
@@ -468,129 +449,5 @@ mod test {
             hex::encode(to_bytes(&LockControllerSimpleV0Capability::Cancel)),
             "03"
         );
-    }
-
-    #[test]
-    #[cfg(feature = "serde_deprecated")]
-    fn test_capability_json_round_trip() {
-        let variants = [
-            LockControllerSimpleV0Capability::Fund,
-            LockControllerSimpleV0Capability::Return,
-            LockControllerSimpleV0Capability::Send,
-            LockControllerSimpleV0Capability::Cancel,
-        ];
-        for variant in &variants {
-            let json = serde_json::to_string(variant).expect("JSON serialize failed");
-            let deserialized: LockControllerSimpleV0Capability =
-                serde_json::from_str(&json).expect("JSON deserialize failed");
-            assert_eq!(&deserialized, variant);
-        }
-    }
-
-    #[test]
-    #[cfg(feature = "serde_deprecated")]
-    fn test_capability_json_fixture() {
-        assert_eq!(
-            serde_json::to_string(&LockControllerSimpleV0Capability::Fund).unwrap(),
-            "\"fund\""
-        );
-        assert_eq!(
-            serde_json::to_string(&LockControllerSimpleV0Capability::Return).unwrap(),
-            "\"return\""
-        );
-        assert_eq!(
-            serde_json::to_string(&LockControllerSimpleV0Capability::Send).unwrap(),
-            "\"send\""
-        );
-        assert_eq!(
-            serde_json::to_string(&LockControllerSimpleV0Capability::Cancel).unwrap(),
-            "\"cancel\""
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "serde_deprecated")]
-    fn test_grant_json_round_trip() {
-        let grant = LockControllerSimpleV0Grant {
-            account: CborHolderAccount::from(ADDRESS),
-            roles: vec![
-                LockControllerSimpleV0Capability::Fund,
-                LockControllerSimpleV0Capability::Cancel,
-            ],
-        };
-        let json = serde_json::to_string(&grant).expect("JSON serialize failed");
-        let deserialized: LockControllerSimpleV0Grant =
-            serde_json::from_str(&json).expect("JSON deserialize failed");
-        assert_eq!(deserialized, grant);
-    }
-
-    #[test]
-    #[cfg(feature = "serde_deprecated")]
-    fn test_grant_json_fixture() {
-        let grant = LockControllerSimpleV0Grant {
-            account: CborHolderAccount::from(ADDRESS),
-            roles: vec![
-                LockControllerSimpleV0Capability::Fund,
-                LockControllerSimpleV0Capability::Cancel,
-            ],
-        };
-        let json = serde_json::to_string(&grant).expect("JSON serialize failed");
-        let expected = r#"{
-                "account": {
-                    "address": "2xBvQb4QFBzCDcRdyuGzPDcWSMvDDisfMUnXeRnNJFdWqBBmK7",
-                    "coinInfo": "CCD"
-                },
-                "roles": ["fund", "cancel"]
-            }"#;
-        let expected: serde_json::Value =
-            serde_json::from_str(&expected).expect("invalid JSON in test fixture");
-        let actual: serde_json::Value =
-            serde_json::from_str(&json).expect("invalid JSON produced by serializer");
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    #[cfg(feature = "serde_deprecated")]
-    fn test_simple_v0_json_round_trip() {
-        let controller = LockControllerSimpleV0 {
-            grants: vec![LockControllerSimpleV0Grant {
-                account: CborHolderAccount::from(ADDRESS),
-                roles: vec![
-                    LockControllerSimpleV0Capability::Fund,
-                    LockControllerSimpleV0Capability::Cancel,
-                ],
-            }],
-            tokens: vec!["XT".parse().unwrap()],
-            keep_alive: true,
-            memo: Some(CborMemo::Raw(
-                Memo::try_from(vec![0x01, 0x02, 0x03]).unwrap(),
-            )),
-        };
-        let json = serde_json::to_string(&controller).expect("JSON serialize failed");
-        let deserialized: LockControllerSimpleV0 =
-            serde_json::from_str(&json).expect("JSON deserialize failed");
-        assert_eq!(deserialized, controller);
-    }
-
-    #[test]
-    #[cfg(feature = "serde_deprecated")]
-    fn test_simple_v0_json_fixture() {
-        let controller = LockControllerSimpleV0 {
-            grants: vec![LockControllerSimpleV0Grant {
-                account: CborHolderAccount::from(ADDRESS),
-                roles: vec![
-                    LockControllerSimpleV0Capability::Fund,
-                    LockControllerSimpleV0Capability::Cancel,
-                ],
-            }],
-            tokens: vec!["XY".parse().unwrap()],
-            keep_alive: true,
-            memo: Some(CborMemo::Raw(
-                Memo::try_from(vec![0x01, 0x02, 0x03]).unwrap(),
-            )),
-        };
-        let json = serde_json::to_string(&controller).expect("JSON serialize failed");
-        let expected = r#"{"grants":[{"account":{"coinInfo":"CCD","address":"2xBvQb4QFBzCDcRdyuGzPDcWSMvDDisfMUnXeRnNJFdWqBBmK7"},"roles":["fund","cancel"]}],"tokens":["XY"],"keepAlive":true,"memo":{"raw":"010203"}}"#;
-        assert_eq!(json, expected);
     }
 }
