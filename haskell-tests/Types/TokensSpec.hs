@@ -20,7 +20,6 @@ import Test.Hspec
 import Test.QuickCheck as QuickCheck hiding ((.&.))
 
 import Concordium.Types
-import Concordium.Types.Locks
 import Concordium.Types.Tokens
 import Generators
 
