@@ -107,7 +107,10 @@ pub struct LockControllerSimpleV0 {
     #[cbor(default = false)]
     pub keep_alive: bool,
     /// Optional memo attached to the lock.
-    #[cfg_attr(feature = "serde_deprecated", serde(skip_serializing_if = "Option::is_none"))]
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(skip_serializing_if = "Option::is_none")
+    )]
     pub memo: Option<CborMemo>,
 }
 
