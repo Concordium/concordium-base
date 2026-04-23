@@ -1,5 +1,5 @@
 ## Unreleased
-
+- Removed `Buffer::start`, `Buffer::start_hint` and `Buffer::result` from the trait `concordium_base::common::Buffer`. 
 - Added `protocol_level_locks` module with types for PLT locks:
   - `LockId`
   - `LockConfig`
