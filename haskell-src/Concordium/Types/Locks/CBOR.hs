@@ -5,11 +5,25 @@
 
 module Concordium.Types.Locks.CBOR (
     LockControllerSimpleV0Capability (..),
+    encodeLockControllerSimpleV0Capability,
+    decodeLockControllerSimpleV0Capability,
     LockControllerSimpleV0Grant (..),
-    LockControllerSimpleV0 (..),
+    encodeLockControllerSimpleV0Grant,
+    decodeLockControllerSimpleV0Grant,
+    LockControllerSimpleConfigV0 (..),
+    encodeLockControllerSimpleConfigV0,
+    decodeLockControllerSimpleConfigV0,
     LockController (..),
+    encodeLockController,
+    decodeLockController,
     LockConfig (..),
     LockedTokenAmount (..),
+    encodeLockAccountFunds,
+    decodeLockAccountFunds,
+    encodeLockId,
+    decodeLockId,
+    encodeLockedTokenAmount,
+    decodeLockedTokenAmount,
     LockAccountFunds (..),
     LockInfoDetails (..),
     lockInfoFromBytes,
@@ -138,7 +152,7 @@ decodeLockControllerSimpleV0Grant =
     valDecoder _ = Nothing
 
 -- | Simple lock controller configuration.
-data LockControllerSimpleV0 = LockControllerSimpleV0
+data LockControllerSimpleConfigV0 = LockControllerSimpleConfigV0
     { lcsv0Grants :: !(Seq.Seq LockControllerSimpleV0Grant),
       lcsv0Tokens :: !(Seq.Seq TokenId),
       lcsv0KeepAlive :: !Bool,
@@ -146,8 +160,8 @@ data LockControllerSimpleV0 = LockControllerSimpleV0
     }
     deriving (Eq, Show)
 
-encodeLockControllerSimpleV0 :: LockControllerSimpleV0 -> Encoding
-encodeLockControllerSimpleV0 LockControllerSimpleV0{..} =
+encodeLockControllerSimpleConfigV0 :: LockControllerSimpleConfigV0 -> Encoding
+encodeLockControllerSimpleConfigV0 LockControllerSimpleConfigV0{..} =
     encodeMapDeterministic $
         Map.empty
             & k "grants" ?~ encodeSequence encodeLockControllerSimpleV0Grant lcsv0Grants
@@ -169,8 +183,8 @@ makeLenses ''LockControllerSimpleV0Builder
 emptyLockControllerSimpleV0Builder :: LockControllerSimpleV0Builder
 emptyLockControllerSimpleV0Builder = LockControllerSimpleV0Builder Nothing Nothing Nothing Nothing
 
-decodeLockControllerSimpleV0 :: Decoder s LockControllerSimpleV0
-decodeLockControllerSimpleV0 =
+decodeLockControllerSimpleConfigV0 :: Decoder s LockControllerSimpleConfigV0
+decodeLockControllerSimpleConfigV0 =
     decodeMap valDecoder build emptyLockControllerSimpleV0Builder
   where
     build LockControllerSimpleV0Builder{..} = do
@@ -178,7 +192,7 @@ decodeLockControllerSimpleV0 =
         lcsv0Tokens <- _lcsv0bTokens `TokenCBOR.orFail` "Missing \"tokens\""
         let lcsv0KeepAlive = maybe False id _lcsv0bKeepAlive
         let lcsv0Memo = _lcsv0bMemo
-        return LockControllerSimpleV0{..}
+        return LockControllerSimpleConfigV0{..}
     valDecoder k@"grants" = Just $ mapValueDecoder k (decodeSequence decodeLockControllerSimpleV0Grant) lcsv0bGrants
     valDecoder k@"tokens" = Just $ mapValueDecoder k (decodeSequence TokenCBOR.decodeTokenId) lcsv0bTokens
     valDecoder k@"keepAlive" = Just $ mapValueDecoder k decodeBool lcsv0bKeepAlive
@@ -187,21 +201,21 @@ decodeLockControllerSimpleV0 =
 
 -- | Lock controller configuration.
 data LockController
-    = LockControllerSimpleV0Variant !LockControllerSimpleV0
+    = LockControllerSimpleV0 !LockControllerSimpleConfigV0
     deriving (Eq, Show)
 
 encodeLockController :: LockController -> Encoding
 encodeLockController = \case
-    LockControllerSimpleV0Variant cfg ->
-        encodeMapDeterministic $ Map.singleton (makeMapKeyEncoding (encodeString "simpleV0")) (encodeLockControllerSimpleV0 cfg)
+    LockControllerSimpleV0 cfg ->
+        encodeMapDeterministic $ Map.singleton (makeMapKeyEncoding (encodeString "simpleV0")) (encodeLockControllerSimpleConfigV0 cfg)
 
 decodeLockController :: Decoder s LockController
 decodeLockController =
     decodeMap valDecoder build Nothing
   where
-    valDecoder k@"simpleV0" = Just $ mapValueDecoder k decodeLockControllerSimpleV0 id
+    valDecoder k@"simpleV0" = Just $ mapValueDecoder k decodeLockControllerSimpleConfigV0 id
     valDecoder _ = Nothing
-    build (Just cfg) = Right $ LockControllerSimpleV0Variant cfg
+    build (Just cfg) = Right $ LockControllerSimpleV0 cfg
     build Nothing = Left "Missing \"simpleV0\""
 
 -- | Static configuration of a lock.
