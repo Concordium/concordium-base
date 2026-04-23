@@ -31,6 +31,7 @@ import Concordium.Types
 import Concordium.Types.Locks.CBOR
 import Concordium.Types.ProtocolLevelTokens.CBOR
 import Concordium.Types.Queries.Tokens
+import Concordium.Types.Tokens
 
 genText :: Gen Text.Text
 genText = sized $ fmap (Text.decodeUtf8 . BS.pack) . genUtf8String
