@@ -56,7 +56,7 @@ import Concordium.Types.ProtocolLevelTokens.CBOR (
     makeMapKeyEncoding,
     mapValueDecoder,
  )
-import qualified Concordium.Types.ProtocolLevelTokens.CBOR as TokenCBOR
+import qualified Concordium.Types.ProtocolLevelTokens.CBOR as CBOR
 import Concordium.Types.Tokens
 
 -- | CBOR tag used for the standalone 'LockId' encoding.
@@ -124,7 +124,7 @@ encodeLockControllerSimpleV0Grant :: LockControllerSimpleV0Grant -> Encoding
 encodeLockControllerSimpleV0Grant LockControllerSimpleV0Grant{..} =
     encodeMapDeterministic $
         Map.empty
-            & k "account" ?~ TokenCBOR.encodeCborAccountAddress lcsv0gAccount
+            & k "account" ?~ CBOR.encodeCborAccountAddress lcsv0gAccount
             & k "roles" ?~ encodeSequence encodeLockControllerSimpleV0Capability lcsv0gRoles
   where
     k = at . makeMapKeyEncoding . encodeString
@@ -144,10 +144,10 @@ decodeLockControllerSimpleV0Grant =
     decodeMap valDecoder build emptyLockControllerSimpleV0GrantBuilder
   where
     build LockControllerSimpleV0GrantBuilder{..} = do
-        lcsv0gAccount <- _lcsvgbAccount `TokenCBOR.orFail` "Missing \"account\""
-        lcsv0gRoles <- _lcsvgbRoles `TokenCBOR.orFail` "Missing \"roles\""
+        lcsv0gAccount <- _lcsvgbAccount `CBOR.orFail` "Missing \"account\""
+        lcsv0gRoles <- _lcsvgbRoles `CBOR.orFail` "Missing \"roles\""
         return LockControllerSimpleV0Grant{..}
-    valDecoder k@"account" = Just $ mapValueDecoder k TokenCBOR.decodeCborAccountAddress lcsvgbAccount
+    valDecoder k@"account" = Just $ mapValueDecoder k CBOR.decodeCborAccountAddress lcsvgbAccount
     valDecoder k@"roles" = Just $ mapValueDecoder k (decodeSequence decodeLockControllerSimpleV0Capability) lcsvgbRoles
     valDecoder _ = Nothing
 
@@ -165,7 +165,7 @@ encodeLockControllerSimpleConfigV0 LockControllerSimpleConfigV0{..} =
     encodeMapDeterministic $
         Map.empty
             & k "grants" ?~ encodeSequence encodeLockControllerSimpleV0Grant lcsv0Grants
-            & k "tokens" ?~ encodeSequence TokenCBOR.encodeTokenId lcsv0Tokens
+            & k "tokens" ?~ encodeSequence CBOR.encodeTokenId lcsv0Tokens
             & k "keepAlive" .~ (if lcsv0KeepAlive then Just (encodeBool True) else Nothing)
             & k "memo" .~ (encodeTaggableMemo <$> lcsv0Memo)
   where
@@ -188,13 +188,13 @@ decodeLockControllerSimpleConfigV0 =
     decodeMap valDecoder build emptyLockControllerSimpleV0Builder
   where
     build LockControllerSimpleV0Builder{..} = do
-        lcsv0Grants <- _lcsv0bGrants `TokenCBOR.orFail` "Missing \"grants\""
-        lcsv0Tokens <- _lcsv0bTokens `TokenCBOR.orFail` "Missing \"tokens\""
+        lcsv0Grants <- _lcsv0bGrants `CBOR.orFail` "Missing \"grants\""
+        lcsv0Tokens <- _lcsv0bTokens `CBOR.orFail` "Missing \"tokens\""
         let lcsv0KeepAlive = maybe False id _lcsv0bKeepAlive
         let lcsv0Memo = _lcsv0bMemo
         return LockControllerSimpleConfigV0{..}
     valDecoder k@"grants" = Just $ mapValueDecoder k (decodeSequence decodeLockControllerSimpleV0Grant) lcsv0bGrants
-    valDecoder k@"tokens" = Just $ mapValueDecoder k (decodeSequence TokenCBOR.decodeTokenId) lcsv0bTokens
+    valDecoder k@"tokens" = Just $ mapValueDecoder k (decodeSequence CBOR.decodeTokenId) lcsv0bTokens
     valDecoder k@"keepAlive" = Just $ mapValueDecoder k decodeBool lcsv0bKeepAlive
     valDecoder k@"memo" = Just $ mapValueDecoder k decodeTaggableMemo lcsv0bMemo
     valDecoder _ = Nothing
@@ -246,7 +246,7 @@ encodeLockedTokenAmount :: LockedTokenAmount -> Encoding
 encodeLockedTokenAmount LockedTokenAmount{..} =
     encodeMapDeterministic $
         Map.empty
-            & k "token" ?~ TokenCBOR.encodeTokenId ltaToken
+            & k "token" ?~ CBOR.encodeTokenId ltaToken
             & k "amount" ?~ encodeTokenAmount ltaAmount
   where
     k = at . makeMapKeyEncoding . encodeString
@@ -266,10 +266,10 @@ decodeLockedTokenAmount =
     decodeMap valDecoder build emptyLockedTokenAmountBuilder
   where
     build LockedTokenAmountBuilder{..} = do
-        ltaToken <- _ltabToken `TokenCBOR.orFail` "Missing \"token\""
-        ltaAmount <- _ltabAmount `TokenCBOR.orFail` "Missing \"amount\""
+        ltaToken <- _ltabToken `CBOR.orFail` "Missing \"token\""
+        ltaAmount <- _ltabAmount `CBOR.orFail` "Missing \"amount\""
         return LockedTokenAmount{..}
-    valDecoder k@"token" = Just $ mapValueDecoder k TokenCBOR.decodeTokenId ltabToken
+    valDecoder k@"token" = Just $ mapValueDecoder k CBOR.decodeTokenId ltabToken
     valDecoder k@"amount" = Just $ mapValueDecoder k decodeTokenAmount ltabAmount
     valDecoder _ = Nothing
 
@@ -284,7 +284,7 @@ encodeLockAccountFunds :: LockAccountFunds -> Encoding
 encodeLockAccountFunds LockAccountFunds{..} =
     encodeMapDeterministic $
         Map.empty
-            & k "account" ?~ TokenCBOR.encodeCborAccountAddress lafAccount
+            & k "account" ?~ CBOR.encodeCborAccountAddress lafAccount
             & k "amounts" ?~ encodeSequence encodeLockedTokenAmount lafAmounts
   where
     k = at . makeMapKeyEncoding . encodeString
@@ -304,10 +304,10 @@ decodeLockAccountFunds =
     decodeMap valDecoder build emptyLockAccountFundsBuilder
   where
     build LockAccountFundsBuilder{..} = do
-        lafAccount <- _lafbAccount `TokenCBOR.orFail` "Missing \"account\""
-        lafAmounts <- _lafbAmounts `TokenCBOR.orFail` "Missing \"amounts\""
+        lafAccount <- _lafbAccount `CBOR.orFail` "Missing \"account\""
+        lafAmounts <- _lafbAmounts `CBOR.orFail` "Missing \"amounts\""
         return LockAccountFunds{..}
-    valDecoder k@"account" = Just $ mapValueDecoder k TokenCBOR.decodeCborAccountAddress lafbAccount
+    valDecoder k@"account" = Just $ mapValueDecoder k CBOR.decodeCborAccountAddress lafbAccount
     valDecoder k@"amounts" = Just $ mapValueDecoder k (decodeSequence decodeLockedTokenAmount) lafbAmounts
     valDecoder _ = Nothing
 
@@ -337,14 +337,14 @@ decodeLockInfoDetails =
     decodeMap valDecoder build emptyLockInfoDetailsBuilder
   where
     build LockInfoDetailsBuilder{..} = do
-        lipLock <- _lidbLock `TokenCBOR.orFail` "Missing \"lock\""
-        lcRecipients <- _lidbRecipients `TokenCBOR.orFail` "Missing \"recipients\""
-        lcExpiry <- _lidbExpiry `TokenCBOR.orFail` "Missing \"expiry\""
-        lcController <- _lidbController `TokenCBOR.orFail` "Missing \"controller\""
-        lipFunds <- _lidbFunds `TokenCBOR.orFail` "Missing \"funds\""
+        lipLock <- _lidbLock `CBOR.orFail` "Missing \"lock\""
+        lcRecipients <- _lidbRecipients `CBOR.orFail` "Missing \"recipients\""
+        lcExpiry <- _lidbExpiry `CBOR.orFail` "Missing \"expiry\""
+        lcController <- _lidbController `CBOR.orFail` "Missing \"controller\""
+        lipFunds <- _lidbFunds `CBOR.orFail` "Missing \"funds\""
         return LockInfoDetails{lipConfig = LockConfig{..}, ..}
     valDecoder k@"lock" = Just $ mapValueDecoder k decodeLockId lidbLock
-    valDecoder k@"recipients" = Just $ mapValueDecoder k (decodeSequence TokenCBOR.decodeCborAccountAddress) lidbRecipients
+    valDecoder k@"recipients" = Just $ mapValueDecoder k (decodeSequence CBOR.decodeCborAccountAddress) lidbRecipients
     valDecoder k@"expiry" = Just $ mapValueDecoder k decodeEpochTime lidbExpiry
     valDecoder k@"controller" = Just $ mapValueDecoder k decodeLockController lidbController
     valDecoder k@"funds" = Just $ mapValueDecoder k (decodeSequence decodeLockAccountFunds) lidbFunds
@@ -355,7 +355,7 @@ encodeLockInfoDetails LockInfoDetails{..} =
     encodeMapDeterministic $
         Map.empty
             & k "lock" ?~ encodeLockId lipLock
-            & k "recipients" ?~ encodeSequence TokenCBOR.encodeCborAccountAddress (lcRecipients lipConfig)
+            & k "recipients" ?~ encodeSequence CBOR.encodeCborAccountAddress (lcRecipients lipConfig)
             & k "expiry" ?~ encodeEpochTime (lcExpiry lipConfig)
             & k "controller" ?~ encodeLockController (lcController lipConfig)
             & k "funds" ?~ encodeSequence encodeLockAccountFunds lipFunds
@@ -366,4 +366,4 @@ lockInfoFromBytes :: LBS.ByteString -> Either String LockInfoDetails
 lockInfoFromBytes = decodeFromBytes decodeLockInfoDetails "lock info"
 
 lockInfoToBytes :: LockInfoDetails -> BS.ByteString
-lockInfoToBytes = TokenCBOR.encodeToBytes . encodeLockInfoDetails
+lockInfoToBytes = CBOR.encodeToBytes . encodeLockInfoDetails
