@@ -202,6 +202,9 @@ module Concordium.Types (
     EncodedTokenOperations (..),
     EncodedTokenInitializationParameters (..),
     EncodedMetaUpdateOperations (..),
+
+    -- * Protocol-level locks
+    module Concordium.Types.Locks,
 ) where
 
 import Data.Data (Data, Typeable)
@@ -221,6 +224,7 @@ import qualified Concordium.Crypto.VRF as VRF
 import Concordium.ID.Types
 import Concordium.Types.Block
 import Concordium.Types.HashableTo
+import Concordium.Types.Locks
 import Concordium.Types.Memo
 import qualified Concordium.Types.ProtocolLevelTokens.CBOR as CBOR
 import Concordium.Types.ProtocolVersion
