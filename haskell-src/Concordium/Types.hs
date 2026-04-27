@@ -185,8 +185,9 @@ module Concordium.Types (
     TokenHolder (..),
     makeTokenId,
     unsafeGetTokenId,
-    TokenParameter (..),
-    MetaUpdateParameter (..),
+    RawCbor (..),
+    rawCborFromBytes,
+    rawCborToLazyBytes,
     TokenModuleRef (..),
     TokenEventDetails (..),
     TokenEventType (..),
@@ -233,9 +234,9 @@ import Control.Monad
 import Control.Monad.Except
 
 import Data.Bits
-import qualified Data.ByteString.Builder as BSBuilder
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Short as BSS
 import Data.Foldable
 import Data.Hashable (Hashable (..))
@@ -1179,24 +1180,32 @@ createAlias (AccountAddress addr) count = AccountAddress ((addr .&. mask) .|. re
 
 -- * Protocol level tokens
 
--- | Parameter for a Token module.
-newtype TokenParameter = TokenParameter {parameterBytes :: BSS.ShortByteString}
+-- | CBOR-encoded data. For serialization, this must be at most 2^32-1 bytes.
+--
+--  Note: it is expected that 'RawCbor' values should be transitory, and not held in memory for
+--  extended periods (e.g. in the block state). Thus, these are represented as 'BS.ByteString'.
+--  Since 'BS.ByteString's are pinned, if they are retained then they can cause memory
+--  fragmentation. However, using 'SBS.ShortByteString' can result in unnecessary copying to
+--  convert to and from 'BS.ByteString'.
+newtype RawCbor = RawCbor {cborBytes :: BS.ByteString}
     deriving (Eq)
-    deriving (AE.ToJSON, AE.FromJSON, Show) via BSH.ShortByteStringHex
+    deriving (AE.ToJSON, AE.FromJSON, Show) via BSH.ByteStringHex
 
-instance S.Serialize TokenParameter where
+instance S.Serialize RawCbor where
     get = do
         len <- S.getWord32be
-        TokenParameter <$> S.getShortByteString (fromIntegral len)
-    put (TokenParameter parameter) = do
-        S.putWord32be (fromIntegral (BSS.length parameter))
-        S.putShortByteString parameter
+        RawCbor <$> S.getByteString (fromIntegral len)
+    put (RawCbor parameter) = do
+        S.putWord32be (fromIntegral (BS.length parameter))
+        S.putByteString parameter
 
--- | Parameter for a Token-update operation.
---  Must be at most 2^16 bytes.
-newtype MetaUpdateParameter = MetaUpdateParameter {mupBytes :: BSS.ShortByteString}
-    deriving (Eq, AE.ToJSON, AE.FromJSON, Show) via BSH.ShortByteStringHex
-    deriving (S.Serialize) via TokenParameter
+-- | Convert a 'BS.ByteString' to a 'RawCbor'.
+rawCborFromBytes :: BS.ByteString -> RawCbor
+rawCborFromBytes = RawCbor
+
+-- | Convert a 'RawCbor' to a 'LBS.LazyByteString'.
+rawCborToLazyBytes :: RawCbor -> LBS.LazyByteString
+rawCborToLazyBytes = BS.fromStrict . cborBytes
 
 -- | Details provided by the token module in the event of rejecting a transaction.
 data TokenModuleRejectReason = TokenModuleRejectReason
@@ -1261,13 +1270,13 @@ decodeTokenModuleRejectReason moduleReason =
 --  (which is then re-encoded as CBOR) or a hex-encoded byte string. When rendering JSON,
 --  it will render as a JSON object if the contents can be decoded to a
 -- 'TokenInitializationParameters', or otherwise as the hex-encoded byte string.
-newtype EncodedTokenInitializationParameters = EncodedTokenInitializationParameters TokenParameter
+newtype EncodedTokenInitializationParameters = EncodedTokenInitializationParameters RawCbor
     deriving newtype (Eq, Show)
 
 instance AE.ToJSON EncodedTokenInitializationParameters where
-    toJSON (EncodedTokenInitializationParameters tp@(TokenParameter sbs)) =
+    toJSON (EncodedTokenInitializationParameters tp) =
         case CBOR.tokenInitializationParametersFromBytes
-            (BSBuilder.toLazyByteString $ BSBuilder.shortByteString sbs) of
+            (rawCborToLazyBytes tp) of
             Left _ -> AE.toJSON tp
             Right v -> AE.toJSON v
 
@@ -1276,9 +1285,8 @@ instance AE.FromJSON EncodedTokenInitializationParameters where
         tip <- AE.parseJSON o
         return $
             EncodedTokenInitializationParameters $
-                TokenParameter $
-                    BSS.toShort $
-                        CBOR.tokenInitializationParametersToBytes tip
+                rawCborFromBytes $
+                    CBOR.tokenInitializationParametersToBytes tip
     parseJSON val = EncodedTokenInitializationParameters <$> AE.parseJSON val
 
 -- | A hash that identifies the specific implementation to use for a token.
@@ -1294,7 +1302,7 @@ data CreatePLT = CreatePLT
       -- | The number of decimal places used in the representation of amounts of this token. This determines the smallest representable fraction of the token.
       _cpltDecimals :: !Word8,
       -- | The initialization parameters of the token, encoded in CBOR.
-      _cpltInitializationParameters :: !TokenParameter
+      _cpltInitializationParameters :: !RawCbor
     }
     deriving (Eq, Show)
 
@@ -1342,14 +1350,13 @@ instance AE.FromJSON CreatePLT where
 -- (which is then re-encoded as CBOR) or a hex-encoded byte string. When
 -- rendering JSON,  it will render as a JSON object if the contents can be
 -- decoded to a 'TokenOperation', or otherwise as the hex-encoded byte string.
-newtype EncodedTokenOperations = EncodedTokenOperations TokenParameter
+newtype EncodedTokenOperations = EncodedTokenOperations RawCbor
     deriving newtype (Eq, Show)
 
 instance AE.ToJSON EncodedTokenOperations where
-    toJSON (EncodedTokenOperations tp@(TokenParameter sbs)) =
-        case CBOR.tokenUpdateTransactionFromBytes
-            (BSBuilder.toLazyByteString $ BSBuilder.shortByteString sbs) of
-            Left _ -> AE.toJSON tp
+    toJSON (EncodedTokenOperations cbor) =
+        case CBOR.tokenUpdateTransactionFromBytes (rawCborToLazyBytes cbor) of
+            Left _ -> AE.toJSON cbor
             Right v -> AE.toJSON v
 
 instance AE.FromJSON EncodedTokenOperations where
@@ -1357,20 +1364,18 @@ instance AE.FromJSON EncodedTokenOperations where
         tip <- AE.parseJSON v
         return $
             EncodedTokenOperations $
-                TokenParameter $
-                    BSS.toShort $
-                        CBOR.tokenUpdateTransactionToBytes tip
+                rawCborFromBytes $
+                    CBOR.tokenUpdateTransactionToBytes tip
     parseJSON v@(AE.String _) = EncodedTokenOperations <$> AE.parseJSON v
     parseJSON _ = fail "EncodedTokenOperations JSON must be either an array or a string"
 
-newtype EncodedMetaUpdateOperations = EncodedMetaUpdateOperations MetaUpdateParameter
+newtype EncodedMetaUpdateOperations = EncodedMetaUpdateOperations RawCbor
     deriving newtype (Eq, Show)
 
 instance AE.ToJSON EncodedMetaUpdateOperations where
-    toJSON (EncodedMetaUpdateOperations tp@(MetaUpdateParameter sbs)) =
-        case CBOR.metaUpdateTransactionFromBytes
-            (BSBuilder.toLazyByteString $ BSBuilder.shortByteString sbs) of
-            Left _ -> AE.toJSON tp
+    toJSON (EncodedMetaUpdateOperations cbor) =
+        case CBOR.metaUpdateTransactionFromBytes (rawCborToLazyBytes cbor) of
+            Left _ -> AE.toJSON cbor
             Right v -> AE.toJSON v
 
 instance AE.FromJSON EncodedMetaUpdateOperations where
@@ -1378,9 +1383,8 @@ instance AE.FromJSON EncodedMetaUpdateOperations where
         tip <- AE.parseJSON v
         return $
             EncodedMetaUpdateOperations $
-                MetaUpdateParameter $
-                    BSS.toShort $
-                        CBOR.metaUpdateTransactionToBytes tip
+                rawCborFromBytes $
+                    CBOR.metaUpdateTransactionToBytes tip
     parseJSON v@(AE.String _) = EncodedMetaUpdateOperations <$> AE.parseJSON v
     parseJSON _ = fail "EncodedMetaUpdateOperations JSON must be either an array or a string"
 

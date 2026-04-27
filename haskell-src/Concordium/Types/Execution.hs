@@ -383,12 +383,12 @@ data Payload
         { -- | Identifier of the token type to which the transaction refers.
           tuTokenId :: !TokenId,
           -- | The CBOR-encoded operations to perform.
-          tuOperations :: !TokenParameter
+          tuOperations :: !RawCbor
         }
     | -- | A meta-update transaction, which may perform PLT and lock operations.
       MetaUpdate
         { -- | The CBOR-encoded operations to perform.
-          muOperations :: !MetaUpdateParameter
+          muOperations :: !RawCbor
         }
     deriving (Eq, Show)
 

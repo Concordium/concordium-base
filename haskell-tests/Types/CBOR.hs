@@ -357,17 +357,16 @@ testInitializationParametersCBOR = describe "TokenInitializationParameters CBOR 
 encTip1 :: EncodedTokenInitializationParameters
 encTip1 =
     EncodedTokenInitializationParameters $
-        TokenParameter $
-            BSS.toShort $
-                CBOR.toStrictByteString $
-                    encodeTokenInitializationParameters tokenInitializationParametersAllValues
+        rawCborFromBytes $
+            CBOR.toStrictByteString $
+                encodeTokenInitializationParameters tokenInitializationParametersAllValues
 
 -- | Encoded 'TokenInitializationParameters' that cannot be successfully CBOR decoded
 invalidEncTip1 :: EncodedTokenInitializationParameters
 invalidEncTip1 =
     EncodedTokenInitializationParameters $
-        TokenParameter $
-            BSS.pack [0x1, 0x2, 0x3, 0x4]
+        rawCborFromBytes $
+            BS.pack [0x1, 0x2, 0x3, 0x4]
 
 testEncodedInitializationParametersJSON :: Spec
 testEncodedInitializationParametersJSON = describe "TokenInitializationParameters JSON serialization" $ do
@@ -465,10 +464,9 @@ tops1ExpectedCbor =
 encTops1 :: EncodedTokenOperations
 encTops1 =
     EncodedTokenOperations $
-        TokenParameter $
-            BSS.toShort $
-                CBOR.toStrictByteString $
-                    encodeTokenUpdateTransaction tops1
+        rawCborFromBytes $
+            CBOR.toStrictByteString $
+                encodeTokenUpdateTransaction tops1
 
 -- | Another example 'TokenUpdateTransaction', which tests new operations introduced in P11.
 tops2 :: TokenUpdateTransaction
@@ -515,10 +513,9 @@ tops2ExpectedCbor = BS16.decodeLenient "84a17061737369676e41646d696e526f6c6573a2
 encTops2 :: EncodedTokenOperations
 encTops2 =
     EncodedTokenOperations $
-        TokenParameter $
-            BSS.toShort $
-                CBOR.toStrictByteString $
-                    encodeTokenUpdateTransaction tops1
+        rawCborFromBytes $
+            CBOR.toStrictByteString $
+                encodeTokenUpdateTransaction tops1
 
 -- | A dummy 'CborAccountAddress' value.
 dummyCborHolder :: CborAccountAddress
@@ -574,8 +571,8 @@ tevents2 =
 invalidEncTops1 :: EncodedTokenOperations
 invalidEncTops1 =
     EncodedTokenOperations $
-        TokenParameter $
-            BSS.pack [0x1, 0x2, 0x3, 0x4]
+        rawCborFromBytes $
+            BS.pack [0x1, 0x2, 0x3, 0x4]
 
 testEncodedTokenOperationsJSON :: Spec
 testEncodedTokenOperationsJSON = describe "EncodedTokenOperations JSON serialization" $ do

@@ -356,7 +356,7 @@ genPayloadConfigureDelegation = do
 genPayloadToken :: Gen Payload
 genPayloadToken = do
     tuTokenId <- genTokenId
-    tuOperations <- genTokenParameter
+    tuOperations <- genRawCbor
     return TokenUpdate{..}
 
 genCredentialId :: Gen CredentialRegistrationID
@@ -1112,10 +1112,8 @@ genGASRewards = do
     return GASRewards{..}
 
 -- | Generate a token parameter consisting of up to 1000 arbitrary bytes.
-genTokenParameter :: Gen TokenParameter
-genTokenParameter = do
-    n <- chooseBoundedIntegral (0, 1000)
-    TokenParameter <$> genShortByteStringLen n
+genRawCbor :: Gen RawCbor
+genRawCbor = rawCborFromBytes <$> Generators.genByteString
 
 -- | Generate an reference to a token module (always 32 bytes).
 genTokenModuleRef :: Gen TokenModuleRef
@@ -1217,7 +1215,7 @@ genCreatePLT = do
     _cpltTokenModule <- genTokenModuleRef
     _cpltGovernanceAccount <- genAccountAddress
     _cpltDecimals <- chooseBoundedIntegral (0, 255)
-    _cpltInitializationParameters <- genTokenParameter
+    _cpltInitializationParameters <- genRawCbor
     return CreatePLT{..}
 
 genHigherLevelKeys :: Gen (HigherLevelKeys a)

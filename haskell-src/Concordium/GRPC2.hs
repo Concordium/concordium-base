@@ -1771,9 +1771,9 @@ convertAccountTransaction ty cost sender mbSponsorDetails result = case ty of
         ProtoFields.sponsor .= toProto sdSponsor
         ProtoFields.cost .= toProto sdCost
 
-instance ToProto TokenParameter where
-    type Output TokenParameter = Proto.Cbor
-    toProto (TokenParameter parameter) = Proto.make $ PLTFields.value .= BSS.fromShort parameter
+instance ToProto RawCbor where
+    type Output RawCbor = Proto.Cbor
+    toProto (RawCbor parameter) = Proto.make $ PLTFields.value .= parameter
 
 instance ToProto TokenEventDetails where
     type Output TokenEventDetails = Proto.Cbor
