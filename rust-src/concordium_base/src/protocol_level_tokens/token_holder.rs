@@ -42,7 +42,6 @@ impl From<AccountAddress> for CborHolderAccount {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub enum CoinInfo {
     CCD,
 }
@@ -137,6 +136,32 @@ mod test {
         let cbor = cbor::cbor_encode(&token_holder);
         assert_eq!(hex::encode(&cbor), "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let token_holder_decoded: CborHolderAccount = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(token_holder_decoded, token_holder);
+    }
+
+    #[test]
+    fn test_coin_info_json() {
+        let coin_info = CoinInfo::CCD;
+        let json = serde_json::to_string(&coin_info).unwrap();
+        assert_eq!(json, r#""CCD""#);
+        let coin_info_decoded: CoinInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(coin_info_decoded, coin_info);
+    }
+
+    #[test]
+    #[cfg(feature = "serde_deprecated")]
+    fn test_token_holder_json() {
+        let token_holder = CborHolderAccount {
+            address: ADDRESS,
+            coin_info: Some(CoinInfo::CCD),
+        };
+
+        let json = serde_json::to_string(&token_holder).unwrap();
+        assert_eq!(
+            json,
+            r#"{"coinInfo":"CCD","address":"2xBvQb4QFBzCDcRdyuGzPDcWSMvDDisfMUnXeRnNJFdWqBBmK7"}"#
+        );
+        let token_holder_decoded: CborHolderAccount = serde_json::from_str(&json).unwrap();
         assert_eq!(token_holder_decoded, token_holder);
     }
 }
