@@ -89,6 +89,8 @@ library
       Concordium.Types.Execution.TH
       Concordium.Types.HashableTo
       Concordium.Types.IdentityProviders
+      Concordium.Types.Locks
+      Concordium.Types.Locks.CBOR
       Concordium.Types.InvokeContract
       Concordium.Types.Memo
       Concordium.Types.Migration
@@ -98,6 +100,7 @@ library
       Concordium.Types.ProtocolVersion.TH
       Concordium.Types.Queries
       Concordium.Types.Queries.KonsensusV1
+      Concordium.Types.Queries.Locks
       Concordium.Types.Queries.Tokens
       Concordium.Types.SeedState
       Concordium.Types.SmartContracts

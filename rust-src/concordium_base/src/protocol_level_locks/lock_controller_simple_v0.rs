@@ -335,7 +335,7 @@ mod test {
 
     /// Fixture test for `LockControllerSimpleV0` with a minimal configuration.
     ///
-    /// `keep_alive: None` and `memo: None` are omitted by the derive macro,
+    /// `keep_alive: false` and `memo: None` are omitted from the CBOR map,
     /// so the CBOR map contains only `"grants"` and `"tokens"` (both empty
     /// arrays).
     ///

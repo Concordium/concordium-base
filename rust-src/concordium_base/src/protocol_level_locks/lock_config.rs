@@ -92,8 +92,8 @@ mod test {
     /// - "recipients" (10 bytes) — same length as "controller", sorted
     ///   lexicographically
     ///
-    /// Note: `keep_alive: None` and `memo: None` are omitted by the derive
-    /// macro, so the inner `LockControllerSimpleV0` map has only 2 entries.
+    /// Note: `keep_alive: false` and `memo: None` are omitted from the CBOR
+    /// map, so the inner `LockControllerSimpleV0` map has only 2 entries.
     #[test]
     fn test_lock_config_cbor_fixture() {
         let config = LockConfig {
