@@ -742,6 +742,7 @@ genEvent spv =
             ++ maybeUpgrade
             ++ maybeSuspendEvents
             ++ maybeTokenEvents
+            ++ maybeLockEvents
         )
   where
     maybeUpgrade = if supportsUpgradableContracts spv then [Upgraded <$> genCAddress <*> genModuleRef <*> genModuleRef] else []
@@ -815,6 +816,12 @@ genEvent spv =
               TokenMint <$> genTokenId <*> genTokenHolder <*> genTokenAmount,
               TokenBurn <$> genTokenId <*> genTokenHolder <*> genTokenAmount,
               TokenCreated <$> genCreatePLT
+            ]
+        | otherwise = []
+    maybeLockEvents
+        | supportsPLTLocks spv =
+            [ LockCreated <$> genLockId <*> genTokenEventDetails,
+              LockDestroyed <$> genLockId
             ]
         | otherwise = []
 
@@ -1202,6 +1209,11 @@ genTokenEventDetails :: Gen TokenEventDetails
 genTokenEventDetails = do
     len <- chooseBoundedIntegral (0, 1000)
     TokenEventDetails . BSS.pack <$> genUtf8String len
+
+-- | Generate an arbitrary 'LockId'. Although technically sequence numbers (nonces) start at 1,
+--  this generator can produce 'LockId's with sequence number 0.
+genLockId :: Gen LockId
+genLockId = LockId <$> arbitrary <*> arbitrary <*> arbitrary
 
 -- | Generate an arbitrary 'CreatePLT' chain update, consisting of:
 --   * Random token symbol up to 255 bytes valid UTF-8.
