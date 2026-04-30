@@ -1451,7 +1451,7 @@ data Event' (supplemented :: Bool)
         { -- | Lock ID of the newly-created lock.
           elcLockId :: !LockId,
           -- | CBOR-encoded lock configuration.
-          elcLockConfig :: !TokenEventDetails
+          elcLockConfig :: !RawCbor
         }
     | -- | A protocol-level lock was destroyed.
       LockDestroyed

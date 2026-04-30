@@ -820,7 +820,7 @@ genEvent spv =
         | otherwise = []
     maybeLockEvents
         | supportsPLTLocks spv =
-            [ LockCreated <$> genLockId <*> genTokenEventDetails,
+            [ LockCreated <$> genLockId <*> genRawCbor,
               LockDestroyed <$> genLockId
             ]
         | otherwise = []
