@@ -301,6 +301,7 @@ module Concordium.Types.ProtocolVersion (
     supportsContractInspectionQueries,
     supportsEncryptedTransfers,
     supportsMetaUpdate,
+    supportsPLTLocks,
 
     -- * Defunctionalisation symbols
     P1Sym0,
@@ -1040,3 +1041,10 @@ supportsMetaUpdate = \case
     SP9 -> False
     SP10 -> False
     SP11 -> True
+
+-- | Whether the protocol version supports protocol-level locks.
+--  (Enabled from 'P11' and onwards.)
+--
+--  This is currently an alias for 'supportsMetaUpdate'.
+supportsPLTLocks :: SProtocolVersion pv -> Bool
+supportsPLTLocks = supportsMetaUpdate

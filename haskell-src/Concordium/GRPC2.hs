@@ -918,8 +918,6 @@ tokenUpdateEventToProto _ = Left ()
 -- | Convert an event to a 'Proto.MetaEvent'. Returns @Left ()@ if the event type is
 --  not one of the meta event types.
 --
---  TODO: COR-2302 - support lock create event
---  TODO: COR-2304 - support lock destroy event
 --  TODO: COR-2305 - support generalized transfer event
 metaUpdateEventToProto :: Event' s -> Either () Proto.MetaEvent
 metaUpdateEventToProto TokenModuleEvent{..} =
@@ -960,6 +958,18 @@ metaUpdateEventToProto TokenBurn{..} =
                     PLTFields.amount .= toProto etbAmount
                     PLTFields.tokenId .= toProto etbTokenId
                 )
+metaUpdateEventToProto LockCreated{..} =
+    Right . Proto.make $
+        PLTFields.lockCreateEvent
+            .= Proto.make
+                ( do
+                    PLTFields.lockId .= toProto elcLockId
+                    PLTFields.lockConfig .= toProto elcLockConfig
+                )
+metaUpdateEventToProto LockDestroyed{..} =
+    Right . Proto.make $
+        PLTFields.lockDestroyEvent
+            .= Proto.make (PLTFields.lockId .= toProto eldLockId)
 metaUpdateEventToProto _ = Left ()
 
 instance ToProto TokenHolder where
@@ -1777,9 +1787,9 @@ convertAccountTransaction ty cost sender mbSponsorDetails result = case ty of
         ProtoFields.sponsor .= toProto sdSponsor
         ProtoFields.cost .= toProto sdCost
 
-instance ToProto TokenParameter where
-    type Output TokenParameter = Proto.Cbor
-    toProto (TokenParameter parameter) = Proto.make $ PLTFields.value .= BSS.fromShort parameter
+instance ToProto RawCbor where
+    type Output RawCbor = Proto.Cbor
+    toProto (RawCbor parameter) = Proto.make $ PLTFields.value .= parameter
 
 instance ToProto TokenEventDetails where
     type Output TokenEventDetails = Proto.Cbor
