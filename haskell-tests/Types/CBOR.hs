@@ -362,17 +362,16 @@ testInitializationParametersCBOR = describe "TokenInitializationParameters CBOR 
 encTip1 :: EncodedTokenInitializationParameters
 encTip1 =
     EncodedTokenInitializationParameters $
-        TokenParameter $
-            BSS.toShort $
-                CBOR.toStrictByteString $
-                    encodeTokenInitializationParameters tokenInitializationParametersAllValues
+        rawCborFromBytes $
+            CBOR.toStrictByteString $
+                encodeTokenInitializationParameters tokenInitializationParametersAllValues
 
 -- | Encoded 'TokenInitializationParameters' that cannot be successfully CBOR decoded
 invalidEncTip1 :: EncodedTokenInitializationParameters
 invalidEncTip1 =
     EncodedTokenInitializationParameters $
-        TokenParameter $
-            BSS.pack [0x1, 0x2, 0x3, 0x4]
+        rawCborFromBytes $
+            BS.pack [0x1, 0x2, 0x3, 0x4]
 
 testEncodedInitializationParametersJSON :: Spec
 testEncodedInitializationParametersJSON = describe "TokenInitializationParameters JSON serialization" $ do
@@ -470,10 +469,9 @@ tops1ExpectedCbor =
 encTops1 :: EncodedTokenOperations
 encTops1 =
     EncodedTokenOperations $
-        TokenParameter $
-            BSS.toShort $
-                CBOR.toStrictByteString $
-                    encodeTokenUpdateTransaction tops1
+        rawCborFromBytes $
+            CBOR.toStrictByteString $
+                encodeTokenUpdateTransaction tops1
 
 -- | Another example 'TokenUpdateTransaction', which tests new operations introduced in P11.
 tops2 :: TokenUpdateTransaction
@@ -520,10 +518,9 @@ tops2ExpectedCbor = BS16.decodeLenient "84a17061737369676e41646d696e526f6c6573a2
 encTops2 :: EncodedTokenOperations
 encTops2 =
     EncodedTokenOperations $
-        TokenParameter $
-            BSS.toShort $
-                CBOR.toStrictByteString $
-                    encodeTokenUpdateTransaction tops1
+        rawCborFromBytes $
+            CBOR.toStrictByteString $
+                encodeTokenUpdateTransaction tops1
 
 -- | A dummy 'CborAccountAddress' value.
 dummyCborHolder :: CborAccountAddress
@@ -579,8 +576,8 @@ tevents2 =
 invalidEncTops1 :: EncodedTokenOperations
 invalidEncTops1 =
     EncodedTokenOperations $
-        TokenParameter $
-            BSS.pack [0x1, 0x2, 0x3, 0x4]
+        rawCborFromBytes $
+            BS.pack [0x1, 0x2, 0x3, 0x4]
 
 testEncodedTokenOperationsJSON :: Spec
 testEncodedTokenOperationsJSON = describe "EncodedTokenOperations JSON serialization" $ do
@@ -1248,7 +1245,7 @@ exampleLockInfoDetails =
                                                   LockControllerSimpleV0Send
                                                 ]
                                         },
-                              lcsv0Tokens = Seq.singleton ccdTokenId,
+                              lcsv0Tokens = Seq.singleton tokenId,
                               lcsv0KeepAlive = False,
                               lcsv0Memo = Nothing
                             }
@@ -1260,14 +1257,14 @@ exampleLockInfoDetails =
                       lafAmounts =
                         Seq.singleton
                             LockedTokenAmount
-                                { ltaToken = ccdTokenId,
+                                { ltaToken = tokenId,
                                   ltaAmount = TokenAmount (TokenRawAmount 12300) 3
                                 }
                     }
         }
   where
     acc = AccountAddress $ FBS.pack [1 .. 32]
-    ccdTokenId = case makeTokenId (BSS.toShort "CCD") of
+    tokenId = case makeTokenId (BSS.toShort "tT") of
         Left err -> error err
         Right tid -> tid
 
@@ -1286,7 +1283,7 @@ exampleLockInfoDetailsCBOR =
           "81",
           "a2",
           "65746f6b656e",
-          "63434344",
+          "627454",
           "66616d6f756e74",
           "c4822219300c",
           "66657870697279",
@@ -1306,7 +1303,7 @@ exampleLockInfoDetailsCBOR =
           "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
           "66746f6b656e73",
           "81",
-          "63434344",
+          "627454",
           "6a726563697069656e7473",
           "81",
           "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
@@ -1330,8 +1327,8 @@ lockTestAcc = AccountAddress $ FBS.pack [1 .. 32]
 lockTestAccHex :: BS.ByteString
 lockTestAccHex = "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
 
-lockCcdTokenId :: TokenId
-lockCcdTokenId = case makeTokenId (BSS.toShort "CCD") of
+lockTokenId :: TokenId
+lockTokenId = case makeTokenId (BSS.toShort "tT") of
     Left err -> error err
     Right tid -> tid
 
@@ -1444,7 +1441,7 @@ testLockControllerSimpleConfigV0CBOR = describe "LockControllerSimpleConfigV0 CB
                   lockTestAccHex,
                   "66746f6b656e73",
                   "81",
-                  "63434344",
+                  "627454",
                   "696b656570416c697665",
                   "f5"
                 ]
@@ -1465,7 +1462,7 @@ testLockControllerSimpleConfigV0CBOR = describe "LockControllerSimpleConfigV0 CB
                         { lcsv0gAccount = accountTokenHolder lockTestAcc,
                           lcsv0gRoles = Seq.fromList [LockControllerSimpleV0Fund, LockControllerSimpleV0Cancel]
                         },
-              lcsv0Tokens = Seq.singleton lockCcdTokenId,
+              lcsv0Tokens = Seq.singleton lockTokenId,
               lcsv0KeepAlive = True,
               lcsv0Memo = Just $ UntaggedMemo (Memo $ BSS.pack [0x01, 0x02, 0x03])
             }
@@ -1502,8 +1499,8 @@ testLockedTokenAmountCBOR = describe "LockedTokenAmount CBOR" $ do
         lockFixture
             encodeLockedTokenAmount
             decodeLockedTokenAmount
-            LockedTokenAmount{ltaToken = lockCcdTokenId, ltaAmount = TokenAmount (TokenRawAmount 12300) 3}
-            (mconcat ["a2", "65746f6b656e", "63434344", "66616d6f756e74", "c4822219300c"])
+            LockedTokenAmount{ltaToken = lockTokenId, ltaAmount = TokenAmount (TokenRawAmount 12300) 3}
+            (mconcat ["a2", "65746f6b656e", "627454", "66616d6f756e74", "c4822219300c"])
 
 testLockAccountFundsCBOR :: Spec
 testLockAccountFundsCBOR = describe "LockAccountFunds CBOR" $ do
@@ -1516,7 +1513,7 @@ testLockAccountFundsCBOR = describe "LockAccountFunds CBOR" $ do
                   lafAmounts =
                     Seq.singleton
                         LockedTokenAmount
-                            { ltaToken = lockCcdTokenId,
+                            { ltaToken = lockTokenId,
                               ltaAmount = TokenAmount (TokenRawAmount 12300) 3
                             }
                 }
@@ -1528,7 +1525,7 @@ testLockAccountFundsCBOR = describe "LockAccountFunds CBOR" $ do
                   "81",
                   "a2",
                   "65746f6b656e",
-                  "63434344",
+                  "627454",
                   "66616d6f756e74",
                   "c4822219300c"
                 ]

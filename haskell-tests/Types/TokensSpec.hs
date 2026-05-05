@@ -159,20 +159,20 @@ testLockIdSerialize = describe "LockId" $ do
     -- Fixture: account=0x1234, sequence=0x5678, order=0x9abc
     -- Each Word64 big-endian: 8 bytes
     it "encode fixture" $
-        BS16.encode (encode (LockId 0x1234 0x5678 0x9abc))
+        BS16.encode (encode (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc}))
             `shouldBe` "000000000000123400000000000056780000000000009abc"
     it "decode fixture" $
         decodeFull get (BS16.decodeLenient "000000000000123400000000000056780000000000009abc")
-            `shouldBe` Right (LockId 0x1234 0x5678 0x9abc)
+            `shouldBe` Right (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc})
     it "encode zero" $
-        BS16.encode (encode (LockId 0 0 0))
+        BS16.encode (encode (LockId{liAccountIndex = 0, liSequenceNumber = 0, liCreationOrder = 0}))
             `shouldBe` "000000000000000000000000000000000000000000000000"
     it "encode max" $
-        BS16.encode (encode (LockId maxBound maxBound maxBound))
+        BS16.encode (encode (LockId{liAccountIndex = maxBound, liSequenceNumber = maxBound, liCreationOrder = maxBound}))
             `shouldBe` "ffffffffffffffffffffffffffffffffffffffffffffffff"
     it "round-trip" $
-        decodeFull get (encode (LockId 0x1234 0x5678 0x9abc))
-            `shouldBe` Right (LockId 0x1234 0x5678 0x9abc)
+        decodeFull get (encode (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc}))
+            `shouldBe` Right (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc})
     it "rejects truncated input" $
         case decodeFull (get @LockId) (BS16.decodeLenient "000000000000123400000000000056780000000000009a") of
             Left _ -> return ()

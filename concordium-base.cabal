@@ -89,9 +89,9 @@ library
       Concordium.Types.Execution.TH
       Concordium.Types.HashableTo
       Concordium.Types.IdentityProviders
+      Concordium.Types.InvokeContract
       Concordium.Types.Locks
       Concordium.Types.Locks.CBOR
-      Concordium.Types.InvokeContract
       Concordium.Types.Memo
       Concordium.Types.Migration
       Concordium.Types.Parameters

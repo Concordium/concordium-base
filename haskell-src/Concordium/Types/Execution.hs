@@ -383,12 +383,12 @@ data Payload
         { -- | Identifier of the token type to which the transaction refers.
           tuTokenId :: !TokenId,
           -- | The CBOR-encoded operations to perform.
-          tuOperations :: !TokenParameter
+          tuOperations :: !RawCbor
         }
     | -- | A meta-update transaction, which may perform PLT and lock operations.
       MetaUpdate
         { -- | The CBOR-encoded operations to perform.
-          muOperations :: !MetaUpdateParameter
+          muOperations :: !RawCbor
         }
     deriving (Eq, Show)
 
@@ -1446,6 +1446,18 @@ data Event' (supplemented :: Bool)
         { -- | The update payload used to create the token.
           etcPayload :: !CreatePLT
         }
+    | -- | A protocol-level lock was created.
+      LockCreated
+        { -- | Lock ID of the newly-created lock.
+          elcLockId :: !LockId,
+          -- | CBOR-encoded lock configuration.
+          elcLockConfig :: !RawCbor
+        }
+    | -- | A protocol-level lock was destroyed.
+      LockDestroyed
+        { -- | Lock ID of the destroyed lock.
+          eldLockId :: !LockId
+        }
     deriving (Show, Generic, Eq)
 
 -- | A contract event, without supplemental data. This is what is stored in the database and
@@ -1509,6 +1521,8 @@ addInitializeParameter _ TokenTransfer{..} = pure TokenTransfer{..}
 addInitializeParameter _ TokenMint{..} = pure TokenMint{..}
 addInitializeParameter _ TokenBurn{..} = pure TokenBurn{..}
 addInitializeParameter _ TokenCreated{..} = pure TokenCreated{..}
+addInitializeParameter _ LockCreated{..} = pure LockCreated{..}
+addInitializeParameter _ LockDestroyed{..} = pure LockDestroyed{..}
 
 putEvent :: S.Putter Event
 putEvent = \case
@@ -1736,6 +1750,13 @@ putEvent = \case
     TokenCreated{..} ->
         S.putWord8 42
             <> S.put etcPayload
+    LockCreated{..} ->
+        S.putWord8 43
+            <> S.put elcLockId
+            <> S.put elcLockConfig
+    LockDestroyed{..} ->
+        S.putWord8 44
+            <> S.put eldLockId
 
 getEvent :: SProtocolVersion pv -> S.Get Event
 getEvent spv =
@@ -1970,6 +1991,13 @@ getEvent spv =
         42 | supportPlt -> do
             etcPayload <- S.get
             return TokenCreated{..}
+        43 | supportLocks -> do
+            elcLockId <- S.get
+            elcLockConfig <- S.get
+            return LockCreated{..}
+        44 | supportLocks -> do
+            eldLockId <- S.get
+            return LockDestroyed{..}
         n -> fail $ "Unrecognized event tag: " ++ show n
   where
     supportMemo = supportsMemo spv
@@ -1977,6 +2005,7 @@ getEvent spv =
     supportDelegation = protocolSupportsDelegation spv
     supportSuspend = protocolSupportsSuspend spv
     supportPlt = protocolSupportsPLT spv
+    supportLocks = supportsPLTLocks spv
     configureTokenTransferBitMask = 0b0000000000000001
     configureTokenMintBitMask = 0b0000000000000000
     configureTokenBurnBitMask = 0b0000000000000000
@@ -2280,6 +2309,17 @@ instance AE.ToJSON (Event' supplemented) where
                 [ "tag" .= AE.String "TokenCreated",
                   "payload" .= etcPayload
                 ]
+        LockCreated{..} ->
+            AE.object
+                [ "tag" .= AE.String "LockCreated",
+                  "lockId" .= elcLockId,
+                  "lockConfig" .= elcLockConfig
+                ]
+        LockDestroyed{..} ->
+            AE.object
+                [ "tag" .= AE.String "LockDestroyed",
+                  "lockId" .= eldLockId
+                ]
 
 instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
     parseJSON = AE.withObject "Event" $ \obj -> do
@@ -2495,6 +2535,13 @@ instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
             "TokenCreated" -> do
                 etcPayload <- obj .: "payload"
                 return TokenCreated{..}
+            "LockCreated" -> do
+                elcLockId <- obj .: "lockId"
+                elcLockConfig <- obj .: "lockConfig"
+                return LockCreated{..}
+            "LockDestroyed" -> do
+                eldLockId <- obj .: "lockId"
+                return LockDestroyed{..}
             tag -> fail $ "Unrecognized 'Event' tag " ++ Text.unpack tag
 
 -- | 'SupplementEvents' provides a traversal that can be used to replace 'Event's with
