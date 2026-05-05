@@ -1,7 +1,7 @@
 use crate::{
     common::cbor::{
-        CborDecoder, CborDeserialize, CborEncoder, CborMapDecoder, CborMapEncoder,
-        CborSerializationResult, CborSerialize,
+        self, CborDecoder, CborDeserialize, CborEncoder, CborMapDecoder, CborMapEncoder,
+        CborSerializationError, CborSerializationResult, CborSerialize, MapKeyRef,
     },
     protocol_level_locks::LockId,
     protocol_level_tokens::TokenAmount,
@@ -62,6 +62,7 @@ impl CborDeserialize for TokenModuleAccountState {
     where
         Self: Sized,
     {
+        let options = decoder.options();
         let mut map_decoder = decoder.decode_map()?;
         let mut account_state = TokenModuleAccountState::default();
 
@@ -71,7 +72,14 @@ impl CborDeserialize for TokenModuleAccountState {
                 "denyList" => account_state.deny_list = Some(map_decoder.deserialize_value()?),
                 "locks" => account_state.locks = map_decoder.deserialize_value()?,
                 "available" => account_state.available = Some(map_decoder.deserialize_value()?),
-                _ => map_decoder.skip_value()?,
+                key => match options.unknown_map_keys {
+                    cbor::UnknownMapKeys::Fail => {
+                        return Err(CborSerializationError::unknown_map_key(MapKeyRef::Text(
+                            key,
+                        )))
+                    }
+                    cbor::UnknownMapKeys::Ignore => map_decoder.skip_value()?,
+                },
             }
         }
 
@@ -93,17 +101,13 @@ mod test {
     use super::*;
     use crate::common::cbor;
 
-    fn lock_amount() -> AccountLockAmount {
-        AccountLockAmount {
-            lock: LockId::new(10001, 5, 0),
-            amount: TokenAmount::from_raw(12300, 3),
-        }
-    }
-
-    fn assert_round_trip(account_state: TokenModuleAccountState) {
-        let cbor = cbor::cbor_encode(&account_state);
-        let decoded: TokenModuleAccountState = cbor::cbor_decode(cbor).unwrap();
-        assert_eq!(account_state, decoded);
+    macro_rules! assert_round_trip {
+        ($account_state:expr) => {{
+            let account_state = $account_state;
+            let cbor = cbor::cbor_encode(&account_state);
+            let decoded: TokenModuleAccountState = cbor::cbor_decode(cbor).unwrap();
+            assert_eq!(account_state, decoded);
+        }};
     }
 
     #[test]
@@ -115,17 +119,17 @@ mod test {
 
         let cbor = cbor::cbor_encode(&token_module_account_state);
         assert_eq!(hex::encode(&cbor), "a169616c6c6f774c697374f5");
-        assert_round_trip(token_module_account_state.clone());
+        assert_round_trip!(token_module_account_state.clone());
 
         token_module_account_state.allow_list = None;
         let cbor = cbor::cbor_encode(&token_module_account_state);
         assert_eq!(hex::encode(&cbor), "a0");
-        assert_round_trip(token_module_account_state.clone());
+        assert_round_trip!(token_module_account_state.clone());
 
         token_module_account_state.deny_list = Some(false);
         let cbor = cbor::cbor_encode(&token_module_account_state);
         assert_eq!(hex::encode(&cbor), "a16864656e794c697374f4");
-        assert_round_trip(token_module_account_state);
+        assert_round_trip!(token_module_account_state);
     }
 
     #[test]
@@ -137,13 +141,18 @@ mod test {
 
         let cbor = cbor::cbor_encode(&token_module_account_state);
         assert_eq!(hex::encode(&cbor), "a169617661696c61626c65c4822219300c");
-        assert_round_trip(token_module_account_state);
+        assert_round_trip!(token_module_account_state);
     }
 
     #[test]
     fn test_token_module_account_state_locks_cbor() {
+        let amount = AccountLockAmount {
+            lock: LockId::new(10001, 5, 0),
+            amount: TokenAmount::from_raw(12300, 3),
+        };
+
         let token_module_account_state = TokenModuleAccountState {
-            locks: vec![lock_amount()],
+            locks: vec![amount],
             ..Default::default()
         };
 
@@ -152,15 +161,19 @@ mod test {
             hex::encode(&cbor),
             "a1656c6f636b7381a2646c6f636bd99fd883192711050066616d6f756e74c4822219300c"
         );
-        assert_round_trip(token_module_account_state);
+        assert_round_trip!(token_module_account_state);
     }
 
     #[test]
     fn test_token_module_account_state_full() {
+        let amount = AccountLockAmount {
+            lock: LockId::new(10001, 5, 0),
+            amount: TokenAmount::from_raw(12300, 3),
+        };
         let token_module_account_state = TokenModuleAccountState {
             allow_list: Some(true),
             deny_list: Some(false),
-            locks: vec![lock_amount()],
+            locks: vec![amount],
             available: Some(TokenAmount::from_raw(12300, 3)),
         };
 
@@ -169,7 +182,7 @@ mod test {
             hex::encode(&cbor),
             "a4656c6f636b7381a2646c6f636bd99fd883192711050066616d6f756e74c4822219300c6864656e794c697374f469616c6c6f774c697374f569617661696c61626c65c4822219300c"
         );
-        assert_round_trip(token_module_account_state);
+        assert_round_trip!(token_module_account_state);
     }
 
     #[test]
