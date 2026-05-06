@@ -8,6 +8,7 @@ module Concordium.Types.Locks where
 import qualified Data.Aeson as AE
 import qualified Data.Serialize as S
 import Data.Word
+import Text.ParserCombinators.ReadP
 
 -- | Lock identifier: a trio of numbers that together uniquely identify a lock.
 data LockId = LockId
@@ -15,7 +16,30 @@ data LockId = LockId
       liSequenceNumber :: !Word64,
       liCreationOrder :: !Word64
     }
-    deriving (Eq, Show)
+    deriving (Eq)
+
+instance Show LockId where
+    show LockId{..} =
+        "<"
+            ++ show liAccountIndex
+            ++ ", "
+            ++ show liSequenceNumber
+            ++ ", "
+            ++ show liCreationOrder
+            ++ ">"
+
+instance Read LockId where
+    readsPrec _ = readP_to_S $ do
+        _ <- char '<'
+        liAccountIndex <- readS_to_P reads
+        _ <- char ','
+        skipSpaces
+        liSequenceNumber <- readS_to_P reads
+        _ <- char ','
+        skipSpaces
+        liCreationOrder <- readS_to_P reads
+        _ <- char '>'
+        return LockId{..}
 
 instance AE.ToJSON LockId where
     toJSON LockId{..} =

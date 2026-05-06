@@ -14,6 +14,7 @@ import qualified Data.ByteString.Base16 as BS16
 import qualified Data.ByteString.Short as BSS
 import Data.Serialize
 import Data.Word
+import Text.Read (readMaybe)
 
 import Test.HUnit
 import Test.Hspec
@@ -152,10 +153,20 @@ testTokenAmountEncodeDecode :: Property
 testTokenAmountEncodeDecode = forAll genTokenAmount $ \a ->
     decodeFull get (encode a) == Right a
 
--- | Test the binary serialization and deserialization of 'LockId'.
--- The encoding is 3 x Word64 big-endian, 24 bytes total.
+-- | Tests for textual, binary serialization and deserialization of 'LockId'.
+-- The binary encoding is 3 x Word64 big-endian, 24 bytes total.
 testLockIdSerialize :: Spec
 testLockIdSerialize = describe "LockId" $ do
+    it "show uses <account, sequence, order> format" $
+        show (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc})
+            `shouldBe` "<4660, 22136, 39612>"
+    it "read parses <account, sequence, order> format" $ do
+        readMaybe "<4660, 22136, 39612>"
+            `shouldBe` Just (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc})
+        readMaybe "<4660,22136,39612>"
+            `shouldBe` Just (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc})
+    it "read rejects invalid format" $
+        (readMaybe "4660,22136,39612" :: Maybe LockId) `shouldBe` Nothing
     -- Fixture: account=0x1234, sequence=0x5678, order=0x9abc
     -- Each Word64 big-endian: 8 bytes
     it "encode fixture" $

@@ -3,6 +3,10 @@ use crate::{
     common::Serialize,
 };
 use concordium_base_derive::{CborDeserialize, CborSerialize};
+use std::{
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
 
 /// CBOR tag identifying a Lock ID.
 const LOCK_ID_TAG: u64 = 40920;
@@ -24,6 +28,50 @@ pub struct LockId {
     /// The 0-based creation order of the lock within the transaction that
     /// created it.
     pub creation_order: u64,
+}
+
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum LockIdFromStrError {
+    #[error("LockId must have the form <account_index,sequence_number,creation_order>")]
+    InvalidFormat,
+}
+
+impl Display for LockId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "<{}, {}, {}>",
+            self.account_index, self.sequence_number, self.creation_order
+        )
+    }
+}
+
+impl FromStr for LockId {
+    type Err = LockIdFromStrError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let inner = s
+            .trim()
+            .strip_prefix('<')
+            .and_then(|s| s.strip_suffix('>'))
+            .ok_or(LockIdFromStrError::InvalidFormat)?;
+
+        let convert = |s: &str| -> Result<u64, _> {
+            str::trim(s)
+                .parse()
+                .map_err(|_| LockIdFromStrError::InvalidFormat)
+        };
+        let parts: Vec<_> = inner.split(',').map(convert).collect::<Result<_, _>>()?;
+        if parts.len() != 3 {
+            return Err(LockIdFromStrError::InvalidFormat);
+        }
+
+        Ok(LockId {
+            account_index: parts[0],
+            sequence_number: parts[1],
+            creation_order: parts[2],
+        })
+    }
 }
 
 impl LockId {
@@ -76,6 +124,34 @@ mod tests {
 
     fn example_lock_id() -> LockId {
         LockId::new(AccountIndex { index: 10001 }, Nonce { nonce: 5 }, 0)
+    }
+
+    #[test]
+    fn test_lock_id_display() {
+        let lock_id = example_lock_id();
+        assert_eq!(lock_id.to_string(), "<10001, 5, 0>");
+    }
+
+    #[test]
+    fn test_lock_id_from_str() {
+        let parsed: LockId = "<10001, 5, 0>".parse().expect("must parse");
+        assert_eq!(parsed, example_lock_id());
+
+        let parsed_no_spaces: LockId = "<10001,5,0>".parse().expect("must parse");
+        assert_eq!(parsed_no_spaces, example_lock_id());
+        assert_eq!(parsed, example_lock_id());
+    }
+
+    #[test]
+    fn test_lock_id_from_str_invalid_format() {
+        let err = "10001,5,0".parse::<LockId>().expect_err("must fail");
+        assert_eq!(err, LockIdFromStrError::InvalidFormat);
+    }
+
+    #[test]
+    fn test_lock_id_from_str_invalid_component() {
+        let err = "<10001,abc,0>".parse::<LockId>().expect_err("must fail");
+        assert_eq!(err, LockIdFromStrError::InvalidFormat);
     }
 
     /// Round-trip test: encode then decode produces the same `LockId`.
