@@ -157,16 +157,14 @@ testTokenAmountEncodeDecode = forAll genTokenAmount $ \a ->
 -- The binary encoding is 3 x Word64 big-endian, 24 bytes total.
 testLockIdSerialize :: Spec
 testLockIdSerialize = describe "LockId" $ do
-    it "show uses <account, sequence, order> format" $
+    it "show uses PaccountLsequenceTorderL format" $
         show (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc})
-            `shouldBe` "<4660, 22136, 39612>"
-    it "read parses <account, sequence, order> format" $ do
-        readMaybe "<4660, 22136, 39612>"
-            `shouldBe` Just (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc})
-        readMaybe "<4660,22136,39612>"
+            `shouldBe` "P4660L22136T39612L"
+    it "read parses PaccountLsequenceTorderL format" $
+        readMaybe "P4660L22136T39612L"
             `shouldBe` Just (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc})
     it "read rejects invalid format" $
-        (readMaybe "4660,22136,39612" :: Maybe LockId) `shouldBe` Nothing
+        (readMaybe "4660L22136T39612L" :: Maybe LockId) `shouldBe` Nothing
     -- Fixture: account=0x1234, sequence=0x5678, order=0x9abc
     -- Each Word64 big-endian: 8 bytes
     it "encode fixture" $

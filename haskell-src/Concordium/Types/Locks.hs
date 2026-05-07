@@ -20,25 +20,23 @@ data LockId = LockId
 
 instance Show LockId where
     show LockId{..} =
-        "<"
+        "P"
             ++ show liAccountIndex
-            ++ ", "
+            ++ "L"
             ++ show liSequenceNumber
-            ++ ", "
+            ++ "T"
             ++ show liCreationOrder
-            ++ ">"
+            ++ "L"
 
 instance Read LockId where
     readsPrec _ = readP_to_S $ do
-        _ <- char '<'
+        _ <- char 'P'
         liAccountIndex <- readS_to_P reads
-        _ <- char ','
-        skipSpaces
+        _ <- char 'L'
         liSequenceNumber <- readS_to_P reads
-        _ <- char ','
-        skipSpaces
+        _ <- char 'T'
         liCreationOrder <- readS_to_P reads
-        _ <- char '>'
+        _ <- char 'L'
         return LockId{..}
 
 instance AE.ToJSON LockId where

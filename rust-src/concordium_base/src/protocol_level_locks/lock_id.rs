@@ -32,7 +32,9 @@ pub struct LockId {
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum LockIdFromStrError {
-    #[error("LockId must have the form <account_index,sequence_number,creation_order>")]
+    #[error(
+        "LockId must have the form P{{account_index}}L{{sequence_number}}T{{creation_order}}L"
+    )]
     InvalidFormat,
 }
 
@@ -40,7 +42,7 @@ impl Display for LockId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "<{}, {}, {}>",
+            "P{}L{}T{}L",
             self.account_index, self.sequence_number, self.creation_order
         )
     }
@@ -50,26 +52,38 @@ impl FromStr for LockId {
     type Err = LockIdFromStrError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let inner = s
-            .trim()
-            .strip_prefix('<')
-            .and_then(|s| s.strip_suffix('>'))
+        let s = s.trim();
+        let rest = s
+            .strip_prefix('P')
+            .ok_or(LockIdFromStrError::InvalidFormat)?;
+        let (account_index, rest) = rest
+            .split_once('L')
+            .ok_or(LockIdFromStrError::InvalidFormat)?;
+        let (sequence_number, rest) = rest
+            .split_once('T')
+            .ok_or(LockIdFromStrError::InvalidFormat)?;
+        let creation_order = rest
+            .strip_suffix('L')
             .ok_or(LockIdFromStrError::InvalidFormat)?;
 
-        let convert = |s: &str| -> Result<u64, _> {
-            str::trim(s)
-                .parse()
-                .map_err(|_| LockIdFromStrError::InvalidFormat)
-        };
-        let parts: Vec<_> = inner.split(',').map(convert).collect::<Result<_, _>>()?;
-        if parts.len() != 3 {
+        if account_index.is_empty() || sequence_number.is_empty() || creation_order.is_empty() {
             return Err(LockIdFromStrError::InvalidFormat);
         }
 
+        let account_index = account_index
+            .parse()
+            .map_err(|_| LockIdFromStrError::InvalidFormat)?;
+        let sequence_number = sequence_number
+            .parse()
+            .map_err(|_| LockIdFromStrError::InvalidFormat)?;
+        let creation_order = creation_order
+            .parse()
+            .map_err(|_| LockIdFromStrError::InvalidFormat)?;
+
         Ok(LockId {
-            account_index: parts[0],
-            sequence_number: parts[1],
-            creation_order: parts[2],
+            account_index,
+            sequence_number,
+            creation_order,
         })
     }
 }
@@ -129,28 +143,24 @@ mod tests {
     #[test]
     fn test_lock_id_display() {
         let lock_id = example_lock_id();
-        assert_eq!(lock_id.to_string(), "<10001, 5, 0>");
+        assert_eq!(lock_id.to_string(), "P10001L5T0L");
     }
 
     #[test]
     fn test_lock_id_from_str() {
-        let parsed: LockId = "<10001, 5, 0>".parse().expect("must parse");
-        assert_eq!(parsed, example_lock_id());
-
-        let parsed_no_spaces: LockId = "<10001,5,0>".parse().expect("must parse");
-        assert_eq!(parsed_no_spaces, example_lock_id());
+        let parsed: LockId = "P10001L5T0L".parse().expect("must parse");
         assert_eq!(parsed, example_lock_id());
     }
 
     #[test]
     fn test_lock_id_from_str_invalid_format() {
-        let err = "10001,5,0".parse::<LockId>().expect_err("must fail");
+        let err = "10001L5T0L".parse::<LockId>().expect_err("must fail");
         assert_eq!(err, LockIdFromStrError::InvalidFormat);
     }
 
     #[test]
     fn test_lock_id_from_str_invalid_component() {
-        let err = "<10001,abc,0>".parse::<LockId>().expect_err("must fail");
+        let err = "P10001LabcT0L".parse::<LockId>().expect_err("must fail");
         assert_eq!(err, LockIdFromStrError::InvalidFormat);
     }
 
