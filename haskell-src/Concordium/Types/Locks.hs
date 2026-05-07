@@ -17,9 +17,9 @@ import qualified Data.ULEB128 as ULEB128
 
 -- | Lock identifier: a trio of numbers that together uniquely identify a lock.
 data LockId = LockId
-    { liAccountIndex :: !Word64
-    , liSequenceNumber :: !Word64
-    , liCreationOrder :: !Word64
+    { liAccountIndex :: !Word64,
+      liSequenceNumber :: !Word64,
+      liCreationOrder :: !Word64
     }
     deriving (Eq)
 
@@ -34,9 +34,9 @@ instance Read LockId where
 instance AE.ToJSON LockId where
     toJSON LockId{..} =
         AE.object
-            [ "accountIndex" AE..= liAccountIndex
-            , "sequenceNumber" AE..= liSequenceNumber
-            , "creationOrder" AE..= liCreationOrder
+            [ "accountIndex" AE..= liAccountIndex,
+              "sequenceNumber" AE..= liSequenceNumber,
+              "creationOrder" AE..= liCreationOrder
             ]
 
 instance AE.FromJSON LockId where
