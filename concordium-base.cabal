@@ -117,6 +117,7 @@ library
       Concordium.Wasm
       Data.Base58Encoding
       Data.Base58Encoding.TH
+      Data.ULEB128
       Data.FixedByteString
       Proto.V2.Concordium.Health Proto.V2.Concordium.Health_Fields Proto.V2.Concordium.Service Proto.V2.Concordium.Service_Fields Proto.V2.Concordium.Types Proto.V2.Concordium.Types_Fields Proto.V2.Concordium.Kernel Proto.V2.Concordium.Kernel_Fields Proto.V2.Concordium.ProtocolLevelTokens Proto.V2.Concordium.ProtocolLevelTokens_Fields
   other-modules:
@@ -322,6 +323,7 @@ test-suite test
       ConcordiumTests.Crypto.SHA256
       ConcordiumTests.Crypto.VRF
       ConcordiumTests.Data.Base58Encoding
+      ConcordiumTests.Data.ULEB128
       ConcordiumTests.ID.Types
       ConcordiumTests.MerkleProofs
       ConcordiumTests.Utils.Encryption

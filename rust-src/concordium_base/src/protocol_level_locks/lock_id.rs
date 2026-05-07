@@ -33,18 +33,18 @@ pub struct LockId {
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum LockIdFromStrError {
     #[error(
-        "LockId must have the form P{{account_index}}L{{sequence_number}}T{{creation_order}}L"
+        "LockId must be a base58check string (version 3) containing three concatenated uleb128-encoded components"
     )]
     InvalidFormat,
 }
 
 impl Display for LockId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "P{}L{}T{}L",
-            self.account_index, self.sequence_number, self.creation_order
-        )
+        let mut bytes = Vec::new();
+        leb128::write::unsigned(&mut bytes, self.account_index).map_err(|_| std::fmt::Error)?;
+        leb128::write::unsigned(&mut bytes, self.sequence_number).map_err(|_| std::fmt::Error)?;
+        leb128::write::unsigned(&mut bytes, self.creation_order).map_err(|_| std::fmt::Error)?;
+        f.write_str(&bs58::encode(bytes).with_check_version(3).into_string())
     }
 }
 
@@ -52,33 +52,24 @@ impl FromStr for LockId {
     type Err = LockIdFromStrError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.trim();
-        let rest = s
-            .strip_prefix('P')
-            .ok_or(LockIdFromStrError::InvalidFormat)?;
-        let (account_index, rest) = rest
-            .split_once('L')
-            .ok_or(LockIdFromStrError::InvalidFormat)?;
-        let (sequence_number, rest) = rest
-            .split_once('T')
-            .ok_or(LockIdFromStrError::InvalidFormat)?;
-        let creation_order = rest
-            .strip_suffix('L')
-            .ok_or(LockIdFromStrError::InvalidFormat)?;
+        let bytes = bs58::decode(s.trim())
+            .with_check(Some(3))
+            .into_vec()
+            .map_err(|_| LockIdFromStrError::InvalidFormat)?;
+        let Some((&3, mut source)) = bytes.split_first() else {
+            return Err(LockIdFromStrError::InvalidFormat);
+        };
 
-        if account_index.is_empty() || sequence_number.is_empty() || creation_order.is_empty() {
+        let account_index =
+            leb128::read::unsigned(&mut source).map_err(|_| LockIdFromStrError::InvalidFormat)?;
+        let sequence_number =
+            leb128::read::unsigned(&mut source).map_err(|_| LockIdFromStrError::InvalidFormat)?;
+        let creation_order =
+            leb128::read::unsigned(&mut source).map_err(|_| LockIdFromStrError::InvalidFormat)?;
+
+        if !source.is_empty() {
             return Err(LockIdFromStrError::InvalidFormat);
         }
-
-        let account_index = account_index
-            .parse()
-            .map_err(|_| LockIdFromStrError::InvalidFormat)?;
-        let sequence_number = sequence_number
-            .parse()
-            .map_err(|_| LockIdFromStrError::InvalidFormat)?;
-        let creation_order = creation_order
-            .parse()
-            .map_err(|_| LockIdFromStrError::InvalidFormat)?;
 
         Ok(LockId {
             account_index,
@@ -141,26 +132,49 @@ mod tests {
     }
 
     #[test]
-    fn test_lock_id_display() {
-        let lock_id = example_lock_id();
-        assert_eq!(lock_id.to_string(), "P10001L5T0L");
+    fn test_lock_id_display_fixture_matches_typescript_sdk() {
+        let lock_id = LockId::new(1, 2, 3);
+        assert_eq!(lock_id.to_string(), "W9EXVYXZJq");
     }
 
     #[test]
-    fn test_lock_id_from_str() {
-        let parsed: LockId = "P10001L5T0L".parse().expect("must parse");
-        assert_eq!(parsed, example_lock_id());
+    fn test_lock_id_from_str_fixture_matches_typescript_sdk() {
+        let parsed: LockId = "W9EXVYXZJq".parse().expect("must parse");
+        assert_eq!(parsed, LockId::new(1, 2, 3));
+    }
+
+    #[test]
+    fn test_lock_id_display_round_trip() {
+        let lock_id = example_lock_id();
+        let text = lock_id.to_string();
+        let parsed: LockId = text.parse().expect("must parse");
+        assert_eq!(parsed, lock_id);
     }
 
     #[test]
     fn test_lock_id_from_str_invalid_format() {
-        let err = "10001L5T0L".parse::<LockId>().expect_err("must fail");
+        let err = "not-a-lock-id".parse::<LockId>().expect_err("must fail");
+        assert_eq!(err, LockIdFromStrError::InvalidFormat);
+    }
+
+    #[test]
+    fn test_lock_id_from_str_invalid_version() {
+        let mut bytes = Vec::new();
+        leb128::write::unsigned(&mut bytes, 10001).expect("must encode");
+        leb128::write::unsigned(&mut bytes, 5).expect("must encode");
+        leb128::write::unsigned(&mut bytes, 0).expect("must encode");
+        let encoded = bs58::encode(bytes).with_check_version(4).into_string();
+        let err = encoded.parse::<LockId>().expect_err("must fail");
         assert_eq!(err, LockIdFromStrError::InvalidFormat);
     }
 
     #[test]
     fn test_lock_id_from_str_invalid_component() {
-        let err = "P10001LabcT0L".parse::<LockId>().expect_err("must fail");
+        let mut bytes = Vec::new();
+        leb128::write::unsigned(&mut bytes, 10001).expect("must encode");
+        leb128::write::unsigned(&mut bytes, 5).expect("must encode");
+        let encoded = bs58::encode(bytes).with_check_version(3).into_string();
+        let err = encoded.parse::<LockId>().expect_err("must fail");
         assert_eq!(err, LockIdFromStrError::InvalidFormat);
     }
 

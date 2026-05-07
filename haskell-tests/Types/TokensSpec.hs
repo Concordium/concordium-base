@@ -106,7 +106,7 @@ testTokenIds = do
 testTokenRawAmountEncodeDecode :: Property
 testTokenRawAmountEncodeDecode = forAll genTokenRawAmount $ \a ->
     let encoded = encode a
-    in  QuickCheck.label ("encoded length " ++ show (BS.length encoded)) $
+     in QuickCheck.label ("encoded length " ++ show (BS.length encoded)) $
             decodeFull get encoded === Right a
 
 -- | Test cases where decoding a 'TokenRawAmount' fails.
@@ -118,12 +118,12 @@ testTokenRawAmountDecodeFailures =
         it ("Decoding " ++ show bytes) $
             decodeFull (get @TokenRawAmount) (BS.pack bytes) `shouldBe` Left expct
     examples =
-        [ ([0x80], noPadding),
-          ([0x80, 0x00], noPadding),
-          ([0x81], unexpectedEnd),
-          ([0x82, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00], outOfRange),
-          ([0x82, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80], outOfRange),
-          ([0x81, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00], outOfRange)
+        [ ([0x80], noPadding)
+        , ([0x80, 0x00], noPadding)
+        , ([0x81], unexpectedEnd)
+        , ([0x82, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00], outOfRange)
+        , ([0x82, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80], outOfRange)
+        , ([0x81, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00], outOfRange)
         ]
     noPadding = "Failed reading: Padding bytes are not allowed\nEmpty call stack\n"
     unexpectedEnd = "too few bytes\nFrom:\tdemandInput\n\n"
@@ -133,7 +133,7 @@ testTokenRawAmountDecodeFailures =
 testTokenAmountJSONEncodeDecode :: Property
 testTokenAmountJSONEncodeDecode = forAll genTokenAmount $ \a ->
     let encoded = AE.encode a
-    in  counterexample (show encoded) $
+     in counterexample (show encoded) $
             case AE.eitherDecode encoded of
                 Left err -> counterexample ("decoding error: " ++ err) False
                 Right decoded ->
@@ -153,18 +153,22 @@ testTokenAmountEncodeDecode :: Property
 testTokenAmountEncodeDecode = forAll genTokenAmount $ \a ->
     decodeFull get (encode a) == Right a
 
--- | Tests for textual, binary serialization and deserialization of 'LockId'.
--- The binary encoding is 3 x Word64 big-endian, 24 bytes total.
+{- | Tests for textual, binary serialization and deserialization of 'LockId'.
+The binary encoding is 3 x Word64 big-endian, 24 bytes total.
+-}
 testLockIdSerialize :: Spec
 testLockIdSerialize = describe "LockId" $ do
-    it "show uses PaccountLsequenceTorderL format" $
-        show (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc})
-            `shouldBe` "P4660L22136T39612L"
-    it "read parses PaccountLsequenceTorderL format" $
-        readMaybe "P4660L22136T39612L"
+    it "show fixture" $
+        show (LockId{liAccountIndex = 1, liSequenceNumber = 2, liCreationOrder = 3})
+            `shouldBe` "W9EXVYXZJq"
+    it "read fixture" $
+        readMaybe "W9EXVYXZJq"
+            `shouldBe` Just (LockId{liAccountIndex = 1, liSequenceNumber = 2, liCreationOrder = 3})
+    it "show and read round-trip via base58check text" $
+        (readMaybe . show) (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc})
             `shouldBe` Just (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc})
     it "read rejects invalid format" $
-        (readMaybe "4660L22136T39612L" :: Maybe LockId) `shouldBe` Nothing
+        (readMaybe "not-a-lock-id" :: Maybe LockId) `shouldBe` Nothing
     -- Fixture: account=0x1234, sequence=0x5678, order=0x9abc
     -- Each Word64 big-endian: 8 bytes
     it "encode fixture" $
