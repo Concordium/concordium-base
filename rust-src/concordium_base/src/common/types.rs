@@ -526,6 +526,11 @@ impl TransactionTime {
     pub fn hours_after(hours: u32) -> Self {
         Self::minutes_after(hours * 60)
     }
+
+    /// Check if the `TransactionTime` preceeds the given [`Timestamp`].
+    pub fn is_expired(self, timestamp: Timestamp) -> bool {
+        self.seconds < u64::MAX / 1000 && self.seconds * 1000 < timestamp.timestamp_millis()
+    }
 }
 
 impl From<u64> for TransactionTime {

@@ -789,6 +789,25 @@ instance ToProto RejectReason where
         PoolClosed -> Proto.make $ ProtoFields.poolClosed .= Proto.defMessage
         NonExistentTokenId tokenId -> Proto.make $ ProtoFields.nonExistentTokenId .= toProto tokenId
         TokenUpdateTransactionFailed reason -> Proto.make $ ProtoFields.tokenUpdateTransactionFailed .= toProto reason
+        NonExistentLockId lockId -> Proto.make $ ProtoFields.nonExistentLockId .= toProto lockId
+        LockExpired lockId -> Proto.make $ ProtoFields.lockExpired .= toProto lockId
+        LockFundNotAuthorized lockId sender -> Proto.make $ ProtoFields.lockFundNotAuthorized .= mkLockOpNotAuth lockId sender
+        LockSendNotAuthorized lockId sender -> Proto.make $ ProtoFields.lockSendNotAuthorized .= mkLockOpNotAuth lockId sender
+        LockReturnNotAuthorized lockId sender -> Proto.make $ ProtoFields.lockReturnNotAuthorized .= mkLockOpNotAuth lockId sender
+        LockCancelNotAuthorized lockId sender -> Proto.make $ ProtoFields.lockCancelNotAuthorized .= mkLockOpNotAuth lockId sender
+        LockTokenImpermissible lockId tokenId ->
+            Proto.make $
+                ProtoFields.lockTokenImpermissible
+                    .= Proto.make
+                        ( do
+                            ProtoFields.lockId .= toProto lockId
+                            ProtoFields.tokenId .= toProto tokenId
+                        )
+        LockRecipientImpermissible lockId recpt -> Proto.make $ ProtoFields.lockRecipientImpermissible .= mkLockOpNotAuth lockId recpt
+      where
+        mkLockOpNotAuth lockId address = Proto.make $ do
+            ProtoFields.lockId .= toProto lockId
+            ProtoFields.account .= toProto address
 
 -- | Attempt to convert the node's TransactionStatus type into the protobuf BlockItemStatus type.
 --   The protobuf type is better structured and removes the need for handling impossible cases.
