@@ -881,7 +881,17 @@ instance Arbitrary RejectReason where
               DelegationTargetNotABaker <$> genBakerId,
               return StakeOverMaximumThresholdForPool,
               return PoolWouldBecomeOverDelegated,
-              return PoolClosed
+              return PoolClosed,
+              NonExistentTokenId <$> genTokenId,
+              TokenUpdateTransactionFailed <$> genRawCbor,
+              NonExistentLockId <$> genLockId,
+              LockExpired <$> genLockId,
+              LockFundNotAuthorized <$> genLockId <*> genAccountAddress,
+              LockSendNotAuthorized <$> genLockId <*> genAccountAddress,
+              LockReturnNotAuthorized <$> genLockId <*> genAccountAddress,
+              LockCancelNotAuthorized <$> genLockId <*> genAccountAddress,
+              LockTokenImpermissible <$> genLockId <*> genTokenId,
+              LockRecipientImpermissible <$> genLockId <*> genAccountAddress
             ]
 
 genValidResult :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen ValidResult
