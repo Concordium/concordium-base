@@ -825,6 +825,13 @@ genEvent spv =
             ]
         | otherwise = []
 
+genTokenModuleRejectReason :: Gen TokenModuleRejectReason
+genTokenModuleRejectReason = do
+    tmrrTokenId <- genTokenId
+    tmrrType <- genTokenEventType
+    tmrrDetails <- oneof [return Nothing, Just <$> genTokenEventDetails]
+    return TokenModuleRejectReason{..}
+
 instance Arbitrary RejectReason where
     arbitrary =
         oneof
