@@ -883,7 +883,7 @@ instance Arbitrary RejectReason where
               return PoolWouldBecomeOverDelegated,
               return PoolClosed,
               NonExistentTokenId <$> genTokenId,
-              TokenUpdateTransactionFailed <$> genRawCbor,
+              TokenUpdateTransactionFailed <$> genTokenModuleRejectReason,
               NonExistentLockId <$> genLockId,
               LockExpired <$> genLockId,
               LockFundNotAuthorized <$> genLockId <*> genAccountAddress,
@@ -1219,6 +1219,13 @@ genTokenEventDetails :: Gen TokenEventDetails
 genTokenEventDetails = do
     len <- chooseBoundedIntegral (0, 1000)
     TokenEventDetails . BSS.pack <$> genUtf8String len
+
+genTokenModuleRejectReason :: Gen TokenModuleRejectReason
+genTokenModuleRejectReason = do
+    tmrrTokenId <- genTokenId
+    tmrrType <- genTokenEventType
+    tmrrDetails <- oneof [return Nothing, Just <$> genTokenEventDetails]
+    return TokenModuleRejectReason{..}
 
 -- | Generate an arbitrary 'LockId'. Although technically sequence numbers (nonces) start at 1,
 --  this generator can produce 'LockId's with sequence number 0.
