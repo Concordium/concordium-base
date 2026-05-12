@@ -2254,6 +2254,26 @@ pub mod cost {
     /// Additional cost of update token metadata for a PLT
     pub const PLT_UPDATE_TOKEN_METADATA: Energy = Energy { energy: 50 };
 
+    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
+    /// Additional cost of a lock creation
+    pub const PLT_LOCK_CREATE: Energy = Energy { energy: 50 };
+
+    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
+    /// Additional cost of a lock fund operation
+    pub const PLT_LOCK_FUND: Energy = Energy { energy: 100 };
+
+    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
+    /// Additional cost of a lock send operation
+    pub const PLT_LOCK_SEND: Energy = Energy { energy: 100 };
+
+    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
+    /// Additional cost of a lock return operation
+    pub const PLT_LOCK_RETURN: Energy = Energy { energy: 100 };
+
+    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
+    /// Additional cost of a lock cancel operation
+    pub const PLT_LOCK_CANCEL: Energy = Energy { energy: 50 };
+
     /// Additional cost of an encrypted transfer.
     #[deprecated(
         since = "5.0.1",
@@ -2371,8 +2391,8 @@ pub mod construct {
     use crate::{
         common::cbor,
         protocol_level_tokens::{
-            meta_operations::MetaUpdateOperations, RawCbor, TokenId, TokenOperation,
-            TokenOperations,
+            meta_operations::{MetaUpdateOperation, MetaUpdateOperations},
+            RawCbor, TokenId, TokenOperation, TokenOperations,
         },
     };
 
@@ -2695,23 +2715,60 @@ pub mod construct {
         )
     }
 
+    /// Additional cost of meta update operations transaction
+    fn meta_update_operations_txn_energy(operations: &MetaUpdateOperations) -> Energy {
+        cost::META_UPDATE_TRANSACTIONS
+            + operations
+                .operations
+                .iter()
+                .map(|op| match op {
+                    MetaUpdateOperation::Transfer(_) => cost::PLT_TRANSFER,
+                    MetaUpdateOperation::Mint(_) => cost::PLT_MINT,
+                    MetaUpdateOperation::Burn(_) => cost::PLT_BURN,
+                    MetaUpdateOperation::AddAllowList(_)
+                    | MetaUpdateOperation::RemoveAllowList(_)
+                    | MetaUpdateOperation::AddDenyList(_)
+                    | MetaUpdateOperation::RemoveDenyList(_) => cost::PLT_LIST_UPDATE,
+                    MetaUpdateOperation::Pause(_) | MetaUpdateOperation::Unpause(_) => {
+                        cost::PLT_PAUSE
+                    }
+                    MetaUpdateOperation::AssignAdminRoles(_)
+                    | MetaUpdateOperation::RevokeAdminRoles(_) => cost::PLT_ASSIGN_REVOKE_ROLES,
+                    MetaUpdateOperation::UpdateMetadata(_) => cost::PLT_UPDATE_TOKEN_METADATA,
+                    MetaUpdateOperation::LockFund(_) => cost::PLT_LOCK_FUND,
+                    MetaUpdateOperation::LockSend(_) => cost::PLT_LOCK_SEND,
+                    MetaUpdateOperation::LockReturn(_) => cost::PLT_LOCK_RETURN,
+                    MetaUpdateOperation::LockCreate(_) => cost::PLT_LOCK_CREATE,
+                    MetaUpdateOperation::LockCancel(_) => cost::PLT_LOCK_CANCEL,
+                })
+                .sum()
+    }
+
     /// Construct a meta update transaction consisting of the given meta update
     /// operations encoded in CBOR.
     ///
     /// Update operations can be created using the functions in
     /// [`meta_operations`](crate::protocol_level_tokens::meta_operations).
     pub fn meta_update_operations(
-        given_energy: GivenEnergy,
+        num_sigs: u32,
         sender: AccountAddress,
         nonce: Nonce,
         expiry: TransactionTime,
         operations: &MetaUpdateOperations,
     ) -> PreAccountTransaction {
+        let energy = meta_update_operations_txn_energy(operations);
         let operations = RawCbor::from(cbor::cbor_encode(operations));
+
         let payload = Payload::MetaUpdate {
             payload: MetaUpdatePayload { operations },
         };
-        make_transaction(sender, nonce, expiry, given_energy, payload)
+        make_transaction(
+            sender,
+            nonce,
+            expiry,
+            GivenEnergy::Add { num_sigs, energy },
+            payload,
+        )
     }
 
     /// Make an encrypted transfer. The payload can be constructed using
