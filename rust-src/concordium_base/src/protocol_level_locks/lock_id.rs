@@ -52,7 +52,7 @@ impl FromStr for LockId {
     type Err = LockIdFromStrError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let bytes = bs58::decode(s.trim())
+        let bytes = bs58::decode(s)
             .with_check(Some(3))
             .into_vec()
             .map_err(|_| LockIdFromStrError::InvalidFormat)?;
