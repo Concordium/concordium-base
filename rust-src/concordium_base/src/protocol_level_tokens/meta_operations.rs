@@ -1,5 +1,6 @@
 use crate::{
     common::cbor::{self, CborSerializationResult},
+    protocol_level_locks::{LockConfig, LockId},
     protocol_level_tokens::{
         operations, CborHolderAccount, CborMemo, MetadataUrl, RawCbor, TokenAdminRole, TokenAmount,
         TokenId, TokenOperation,
@@ -97,6 +98,70 @@ pub fn update_metadata(token_id: TokenId, metadata_url: MetadataUrl) -> MetaUpda
     (token_id, operations::update_metadata(metadata_url)).into()
 }
 
+/// Construct an operation to fund a lock.
+pub fn lock_fund(
+    token_id: TokenId,
+    lock_id: LockId,
+    amount: TokenAmount,
+    memo: Option<CborMemo>,
+) -> MetaUpdateOperation {
+    MetaUpdateOperation::LockFund(MetaLockFundDetails {
+        token: token_id,
+        lock: lock_id,
+        amount,
+        memo,
+    })
+}
+
+/// Construct an operation to send funds controlled by a lock.
+pub fn lock_send(
+    token_id: TokenId,
+    lock_id: LockId,
+    source: AccountAddress,
+    recipient: AccountAddress,
+    amount: TokenAmount,
+    memo: Option<CborMemo>,
+) -> MetaUpdateOperation {
+    MetaUpdateOperation::LockSend(MetaLockSendDetails {
+        token: token_id,
+        lock: lock_id,
+        source: CborHolderAccount::from(source),
+        recipient: CborHolderAccount::from(recipient),
+        amount,
+        memo,
+    })
+}
+
+/// Construct an operation to return funds controlled by a lock to the owner.
+pub fn lock_return(
+    token_id: TokenId,
+    lock_id: LockId,
+    source: AccountAddress,
+    amount: TokenAmount,
+    memo: Option<CborMemo>,
+) -> MetaUpdateOperation {
+    MetaUpdateOperation::LockReturn(MetaLockReturnDetails {
+        token: token_id,
+        lock: lock_id,
+        source: CborHolderAccount::from(source),
+        amount,
+        memo,
+    })
+}
+
+/// Construct an operation to create a lock.
+pub fn lock_create(config: LockConfig) -> MetaUpdateOperation {
+    MetaUpdateOperation::LockCreate(MetaLockCreateDetails { config })
+}
+
+/// Construct an operation to cancel a lock.
+pub fn lock_cancel(lock_id: LockId, memo: Option<CborMemo>) -> MetaUpdateOperation {
+    MetaUpdateOperation::LockCancel(MetaLockCancelDetails {
+        lock: lock_id,
+        memo,
+    })
+}
+
 /// Payload for meta-update transaction. The transaction is a list of meta-update operations
 /// that can be decoded from CBOR using [`MetaUpdatePayload::decode_operations`].
 #[derive(Debug, Clone)]
@@ -182,6 +247,16 @@ pub enum MetaUpdateOperation {
     RevokeAdminRoles(MetaTokenUpdateAdminRolesDetails),
     /// Operation to update token metadata
     UpdateMetadata(MetaMetadataUrlDetails),
+    /// Operation to fund a lock.
+    LockFund(MetaLockFundDetails),
+    /// Operation to send funds controlled by a lock.
+    LockSend(MetaLockSendDetails),
+    /// Operation to return funds controlled by a lock to the owner.
+    LockReturn(MetaLockReturnDetails),
+    /// Operation to create a lock.
+    LockCreate(MetaLockCreateDetails),
+    /// Operation to cancel a lock.
+    LockCancel(MetaLockCancelDetails),
 }
 
 impl From<(TokenId, TokenOperation)> for MetaUpdateOperation {
@@ -223,76 +298,23 @@ impl From<(TokenId, TokenOperation)> for MetaUpdateOperation {
     }
 }
 
-/// A discriminated version of [`MetaUpdateOperation`] for the purpose of
-/// dispatching to the appropriate operation handler.
-#[derive(PartialEq, Debug)]
-pub enum MetaUpdateOperationKind {
-    /// A [`TokenOperation`] for a specific [`TokenId`].
-    Token((TokenId, TokenOperation)),
-}
-
-impl From<MetaUpdateOperation> for MetaUpdateOperationKind {
-    fn from(value: MetaUpdateOperation) -> Self {
-        match value {
-            MetaUpdateOperation::Transfer(details) => {
-                let (token_id, details) = details.into();
-                Self::Token((token_id, TokenOperation::Transfer(details)))
-            }
-            MetaUpdateOperation::Mint(details) => {
-                let (token_id, details) = details.into();
-                Self::Token((token_id, TokenOperation::Mint(details)))
-            }
-            MetaUpdateOperation::Burn(details) => {
-                let (token_id, details) = details.into();
-                Self::Token((token_id, TokenOperation::Burn(details)))
-            }
-            MetaUpdateOperation::AddAllowList(details) => {
-                let (token_id, details) = details.into();
-                Self::Token((token_id, TokenOperation::AddAllowList(details)))
-            }
-            MetaUpdateOperation::RemoveAllowList(details) => {
-                let (token_id, details) = details.into();
-                Self::Token((token_id, TokenOperation::RemoveAllowList(details)))
-            }
-            MetaUpdateOperation::AddDenyList(details) => {
-                let (token_id, details) = details.into();
-                Self::Token((token_id, TokenOperation::AddDenyList(details)))
-            }
-            MetaUpdateOperation::RemoveDenyList(details) => {
-                let (token_id, details) = details.into();
-                Self::Token((token_id, TokenOperation::RemoveDenyList(details)))
-            }
-            MetaUpdateOperation::Pause(details) => {
-                let (token_id, details) = details.into();
-                Self::Token((token_id, TokenOperation::Pause(details)))
-            }
-            MetaUpdateOperation::Unpause(details) => {
-                let (token_id, details) = details.into();
-                Self::Token((token_id, TokenOperation::Unpause(details)))
-            }
-            MetaUpdateOperation::AssignAdminRoles(details) => {
-                let (token_id, details) = details.into();
-                Self::Token((token_id, TokenOperation::AssignAdminRoles(details)))
-            }
-            MetaUpdateOperation::RevokeAdminRoles(details) => {
-                let (token_id, details) = details.into();
-                Self::Token((token_id, TokenOperation::RevokeAdminRoles(details)))
-            }
-            MetaUpdateOperation::UpdateMetadata(details) => {
-                let (token_id, details) = details.into();
-                Self::Token((token_id, TokenOperation::UpdateMetadata(details)))
-            }
-        }
-    }
+/// Lock operations.
+#[derive(PartialEq, Debug, Clone)]
+pub enum LockOperation {
+    /// Operation to fund a lock.
+    Fund(MetaLockFundDetails),
+    /// Operation to send funds controlled by a lock.
+    Send(MetaLockSendDetails),
+    /// Operation to return funds controlled by a lock to the owner.
+    Return(MetaLockReturnDetails),
+    /// Operation to create a lock.
+    Create(MetaLockCreateDetails),
+    /// Operation to cancel a lock.
+    Cancel(MetaLockCancelDetails),
 }
 
 /// Details of an operation that changes a protocol-level token supply.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct MetaTokenSupplyUpdateDetails {
     /// Token the operation applies to.
     pub token: TokenId,
@@ -324,11 +346,6 @@ impl From<MetaTokenSupplyUpdateDetails> for (TokenId, super::TokenSupplyUpdateDe
 /// Details of an operation that changes the `paused` state of a protocol level
 /// token.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct MetaTokenPauseDetails {
     /// Token the operation applies to.
     pub token: TokenId,
@@ -349,11 +366,6 @@ impl From<MetaTokenPauseDetails> for (TokenId, super::TokenPauseDetails) {
 /// Details of an operation that adds or removes an account from
 /// an allow or deny list.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct MetaTokenListUpdateDetails {
     /// Token the operation applies to.
     pub token: TokenId,
@@ -384,11 +396,6 @@ impl From<MetaTokenListUpdateDetails> for (TokenId, super::TokenListUpdateDetail
 /// Details of an operation to assign or revoke roles for an account
 /// for a protocol-level token.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct MetaTokenUpdateAdminRolesDetails {
     /// Token the operation applies to.
     pub token: TokenId,
@@ -422,11 +429,6 @@ impl From<MetaTokenUpdateAdminRolesDetails> for (TokenId, super::TokenUpdateAdmi
 
 /// Protocol-level token transfer
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct MetaTokenTransfer {
     /// Token the operation applies to.
     pub token: TokenId,
@@ -435,10 +437,6 @@ pub struct MetaTokenTransfer {
     /// The recipient account.
     pub recipient: CborHolderAccount,
     /// An optional memo.
-    #[cfg_attr(
-        feature = "serde_deprecated",
-        serde(skip_serializing_if = "Option::is_none")
-    )]
     pub memo: Option<CborMemo>,
 }
 
@@ -468,11 +466,6 @@ impl From<MetaTokenTransfer> for (TokenId, super::TokenTransfer) {
 
 /// Details of an operation to update token metadata.
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
-#[cfg_attr(
-    feature = "serde_deprecated",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct MetaMetadataUrlDetails {
     /// Token to update.
     pub token: TokenId,
@@ -495,11 +488,81 @@ impl From<MetaMetadataUrlDetails> for (TokenId, super::MetadataUrl) {
     }
 }
 
+/// Fund a lock by locking the specified amount on the sender account under the
+/// control of the specified lock.
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+pub struct MetaLockFundDetails {
+    /// Token to fund the lock with.
+    pub token: TokenId,
+    /// The lock that will control the funds.
+    pub lock: LockId,
+    /// The amount to lock.
+    pub amount: TokenAmount,
+    /// An optional memo.
+    pub memo: Option<CborMemo>,
+}
+
+/// Send funds under the control of a lock from a source account to a recipient.
+/// The funds will be transferred to the available balance of the recipient.
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+pub struct MetaLockSendDetails {
+    /// Token to send.
+    pub token: TokenId,
+    /// The lock that controls the funds.
+    pub lock: LockId,
+    /// The account holding the funds.
+    pub source: CborHolderAccount,
+    /// The amount of tokens to transfer.
+    pub amount: TokenAmount,
+    /// The recipient of the funds.
+    pub recipient: CborHolderAccount,
+    /// An optional memo.
+    pub memo: Option<CborMemo>,
+}
+
+/// Return funds under the control of a lock to the owner account.
+/// The funds are moved from the locked balance to the available balance
+/// of the owner.
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+pub struct MetaLockReturnDetails {
+    /// The token the operation applies to.
+    pub token: TokenId,
+    /// The lock controlling the funds.
+    pub lock: LockId,
+    /// The account holding the funds.
+    pub source: CborHolderAccount,
+    /// The amount of tokens to return.
+    pub amount: TokenAmount,
+    /// An optional memo.
+    pub memo: Option<CborMemo>,
+}
+
+/// Create a lock with the specified configuration.
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cbor(transparent)]
+pub struct MetaLockCreateDetails {
+    pub config: LockConfig,
+}
+
+/// Cancel a lock, returning funds to their owners and destroying the lock.
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+pub struct MetaLockCancelDetails {
+    /// The lock to cancel.
+    pub lock: LockId,
+    /// An optional memo.
+    pub memo: Option<CborMemo>,
+}
+
 #[cfg(test)]
 mod tests {
 
     use super::*;
     use crate::common::cbor;
+    use crate::common::types::TransactionTime;
+    use crate::protocol_level_locks::{
+        LockController, LockControllerSimpleV0, LockControllerSimpleV0Capability,
+        LockControllerSimpleV0Grant,
+    };
     use crate::protocol_level_tokens::{test_fixtures::ADDRESS, MetadataUrl, TokenAdminRole};
     use crate::transactions::Memo;
 
@@ -708,262 +771,111 @@ mod tests {
     }
 
     #[test]
-    fn test_meta_operation_token_operation_conversion() {
-        // For each meta-update operation variant:
-        // - construct a meta-update operation with some test data
-        // - construct the corresponding token operation with the same test data
-        // - convert in each direction and check that the result matches the original
-        // - construct the meta-update operation using the `meta_operations` helper function
-        //   and check that it matches the original
-        let token_id: TokenId = "tokenid1".parse().unwrap();
-        let amount = TokenAmount::from_raw(100000, 2);
-        let account = CborHolderAccount::from(ADDRESS);
-        let cbor_memo = CborMemo::Raw(Memo::try_from(vec![1, 2, 3, 4]).unwrap());
-        let memo = Some(cbor_memo.clone());
-
-        let token_transfer = TokenOperation::Transfer(super::super::TokenTransfer {
-            amount,
-            recipient: account.clone(),
-            memo: memo.clone(),
+    fn test_meta_operation_cbor_lock_fund() {
+        let operation = MetaUpdateOperation::LockFund(MetaLockFundDetails {
+            token: "testPLT".parse().unwrap(),
+            lock: LockId::new(20, 7, 0),
+            amount: TokenAmount::from_raw(5000, 0),
+            memo: Some(CborMemo::Cbor(Memo::try_from(vec![0xa0]).unwrap())),
         });
-        let meta_transfer = MetaUpdateOperation::Transfer(MetaTokenTransfer {
-            token: token_id.clone(),
-            amount: amount,
-            recipient: account.clone(),
-            memo: memo.clone(),
+        let cbor = cbor::cbor_encode(&operation);
+        assert_eq!(
+            hex::encode(&cbor),
+            "a1686c6f636b46756e64a4646c6f636bd99fd883140700646d656d6fd81841a065746f6b656e6774657374504c5466616d6f756e74c48200191388"
+        );
+        let operation_decoded: MetaUpdateOperation =
+            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_meta_operation_cbor_lock_send() {
+        let operation = MetaUpdateOperation::LockSend(MetaLockSendDetails {
+            token: "testPLT".parse().unwrap(),
+            lock: LockId::new(20, 7, 0),
+            source: CborHolderAccount::from(ADDRESS),
+            amount: TokenAmount::from_raw(5000, 2),
+            recipient: CborHolderAccount::from(AccountAddress([0x11; 32])),
+            memo: None,
         });
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(
-            transfer_tokens_with_memo(token_id.clone(), ADDRESS, amount, cbor_memo.clone()),
-            meta_transfer
+            hex::encode(&cbor),
+            "a1686c6f636b53656e64a5646c6f636bd99fd88314070065746f6b656e6774657374504c5466616d6f756e74c4822119138866736f75726365d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2069726563697069656e74d99d73a201d99d71a1011903970358201111111111111111111111111111111111111111111111111111111111111111"
         );
-        assert_eq!(
-            MetaUpdateOperation::from((token_id.clone(), token_transfer.clone())),
-            meta_transfer
-        );
-        assert_eq!(
-            MetaUpdateOperationKind::Token((token_id.clone(), token_transfer)),
-            meta_transfer.into(),
-        );
+        let operation_decoded: MetaUpdateOperation =
+            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        assert_eq!(operation_decoded, operation);
+    }
 
-        let token_mint = TokenOperation::Mint(super::super::TokenSupplyUpdateDetails { amount });
-        let meta_mint = MetaUpdateOperation::Mint(MetaTokenSupplyUpdateDetails {
-            token: token_id.clone(),
-            amount,
+    #[test]
+    fn test_meta_operation_cbor_lock_return() {
+        let operation = MetaUpdateOperation::LockReturn(MetaLockReturnDetails {
+            token: "testPLT".parse().unwrap(),
+            lock: LockId::new(20, 7, 0),
+            source: CborHolderAccount::from(ADDRESS),
+            amount: TokenAmount::from_raw(5000, 0),
+            memo: None,
         });
-        assert_eq!(mint_tokens(token_id.clone(), amount), meta_mint);
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(
-            MetaUpdateOperation::from((token_id.clone(), token_mint.clone())),
-            meta_mint
+            hex::encode(&cbor),
+            "a16a6c6f636b52657475726ea4646c6f636bd99fd88314070065746f6b656e6774657374504c5466616d6f756e74c4820019138866736f75726365d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
         );
-        assert_eq!(
-            MetaUpdateOperationKind::Token((token_id.clone(), token_mint)),
-            meta_mint.into(),
-        );
+        let operation_decoded: MetaUpdateOperation =
+            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        assert_eq!(operation_decoded, operation);
+    }
 
-        let token_burn = TokenOperation::Burn(super::super::TokenSupplyUpdateDetails { amount });
-        let meta_burn = MetaUpdateOperation::Burn(MetaTokenSupplyUpdateDetails {
-            token: token_id.clone(),
-            amount,
+    #[test]
+    fn test_meta_operation_cbor_lock_create() {
+        let operation = MetaUpdateOperation::LockCreate(MetaLockCreateDetails {
+            config: LockConfig {
+                recipients: vec![CborHolderAccount::from(ADDRESS)],
+                expiry: TransactionTime::from_seconds(1_000_000),
+                controller: LockController::SimpleV0(LockControllerSimpleV0 {
+                    grants: vec![
+                        LockControllerSimpleV0Grant {
+                            account: CborHolderAccount::from(ADDRESS),
+                            roles: vec![
+                                LockControllerSimpleV0Capability::Fund,
+                                LockControllerSimpleV0Capability::Cancel,
+                            ],
+                        },
+                        LockControllerSimpleV0Grant {
+                            account: CborHolderAccount::from(AccountAddress([0x11; 32])),
+                            roles: vec![LockControllerSimpleV0Capability::Send],
+                        },
+                    ],
+                    tokens: vec!["testPLT".parse().unwrap(), "TKN".parse().unwrap()],
+                    keep_alive: false,
+                    memo: None,
+                }),
+            },
         });
-        assert_eq!(burn_tokens(token_id.clone(), amount), meta_burn);
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(
-            MetaUpdateOperation::from((token_id.clone(), token_burn.clone())),
-            meta_burn
+            hex::encode(&cbor),
+            "a16a6c6f636b437265617465a366657870697279c11a000f42406a636f6e74726f6c6c6572a16873696d706c655630a2666772616e747382a265726f6c6573826466756e646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20a265726f6c6573816473656e64676163636f756e74d99d73a201d99d71a101190397035820111111111111111111111111111111111111111111111111111111111111111166746f6b656e73826774657374504c5463544b4e6a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
         );
-        assert_eq!(
-            MetaUpdateOperationKind::Token((token_id.clone(), token_burn)),
-            meta_burn.into(),
-        );
+        let operation_decoded: MetaUpdateOperation =
+            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        assert_eq!(operation_decoded, operation);
+    }
 
-        let token_add_allow_list =
-            TokenOperation::AddAllowList(super::super::TokenListUpdateDetails {
-                target: account.clone(),
-            });
-        let meta_add_allow_list = MetaUpdateOperation::AddAllowList(MetaTokenListUpdateDetails {
-            token: token_id.clone(),
-            target: account.clone(),
+    #[test]
+    fn test_meta_operation_cbor_lock_cancel() {
+        let operation = MetaUpdateOperation::LockCancel(MetaLockCancelDetails {
+            lock: LockId::new(20, 7, 0),
+            memo: Some(CborMemo::Cbor(Memo::try_from(vec![0xa0]).unwrap())),
         });
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(
-            add_token_allow_list(token_id.clone(), ADDRESS),
-            meta_add_allow_list
+            hex::encode(&cbor),
+            "a16a6c6f636b43616e63656ca2646c6f636bd99fd883140700646d656d6fd81841a0"
         );
-        assert_eq!(
-            MetaUpdateOperation::from((token_id.clone(), token_add_allow_list.clone())),
-            meta_add_allow_list
-        );
-        assert_eq!(
-            MetaUpdateOperationKind::Token((token_id.clone(), token_add_allow_list)),
-            meta_add_allow_list.into(),
-        );
-
-        let token_remove_allow_list =
-            TokenOperation::RemoveAllowList(super::super::TokenListUpdateDetails {
-                target: account.clone(),
-            });
-        let meta_remove_allow_list =
-            MetaUpdateOperation::RemoveAllowList(MetaTokenListUpdateDetails {
-                token: token_id.clone(),
-                target: account.clone(),
-            });
-        assert_eq!(
-            remove_token_allow_list(token_id.clone(), ADDRESS),
-            meta_remove_allow_list
-        );
-        assert_eq!(
-            MetaUpdateOperation::from((token_id.clone(), token_remove_allow_list.clone())),
-            meta_remove_allow_list
-        );
-        assert_eq!(
-            MetaUpdateOperationKind::Token((token_id.clone(), token_remove_allow_list)),
-            meta_remove_allow_list.into(),
-        );
-
-        let token_add_deny_list =
-            TokenOperation::AddDenyList(super::super::TokenListUpdateDetails {
-                target: account.clone(),
-            });
-        let meta_add_deny_list = MetaUpdateOperation::AddDenyList(MetaTokenListUpdateDetails {
-            token: token_id.clone(),
-            target: account.clone(),
-        });
-        assert_eq!(
-            add_token_deny_list(token_id.clone(), ADDRESS),
-            meta_add_deny_list
-        );
-        assert_eq!(
-            MetaUpdateOperation::from((token_id.clone(), token_add_deny_list.clone())),
-            meta_add_deny_list
-        );
-        assert_eq!(
-            MetaUpdateOperationKind::Token((token_id.clone(), token_add_deny_list)),
-            meta_add_deny_list.into(),
-        );
-
-        let token_remove_deny_list =
-            TokenOperation::RemoveDenyList(super::super::TokenListUpdateDetails {
-                target: account.clone(),
-            });
-        let meta_remove_deny_list =
-            MetaUpdateOperation::RemoveDenyList(MetaTokenListUpdateDetails {
-                token: token_id.clone(),
-                target: account.clone(),
-            });
-        assert_eq!(
-            remove_token_deny_list(token_id.clone(), ADDRESS),
-            meta_remove_deny_list
-        );
-        assert_eq!(
-            MetaUpdateOperation::from((token_id.clone(), token_remove_deny_list.clone())),
-            meta_remove_deny_list
-        );
-        assert_eq!(
-            MetaUpdateOperationKind::Token((token_id.clone(), token_remove_deny_list)),
-            meta_remove_deny_list.into(),
-        );
-
-        let token_pause = TokenOperation::Pause(super::super::TokenPauseDetails {});
-        let meta_pause = MetaUpdateOperation::Pause(MetaTokenPauseDetails {
-            token: token_id.clone(),
-        });
-        assert_eq!(pause(token_id.clone()), meta_pause);
-        assert_eq!(
-            MetaUpdateOperation::from((token_id.clone(), token_pause.clone())),
-            meta_pause
-        );
-        assert_eq!(
-            MetaUpdateOperationKind::Token((token_id.clone(), token_pause)),
-            meta_pause.into(),
-        );
-
-        let token_unpause = TokenOperation::Unpause(super::super::TokenPauseDetails {});
-        let meta_unpause = MetaUpdateOperation::Unpause(MetaTokenPauseDetails {
-            token: token_id.clone(),
-        });
-        assert_eq!(unpause(token_id.clone()), meta_unpause);
-        assert_eq!(
-            MetaUpdateOperation::from((token_id.clone(), token_unpause.clone())),
-            meta_unpause
-        );
-        assert_eq!(
-            MetaUpdateOperationKind::Token((token_id.clone(), token_unpause)),
-            meta_unpause.into(),
-        );
-
-        let assign_roles = vec![TokenAdminRole::Mint, TokenAdminRole::Pause];
-        let token_assign_admin_roles =
-            TokenOperation::AssignAdminRoles(super::super::TokenUpdateAdminRolesDetails {
-                roles: assign_roles.clone(),
-                account: account.clone(),
-            });
-        let meta_assign_admin_roles =
-            MetaUpdateOperation::AssignAdminRoles(MetaTokenUpdateAdminRolesDetails {
-                token: token_id.clone(),
-                roles: assign_roles.clone(),
-                account: account.clone(),
-            });
-        assert_eq!(
-            assign_admin_roles(token_id.clone(), ADDRESS, assign_roles.clone()),
-            meta_assign_admin_roles
-        );
-        assert_eq!(
-            MetaUpdateOperation::from((token_id.clone(), token_assign_admin_roles.clone())),
-            meta_assign_admin_roles
-        );
-        assert_eq!(
-            MetaUpdateOperationKind::Token((token_id.clone(), token_assign_admin_roles)),
-            meta_assign_admin_roles.into(),
-        );
-
-        let revoke_roles = vec![
-            TokenAdminRole::Burn,
-            TokenAdminRole::UpdateMetadata,
-            TokenAdminRole::UpdateDenyList,
-        ];
-        let token_revoke_admin_roles =
-            TokenOperation::RevokeAdminRoles(super::super::TokenUpdateAdminRolesDetails {
-                roles: revoke_roles.clone(),
-                account: account.clone(),
-            });
-        let meta_revoke_admin_roles =
-            MetaUpdateOperation::RevokeAdminRoles(MetaTokenUpdateAdminRolesDetails {
-                token: token_id.clone(),
-                roles: revoke_roles.clone(),
-                account: account.clone(),
-            });
-        assert_eq!(
-            revoke_admin_roles(token_id.clone(), ADDRESS, revoke_roles.clone()),
-            meta_revoke_admin_roles
-        );
-        assert_eq!(
-            MetaUpdateOperation::from((token_id.clone(), token_revoke_admin_roles.clone())),
-            meta_revoke_admin_roles
-        );
-        assert_eq!(
-            MetaUpdateOperationKind::Token((token_id.clone(), token_revoke_admin_roles)),
-            meta_revoke_admin_roles.into(),
-        );
-
-        let metadata_url = MetadataUrl {
-            url: "https://example.com/metadata.json".to_string(),
-            checksum_sha_256: Some([0u8; 32].into()),
-            additional: Default::default(),
-        };
-        let token_update_metadata = TokenOperation::UpdateMetadata(metadata_url.clone());
-        let meta_update_metadata = MetaUpdateOperation::UpdateMetadata(MetaMetadataUrlDetails {
-            token: token_id.clone(),
-            metadata_url: metadata_url.clone(),
-        });
-        assert_eq!(
-            update_metadata(token_id.clone(), metadata_url.clone()),
-            meta_update_metadata
-        );
-        assert_eq!(
-            MetaUpdateOperation::from((token_id.clone(), token_update_metadata.clone())),
-            meta_update_metadata
-        );
-        assert_eq!(
-            MetaUpdateOperationKind::Token((token_id.clone(), token_update_metadata)),
-            meta_update_metadata.into(),
-        );
+        let operation_decoded: MetaUpdateOperation =
+            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        assert_eq!(operation_decoded, operation);
     }
 }

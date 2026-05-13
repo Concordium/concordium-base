@@ -356,7 +356,7 @@ genPayloadConfigureDelegation = do
 genPayloadToken :: Gen Payload
 genPayloadToken = do
     tuTokenId <- genTokenId
-    tuOperations <- genTokenParameter
+    tuOperations <- genRawCbor
     return TokenUpdate{..}
 
 genCredentialId :: Gen CredentialRegistrationID
@@ -742,6 +742,7 @@ genEvent spv =
             ++ maybeUpgrade
             ++ maybeSuspendEvents
             ++ maybeTokenEvents
+            ++ maybeLockEvents
         )
   where
     maybeUpgrade = if supportsUpgradableContracts spv then [Upgraded <$> genCAddress <*> genModuleRef <*> genModuleRef] else []
@@ -817,6 +818,19 @@ genEvent spv =
               TokenCreated <$> genCreatePLT
             ]
         | otherwise = []
+    maybeLockEvents
+        | supportsPLTLocks spv =
+            [ LockCreated <$> genLockId <*> genRawCbor,
+              LockDestroyed <$> genLockId
+            ]
+        | otherwise = []
+
+genTokenModuleRejectReason :: Gen TokenModuleRejectReason
+genTokenModuleRejectReason = do
+    tmrrTokenId <- genTokenId
+    tmrrType <- genTokenEventType
+    tmrrDetails <- oneof [return Nothing, Just <$> genTokenEventDetails]
+    return TokenModuleRejectReason{..}
 
 instance Arbitrary RejectReason where
     arbitrary =
@@ -874,7 +888,17 @@ instance Arbitrary RejectReason where
               DelegationTargetNotABaker <$> genBakerId,
               return StakeOverMaximumThresholdForPool,
               return PoolWouldBecomeOverDelegated,
-              return PoolClosed
+              return PoolClosed,
+              NonExistentTokenId <$> genTokenId,
+              TokenUpdateTransactionFailed <$> genTokenModuleRejectReason,
+              NonExistentLockId <$> genLockId,
+              LockExpired <$> genLockId,
+              LockFundNotAuthorized <$> genLockId <*> genAccountAddress,
+              LockSendNotAuthorized <$> genLockId <*> genAccountAddress,
+              LockReturnNotAuthorized <$> genLockId <*> genAccountAddress,
+              LockCancelNotAuthorized <$> genLockId <*> genAccountAddress,
+              LockTokenImpermissible <$> genLockId <*> genTokenId,
+              LockRecipientImpermissible <$> genLockId <*> genAccountAddress
             ]
 
 genValidResult :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen ValidResult
@@ -1112,10 +1136,8 @@ genGASRewards = do
     return GASRewards{..}
 
 -- | Generate a token parameter consisting of up to 1000 arbitrary bytes.
-genTokenParameter :: Gen TokenParameter
-genTokenParameter = do
-    n <- chooseBoundedIntegral (0, 1000)
-    TokenParameter <$> genShortByteStringLen n
+genRawCbor :: Gen RawCbor
+genRawCbor = rawCborFromBytes <$> Generators.genByteString
 
 -- | Generate an reference to a token module (always 32 bytes).
 genTokenModuleRef :: Gen TokenModuleRef
@@ -1205,6 +1227,11 @@ genTokenEventDetails = do
     len <- chooseBoundedIntegral (0, 1000)
     TokenEventDetails . BSS.pack <$> genUtf8String len
 
+-- | Generate an arbitrary 'LockId'. Although technically sequence numbers (nonces) start at 1,
+--  this generator can produce 'LockId's with sequence number 0.
+genLockId :: Gen LockId
+genLockId = LockId <$> arbitrary <*> arbitrary <*> arbitrary
+
 -- | Generate an arbitrary 'CreatePLT' chain update, consisting of:
 --   * Random token symbol up to 255 bytes valid UTF-8.
 --   * Token module reference from arbitrary bytes.
@@ -1217,7 +1244,7 @@ genCreatePLT = do
     _cpltTokenModule <- genTokenModuleRef
     _cpltGovernanceAccount <- genAccountAddress
     _cpltDecimals <- chooseBoundedIntegral (0, 255)
-    _cpltInitializationParameters <- genTokenParameter
+    _cpltInitializationParameters <- genRawCbor
     return CreatePLT{..}
 
 genHigherLevelKeys :: Gen (HigherLevelKeys a)

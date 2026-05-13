@@ -1,15 +1,33 @@
 ## Unreleased
+- Added new `Payload::MetaUpdate` payload type.
+- Added `meta_operations` module that defines the operations that make up the body of a `Payload::MetaUpdate`.
 - Removed `Buffer::start`, `Buffer::start_hint` and `Buffer::result` from the trait `concordium_base::common::Buffer`. 
+- Added `protocol_level_locks` module with types for PLT locks:
+  - `LockId`
+  - `LockConfig`
+  - `LockController`
+  - `LockControllerSimpleV0`
+  - `LockControllerSimpleV0Grant`
+  - `LockControllerSimpleV0Capability`
+  - `LockInfo`
+  - `LockAccountFunds`
+  - `LockedTokenAmount`
+- Added CBOR serialization for `TransactionTime` and `TokenId`.
+
 - Introduce `TokenAuthorizations` representing the CBOR encoding of the `getTokenAuthorizations` query.
+- Introduce lock query boundary types representing the CBOR encoding of the `getLockInfo` query.
+- Extend `TokenModuleAccountState` with the P11 lock-aware CBOR fields `locks` and `available`, including empty-lock omission semantics.
 - Implemented definition for `UpdateMetadata` token operation and token event which allows to update the metadata of a protocol level token.
 - Implemented definition for `TokenAdminRole` which describes the list of supported roles.
   Implemented `assignAdminRoles` and `revokeAdminRoles` token operations for RBAC too.
+
 - Implemented `common::from_bytes_complete` that fails if all bytes are not consumed during deserialization.
 - `cbor::cbor_encode` is now infallible and returns `Vec<u8>` instead of `CborSerializationResult<Vec<u8>>`
 - `&[T]` no longer implements `CborSerialize` in order to avoid ambiguity with `CborSerialize` implementation for `[u8]`.
   To serialize a slice as a CBOR array, wrap it in `ArraySlice`.
   `[u8]` still implements `CborSerialize` and serializes as a CBOR bytestring.
 - Removed the module `upward`. This will be added to Rust SDK crate instead.
+
 - Changes to `protocol_level_tokens` module:
   - Removed the usage of `Upward` in `TokenOperations` type. To CBOR decode and allow unknown variants,
     the new function `TokenOperationsPayload::decode_operations_maybe_known` can be used instead.

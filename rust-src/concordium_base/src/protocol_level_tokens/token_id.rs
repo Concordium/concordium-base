@@ -108,19 +108,20 @@ impl common::Deserial for TokenId {
     }
 }
 
+/// CBOR serialization of [`TokenId`] as a CBOR text string.
 impl cbor::CborSerialize for TokenId {
     fn serialize<C: cbor::CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         encoder.encode_text(&self.value)
     }
 }
 
+/// CBOR deserialization of [`TokenId`] from a CBOR text string.
 impl cbor::CborDeserialize for TokenId {
     fn deserialize<C: cbor::CborDecoder>(decoder: C) -> cbor::CborSerializationResult<Self>
     where
         Self: Sized,
     {
-        let encoded = decoder.decode_text()?;
-        let string = String::from_utf8(encoded).map_err(CborSerializationError::invalid_data)?;
+        let string = <String as common::cbor::CborDeserialize>::deserialize(decoder)?;
         string
             .try_into()
             .map_err(CborSerializationError::invalid_data)
@@ -129,6 +130,8 @@ impl cbor::CborDeserialize for TokenId {
 
 #[cfg(test)]
 mod tests {
+    use crate::common::cbor::{cbor_decode, cbor_encode};
+
     use super::*;
     use std::str::FromStr;
 
@@ -196,7 +199,7 @@ mod tests {
         // token id which is too long
         let bytes: Vec<_> = [129]
             .into_iter()
-            .chain("a".repeat(129).as_bytes().to_vec().into_iter())
+            .chain("a".repeat(129).as_bytes().to_vec())
             .collect();
         let err = common::from_bytes::<TokenId, _>(&mut bytes.as_slice()).expect_err("deserial");
         assert!(
@@ -226,6 +229,24 @@ mod tests {
             "err: {}",
             err
         );
+    }
+
+    /// CBOR round-trip test for [`TokenId`].
+    #[test]
+    fn test_token_id_cbor_round_trip() {
+        let token_id: TokenId = "tokenid1".parse().unwrap();
+        let encoded = cbor_encode(&token_id);
+        let decoded: TokenId = cbor_decode(&encoded).expect("CBOR decode failed");
+        assert_eq!(decoded, token_id);
+    }
+
+    /// Fixture test: `TokenId("CCD")` → CBOR text "CCD" → `63434344`
+    #[test]
+    fn test_token_id_cbor_fixture() {
+        let token_id: TokenId = "CCD".parse().unwrap();
+        let encoded = cbor_encode(&token_id);
+        // 63 = text string of length 3, 434344 = "CCD" in ASCII
+        assert_eq!(hex::encode(&encoded), "63434344");
     }
 
     /// Test CBOR serialization of [`TokenId`]

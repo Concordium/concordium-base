@@ -71,6 +71,7 @@ import Concordium.Types.Execution
 import qualified Concordium.Types.InvokeContract as InvokeContract
 import qualified Concordium.Types.Parameters as Parameters
 import qualified Concordium.Types.Queries.KonsensusV1 as KonsensusV1
+import Concordium.Types.Queries.Locks
 import Concordium.Types.Queries.Tokens
 import Concordium.Types.Tokens (TokenRawAmount (..))
 import qualified Concordium.Types.Updates as Updates
@@ -679,6 +680,11 @@ instance ToProto TokenAuthorizations where
         ProtoFields.tokenId .= toProto taTokenId
         ProtoFields.details .= Proto.make (PLTFields.value .= taDetails)
 
+instance ToProto LockInfo where
+    type Output LockInfo = Proto.LockInfo
+    toProto LockInfo{..} = Proto.make $ do
+        ProtoFields.lockInfo .= Proto.make (PLTFields.value .= liLockInfo)
+
 instance ToProto Wasm.Parameter where
     type Output Wasm.Parameter = Proto.Parameter
     toProto Wasm.Parameter{..} = Proto.make $ ProtoFields.value .= BSS.fromShort parameter
@@ -783,6 +789,25 @@ instance ToProto RejectReason where
         PoolClosed -> Proto.make $ ProtoFields.poolClosed .= Proto.defMessage
         NonExistentTokenId tokenId -> Proto.make $ ProtoFields.nonExistentTokenId .= toProto tokenId
         TokenUpdateTransactionFailed reason -> Proto.make $ ProtoFields.tokenUpdateTransactionFailed .= toProto reason
+        NonExistentLockId lockId -> Proto.make $ ProtoFields.nonExistentLockId .= toProto lockId
+        LockExpired lockId -> Proto.make $ ProtoFields.lockExpired .= toProto lockId
+        LockFundNotAuthorized lockId sender -> Proto.make $ ProtoFields.lockFundNotAuthorized .= mkLockOpNotAuth lockId sender
+        LockSendNotAuthorized lockId sender -> Proto.make $ ProtoFields.lockSendNotAuthorized .= mkLockOpNotAuth lockId sender
+        LockReturnNotAuthorized lockId sender -> Proto.make $ ProtoFields.lockReturnNotAuthorized .= mkLockOpNotAuth lockId sender
+        LockCancelNotAuthorized lockId sender -> Proto.make $ ProtoFields.lockCancelNotAuthorized .= mkLockOpNotAuth lockId sender
+        LockTokenImpermissible lockId tokenId ->
+            Proto.make $
+                ProtoFields.lockTokenImpermissible
+                    .= Proto.make
+                        ( do
+                            ProtoFields.lockId .= toProto lockId
+                            ProtoFields.tokenId .= toProto tokenId
+                        )
+        LockRecipientImpermissible lockId recpt -> Proto.make $ ProtoFields.lockRecipientImpermissible .= mkLockOpNotAuth lockId recpt
+      where
+        mkLockOpNotAuth lockId address = Proto.make $ do
+            ProtoFields.lockId .= toProto lockId
+            ProtoFields.account .= toProto address
 
 -- | Attempt to convert the node's TransactionStatus type into the protobuf BlockItemStatus type.
 --   The protobuf type is better structured and removes the need for handling impossible cases.
@@ -912,8 +937,6 @@ tokenUpdateEventToProto _ = Left ()
 -- | Convert an event to a 'Proto.MetaEvent'. Returns @Left ()@ if the event type is
 --  not one of the meta event types.
 --
---  TODO: COR-2302 - support lock create event
---  TODO: COR-2304 - support lock destroy event
 --  TODO: COR-2305 - support generalized transfer event
 metaUpdateEventToProto :: Event' s -> Either () Proto.MetaEvent
 metaUpdateEventToProto TokenModuleEvent{..} =
@@ -954,6 +977,18 @@ metaUpdateEventToProto TokenBurn{..} =
                     PLTFields.amount .= toProto etbAmount
                     PLTFields.tokenId .= toProto etbTokenId
                 )
+metaUpdateEventToProto LockCreated{..} =
+    Right . Proto.make $
+        PLTFields.lockCreateEvent
+            .= Proto.make
+                ( do
+                    PLTFields.lockId .= toProto elcLockId
+                    PLTFields.lockConfig .= toProto elcLockConfig
+                )
+metaUpdateEventToProto LockDestroyed{..} =
+    Right . Proto.make $
+        PLTFields.lockDestroyEvent
+            .= Proto.make (PLTFields.lockId .= toProto eldLockId)
 metaUpdateEventToProto _ = Left ()
 
 instance ToProto TokenHolder where
@@ -1771,9 +1806,9 @@ convertAccountTransaction ty cost sender mbSponsorDetails result = case ty of
         ProtoFields.sponsor .= toProto sdSponsor
         ProtoFields.cost .= toProto sdCost
 
-instance ToProto TokenParameter where
-    type Output TokenParameter = Proto.Cbor
-    toProto (TokenParameter parameter) = Proto.make $ PLTFields.value .= BSS.fromShort parameter
+instance ToProto RawCbor where
+    type Output RawCbor = Proto.Cbor
+    toProto (RawCbor parameter) = Proto.make $ PLTFields.value .= parameter
 
 instance ToProto TokenEventDetails where
     type Output TokenEventDetails = Proto.Cbor
@@ -2758,3 +2793,10 @@ instance ToProto TokenId where
     type Output TokenId = Proto.TokenId
     toProto (TokenId bss) = Proto.make $ do
         PLTFields.value .= decodeUtf8 (BSS.fromShort bss)
+
+instance ToProto LockId where
+    type Output LockId = Proto.LockId
+    toProto LockId{..} = Proto.make $ do
+        PLTFields.accountIndex .= liAccountIndex
+        PLTFields.sequenceNumber .= liSequenceNumber
+        PLTFields.creationOrder .= liCreationOrder

@@ -1,23 +1,25 @@
+use crate::{
+    base::{AccountIndex, Nonce},
+    common::Serialize,
+};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
+use std::{
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
 
-/// This tag ident
+/// CBOR tag identifying a Lock ID.
 const LOCK_ID_TAG: u64 = 40920;
 
 #[derive(
-    Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Clone,
-    CborSerialize,
-    CborDeserialize,
-    serde::Serialize,
-    serde::Deserialize,
+    Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, CborSerialize, CborDeserialize, Serialize,
 )]
 #[cbor(tag = LOCK_ID_TAG, tuple)]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct LockId {
     /// The account index of the account that created the lock.
     pub account_index: u64,
@@ -28,12 +30,82 @@ pub struct LockId {
     pub creation_order: u64,
 }
 
-impl LockId {
-    pub fn new(account_index: u64, sequence_number: u64, creation_order: u64) -> Self {
-        LockId {
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum LockIdFromStrError {
+    #[error(
+        "LockId must be a base58check string (version 3) containing three concatenated uleb128-encoded components"
+    )]
+    InvalidFormat,
+}
+
+impl Display for LockId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut bytes = Vec::new();
+        leb128::write::unsigned(&mut bytes, self.account_index).map_err(|_| std::fmt::Error)?;
+        leb128::write::unsigned(&mut bytes, self.sequence_number).map_err(|_| std::fmt::Error)?;
+        leb128::write::unsigned(&mut bytes, self.creation_order).map_err(|_| std::fmt::Error)?;
+        f.write_str(&bs58::encode(bytes).with_check_version(3).into_string())
+    }
+}
+
+impl FromStr for LockId {
+    type Err = LockIdFromStrError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let bytes = bs58::decode(s)
+            .with_check(Some(3))
+            .into_vec()
+            .map_err(|_| LockIdFromStrError::InvalidFormat)?;
+        let Some((&3, mut source)) = bytes.split_first() else {
+            return Err(LockIdFromStrError::InvalidFormat);
+        };
+
+        let account_index =
+            leb128::read::unsigned(&mut source).map_err(|_| LockIdFromStrError::InvalidFormat)?;
+        let sequence_number =
+            leb128::read::unsigned(&mut source).map_err(|_| LockIdFromStrError::InvalidFormat)?;
+        let creation_order =
+            leb128::read::unsigned(&mut source).map_err(|_| LockIdFromStrError::InvalidFormat)?;
+
+        if !source.is_empty() {
+            return Err(LockIdFromStrError::InvalidFormat);
+        }
+
+        Ok(LockId {
             account_index,
             sequence_number,
             creation_order,
+        })
+    }
+}
+
+impl LockId {
+    #[inline(always)]
+    pub fn new(
+        account_index: impl Into<AccountIndex>,
+        sequence_number: impl Into<Nonce>,
+        creation_order: u64,
+    ) -> Self {
+        LockId {
+            account_index: account_index.into().index,
+            sequence_number: sequence_number.into().nonce,
+            creation_order,
+        }
+    }
+
+    /// Get the account index of the lock ID.
+    #[inline(always)]
+    pub fn account_index(&self) -> AccountIndex {
+        AccountIndex {
+            index: self.account_index,
+        }
+    }
+
+    /// Get the sequence number of the lock ID.
+    #[inline(always)]
+    pub fn sequence_number(&self) -> Nonce {
+        Nonce {
+            nonce: self.sequence_number,
         }
     }
 }
@@ -51,5 +123,132 @@ mod tests {
         assert_eq!(hex::encode(&cbor), "d99fd8831a000185e419824111");
         let lock_id_decoded: LockId = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(lock_id_decoded, lock_id);
+    }
+
+    use crate::common::{serialize_deserialize, to_bytes};
+
+    fn example_lock_id() -> LockId {
+        LockId::new(AccountIndex { index: 10001 }, Nonce { nonce: 5 }, 0)
+    }
+
+    #[test]
+    fn test_lock_id_display_fixture_matches_typescript_sdk() {
+        let lock_id = LockId::new(1, 2, 3);
+        assert_eq!(lock_id.to_string(), "W9EXVYXZJq");
+    }
+
+    #[test]
+    fn test_lock_id_from_str_fixture_matches_typescript_sdk() {
+        let parsed: LockId = "W9EXVYXZJq".parse().expect("must parse");
+        assert_eq!(parsed, LockId::new(1, 2, 3));
+    }
+
+    #[test]
+    fn test_lock_id_display_round_trip() {
+        let lock_id = example_lock_id();
+        let text = lock_id.to_string();
+        let parsed: LockId = text.parse().expect("must parse");
+        assert_eq!(parsed, lock_id);
+    }
+
+    #[test]
+    fn test_lock_id_from_str_invalid_format() {
+        let err = "not-a-lock-id".parse::<LockId>().expect_err("must fail");
+        assert_eq!(err, LockIdFromStrError::InvalidFormat);
+    }
+
+    #[test]
+    fn test_lock_id_from_str_invalid_version() {
+        let mut bytes = Vec::new();
+        leb128::write::unsigned(&mut bytes, 10001).expect("must encode");
+        leb128::write::unsigned(&mut bytes, 5).expect("must encode");
+        leb128::write::unsigned(&mut bytes, 0).expect("must encode");
+        let encoded = bs58::encode(bytes).with_check_version(4).into_string();
+        let err = encoded.parse::<LockId>().expect_err("must fail");
+        assert_eq!(err, LockIdFromStrError::InvalidFormat);
+    }
+
+    #[test]
+    fn test_lock_id_from_str_invalid_component() {
+        let mut bytes = Vec::new();
+        leb128::write::unsigned(&mut bytes, 10001).expect("must encode");
+        leb128::write::unsigned(&mut bytes, 5).expect("must encode");
+        let encoded = bs58::encode(bytes).with_check_version(3).into_string();
+        let err = encoded.parse::<LockId>().expect_err("must fail");
+        assert_eq!(err, LockIdFromStrError::InvalidFormat);
+    }
+
+    /// Round-trip test: encode then decode produces the same `LockId`.
+    #[test]
+    fn test_lock_id_cbor_round_trip() {
+        let lock_id = example_lock_id();
+        let encoded = cbor::cbor_encode(&lock_id);
+        let decoded: LockId = cbor::cbor_decode(&encoded).expect("CBOR decode failed");
+        assert_eq!(decoded, lock_id);
+    }
+
+    /// Fixture test: verify the exact CBOR encoding.
+    ///
+    /// Expected encoding for `LockId { account_index: 10001, sequence_number:
+    /// 5, creation_order: 0 }`:
+    /// - Tag 40920 (0x9FD8): `d9 9f d8`
+    /// - Array of 3: `83`
+    /// - 10001 (0x2711, 2-byte uint): `19 27 11`
+    /// - 5: `05`
+    /// - 0: `00`
+    ///
+    /// Full: `d99fd8831927110500`
+    #[test]
+    fn test_lock_id_cbor_fixture() {
+        let lock_id = example_lock_id();
+        let encoded = cbor::cbor_encode(&lock_id);
+        assert_eq!(hex::encode(&encoded), "d99fd8831927110500");
+    }
+
+    /// Round-trip test: binary (`Serial`/`Deserial`) encoding of `LockId`
+    /// produces the same value.
+    #[test]
+    fn test_lock_id_serial_round_trip() {
+        let lock_id = example_lock_id();
+        let result = serialize_deserialize(&lock_id).expect("Serial round-trip should succeed");
+        assert_eq!(result, lock_id);
+    }
+
+    /// Fixture test: verify the exact binary (`Serial`) encoding of `LockId`.
+    ///
+    /// `LockId { account_index: 10001, sequence_number: 5, creation_order: 0
+    /// }`:
+    /// - `account_index.index` = 10001 = `0x0000000000002711` (8 bytes BE u64)
+    /// - `sequence_number.nonce` = 5 = `0x0000000000000005` (8 bytes BE u64)
+    /// - `creation_order` = 0 = `0x0000000000000000` (8 bytes BE u64)
+    ///
+    /// Total 24 bytes:
+    /// `000000000000271100000000000000050000000000000000`
+    #[test]
+    fn test_lock_id_serial_fixture() {
+        let lock_id = example_lock_id();
+        let bytes = to_bytes(&lock_id);
+        assert_eq!(
+            hex::encode(&bytes),
+            "000000000000271100000000000000050000000000000000"
+        );
+    }
+
+    /// Test with zero values.
+    #[test]
+    fn test_lock_id_cbor_zero_values() {
+        let lock_id = LockId::new(0, 0, 0);
+        let encoded = cbor::cbor_encode(&lock_id);
+        let decoded: LockId = cbor::cbor_decode(&encoded).expect("CBOR decode failed");
+        assert_eq!(decoded, lock_id);
+    }
+
+    /// Test with max u64 values.
+    #[test]
+    fn test_lock_id_cbor_max_values() {
+        let lock_id = LockId::new(u64::MAX, u64::MAX, u64::MAX);
+        let encoded = cbor::cbor_encode(&lock_id);
+        let decoded: LockId = cbor::cbor_decode(&encoded).expect("CBOR decode failed");
+        assert_eq!(decoded, lock_id);
     }
 }

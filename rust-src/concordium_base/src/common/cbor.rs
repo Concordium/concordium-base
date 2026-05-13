@@ -148,6 +148,44 @@
 //!
 //! In this example `TestStructWrapper` is serialized as `TestStruct`.
 //!
+//! #### `cbor(tuple)`
+//! Serializes the struct as a tuple of its fields, instead of a map with field
+//! names as keys.
+//!
+//! ```ignore
+//! #[derive(CborSerialize, CborDeserialize)]
+//! #[cbor(tuple)]
+//! struct TestStruct {
+//!    field1: u64,
+//!    field2: String,
+//! }
+//! ```
+//!
+//! In this example, `TestStruct { field1: 3, field2: "abcd".to_string() }` is
+//! serialized as the CBOR array `[3, "abcd"]` instead of the CBOR map
+//! `{"field1": 3, "field2": "abcd"}`.
+//!
+//! #### `cbor(default)`
+//! When applied to a field in a struct with named fields, if the field is not
+//! present in the CBOR map, the field is deserialized to the specified default
+//! value. The field is omitted from the serialization if the value is equal
+//! to the specified default.
+//!
+//! ```ignore
+//! #[derive(CborSerialize, CborDeserialize)]
+//! struct TestStruct {
+//!    #[cbor(default = 0)]
+//!    field1: u64,
+//!    #[cbor(default = false)]
+//!    field2: bool,
+//! }
+//! ```
+//!
+//! Note: this differs from the [CDDL specification](https://datatracker.ietf.org/doc/html/rfc8610#section-3.8.6)
+//! of the `.default` control operator in that this implementation permits the
+//! field to appear with the default value in the CBOR map, while the CDDL
+//! specification requires the field to be omitted from the CBOR map.
+//!
 //! #### `cbor(other)`
 //! This attribute can be applied to a variant in an enum for a field in a
 //! struct. When applied to a variant in an enum represented as a CBOR map,
@@ -1231,6 +1269,35 @@ mod test {
             .unwrap_err()
             .to_string();
         assert!(err.contains("expected tag 39998"), "err: {}", err);
+    }
+
+    #[test]
+    fn test_struct_default_derived() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct {
+            field1: u64,
+            #[cbor(default = 5)]
+            field2: u64,
+        }
+
+        let value = TestStruct {
+            field1: 3,
+            field2: 5,
+        };
+
+        let cbor = cbor_encode(&value);
+        assert_eq!(hex::encode(&cbor), "a1666669656c643103");
+        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let value2 = TestStruct {
+            field1: 5,
+            field2: 6,
+        };
+        let cbor = cbor_encode(&value2);
+        assert_eq!(hex::encode(&cbor), "a2666669656c643105666669656c643206");
+        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value2);
     }
 
     #[test]
