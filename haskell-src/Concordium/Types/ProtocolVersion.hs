@@ -573,6 +573,7 @@ instance ToJSON ChainParametersVersion where
     toJSON = toJSON . chainParameterVersionToWord64
 
 deriving instance Show ProtocolVersion
+deriving instance Read ProtocolVersion
 
 deriving instance Show ChainParametersVersion
 

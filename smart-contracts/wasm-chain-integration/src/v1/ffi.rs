@@ -14,8 +14,9 @@
 //! In addition to pointers to structured objects, the remaining data passed
 //! between foreign code and Rust is mainly byte-arrays. The main reason for
 //! this is that this is cheap and relatively easy to do.
+
 use super::trie::{
-    EmptyCollector, LoadCallback, Loadable, MutableState, PersistentState, Reference,
+    state_dump, EmptyCollector, LoadCallback, Loadable, MutableState, PersistentState, Reference,
     SizeCollector, StoreCallback,
 };
 use crate::v1::*;
@@ -27,9 +28,13 @@ use concordium_wasm::{
     validate::ValidationConfig,
     CostConfigurationV0, CostConfigurationV1,
 };
+use std::sync::LazyLock;
 
 use crate::v0::ffi::slice_from_c_bytes;
 
+use crate::v1::trie::state_dump::shared::{
+    NodeId, OutputFilesPaths, StateDumpBuilder, StateDumpContext,
+};
 use libc::size_t;
 use sha2::Digest;
 
@@ -803,7 +808,7 @@ extern "C" fn persistent_state_v1_lookup(
 /// used for testing.**
 extern "C" fn generate_persistent_state_from_seed(seed: u64, len: u64) -> *mut PersistentState {
     let res = std::panic::catch_unwind(|| {
-        let mut mutable = PersistentState::Empty.thaw();
+        let mut mutable = PersistentState::empty().thaw();
         let mut loader = trie::Loader::new(&[]);
         {
             let mut state_lock = mutable.get_inner(&mut loader).lock();
@@ -844,7 +849,7 @@ unsafe extern "C" fn is_legacy_artifact(
 /// Allocate empty persistent state.
 #[no_mangle]
 unsafe extern "C" fn empty_persistent_state() -> *mut PersistentState {
-    let state = PersistentState::Empty;
+    let state = PersistentState::empty();
     Box::into_raw(Box::new(state))
 }
 
@@ -930,3 +935,73 @@ unsafe extern "C" fn insert_entry_value_mutable_state(
         Err(trie::AttemptToModifyLockedArea) => 2,
     }
 }
+
+/// Dump the persistent state to files for debugging.
+///
+/// # Arguments
+///
+/// - `load_callback` External function to call for loading bytes a reference from the blob store.
+/// - `persistent_state` The persistent state tree.
+/// - `location` The blob store location the tree is stored at
+/// - `parent_node` The parent node in the state graph
+/// - `state_graph_file_path` Shared pointer to state graph file path bytes.
+/// - `state_graph_file_path_len` Byte length of state graph file path bytes.
+/// - `state_data_file_path` Shared pointer to state data file path bytes.
+/// - `state_data_file_path_len` Byte length of state data file path bytes.
+///
+/// # Safety
+///
+/// - Argument `load_callback` must be a valid function pointer to a function with a signature matching [`LoadCallback`].
+/// - Argument `persistent_state` must be a non-null pointer to well-formed [`PersistentState`].
+///   The pointer is to a shared instance, hence only valid for reading (writing only allowed through interior mutability).
+/// - Argument `state_graph_file_path` must be non-null and valid for reads for `state_graph_file_path_len` many bytes.
+/// - Argument `state_data_file_path` must be non-null and valid for reads for `state_data_file_path_len` many bytes.
+#[unsafe(no_mangle)]
+extern "C" fn ffi_dump_persistent_state(
+    load_callback: LoadCallback,
+    persistent_state: *const PersistentState,
+    parent_node: u64,
+    state_graph_file_path: *const u8,
+    state_graph_file_path_len: size_t,
+    state_data_file_path: *const u8,
+    state_data_file_path_len: size_t,
+) {
+    assert!(
+        !persistent_state.is_null(),
+        "block_state is a null pointer."
+    );
+    assert!(
+        !state_graph_file_path.is_null(),
+        "state_graph_file_path is a null pointer."
+    );
+    assert!(
+        !state_data_file_path.is_null(),
+        "state_data_file_path is a null pointer."
+    );
+
+    let tree = unsafe { &*persistent_state };
+
+    let state_graph_file_path = String::from_utf8(
+        unsafe { std::slice::from_raw_parts(state_graph_file_path, state_graph_file_path_len) }
+            .to_vec(),
+    )
+    .unwrap();
+    let state_data_file_path = String::from_utf8(
+        unsafe { std::slice::from_raw_parts(state_data_file_path, state_data_file_path_len) }
+            .to_vec(),
+    )
+    .unwrap();
+
+    let output_paths = OutputFilesPaths {
+        state_graph_file_path,
+        state_data_file_path,
+    };
+
+    let mut builder = StateDumpBuilder::new(STATE_DUMP_CONTEXT.clone(), output_paths);
+
+    state_dump::dump_persistent_state(&mut builder, load_callback, NodeId(parent_node), tree);
+}
+
+/// Static context. Ideally we create a context per block state dump.
+static STATE_DUMP_CONTEXT: LazyLock<StateDumpContext> =
+    LazyLock::new(|| StateDumpContext::new(NodeId(2_000_000)));
