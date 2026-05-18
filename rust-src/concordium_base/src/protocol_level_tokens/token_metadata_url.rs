@@ -27,6 +27,7 @@ pub struct MetadataUrl {
         serde(
             serialize_with = "serialize_hex_bytes",
             deserialize_with = "deserialize_hex_bytes",
+            default,
             skip_serializing_if = "Option::is_none"
         )
     )]
@@ -136,6 +137,9 @@ mod tests {
         let expected_json = r#"{
             "url": "https://example.com"
         }"#;
+
+        // verify that the minimal json can be deserialized
+        let _: MetadataUrl = serde_json::from_str(expected_json).unwrap();
 
         let expected: serde_json::Value = serde_json::from_str(expected_json).unwrap();
         let actual: serde_json::Value = serde_json::from_str(&serialized).unwrap();
