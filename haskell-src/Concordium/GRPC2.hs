@@ -915,6 +915,8 @@ tokenUpdateEventToProto TokenTransfer{..} = Right . Proto.make $ do
                 PLTFields.to .= toProto ettTo
                 PLTFields.amount .= toProto ettAmount
                 PLTFields.maybe'memo .= fmap toProto ettMemo
+                PLTFields.maybe'fromLock .= fmap toProto ettFromLock
+                PLTFields.maybe'toLock .= fmap toProto ettToLock
             )
 tokenUpdateEventToProto TokenMint{..} = Right . Proto.make $ do
     PLTFields.tokenId .= toProto etmTokenId
@@ -936,8 +938,6 @@ tokenUpdateEventToProto _ = Left ()
 
 -- | Convert an event to a 'Proto.MetaEvent'. Returns @Left ()@ if the event type is
 --  not one of the meta event types.
---
---  TODO: COR-2305 - support generalized transfer event
 metaUpdateEventToProto :: Event' s -> Either () Proto.MetaEvent
 metaUpdateEventToProto TokenModuleEvent{..} =
     Right . Proto.make $
@@ -958,6 +958,8 @@ metaUpdateEventToProto TokenTransfer{..} =
                     PLTFields.amount .= toProto ettAmount
                     PLTFields.maybe'memo .= fmap toProto ettMemo
                     PLTFields.tokenId .= toProto ettTokenId
+                    PLTFields.maybe'fromLock .= fmap toProto ettFromLock
+                    PLTFields.maybe'toLock .= fmap toProto ettToLock
                 )
 metaUpdateEventToProto TokenMint{..} =
     Right . Proto.make $
