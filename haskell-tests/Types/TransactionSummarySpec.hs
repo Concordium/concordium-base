@@ -44,9 +44,9 @@ testEventSerializationIdentity :: (IsProtocolVersion pv) => SProtocolVersion pv 
 testEventSerializationIdentity spv = forAll (genEvent spv) $ \e -> decodeFull' (getEvent spv) (runPut $ putEvent e) === Right e
 
 testExemplarEventSerialization :: Spec
-testExemplarEventSerialization = focus {- NOCOMMIT -} $ do
+testExemplarEventSerialization = do
     it "Simple TokenTransfer" $
-        t
+        testEncoding
             "27000008746f6b656e696431000101010101010101010101010101010101010101010101010101010101010101000202020202020202020202020202020202020202020202020202020202020202876804"
             ( TokenTransfer
                 { ettTokenId = TokenId "tokenid1",
@@ -59,7 +59,7 @@ testExemplarEventSerialization = focus {- NOCOMMIT -} $ do
                 }
             )
     it "TokenTransfer with memo" $
-        t
+        testEncoding
             "27000108746f6b656e6964310001010101010101010101010101010101010101010101010101010101010101010002020202020202020202020202020202020202020202020202020202020202028768040003010203"
             ( TokenTransfer
                 { ettTokenId = TokenId "tokenid1",
@@ -72,7 +72,7 @@ testExemplarEventSerialization = focus {- NOCOMMIT -} $ do
                 }
             )
     it "TokenTransfer from lock" $
-        t
+        testEncoding
             "27000208746f6b656e6964310001010101010101010101010101010101010101010101010101010101010101010002020202020202020202020202020202020202020202020202020202020202028768040f0e0d0c0b0a0908112233445566778899aabbccddeeff00"
             ( TokenTransfer
                 { ettTokenId = TokenId "tokenid1",
@@ -85,7 +85,7 @@ testExemplarEventSerialization = focus {- NOCOMMIT -} $ do
                 }
             )
     it "TokenTransfer to lock" $
-        t
+        testEncoding
             "27000408746f6b656e69643100010101010101010101010101010101010101010101010101010101010101010100020202020202020202020202020202020202020202020202020202020202020287680499aabbccddeeff000f0e0d0c0b0a09081122334455667788"
             ( TokenTransfer
                 { ettTokenId = TokenId "tokenid1",
@@ -98,7 +98,7 @@ testExemplarEventSerialization = focus {- NOCOMMIT -} $ do
                 }
             )
     it "TokenTransfer with everything" $
-        t
+        testEncoding
             "27\
             \000706546573745454\
             \000d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d\
@@ -118,7 +118,7 @@ testExemplarEventSerialization = focus {- NOCOMMIT -} $ do
                 }
             )
   where
-    t hex expected = do
+    testEncoding hex expected = do
         BS16.encode (runPut $ putEvent expected) `shouldBe` hex
         decodeFull' (getEvent SP11) (BS16.decodeLenient hex) `shouldBe` Right expected
 
