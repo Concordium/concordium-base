@@ -1415,7 +1415,16 @@ data Event' (supplemented :: Bool)
           -- | The amount transferred.
           ettAmount :: !TokenAmount,
           -- | An optional memo for the transfer.
-          ettMemo :: !(Maybe Memo)
+          ettMemo :: !(Maybe Memo),
+          -- | When the funds originate on the locked balance of an account, the
+          --  identity of the lock controlling the funds. Absent when the funds
+          --  are not on the locked balance of the originating account.
+          ettFromLock :: !(Maybe LockId),
+          -- | When the funds are transferred into the control of a lock, the
+          --  identity of the lock assuming control of the funds. Absent when
+          --  the funds are sent to the available balance of the receiving
+          --  account.
+          ettToLock :: !(Maybe LockId)
         }
     | -- | A token mint event.
       -- The serialization uses a bitmap to indicate which fields are present.
@@ -1728,9 +1737,13 @@ putEvent = \case
             <> S.put ettTo
             <> S.put ettAmount
             <> mapM_ S.put ettMemo
+            <> mapM_ S.put ettFromLock
+            <> mapM_ S.put ettToLock
       where
         bitmap =
             bitFor 0 ettMemo
+                .|. bitFor 1 ettFromLock
+                .|. bitFor 2 ettToLock
     TokenMint{..} ->
         S.putWord8 40
             -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
@@ -1967,6 +1980,8 @@ getEvent spv =
                     | testBit bitmap b = Just <$> S.get
                     | otherwise = return Nothing
             ettMemo <- maybeGet 0
+            ettFromLock <- maybeGet 1
+            ettToLock <- maybeGet 2
             return TokenTransfer{..}
         40 | supportPlt -> do
             -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
@@ -2006,7 +2021,9 @@ getEvent spv =
     supportSuspend = protocolSupportsSuspend spv
     supportPlt = protocolSupportsPLT spv
     supportLocks = supportsPLTLocks spv
-    configureTokenTransferBitMask = 0b0000000000000001
+    configureTokenTransferBitMask
+        | supportLocks = 0b0000000000000111
+        | otherwise = 0b0000000000000001
     configureTokenMintBitMask = 0b0000000000000000
     configureTokenBurnBitMask = 0b0000000000000000
 
@@ -2290,6 +2307,8 @@ instance AE.ToJSON (Event' supplemented) where
                   "amount" .= ettAmount
                 ]
                     ++ foldMap (\memo -> ["memo" .= memo]) ettMemo
+                    ++ foldMap (\fromLock -> ["fromLock" .= fromLock]) ettFromLock
+                    ++ foldMap (\toLock -> ["toLock" .= toLock]) ettToLock
         TokenMint{..} ->
             AE.object
                 [ "tag" .= AE.String "TokenMint",
@@ -2521,6 +2540,8 @@ instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
                 ettTo <- obj .: "to"
                 ettAmount <- obj .: "amount"
                 ettMemo <- obj AE..:? "memo"
+                ettFromLock <- obj AE..:? "fromLock"
+                ettToLock <- obj AE..:? "toLock"
                 return TokenTransfer{..}
             "TokenMint" -> do
                 etmTokenId <- obj .: "tokenId"

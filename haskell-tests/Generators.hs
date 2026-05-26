@@ -812,7 +812,9 @@ genEvent spv =
                 <*> genTokenHolder
                 <*> genTokenHolder
                 <*> genTokenAmount
-                <*> liftArbitrary genMemo,
+                <*> liftArbitrary genMemo
+                <*> (if supportsPLTLocks spv then liftArbitrary genLockId else return Nothing)
+                <*> (if supportsPLTLocks spv then liftArbitrary genLockId else return Nothing),
               TokenMint <$> genTokenId <*> genTokenHolder <*> genTokenAmount,
               TokenBurn <$> genTokenId <*> genTokenHolder <*> genTokenAmount,
               TokenCreated <$> genCreatePLT
