@@ -795,15 +795,15 @@ instance ToProto RejectReason where
         LockSendNotAuthorized lockId sender -> Proto.make $ ProtoFields.lockSendNotAuthorized .= mkLockOpNotAuth lockId sender
         LockReturnNotAuthorized lockId sender -> Proto.make $ ProtoFields.lockReturnNotAuthorized .= mkLockOpNotAuth lockId sender
         LockCancelNotAuthorized lockId sender -> Proto.make $ ProtoFields.lockCancelNotAuthorized .= mkLockOpNotAuth lockId sender
-        LockTokenImpermissible lockId tokenId ->
+        LockTokenNotPermitted lockId tokenId ->
             Proto.make $
-                ProtoFields.lockTokenImpermissible
+                ProtoFields.lockTokenNotPermitted
                     .= Proto.make
                         ( do
                             ProtoFields.lockId .= toProto lockId
                             ProtoFields.tokenId .= toProto tokenId
                         )
-        LockRecipientImpermissible lockId recpt -> Proto.make $ ProtoFields.lockRecipientImpermissible .= mkLockOpNotAuth lockId recpt
+        LockRecipientNotPermitted lockId recpt -> Proto.make $ ProtoFields.lockRecipientNotPermitted .= mkLockOpNotAuth lockId recpt
       where
         mkLockOpNotAuth lockId address = Proto.make $ do
             ProtoFields.lockId .= toProto lockId
