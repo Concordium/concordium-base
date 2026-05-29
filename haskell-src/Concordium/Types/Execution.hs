@@ -2935,9 +2935,9 @@ data RejectReason
     | -- | The account is not authorized to cancel the lock.
       LockCancelNotAuthorized !LockId !AccountAddress
     | -- | The lock does not allow funding with the particular token.
-      LockTokenImpermissible !LockId !TokenId
+      LockTokenNotPermitted !LockId !TokenId
     | -- | The recipient is not permitted to receive funds controlled by the lock.
-      LockRecipientImpermissible !LockId !AccountAddress
+      LockRecipientNotPermitted !LockId !AccountAddress
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
@@ -3017,8 +3017,8 @@ instance S.Serialize RejectReason where
         LockSendNotAuthorized lockId addr -> S.putWord8 60 <> S.put lockId <> S.put addr
         LockReturnNotAuthorized lockId addr -> S.putWord8 61 <> S.put lockId <> S.put addr
         LockCancelNotAuthorized lockId addr -> S.putWord8 62 <> S.put lockId <> S.put addr
-        LockTokenImpermissible lockId tokenId -> S.putWord8 63 <> S.put lockId <> S.put tokenId
-        LockRecipientImpermissible lockId addr -> S.putWord8 64 <> S.put lockId <> S.put addr
+        LockTokenNotPermitted lockId tokenId -> S.putWord8 63 <> S.put lockId <> S.put tokenId
+        LockRecipientNotPermitted lockId addr -> S.putWord8 64 <> S.put lockId <> S.put addr
     get =
         S.getWord8 >>= \case
             0 -> return ModuleNotWF
@@ -3093,8 +3093,8 @@ instance S.Serialize RejectReason where
             60 -> LockSendNotAuthorized <$> S.get <*> S.get
             61 -> LockReturnNotAuthorized <$> S.get <*> S.get
             62 -> LockCancelNotAuthorized <$> S.get <*> S.get
-            63 -> LockTokenImpermissible <$> S.get <*> S.get
-            64 -> LockRecipientImpermissible <$> S.get <*> S.get
+            63 -> LockTokenNotPermitted <$> S.get <*> S.get
+            64 -> LockRecipientNotPermitted <$> S.get <*> S.get
             n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 instance AE.ToJSON RejectReason
