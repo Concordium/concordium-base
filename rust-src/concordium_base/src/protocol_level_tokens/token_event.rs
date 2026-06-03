@@ -301,12 +301,24 @@ pub struct TokenTransferEvent {
     pub amount: TokenAmount,
     /// An optional memo field that can be used to attach a message to the token
     /// transfer.
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub memo: Option<Memo>,
     /// When the funds originate on the locked balance of an account, the
     /// identity of the lock controlling the funds.
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub from_lock: Option<LockId>,
     /// When the funds are transferred into the control of a lock, the identity
     /// of the lock assuming control of the funds.
+    #[cfg_attr(
+        feature = "serde_deprecated",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub to_lock: Option<LockId>,
 }
 
