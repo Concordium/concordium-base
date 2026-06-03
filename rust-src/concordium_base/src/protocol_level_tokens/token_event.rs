@@ -2,6 +2,7 @@ use super::{CborHolderAccount, RawCbor, TokenAmount};
 use crate::common;
 use crate::common::cbor::CborSerializationResult;
 use crate::common::{cbor, Buffer, Deserial, Get, ParseResult, SerdeDeserialize, Serial};
+use crate::protocol_level_locks::LockId;
 use crate::protocol_level_tokens::{MetadataUrl, TokenAdminRole};
 use crate::transactions::Memo;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
@@ -301,6 +302,12 @@ pub struct TokenTransferEvent {
     /// An optional memo field that can be used to attach a message to the token
     /// transfer.
     pub memo: Option<Memo>,
+    /// When the funds originate on the locked balance of an account, the
+    /// identity of the lock controlling the funds.
+    pub from_lock: Option<LockId>,
+    /// When the funds are transferred into the control of a lock, the identity
+    /// of the lock assuming control of the funds.
+    pub to_lock: Option<LockId>,
 }
 
 /// An event emitted when the token supply is updated, i.e. by minting/burning
