@@ -561,7 +561,7 @@ mod tests {
     use crate::common::types::TransactionTime;
     use crate::protocol_level_locks::{
         LockController, LockControllerSimpleV0, LockControllerSimpleV0Capability,
-        LockControllerSimpleV0Grant,
+        LockControllerSimpleV0Grant, LockRecipients,
     };
     use crate::protocol_level_tokens::{test_fixtures::ADDRESS, MetadataUrl, TokenAdminRole};
     use crate::transactions::Memo;
@@ -831,7 +831,7 @@ mod tests {
     fn test_meta_operation_cbor_lock_create() {
         let operation = MetaUpdateOperation::LockCreate(MetaLockCreateDetails {
             config: LockConfig {
-                recipients: vec![CborHolderAccount::from(ADDRESS)],
+                recipients: LockRecipients::Limited(vec![CborHolderAccount::from(ADDRESS)]),
                 expiry: TransactionTime::from_seconds(1_000_000),
                 controller: LockController::SimpleV0(LockControllerSimpleV0 {
                     grants: vec![
