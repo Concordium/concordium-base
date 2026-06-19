@@ -4,7 +4,7 @@
 ;   cargo install cddl
 ;   cddl compile-cddl --cddl cis-7.cddl
 
-; Common Types 
+; Common Types
 
 token-id = (text .size (1..128)) .regexp "[a-zA-Z0-9\\-.%]+"
 
@@ -93,7 +93,7 @@ epoch-time = #6.1(uint)
 
 ; Initialization
 
-; The initialization parameters are used when creating a new PLT instance. They are included as 
+; The initialization parameters are used when creating a new PLT instance. They are included as
 ; part of the CreatePLT chain update transaction. They are passed to the Token Module to
 ; initialize the state.
 token-initialization-parameters = {
@@ -448,12 +448,14 @@ meta-lock-create = {
 lock-config = (
     ; The set of accounts that are permitted to receive funds controlled
     ; by the lock.
-    "recipients": [ * tagged-account-address ],
+    "recipients": lock-recipients,
     ; The expiry time for the lock.
     "expiry": epoch-time,
     ; The initialization parameters for the lock.
     "controller": lock-controller,
 )
+
+lock-recipients = "any" / [ * tagged-account-address ]
 
 lock-controller =
     lock-controller-simple

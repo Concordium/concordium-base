@@ -17,6 +17,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as BS16
 import qualified Data.ByteString.Lazy.Char8 as B8
 import qualified Data.ByteString.Short as BSS
+import Data.Either (isLeft)
 import qualified Data.FixedByteString as FBS
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
@@ -1230,7 +1231,7 @@ exampleLockInfoDetails =
                 },
           lipConfig =
             LockConfig
-                { lcRecipients = Seq.singleton $ accountTokenHolder acc,
+                { lcRecipients = LockRecipientsLimited . Seq.singleton $ accountTokenHolder acc,
                   lcExpiry = TransactionTime 1804806000,
                   lcController =
                     LockControllerSimpleV0
@@ -1317,6 +1318,53 @@ testLockInfoDetailsCBOR = describe "LockInfoDetails CBOR" $ do
             `shouldBe` Right exampleLockInfoDetails
         BS16.encode (lockInfoToBytes exampleLockInfoDetails)
             `shouldBe` exampleLockInfoDetailsCBOR
+    it "any recipients fixture" $ do
+        let lockInfoAny =
+                exampleLockInfoDetails
+                    { lipConfig = (lipConfig exampleLockInfoDetails){lcRecipients = LockRecipientsAny}
+                    }
+            lockInfoAnyCBOR =
+                mconcat
+                    [ "a5",
+                      "646c6f636b",
+                      "d99fd8831927110500",
+                      "6566756e6473",
+                      "81",
+                      "a2",
+                      "676163636f756e74",
+                      "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+                      "67616d6f756e7473",
+                      "81",
+                      "a2",
+                      "65746f6b656e",
+                      "627454",
+                      "66616d6f756e74",
+                      "c4822219300c",
+                      "66657870697279",
+                      "c11a6b932770",
+                      "6a636f6e74726f6c6c6572",
+                      "a1",
+                      "6873696d706c655630",
+                      "a2",
+                      "666772616e7473",
+                      "81",
+                      "a2",
+                      "65726f6c6573",
+                      "82",
+                      "6466756e64",
+                      "6473656e64",
+                      "676163636f756e74",
+                      "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+                      "66746f6b656e73",
+                      "81",
+                      "627454",
+                      "6a726563697069656e7473",
+                      "63616e79"
+                    ]
+        lockInfoFromBytes (B8.fromStrict $ BS16.decodeLenient lockInfoAnyCBOR)
+            `shouldBe` Right lockInfoAny
+        BS16.encode (lockInfoToBytes lockInfoAny)
+            `shouldBe` lockInfoAnyCBOR
 
 -- * Lock CBOR tests
 
@@ -1361,6 +1409,30 @@ testLockIdCBOR = describe "LockId CBOR" $ do
             decodeLockId
             (LockId 10001 5 0)
             "d99fd8831927110500"
+
+testLockRecipientsCBOR :: Spec
+testLockRecipientsCBOR = describe "LockRecipients CBOR" $ do
+    it "any" $
+        lockFixture
+            encodeLockRecipients
+            decodeLockRecipients
+            LockRecipientsAny
+            "63616e79"
+    it "limited single account" $
+        lockFixture
+            encodeLockRecipients
+            decodeLockRecipients
+            (LockRecipientsLimited $ Seq.singleton $ accountTokenHolder lockTestAcc)
+            ("81" <> lockTestAccHex)
+    it "limited empty" $
+        lockFixture
+            encodeLockRecipients
+            decodeLockRecipients
+            (LockRecipientsLimited Seq.empty)
+            "80"
+    it "rejects unknown text" $
+        lockDecode decodeLockRecipients (BS16.decodeLenient "63616c6c")
+            `shouldSatisfy` isLeft
 
 testLockControllerSimpleV0CapabilityCBOR :: Spec
 testLockControllerSimpleV0CapabilityCBOR = describe "LockControllerSimpleV0Capability CBOR" $ do
@@ -1661,6 +1733,7 @@ tests = parallel $ describe "CBOR" $ do
     testTokenAuthorizationsMapJSON
     testLockInfoDetailsCBOR
     testLockIdCBOR
+    testLockRecipientsCBOR
     testLockControllerSimpleV0CapabilityCBOR
     testLockControllerSimpleV0GrantCBOR
     testLockControllerSimpleConfigV0CBOR

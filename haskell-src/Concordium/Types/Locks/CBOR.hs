@@ -16,6 +16,9 @@ module Concordium.Types.Locks.CBOR (
     LockController (..),
     encodeLockController,
     decodeLockController,
+    LockRecipients (..),
+    encodeLockRecipients,
+    decodeLockRecipients,
     LockConfig (..),
     LockedTokenAmount (..),
     encodeLockAccountFunds,
@@ -32,11 +35,14 @@ module Concordium.Types.Locks.CBOR (
 
 import Codec.CBOR.Decoding
 import Codec.CBOR.Encoding
+import qualified Codec.CBOR.Term as CBORTerm
 import Control.Monad
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map.Lazy as Map
 import qualified Data.Sequence as Seq
+import Data.Text (Text)
+import qualified Data.Text.Lazy as LazyText
 import Lens.Micro.Platform
 
 import Concordium.Types (TransactionTime (..))
@@ -218,9 +224,41 @@ decodeLockController =
     build (Just cfg) = Right $ LockControllerSimpleV0 cfg
     build Nothing = Left "Missing \"simpleV0\""
 
+-- | Accounts that can receive funds controlled by a lock.
+data LockRecipients
+    = LockRecipientsAny
+    | LockRecipientsLimited !(Seq.Seq CborAccountAddress)
+    deriving (Eq, Show)
+
+-- | Encode lock recipients as CBOR text @"any"@ or an account-address array.
+encodeLockRecipients :: LockRecipients -> Encoding
+encodeLockRecipients LockRecipientsAny = encodeString "any"
+encodeLockRecipients (LockRecipientsLimited accounts) = encodeSequence CBOR.encodeCborAccountAddress accounts
+
+-- | Decode lock recipients from CBOR text @"any"@ or an account-address array.
+decodeLockRecipients :: Decoder s LockRecipients
+decodeLockRecipients = do
+    term <- CBORTerm.decodeTerm
+    either fail return $ decodeLockRecipientsHelper term
+
+-- | Decode lock recipients from a CBOR term.
+decodeLockRecipientsHelper :: CBORTerm.Term -> Either String LockRecipients
+decodeLockRecipientsHelper = \case
+    CBORTerm.TString "any" -> return LockRecipientsAny
+    CBORTerm.TString value -> unsupportedText value
+    CBORTerm.TStringI value ->
+        let strictValue = LazyText.toStrict value
+        in  if strictValue == "any" then return LockRecipientsAny else unsupportedText strictValue
+    CBORTerm.TList accounts -> LockRecipientsLimited . Seq.fromList <$> traverse CBOR.decodeCborAccountAddressHelper accounts
+    CBORTerm.TListI accounts -> LockRecipientsLimited . Seq.fromList <$> traverse CBOR.decodeCborAccountAddressHelper accounts
+    term -> Left $ "lock recipients: expected text \"any\" or account address array, found " ++ show term
+  where
+    unsupportedText :: Text -> Either String LockRecipients
+    unsupportedText value = Left $ "Unsupported lock recipients text value: " ++ show value
+
 -- | Static configuration of a lock.
 data LockConfig = LockConfig
-    { lcRecipients :: !(Seq.Seq CborAccountAddress),
+    { lcRecipients :: !LockRecipients,
       lcExpiry :: !TransactionTime,
       lcController :: !LockController
     }
@@ -321,7 +359,7 @@ data LockInfoDetails = LockInfoDetails
 
 data LockInfoDetailsBuilder = LockInfoDetailsBuilder
     { _lidbLock :: !(Maybe LockId),
-      _lidbRecipients :: !(Maybe (Seq.Seq CborAccountAddress)),
+      _lidbRecipients :: !(Maybe LockRecipients),
       _lidbExpiry :: !(Maybe TransactionTime),
       _lidbController :: !(Maybe LockController),
       _lidbFunds :: !(Maybe (Seq.Seq LockAccountFunds))
@@ -344,7 +382,7 @@ decodeLockInfoDetails =
         lipFunds <- _lidbFunds `CBOR.orFail` "Missing \"funds\""
         return LockInfoDetails{lipConfig = LockConfig{..}, ..}
     valDecoder k@"lock" = Just $ mapValueDecoder k decodeLockId lidbLock
-    valDecoder k@"recipients" = Just $ mapValueDecoder k (decodeSequence CBOR.decodeCborAccountAddress) lidbRecipients
+    valDecoder k@"recipients" = Just $ mapValueDecoder k decodeLockRecipients lidbRecipients
     valDecoder k@"expiry" = Just $ mapValueDecoder k decodeEpochTime lidbExpiry
     valDecoder k@"controller" = Just $ mapValueDecoder k decodeLockController lidbController
     valDecoder k@"funds" = Just $ mapValueDecoder k (decodeSequence decodeLockAccountFunds) lidbFunds
@@ -355,7 +393,7 @@ encodeLockInfoDetails LockInfoDetails{..} =
     encodeMapDeterministic $
         Map.empty
             & k "lock" ?~ encodeLockId lipLock
-            & k "recipients" ?~ encodeSequence CBOR.encodeCborAccountAddress (lcRecipients lipConfig)
+            & k "recipients" ?~ encodeLockRecipients (lcRecipients lipConfig)
             & k "expiry" ?~ encodeEpochTime (lcExpiry lipConfig)
             & k "controller" ?~ encodeLockController (lcController lipConfig)
             & k "funds" ?~ encodeSequence encodeLockAccountFunds lipFunds
