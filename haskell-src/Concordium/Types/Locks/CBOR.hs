@@ -22,6 +22,8 @@ module Concordium.Types.Locks.CBOR (
     LockMetadata (..),
     encodeLockMetadata,
     decodeLockMetadata,
+    lockMetadataToRawCbor,
+    lockMetadataFromRawCbor,
     LockConfig (..),
     LockedTokenAmount (..),
     encodeLockAccountFunds,
@@ -48,7 +50,7 @@ import Data.Text (Text)
 import qualified Data.Text.Lazy as LazyText
 import Lens.Micro.Platform
 
-import Concordium.Types (TransactionTime (..))
+import Concordium.Types (RawCbor (..), TransactionTime (..), rawCborFromBytes, rawCborToLazyBytes)
 import Concordium.Types.Locks
 import Concordium.Types.ProtocolLevelTokens.CBOR (
     CborAccountAddress,
@@ -304,12 +306,20 @@ decodeLockMetadata =
     valDecoder k@"description" = Just $ mapValueDecoder k decodeString lmbDescription
     valDecoder k = Just $ mapValueDecoder k CBORTerm.decodeTerm (lmbAdditional . at k)
 
+-- | Encode typed lock metadata to raw CBOR bytes.
+lockMetadataToRawCbor :: LockMetadata -> RawCbor
+lockMetadataToRawCbor = rawCborFromBytes . CBOR.encodeToBytes . encodeLockMetadata
+
+-- | Decode typed lock metadata from raw CBOR bytes.
+lockMetadataFromRawCbor :: RawCbor -> Either String LockMetadata
+lockMetadataFromRawCbor = decodeFromBytes decodeLockMetadata "lock metadata" . rawCborToLazyBytes
+
 -- | Static configuration of a lock.
 data LockConfig = LockConfig
     { lcRecipients :: !LockRecipients,
       lcExpiry :: !TransactionTime,
       lcController :: !LockController,
-      lcMetadata :: !(Maybe LockMetadata)
+      lcMetadata :: !(Maybe RawCbor)
     }
     deriving (Eq, Show)
 
@@ -322,15 +332,13 @@ decodeEpochTime = do
     unless (tag == 1) $ fail $ "epoch-time: Expected tag 1 but found " ++ show tag
     TransactionTime <$> decodeWord64
 
--- | Encode lock metadata as a byte string containing its CBOR encoding.
-encodeLockMetadataBytes :: LockMetadata -> Encoding
-encodeLockMetadataBytes = encodeBytes . CBOR.encodeToBytes . encodeLockMetadata
+-- | Encode raw lock metadata bytes.
+encodeLockMetadataBytes :: RawCbor -> Encoding
+encodeLockMetadataBytes = encodeBytes . cborBytes
 
--- | Decode lock metadata from a byte string containing its CBOR encoding.
-decodeLockMetadataBytes :: Decoder s LockMetadata
-decodeLockMetadataBytes = do
-    bytes <- decodeBytes
-    either fail return $ decodeFromBytes decodeLockMetadata "lock metadata" (LBS.fromStrict bytes)
+-- | Decode raw lock metadata bytes.
+decodeLockMetadataBytes :: Decoder s RawCbor
+decodeLockMetadataBytes = rawCborFromBytes <$> decodeBytes
 
 -- | Locked amount for a token.
 data LockedTokenAmount = LockedTokenAmount
@@ -421,7 +429,7 @@ data LockInfoDetailsBuilder = LockInfoDetailsBuilder
       _lidbRecipients :: !(Maybe LockRecipients),
       _lidbExpiry :: !(Maybe TransactionTime),
       _lidbController :: !(Maybe LockController),
-      _lidbMetadata :: !(Maybe LockMetadata),
+      _lidbMetadata :: !(Maybe RawCbor),
       _lidbFunds :: !(Maybe (Seq.Seq LockAccountFunds))
     }
 

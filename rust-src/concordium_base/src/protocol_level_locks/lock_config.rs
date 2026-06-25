@@ -1,13 +1,12 @@
 use super::LockController;
 use crate::common::{
     cbor::{
-        self, value, Bytes, CborDecoder, CborDeserialize, CborEncoder, CborMapDecoder,
-        CborMapEncoder, CborSerializationError, CborSerializationResult, CborSerialize,
-        DataItemHeader,
+        self, value, CborDecoder, CborDeserialize, CborEncoder, CborSerializationError,
+        CborSerializationResult, CborSerialize, DataItemHeader,
     },
     types::TransactionTime,
 };
-use crate::protocol_level_tokens::CborHolderAccount;
+use crate::protocol_level_tokens::{CborHolderAccount, RawCbor};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use std::collections::HashMap;
 
@@ -55,7 +54,7 @@ impl CborDeserialize for LockRecipients {
 }
 
 /// User-facing metadata attached to a lock at creation time.
-#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
+#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize, Default)]
 pub struct LockMetadata {
     /// Optional user-facing lock name.
     pub name: Option<String>,
@@ -67,11 +66,52 @@ pub struct LockMetadata {
     pub additional: HashMap<String, value::Value>,
 }
 
+impl LockMetadata {
+    /// Decode typed lock metadata from raw CBOR bytes.
+    ///
+    /// # Arguments
+    ///
+    /// * `raw_cbor` - Raw bytes expected to contain a CBOR-encoded lock metadata map.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the bytes are not valid CBOR for [`LockMetadata`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use concordium_base::common::cbor;
+    /// use concordium_base::protocol_level_locks::LockMetadata;
+    /// use concordium_base::protocol_level_tokens::RawCbor;
+    ///
+    /// let raw = RawCbor::from(cbor::cbor_encode(&LockMetadata::default()));
+    /// let metadata = LockMetadata::decode_raw_cbor(&raw)?;
+    /// # Ok::<(), concordium_base::common::cbor::CborSerializationError>(())
+    /// ```
+    pub fn decode_raw_cbor(raw_cbor: &RawCbor) -> CborSerializationResult<Self> {
+        cbor::cbor_decode(raw_cbor.as_ref())
+    }
+
+    /// Encode typed lock metadata to raw CBOR bytes.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use concordium_base::protocol_level_locks::LockMetadata;
+    ///
+    /// let raw = LockMetadata::default().encode_raw_cbor();
+    /// assert!(!raw.as_ref().is_empty());
+    /// ```
+    pub fn encode_raw_cbor(&self) -> RawCbor {
+        RawCbor::from(cbor::cbor_encode(self))
+    }
+}
+
 /// Top-level lock configuration.
 ///
 /// Contains the recipients, the expiry time, the controller configuration, and
 /// optional immutable metadata for a lock.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
 pub struct LockConfig {
     /// Accounts that can receive funds from this lock, or `Any` for any
     /// eligible recipient.
@@ -80,70 +120,8 @@ pub struct LockConfig {
     pub expiry: TransactionTime,
     /// Controller configuration for the lock.
     pub controller: LockController,
-    /// Optional user-facing metadata encoded externally as CBOR bytes.
-    pub metadata: Option<LockMetadata>,
-}
-
-impl CborSerialize for LockConfig {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
-        let mut map_encoder = encoder.encode_map()?;
-        map_encoder.serialize_entry("recipients", &self.recipients)?;
-        map_encoder.serialize_entry("expiry", &self.expiry)?;
-        map_encoder.serialize_entry("controller", &self.controller)?;
-        if let Some(metadata) = &self.metadata {
-            map_encoder.serialize_entry("metadata", &Bytes(cbor::cbor_encode(metadata)))?;
-        }
-        map_encoder.end()
-    }
-}
-
-impl CborDeserialize for LockConfig {
-    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
-    where
-        Self: Sized,
-    {
-        let mut recipients = None;
-        let mut expiry = None;
-        let mut controller = None;
-        let mut metadata = None;
-        let mut map_decoder = decoder.decode_map()?;
-
-        while let Some(key) = map_decoder.deserialize_key::<String>()? {
-            match key.as_str() {
-                "recipients" => recipients = Some(map_decoder.deserialize_value()?),
-                "expiry" => expiry = Some(map_decoder.deserialize_value()?),
-                "controller" => controller = Some(map_decoder.deserialize_value()?),
-                "metadata" => {
-                    let bytes: Bytes = map_decoder.deserialize_value()?;
-                    metadata = Some(cbor::cbor_decode(bytes)?);
-                }
-                _ => {
-                    return Err(CborSerializationError::invalid_data(format_args!(
-                        "unexpected lock config key {key:?}"
-                    )))
-                }
-            }
-        }
-
-        Ok(Self {
-            recipients: recipients.ok_or_else(|| {
-                CborSerializationError::invalid_data(format_args!(
-                    "missing required lock config key \"recipients\""
-                ))
-            })?,
-            expiry: expiry.ok_or_else(|| {
-                CborSerializationError::invalid_data(format_args!(
-                    "missing required lock config key \"expiry\""
-                ))
-            })?,
-            controller: controller.ok_or_else(|| {
-                CborSerializationError::invalid_data(format_args!(
-                    "missing required lock config key \"controller\""
-                ))
-            })?,
-            metadata,
-        })
-    }
+    /// Optional raw CBOR-encoded user-facing metadata.
+    pub metadata: Option<RawCbor>,
 }
 
 #[cfg(test)]
@@ -303,7 +281,7 @@ mod test {
                 keep_alive: false,
                 memo: None,
             }),
-            metadata: Some(example_lock_metadata()),
+            metadata: Some(example_lock_metadata().encode_raw_cbor()),
         };
         let encoded = cbor::cbor_encode(&config);
         let expected = concat!(
@@ -362,14 +340,21 @@ mod test {
             "7821546f6b656e73206c6f636b65642062792076657374696e67207363686564756c65",
         );
         assert_eq!(hex::encode(&encoded), expected);
-        let decoded: LockMetadata = cbor::cbor_decode(&encoded).expect("CBOR decode failed");
+        let decoded =
+            LockMetadata::decode_raw_cbor(&RawCbor::from(encoded)).expect("CBOR decode failed");
         assert_eq!(decoded, metadata);
+    }
+
+    #[test]
+    fn test_lock_metadata_decode_raw_rejects_invalid_metadata() {
+        let raw = RawCbor::from(vec![0x01]);
+        LockMetadata::decode_raw_cbor(&raw).expect_err("metadata helper decode should fail");
     }
 
     #[test]
     fn test_lock_config_cbor_round_trip_with_metadata() {
         let mut config = example_lock_config();
-        config.metadata = Some(example_lock_metadata());
+        config.metadata = Some(example_lock_metadata().encode_raw_cbor());
         let encoded = cbor::cbor_encode(&config);
         let decoded: LockConfig = cbor::cbor_decode(&encoded).expect("CBOR decode failed");
         assert_eq!(decoded, config);

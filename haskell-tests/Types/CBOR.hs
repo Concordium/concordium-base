@@ -1250,7 +1250,7 @@ exampleLockInfoDetails =
                               lcsv0KeepAlive = False,
                               lcsv0Memo = Nothing
                             },
-                  lcMetadata = Just exampleLockMetadata
+                  lcMetadata = Just (lockMetadataToRawCbor exampleLockMetadata)
                 },
           lipFunds =
             Seq.singleton
@@ -1448,18 +1448,21 @@ exampleLockMetadataCBOR =
 
 testLockMetadataCBOR :: Spec
 testLockMetadataCBOR = describe "LockMetadata CBOR" $ do
-    it "known and additional fields fixture" $
+    it "known and additional fields fixture" $ do
         lockFixture
             encodeLockMetadata
             decodeLockMetadata
             exampleLockMetadata
             exampleLockMetadataCBOR
+        lockMetadataFromRawCbor (lockMetadataToRawCbor exampleLockMetadata) `shouldBe` Right exampleLockMetadata
     it "only additional fields" $
         lockFixture
             encodeLockMetadata
             decodeLockMetadata
             LockMetadata{lmName = Nothing, lmDescription = Nothing, lmAdditional = Map.singleton "issuer" (CBOR.TString "Concordium")}
             (mconcat ["a1", "66697373756572", "6a436f6e636f726469756d"])
+    it "raw helper rejects invalid metadata" $
+        lockMetadataFromRawCbor (rawCborFromBytes "\x01") `shouldSatisfy` isLeft
 
 testLockRecipientsCBOR :: Spec
 testLockRecipientsCBOR = describe "LockRecipients CBOR" $ do

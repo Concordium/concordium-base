@@ -538,7 +538,7 @@ pub struct MetaLockReturnDetails {
 }
 
 /// Create a lock with the specified configuration.
-#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
 #[cbor(transparent)]
 pub struct MetaLockCreateDetails {
     pub config: LockConfig,

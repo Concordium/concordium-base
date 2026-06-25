@@ -1,16 +1,10 @@
-use super::{LockController, LockId, LockMetadata, LockRecipients};
-use crate::common::{
-    cbor::{
-        self, Bytes, CborDecoder, CborDeserialize, CborEncoder, CborMapDecoder, CborMapEncoder,
-        CborSerializationError, CborSerializationResult, CborSerialize,
-    },
-    types::TransactionTime,
-};
-use crate::protocol_level_tokens::{CborHolderAccount, TokenAmount, TokenId};
+use super::{LockController, LockId, LockRecipients};
+use crate::common::types::TransactionTime;
+use crate::protocol_level_tokens::{CborHolderAccount, RawCbor, TokenAmount, TokenId};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 
 /// CBOR-encoded result of the `GetLockInfo` query.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
 pub struct LockInfo {
     /// The lock identifier.
     pub lock: LockId,
@@ -21,88 +15,10 @@ pub struct LockInfo {
     pub expiry: TransactionTime,
     /// Controller configuration for the lock.
     pub controller: LockController,
-    /// Optional user-facing metadata encoded externally as CBOR bytes.
-    pub metadata: Option<LockMetadata>,
+    /// Optional raw CBOR-encoded user-facing metadata.
+    pub metadata: Option<RawCbor>,
     /// The locked balances currently controlled by the lock.
     pub funds: Vec<LockAccountFunds>,
-}
-
-impl CborSerialize for LockInfo {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
-        let mut map_encoder = encoder.encode_map()?;
-        map_encoder.serialize_entry("lock", &self.lock)?;
-        map_encoder.serialize_entry("recipients", &self.recipients)?;
-        map_encoder.serialize_entry("expiry", &self.expiry)?;
-        map_encoder.serialize_entry("controller", &self.controller)?;
-        if let Some(metadata) = &self.metadata {
-            map_encoder.serialize_entry("metadata", &Bytes(cbor::cbor_encode(metadata)))?;
-        }
-        map_encoder.serialize_entry("funds", &self.funds)?;
-        map_encoder.end()
-    }
-}
-
-impl CborDeserialize for LockInfo {
-    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
-    where
-        Self: Sized,
-    {
-        let mut lock = None;
-        let mut recipients = None;
-        let mut expiry = None;
-        let mut controller = None;
-        let mut metadata = None;
-        let mut funds = None;
-        let mut map_decoder = decoder.decode_map()?;
-
-        while let Some(key) = map_decoder.deserialize_key::<String>()? {
-            match key.as_str() {
-                "lock" => lock = Some(map_decoder.deserialize_value()?),
-                "recipients" => recipients = Some(map_decoder.deserialize_value()?),
-                "expiry" => expiry = Some(map_decoder.deserialize_value()?),
-                "controller" => controller = Some(map_decoder.deserialize_value()?),
-                "metadata" => {
-                    let bytes: Bytes = map_decoder.deserialize_value()?;
-                    metadata = Some(cbor::cbor_decode(bytes)?);
-                }
-                "funds" => funds = Some(map_decoder.deserialize_value()?),
-                _ => {
-                    return Err(CborSerializationError::invalid_data(format_args!(
-                        "unexpected lock info key {key:?}"
-                    )))
-                }
-            }
-        }
-
-        Ok(Self {
-            lock: lock.ok_or_else(|| {
-                CborSerializationError::invalid_data(format_args!(
-                    "missing required lock info key \"lock\""
-                ))
-            })?,
-            recipients: recipients.ok_or_else(|| {
-                CborSerializationError::invalid_data(format_args!(
-                    "missing required lock info key \"recipients\""
-                ))
-            })?,
-            expiry: expiry.ok_or_else(|| {
-                CborSerializationError::invalid_data(format_args!(
-                    "missing required lock info key \"expiry\""
-                ))
-            })?,
-            controller: controller.ok_or_else(|| {
-                CborSerializationError::invalid_data(format_args!(
-                    "missing required lock info key \"controller\""
-                ))
-            })?,
-            metadata,
-            funds: funds.ok_or_else(|| {
-                CborSerializationError::invalid_data(format_args!(
-                    "missing required lock info key \"funds\""
-                ))
-            })?,
-        })
-    }
 }
 
 /// Locked funds controlled by a lock for a single account.
@@ -131,7 +47,7 @@ mod test {
     use crate::common::types::TransactionTime;
     use crate::protocol_level_locks::{
         LockController, LockControllerSimpleV0, LockControllerSimpleV0Capability,
-        LockControllerSimpleV0Grant,
+        LockControllerSimpleV0Grant, LockMetadata,
     };
     use crate::protocol_level_tokens::test_fixtures::ADDRESS;
     use std::collections::HashMap;
@@ -189,7 +105,7 @@ mod test {
     #[test]
     fn test_lock_info_cbor_fixture_with_metadata() {
         let mut lock_info = example_lock_info();
-        lock_info.metadata = Some(example_lock_metadata());
+        lock_info.metadata = Some(example_lock_metadata().encode_raw_cbor());
         let encoded = cbor::cbor_encode(&lock_info);
         let expected = concat!(
             "a6",
@@ -257,7 +173,7 @@ mod test {
     #[test]
     fn test_lock_info_cbor_round_trip_with_metadata() {
         let mut lock_info = example_lock_info();
-        lock_info.metadata = Some(example_lock_metadata());
+        lock_info.metadata = Some(example_lock_metadata().encode_raw_cbor());
         let encoded = cbor::cbor_encode(&lock_info);
         let decoded: LockInfo = cbor::cbor_decode(&encoded).expect("CBOR decode failed");
         assert_eq!(decoded, lock_info);
