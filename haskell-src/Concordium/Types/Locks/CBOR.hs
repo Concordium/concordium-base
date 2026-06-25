@@ -19,6 +19,9 @@ module Concordium.Types.Locks.CBOR (
     LockRecipients (..),
     encodeLockRecipients,
     decodeLockRecipients,
+    LockMetadata (..),
+    encodeLockMetadata,
+    decodeLockMetadata,
     LockConfig (..),
     LockedTokenAmount (..),
     encodeLockAccountFunds,
@@ -256,11 +259,57 @@ decodeLockRecipientsHelper = \case
     unsupportedText :: Text -> Either String LockRecipients
     unsupportedText value = Left $ "Unsupported lock recipients text value: " ++ show value
 
+-- | User-facing metadata attached to a lock at creation time.
+data LockMetadata = LockMetadata
+    { lmName :: !(Maybe Text),
+      lmDescription :: !(Maybe Text),
+      lmAdditional :: !(Map.Map Text CBORTerm.Term)
+    }
+    deriving (Eq, Show)
+
+data LockMetadataBuilder = LockMetadataBuilder
+    { _lmbName :: !(Maybe Text),
+      _lmbDescription :: !(Maybe Text),
+      _lmbAdditional :: !(Map.Map Text CBORTerm.Term)
+    }
+
+makeLenses ''LockMetadataBuilder
+
+emptyLockMetadataBuilder :: LockMetadataBuilder
+emptyLockMetadataBuilder = LockMetadataBuilder Nothing Nothing Map.empty
+
+-- | Encode lock metadata as a text-keyed CBOR map.
+encodeLockMetadata :: LockMetadata -> Encoding
+encodeLockMetadata LockMetadata{..} =
+    encodeMapDeterministic $
+        CBOR.encodeAdditionalMapCbor lmAdditional
+            & k "name" .~ (encodeString <$> lmName)
+            & k "description" .~ (encodeString <$> lmDescription)
+  where
+    k = at . makeMapKeyEncoding . encodeString
+
+-- | Decode lock metadata from a text-keyed CBOR map.
+decodeLockMetadata :: Decoder s LockMetadata
+decodeLockMetadata =
+    decodeMap valDecoder build emptyLockMetadataBuilder
+  where
+    build LockMetadataBuilder{..} =
+        Right $
+            LockMetadata
+                { lmName = _lmbName,
+                  lmDescription = _lmbDescription,
+                  lmAdditional = _lmbAdditional
+                }
+    valDecoder k@"name" = Just $ mapValueDecoder k decodeString lmbName
+    valDecoder k@"description" = Just $ mapValueDecoder k decodeString lmbDescription
+    valDecoder k = Just $ mapValueDecoder k CBORTerm.decodeTerm (lmbAdditional . at k)
+
 -- | Static configuration of a lock.
 data LockConfig = LockConfig
     { lcRecipients :: !LockRecipients,
       lcExpiry :: !TransactionTime,
-      lcController :: !LockController
+      lcController :: !LockController,
+      lcMetadata :: !(Maybe LockMetadata)
     }
     deriving (Eq, Show)
 
@@ -272,6 +321,16 @@ decodeEpochTime = do
     tag <- decodeTag
     unless (tag == 1) $ fail $ "epoch-time: Expected tag 1 but found " ++ show tag
     TransactionTime <$> decodeWord64
+
+-- | Encode lock metadata as a byte string containing its CBOR encoding.
+encodeLockMetadataBytes :: LockMetadata -> Encoding
+encodeLockMetadataBytes = encodeBytes . CBOR.encodeToBytes . encodeLockMetadata
+
+-- | Decode lock metadata from a byte string containing its CBOR encoding.
+decodeLockMetadataBytes :: Decoder s LockMetadata
+decodeLockMetadataBytes = do
+    bytes <- decodeBytes
+    either fail return $ decodeFromBytes decodeLockMetadata "lock metadata" (LBS.fromStrict bytes)
 
 -- | Locked amount for a token.
 data LockedTokenAmount = LockedTokenAmount
@@ -362,13 +421,14 @@ data LockInfoDetailsBuilder = LockInfoDetailsBuilder
       _lidbRecipients :: !(Maybe LockRecipients),
       _lidbExpiry :: !(Maybe TransactionTime),
       _lidbController :: !(Maybe LockController),
+      _lidbMetadata :: !(Maybe LockMetadata),
       _lidbFunds :: !(Maybe (Seq.Seq LockAccountFunds))
     }
 
 makeLenses ''LockInfoDetailsBuilder
 
 emptyLockInfoDetailsBuilder :: LockInfoDetailsBuilder
-emptyLockInfoDetailsBuilder = LockInfoDetailsBuilder Nothing Nothing Nothing Nothing Nothing
+emptyLockInfoDetailsBuilder = LockInfoDetailsBuilder Nothing Nothing Nothing Nothing Nothing Nothing
 
 decodeLockInfoDetails :: Decoder s LockInfoDetails
 decodeLockInfoDetails =
@@ -379,12 +439,14 @@ decodeLockInfoDetails =
         lcRecipients <- _lidbRecipients `CBOR.orFail` "Missing \"recipients\""
         lcExpiry <- _lidbExpiry `CBOR.orFail` "Missing \"expiry\""
         lcController <- _lidbController `CBOR.orFail` "Missing \"controller\""
+        let lcMetadata = _lidbMetadata
         lipFunds <- _lidbFunds `CBOR.orFail` "Missing \"funds\""
         return LockInfoDetails{lipConfig = LockConfig{..}, ..}
     valDecoder k@"lock" = Just $ mapValueDecoder k decodeLockId lidbLock
     valDecoder k@"recipients" = Just $ mapValueDecoder k decodeLockRecipients lidbRecipients
     valDecoder k@"expiry" = Just $ mapValueDecoder k decodeEpochTime lidbExpiry
     valDecoder k@"controller" = Just $ mapValueDecoder k decodeLockController lidbController
+    valDecoder k@"metadata" = Just $ mapValueDecoder k decodeLockMetadataBytes lidbMetadata
     valDecoder k@"funds" = Just $ mapValueDecoder k (decodeSequence decodeLockAccountFunds) lidbFunds
     valDecoder _ = Nothing
 
@@ -396,6 +458,7 @@ encodeLockInfoDetails LockInfoDetails{..} =
             & k "recipients" ?~ encodeLockRecipients (lcRecipients lipConfig)
             & k "expiry" ?~ encodeEpochTime (lcExpiry lipConfig)
             & k "controller" ?~ encodeLockController (lcController lipConfig)
+            & k "metadata" .~ (encodeLockMetadataBytes <$> lcMetadata lipConfig)
             & k "funds" ?~ encodeSequence encodeLockAccountFunds lipFunds
   where
     k = at . makeMapKeyEncoding . encodeString

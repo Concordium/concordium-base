@@ -538,7 +538,7 @@ pub struct MetaLockReturnDetails {
 }
 
 /// Create a lock with the specified configuration.
-#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 #[cbor(transparent)]
 pub struct MetaLockCreateDetails {
     pub config: LockConfig,
@@ -851,6 +851,7 @@ mod tests {
                     keep_alive: false,
                     memo: None,
                 }),
+                metadata: None,
             },
         });
         let cbor = cbor::cbor_encode(&operation);
