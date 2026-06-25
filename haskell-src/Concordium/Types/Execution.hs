@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -2927,18 +2928,48 @@ data RejectReason
     | -- | The lock is expired.
       LockExpired !LockId
     | -- | The account is not authorized to fund the lock.
-      LockFundNotAuthorized !LockId !AccountAddress
+      LockFundNotAuthorized !LockAccountRejectReasonDetails
     | -- | The account is not authorized to send funds controlled by the lock.
-      LockSendNotAuthorized !LockId !AccountAddress
+      LockSendNotAuthorized !LockAccountRejectReasonDetails
     | -- | The account is not authorized to return funds controlled by the lock.
-      LockReturnNotAuthorized !LockId !AccountAddress
+      LockReturnNotAuthorized !LockAccountRejectReasonDetails
     | -- | The account is not authorized to cancel the lock.
-      LockCancelNotAuthorized !LockId !AccountAddress
+      LockCancelNotAuthorized !LockAccountRejectReasonDetails
     | -- | The lock does not allow funding with the particular token.
-      LockTokenNotPermitted !LockId !TokenId
+      LockTokenNotPermitted !LockTokenRejectReasonDetails
     | -- | The recipient is not permitted to receive funds controlled by the lock.
-      LockRecipientNotPermitted !LockId !AccountAddress
+      LockRecipientNotPermitted !LockAccountRejectReasonDetails
     deriving (Show, Eq, Generic)
+
+-- | Details for lock reject reasons involving an account.
+data LockAccountRejectReasonDetails = LockAccountRejectReasonDetails
+    { -- | The lock involved in the rejected operation.
+      lockId :: !LockId,
+      -- | The account involved in the rejected operation.
+      account :: !AccountAddress
+    }
+    deriving (Show, Eq, Generic)
+
+instance AE.ToJSON LockAccountRejectReasonDetails
+instance AE.FromJSON LockAccountRejectReasonDetails
+
+-- | Details for lock reject reasons involving a token.
+data LockTokenRejectReasonDetails = LockTokenRejectReasonDetails
+    { -- | The lock involved in the rejected operation.
+      lockId :: !LockId,
+      -- | The token involved in the rejected operation.
+      tokenId :: !TokenId
+    }
+    deriving (Show, Eq, Generic)
+
+instance AE.ToJSON LockTokenRejectReasonDetails
+instance AE.FromJSON LockTokenRejectReasonDetails
+
+getLockAccountRejectReasonDetails :: S.Get LockAccountRejectReasonDetails
+getLockAccountRejectReasonDetails = LockAccountRejectReasonDetails <$> S.get <*> S.get
+
+getLockTokenRejectReasonDetails :: S.Get LockTokenRejectReasonDetails
+getLockTokenRejectReasonDetails = LockTokenRejectReasonDetails <$> S.get <*> S.get
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
 wasmRejectToRejectReasonInit (Wasm.ContractReject reason) = RejectedInit reason
@@ -3013,12 +3044,12 @@ instance S.Serialize RejectReason where
         TokenUpdateTransactionFailed reason -> S.putWord8 56 <> S.put reason
         NonExistentLockId lockId -> S.putWord8 57 <> S.put lockId
         LockExpired lockId -> S.putWord8 58 <> S.put lockId
-        LockFundNotAuthorized lockId addr -> S.putWord8 59 <> S.put lockId <> S.put addr
-        LockSendNotAuthorized lockId addr -> S.putWord8 60 <> S.put lockId <> S.put addr
-        LockReturnNotAuthorized lockId addr -> S.putWord8 61 <> S.put lockId <> S.put addr
-        LockCancelNotAuthorized lockId addr -> S.putWord8 62 <> S.put lockId <> S.put addr
-        LockTokenNotPermitted lockId tokenId -> S.putWord8 63 <> S.put lockId <> S.put tokenId
-        LockRecipientNotPermitted lockId addr -> S.putWord8 64 <> S.put lockId <> S.put addr
+        LockFundNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 59 <> S.put lockId <> S.put account
+        LockSendNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 60 <> S.put lockId <> S.put account
+        LockReturnNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 61 <> S.put lockId <> S.put account
+        LockCancelNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 62 <> S.put lockId <> S.put account
+        LockTokenNotPermitted LockTokenRejectReasonDetails{..} -> S.putWord8 63 <> S.put lockId <> S.put tokenId
+        LockRecipientNotPermitted LockAccountRejectReasonDetails{..} -> S.putWord8 64 <> S.put lockId <> S.put account
     get =
         S.getWord8 >>= \case
             0 -> return ModuleNotWF
@@ -3089,12 +3120,12 @@ instance S.Serialize RejectReason where
             56 -> TokenUpdateTransactionFailed <$> S.get
             57 -> NonExistentLockId <$> S.get
             58 -> LockExpired <$> S.get
-            59 -> LockFundNotAuthorized <$> S.get <*> S.get
-            60 -> LockSendNotAuthorized <$> S.get <*> S.get
-            61 -> LockReturnNotAuthorized <$> S.get <*> S.get
-            62 -> LockCancelNotAuthorized <$> S.get <*> S.get
-            63 -> LockTokenNotPermitted <$> S.get <*> S.get
-            64 -> LockRecipientNotPermitted <$> S.get <*> S.get
+            59 -> LockFundNotAuthorized <$> getLockAccountRejectReasonDetails
+            60 -> LockSendNotAuthorized <$> getLockAccountRejectReasonDetails
+            61 -> LockReturnNotAuthorized <$> getLockAccountRejectReasonDetails
+            62 -> LockCancelNotAuthorized <$> getLockAccountRejectReasonDetails
+            63 -> LockTokenNotPermitted <$> getLockTokenRejectReasonDetails
+            64 -> LockRecipientNotPermitted <$> getLockAccountRejectReasonDetails
             n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 instance AE.ToJSON RejectReason

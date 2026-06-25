@@ -1,4 +1,5 @@
 {-# LANGUAGE MonoLocalBinds #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -130,6 +131,44 @@ testEventJSONSerializationIdentity spv = forAll (genEvent spv) $ \e -> AE.either
 testRejectReasonSerializationIdentity :: RejectReason -> Property
 testRejectReasonSerializationIdentity e = decodeFull (encode e) === Right e
 
+-- | Test the JSON representation of lock reject reasons.
+testLockRejectReasonJSONRepresentation :: Spec
+testLockRejectReasonJSONRepresentation = do
+    it "encodes and decodes LockExpired with contents" $
+        assertJSON
+            (LockExpired lockId)
+            (AE.object ["tag" AE..= ("LockExpired" :: String), "contents" AE..= lockId])
+    it "encodes and decodes lock account rejects with contents" $ do
+        assertJSON
+            (LockFundNotAuthorized accountDetails)
+            (AE.object ["tag" AE..= ("LockFundNotAuthorized" :: String), "contents" AE..= accountDetails])
+        assertJSON
+            (LockSendNotAuthorized accountDetails)
+            (AE.object ["tag" AE..= ("LockSendNotAuthorized" :: String), "contents" AE..= accountDetails])
+        assertJSON
+            (LockReturnNotAuthorized accountDetails)
+            (AE.object ["tag" AE..= ("LockReturnNotAuthorized" :: String), "contents" AE..= accountDetails])
+        assertJSON
+            (LockCancelNotAuthorized accountDetails)
+            (AE.object ["tag" AE..= ("LockCancelNotAuthorized" :: String), "contents" AE..= accountDetails])
+        assertJSON
+            (LockRecipientNotPermitted accountDetails)
+            (AE.object ["tag" AE..= ("LockRecipientNotPermitted" :: String), "contents" AE..= accountDetails])
+    it "encodes and decodes LockTokenNotPermitted with contents" $
+        assertJSON
+            (LockTokenNotPermitted tokenDetails)
+            (AE.object ["tag" AE..= ("LockTokenNotPermitted" :: String), "contents" AE..= tokenDetails])
+  where
+    account = AccountAddress $ FBS.pack $ replicate 32 1
+    accountDetails = LockAccountRejectReasonDetails{lockId, account}
+    assertJSON reason expected = do
+        AE.toJSON reason `shouldBe` expected
+        AE.eitherDecode (AE.encode reason) `shouldBe` Right expected
+        AE.fromJSON expected `shouldBe` AE.Success reason
+    lockId = LockId{liAccountIndex = 1, liSequenceNumber = 2, liCreationOrder = 3}
+    tokenDetails = LockTokenRejectReasonDetails{lockId, tokenId}
+    tokenId = TokenId "CCD"
+
 -- | Test that decoding is the inverse of encoding for 'ValidResult's.
 testValidResultSerializationIdentity :: (IsProtocolVersion pv) => SProtocolVersion pv -> Property
 testValidResultSerializationIdentity spv = forAll (genValidResult spv) $ \e -> decodeFull' (getValidResult spv) (runPut $ putValidResult e) === Right e
@@ -145,6 +184,7 @@ tests = describe "Transaction summaries" $ do
     -- since this includes all events.
     specify "Event: JSON serialize then deserialize is identity" $ withMaxSuccess 10000 $ testEventJSONSerializationIdentity SP9
     specify "RejectReason: serialize then deserialize is identity" $ withMaxSuccess 10000 testRejectReasonSerializationIdentity
+    testLockRejectReasonJSONRepresentation
     versionedTests SP1
     versionedTests SP2
     versionedTests SP3

@@ -895,12 +895,12 @@ instance Arbitrary RejectReason where
               TokenUpdateTransactionFailed <$> genTokenModuleRejectReason,
               NonExistentLockId <$> genLockId,
               LockExpired <$> genLockId,
-              LockFundNotAuthorized <$> genLockId <*> genAccountAddress,
-              LockSendNotAuthorized <$> genLockId <*> genAccountAddress,
-              LockReturnNotAuthorized <$> genLockId <*> genAccountAddress,
-              LockCancelNotAuthorized <$> genLockId <*> genAccountAddress,
-              LockTokenNotPermitted <$> genLockId <*> genTokenId,
-              LockRecipientNotPermitted <$> genLockId <*> genAccountAddress
+              LockFundNotAuthorized <$> genLockAccountRejectReasonDetails,
+              LockSendNotAuthorized <$> genLockAccountRejectReasonDetails,
+              LockReturnNotAuthorized <$> genLockAccountRejectReasonDetails,
+              LockCancelNotAuthorized <$> genLockAccountRejectReasonDetails,
+              LockTokenNotPermitted <$> genLockTokenRejectReasonDetails,
+              LockRecipientNotPermitted <$> genLockAccountRejectReasonDetails
             ]
 
 genValidResult :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen ValidResult
@@ -1233,6 +1233,14 @@ genTokenEventDetails = do
 --  this generator can produce 'LockId's with sequence number 0.
 genLockId :: Gen LockId
 genLockId = LockId <$> arbitrary <*> arbitrary <*> arbitrary
+
+-- | Generate arbitrary lock reject reason details involving an account.
+genLockAccountRejectReasonDetails :: Gen LockAccountRejectReasonDetails
+genLockAccountRejectReasonDetails = LockAccountRejectReasonDetails <$> genLockId <*> genAccountAddress
+
+-- | Generate arbitrary lock reject reason details involving a token.
+genLockTokenRejectReasonDetails :: Gen LockTokenRejectReasonDetails
+genLockTokenRejectReasonDetails = LockTokenRejectReasonDetails <$> genLockId <*> genTokenId
 
 -- | Generate an arbitrary 'CreatePLT' chain update, consisting of:
 --   * Random token symbol up to 255 bytes valid UTF-8.
