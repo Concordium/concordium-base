@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -791,11 +792,11 @@ instance ToProto RejectReason where
         TokenUpdateTransactionFailed reason -> Proto.make $ ProtoFields.tokenUpdateTransactionFailed .= toProto reason
         NonExistentLockId lockId -> Proto.make $ ProtoFields.nonExistentLockId .= toProto lockId
         LockExpired lockId -> Proto.make $ ProtoFields.lockExpired .= toProto lockId
-        LockFundNotAuthorized lockId sender -> Proto.make $ ProtoFields.lockFundNotAuthorized .= mkLockOpNotAuth lockId sender
-        LockSendNotAuthorized lockId sender -> Proto.make $ ProtoFields.lockSendNotAuthorized .= mkLockOpNotAuth lockId sender
-        LockReturnNotAuthorized lockId sender -> Proto.make $ ProtoFields.lockReturnNotAuthorized .= mkLockOpNotAuth lockId sender
-        LockCancelNotAuthorized lockId sender -> Proto.make $ ProtoFields.lockCancelNotAuthorized .= mkLockOpNotAuth lockId sender
-        LockTokenNotPermitted lockId tokenId ->
+        LockFundNotAuthorized LockAccountRejectReasonDetails{lockId, account} -> Proto.make $ ProtoFields.lockFundNotAuthorized .= mkLockOpNotAuth lockId account
+        LockSendNotAuthorized LockAccountRejectReasonDetails{lockId, account} -> Proto.make $ ProtoFields.lockSendNotAuthorized .= mkLockOpNotAuth lockId account
+        LockReturnNotAuthorized LockAccountRejectReasonDetails{lockId, account} -> Proto.make $ ProtoFields.lockReturnNotAuthorized .= mkLockOpNotAuth lockId account
+        LockCancelNotAuthorized LockAccountRejectReasonDetails{lockId, account} -> Proto.make $ ProtoFields.lockCancelNotAuthorized .= mkLockOpNotAuth lockId account
+        LockTokenNotPermitted LockTokenRejectReasonDetails{lockId, tokenId} ->
             Proto.make $
                 ProtoFields.lockTokenNotPermitted
                     .= Proto.make
@@ -803,7 +804,7 @@ instance ToProto RejectReason where
                             ProtoFields.lockId .= toProto lockId
                             ProtoFields.tokenId .= toProto tokenId
                         )
-        LockRecipientNotPermitted lockId recpt -> Proto.make $ ProtoFields.lockRecipientNotPermitted .= mkLockOpNotAuth lockId recpt
+        LockRecipientNotPermitted LockAccountRejectReasonDetails{lockId, account} -> Proto.make $ ProtoFields.lockRecipientNotPermitted .= mkLockOpNotAuth lockId account
       where
         mkLockOpNotAuth lockId address = Proto.make $ do
             ProtoFields.lockId .= toProto lockId
