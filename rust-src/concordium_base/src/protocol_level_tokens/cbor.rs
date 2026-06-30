@@ -1,4 +1,7 @@
 use crate::common;
+use crate::common::cbor::{
+    CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize,
+};
 use crate::common::Get;
 
 /// CBOR encoded byte string.
@@ -27,6 +30,23 @@ impl From<RawCbor> for Vec<u8> {
 impl From<Vec<u8>> for RawCbor {
     fn from(bytes: Vec<u8>) -> Self {
         Self { bytes }
+    }
+}
+
+impl CborSerialize for RawCbor {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
+        encoder.encode_bytes(&self.bytes)
+    }
+}
+
+impl CborDeserialize for RawCbor {
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self {
+            bytes: decoder.decode_bytes()?,
+        })
     }
 }
 

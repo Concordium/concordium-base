@@ -851,6 +851,7 @@ mod tests {
                     keep_alive: false,
                     memo: None,
                 }),
+                metadata: None,
             },
         });
         let cbor = cbor::cbor_encode(&operation);

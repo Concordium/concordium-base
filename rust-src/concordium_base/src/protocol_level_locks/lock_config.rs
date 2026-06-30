@@ -1,13 +1,14 @@
 use super::LockController;
 use crate::common::{
     cbor::{
-        CborDecoder, CborDeserialize, CborEncoder, CborSerializationError, CborSerializationResult,
-        CborSerialize, DataItemHeader,
+        self, value, CborDecoder, CborDeserialize, CborEncoder, CborSerializationError,
+        CborSerializationResult, CborSerialize, DataItemHeader,
     },
     types::TransactionTime,
 };
-use crate::protocol_level_tokens::CborHolderAccount;
+use crate::protocol_level_tokens::{CborHolderAccount, RawCbor};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
+use std::collections::HashMap;
 
 /// Accounts that can receive funds controlled by a lock.
 #[allow(clippy::large_enum_variant)]
@@ -52,10 +53,64 @@ impl CborDeserialize for LockRecipients {
     }
 }
 
+/// User-facing metadata attached to a lock at creation time.
+#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize, Default)]
+pub struct LockMetadata {
+    /// Optional user-facing lock name.
+    pub name: Option<String>,
+    /// Optional user-facing lock description.
+    pub description: Option<String>,
+    /// Additional text-keyed CBOR fields preserved for future extensibility and
+    /// user-defined metadata.
+    #[cbor(other)]
+    pub additional: HashMap<String, value::Value>,
+}
+
+impl LockMetadata {
+    /// Decode typed lock metadata from raw CBOR bytes.
+    ///
+    /// # Arguments
+    ///
+    /// * `raw_cbor` - Raw bytes expected to contain a CBOR-encoded lock metadata map.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the bytes are not valid CBOR for [`LockMetadata`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use concordium_base::common::cbor;
+    /// use concordium_base::protocol_level_locks::LockMetadata;
+    /// use concordium_base::protocol_level_tokens::RawCbor;
+    ///
+    /// let raw = RawCbor::from(cbor::cbor_encode(&LockMetadata::default()));
+    /// let metadata = LockMetadata::decode_raw_cbor(&raw)?;
+    /// # Ok::<(), concordium_base::common::cbor::CborSerializationError>(())
+    /// ```
+    pub fn decode_raw_cbor(raw_cbor: &RawCbor) -> CborSerializationResult<Self> {
+        cbor::cbor_decode(raw_cbor.as_ref())
+    }
+
+    /// Encode typed lock metadata to raw CBOR bytes.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use concordium_base::protocol_level_locks::LockMetadata;
+    ///
+    /// let raw = LockMetadata::default().encode_raw_cbor();
+    /// assert!(!raw.as_ref().is_empty());
+    /// ```
+    pub fn encode_raw_cbor(&self) -> RawCbor {
+        RawCbor::from(cbor::cbor_encode(self))
+    }
+}
+
 /// Top-level lock configuration.
 ///
-/// Contains the recipients, the expiry time, and the controller configuration
-/// for a lock.
+/// Contains the recipients, the expiry time, the controller configuration, and
+/// optional immutable metadata for a lock.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
 pub struct LockConfig {
     /// Accounts that can receive funds from this lock, or `Any` for any
@@ -65,12 +120,15 @@ pub struct LockConfig {
     pub expiry: TransactionTime,
     /// Controller configuration for the lock.
     pub controller: LockController,
+    /// Optional raw CBOR-encoded user-facing metadata.
+    pub metadata: Option<RawCbor>,
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::common::cbor;
+    use crate::common::cbor::value::Value;
     use crate::protocol_level_locks::{
         LockControllerSimpleV0, LockControllerSimpleV0Capability, LockControllerSimpleV0Grant,
     };
@@ -93,6 +151,7 @@ mod test {
                 keep_alive: false,
                 memo: None,
             }),
+            metadata: None,
         }
     }
 
@@ -168,6 +227,7 @@ mod test {
                 keep_alive: false,
                 memo: None,
             }),
+            metadata: None,
         };
         let encoded = cbor::cbor_encode(&config);
         // Build expected hex:
@@ -209,9 +269,9 @@ mod test {
         assert_eq!(hex::encode(&encoded), expected);
     }
 
-    /// Fixture test: verify the exact CBOR encoding of any recipients.
+    /// Fixture test: verify the exact CBOR encoding of any recipients and metadata.
     #[test]
-    fn test_lock_config_cbor_fixture_any_recipients() {
+    fn test_lock_config_cbor_fixture_any_recipients_with_metadata() {
         let config = LockConfig {
             recipients: LockRecipients::Any,
             expiry: TransactionTime::from_seconds(1804806000),
@@ -221,12 +281,24 @@ mod test {
                 keep_alive: false,
                 memo: None,
             }),
+            metadata: Some(example_lock_metadata().encode_raw_cbor()),
         };
         let encoded = cbor::cbor_encode(&config);
         let expected = concat!(
-            "a3",                     // map(3)
-            "66657870697279",         // text "expiry"
-            "c11a6b932770",           // tag(1) uint(1804806000)
+            "a4",                                                                     // map(4)
+            "66657870697279",             // text "expiry"
+            "c11a6b932770",               // tag(1) uint(1804806000)
+            "686d65746164617461",         // text "metadata"
+            "585d",                       // bytes(93)
+            "a4",                         // metadata map(4)
+            "646e616d65",                 // text "name"
+            "6c56657374696e67206c6f636b", // text "Vesting lock"
+            "66697373756572",             // text "issuer"
+            "6a436f6e636f726469756d",     // text "Concordium"
+            "6776657273696f6e",           // text "version"
+            "01",                         // uint(1)
+            "6b6465736372697074696f6e",   // text "description"
+            "7821546f6b656e73206c6f636b65642062792076657374696e67207363686564756c65", // text "Tokens locked by vesting schedule"
             "6a636f6e74726f6c6c6572", // text "controller"
             "a1",                     // map(1) — LockController
             "6873696d706c655630",     // text "simpleV0"
@@ -239,6 +311,53 @@ mod test {
             "63616e79",               // text "any"
         );
         assert_eq!(hex::encode(&encoded), expected);
+    }
+
+    fn example_lock_metadata() -> LockMetadata {
+        let mut additional = HashMap::new();
+        additional.insert("issuer".to_string(), Value::Text("Concordium".to_string()));
+        additional.insert("version".to_string(), Value::Positive(1));
+        LockMetadata {
+            name: Some("Vesting lock".to_string()),
+            description: Some("Tokens locked by vesting schedule".to_string()),
+            additional,
+        }
+    }
+
+    #[test]
+    fn test_lock_metadata_cbor_fixture_known_and_additional_fields() {
+        let metadata = example_lock_metadata();
+        let encoded = cbor::cbor_encode(&metadata);
+        let expected = concat!(
+            "a4",
+            "646e616d65",
+            "6c56657374696e67206c6f636b",
+            "66697373756572",
+            "6a436f6e636f726469756d",
+            "6776657273696f6e",
+            "01",
+            "6b6465736372697074696f6e",
+            "7821546f6b656e73206c6f636b65642062792076657374696e67207363686564756c65",
+        );
+        assert_eq!(hex::encode(&encoded), expected);
+        let decoded =
+            LockMetadata::decode_raw_cbor(&RawCbor::from(encoded)).expect("CBOR decode failed");
+        assert_eq!(decoded, metadata);
+    }
+
+    #[test]
+    fn test_lock_metadata_decode_raw_rejects_invalid_metadata() {
+        let raw = RawCbor::from(vec![0x01]);
+        LockMetadata::decode_raw_cbor(&raw).expect_err("metadata helper decode should fail");
+    }
+
+    #[test]
+    fn test_lock_config_cbor_round_trip_with_metadata() {
+        let mut config = example_lock_config();
+        config.metadata = Some(example_lock_metadata().encode_raw_cbor());
+        let encoded = cbor::cbor_encode(&config);
+        let decoded: LockConfig = cbor::cbor_decode(&encoded).expect("CBOR decode failed");
+        assert_eq!(decoded, config);
     }
 
     /// Decode rejects unknown text recipient values.

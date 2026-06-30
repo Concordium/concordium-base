@@ -1249,7 +1249,8 @@ exampleLockInfoDetails =
                               lcsv0Tokens = Seq.singleton tokenId,
                               lcsv0KeepAlive = False,
                               lcsv0Memo = Nothing
-                            }
+                            },
+                  lcMetadata = Just (lockMetadataToRawCbor exampleLockMetadata)
                 },
           lipFunds =
             Seq.singleton
@@ -1272,7 +1273,7 @@ exampleLockInfoDetails =
 exampleLockInfoDetailsCBOR :: BS.ByteString
 exampleLockInfoDetailsCBOR =
     mconcat
-        [ "a5",
+        [ "a6",
           "646c6f636b",
           "d99fd8831927110500",
           "6566756e6473",
@@ -1289,6 +1290,9 @@ exampleLockInfoDetailsCBOR =
           "c4822219300c",
           "66657870697279",
           "c11a6b932770",
+          "686d65746164617461",
+          "5848",
+          exampleLockMetadataCBOR,
           "6a636f6e74726f6c6c6572",
           "a1",
           "6873696d706c655630",
@@ -1325,7 +1329,7 @@ testLockInfoDetailsCBOR = describe "LockInfoDetails CBOR" $ do
                     }
             lockInfoAnyCBOR =
                 mconcat
-                    [ "a5",
+                    [ "a6",
                       "646c6f636b",
                       "d99fd8831927110500",
                       "6566756e6473",
@@ -1342,6 +1346,9 @@ testLockInfoDetailsCBOR = describe "LockInfoDetails CBOR" $ do
                       "c4822219300c",
                       "66657870697279",
                       "c11a6b932770",
+                      "686d65746164617461",
+                      "5848",
+                      exampleLockMetadataCBOR,
                       "6a636f6e74726f6c6c6572",
                       "a1",
                       "6873696d706c655630",
@@ -1365,6 +1372,9 @@ testLockInfoDetailsCBOR = describe "LockInfoDetails CBOR" $ do
             `shouldBe` Right lockInfoAny
         BS16.encode (lockInfoToBytes lockInfoAny)
             `shouldBe` lockInfoAnyCBOR
+    it "metadata round-trip" $ do
+        let encoded = lockInfoToBytes exampleLockInfoDetails
+        lockInfoFromBytes (B8.fromStrict encoded) `shouldBe` Right exampleLockInfoDetails
 
 -- * Lock CBOR tests
 
@@ -1409,6 +1419,50 @@ testLockIdCBOR = describe "LockId CBOR" $ do
             decodeLockId
             (LockId 10001 5 0)
             "d99fd8831927110500"
+
+exampleLockMetadata :: LockMetadata
+exampleLockMetadata =
+    LockMetadata
+        { lmName = Just "Vesting lock",
+          lmDescription = Just "Tokens locked",
+          lmAdditional =
+            Map.fromList
+                [ ("issuer", CBOR.TString "Concordium"),
+                  ("version", CBOR.TInt 1)
+                ]
+        }
+
+exampleLockMetadataCBOR :: BS.ByteString
+exampleLockMetadataCBOR =
+    mconcat
+        [ "a4",
+          "646e616d65",
+          "6c56657374696e67206c6f636b",
+          "66697373756572",
+          "6a436f6e636f726469756d",
+          "6776657273696f6e",
+          "01",
+          "6b6465736372697074696f6e",
+          "6d546f6b656e73206c6f636b6564"
+        ]
+
+testLockMetadataCBOR :: Spec
+testLockMetadataCBOR = describe "LockMetadata CBOR" $ do
+    it "known and additional fields fixture" $ do
+        lockFixture
+            encodeLockMetadata
+            decodeLockMetadata
+            exampleLockMetadata
+            exampleLockMetadataCBOR
+        lockMetadataFromRawCbor (lockMetadataToRawCbor exampleLockMetadata) `shouldBe` Right exampleLockMetadata
+    it "only additional fields" $
+        lockFixture
+            encodeLockMetadata
+            decodeLockMetadata
+            LockMetadata{lmName = Nothing, lmDescription = Nothing, lmAdditional = Map.singleton "issuer" (CBOR.TString "Concordium")}
+            (mconcat ["a1", "66697373756572", "6a436f6e636f726469756d"])
+    it "raw helper rejects invalid metadata" $
+        lockMetadataFromRawCbor (rawCborFromBytes "\x01") `shouldSatisfy` isLeft
 
 testLockRecipientsCBOR :: Spec
 testLockRecipientsCBOR = describe "LockRecipients CBOR" $ do
@@ -1733,6 +1787,7 @@ tests = parallel $ describe "CBOR" $ do
     testTokenAuthorizationsMapJSON
     testLockInfoDetailsCBOR
     testLockIdCBOR
+    testLockMetadataCBOR
     testLockRecipientsCBOR
     testLockControllerSimpleV0CapabilityCBOR
     testLockControllerSimpleV0GrantCBOR
