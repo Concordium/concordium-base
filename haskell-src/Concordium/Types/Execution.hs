@@ -3,7 +3,6 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -2944,9 +2943,9 @@ data RejectReason
 -- | Details for lock reject reasons involving an account.
 data LockAccountRejectReasonDetails = LockAccountRejectReasonDetails
     { -- | The lock involved in the rejected operation.
-      lockId :: !LockId,
+      larrdLockId :: !LockId,
       -- | The account involved in the rejected operation.
-      account :: !AccountAddress
+      larrdAccount :: !AccountAddress
     }
     deriving (Show, Eq, Generic)
 
@@ -2956,9 +2955,9 @@ instance AE.FromJSON LockAccountRejectReasonDetails
 -- | Details for lock reject reasons involving a token.
 data LockTokenRejectReasonDetails = LockTokenRejectReasonDetails
     { -- | The lock involved in the rejected operation.
-      lockId :: !LockId,
+      ltrrdLockId :: !LockId,
       -- | The token involved in the rejected operation.
-      tokenId :: !TokenId
+      ltrrdTokenId :: !TokenId
     }
     deriving (Show, Eq, Generic)
 
@@ -3044,12 +3043,12 @@ instance S.Serialize RejectReason where
         TokenUpdateTransactionFailed reason -> S.putWord8 56 <> S.put reason
         NonExistentLockId lockId -> S.putWord8 57 <> S.put lockId
         LockExpired lockId -> S.putWord8 58 <> S.put lockId
-        LockFundNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 59 <> S.put lockId <> S.put account
-        LockSendNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 60 <> S.put lockId <> S.put account
-        LockReturnNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 61 <> S.put lockId <> S.put account
-        LockCancelNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 62 <> S.put lockId <> S.put account
-        LockTokenNotPermitted LockTokenRejectReasonDetails{..} -> S.putWord8 63 <> S.put lockId <> S.put tokenId
-        LockRecipientNotPermitted LockAccountRejectReasonDetails{..} -> S.putWord8 64 <> S.put lockId <> S.put account
+        LockFundNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 59 <> S.put larrdLockId <> S.put larrdAccount
+        LockSendNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 60 <> S.put larrdLockId <> S.put larrdAccount
+        LockReturnNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 61 <> S.put larrdLockId <> S.put larrdAccount
+        LockCancelNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 62 <> S.put larrdLockId <> S.put larrdAccount
+        LockTokenNotPermitted LockTokenRejectReasonDetails{..} -> S.putWord8 63 <> S.put ltrrdLockId <> S.put ltrrdTokenId
+        LockRecipientNotPermitted LockAccountRejectReasonDetails{..} -> S.putWord8 64 <> S.put larrdLockId <> S.put larrdAccount
     get =
         S.getWord8 >>= \case
             0 -> return ModuleNotWF
