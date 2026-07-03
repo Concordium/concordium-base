@@ -1,6 +1,6 @@
 use super::{LockController, LockId, LockRecipients};
 use crate::common::types::TransactionTime;
-use crate::protocol_level_tokens::{CborHolderAccount, TokenAmount, TokenId};
+use crate::protocol_level_tokens::{CborHolderAccount, RawCbor, TokenAmount, TokenId};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 
 /// CBOR-encoded result of the `GetLockInfo` query.
@@ -15,6 +15,8 @@ pub struct LockInfo {
     pub expiry: TransactionTime,
     /// Controller configuration for the lock.
     pub controller: LockController,
+    /// Optional raw CBOR-encoded user-facing metadata.
+    pub metadata: Option<RawCbor>,
     /// The locked balances currently controlled by the lock.
     pub funds: Vec<LockAccountFunds>,
 }
@@ -41,12 +43,14 @@ pub struct LockedTokenAmount {
 mod test {
     use super::*;
     use crate::common::cbor;
+    use crate::common::cbor::value::Value;
     use crate::common::types::TransactionTime;
     use crate::protocol_level_locks::{
         LockController, LockControllerSimpleV0, LockControllerSimpleV0Capability,
-        LockControllerSimpleV0Grant,
+        LockControllerSimpleV0Grant, LockMetadata,
     };
     use crate::protocol_level_tokens::test_fixtures::ADDRESS;
+    use std::collections::HashMap;
 
     fn example_lock_id() -> LockId {
         LockId {
@@ -79,6 +83,7 @@ mod test {
                 keep_alive: false,
                 memo: None,
             }),
+            metadata: None,
             funds: vec![LockAccountFunds {
                 account: CborHolderAccount::from(ADDRESS),
                 amounts: vec![LockedTokenAmount {
@@ -98,11 +103,12 @@ mod test {
     }
 
     #[test]
-    fn test_lock_info_cbor_fixture() {
-        let lock_info = example_lock_info();
+    fn test_lock_info_cbor_fixture_with_metadata() {
+        let mut lock_info = example_lock_info();
+        lock_info.metadata = Some(example_lock_metadata().encode_raw_cbor());
         let encoded = cbor::cbor_encode(&lock_info);
         let expected = concat!(
-            "a5",
+            "a6",
             "646c6f636b",
             "d99fd8831927110500",
             "6566756e6473",
@@ -119,6 +125,17 @@ mod test {
             "c4822219300c",
             "66657870697279",
             "c11a6b932770",
+            "686d65746164617461",
+            "585d",
+            "a4",
+            "646e616d65",
+            "6c56657374696e67206c6f636b",
+            "66697373756572",
+            "6a436f6e636f726469756d",
+            "6776657273696f6e",
+            "01",
+            "6b6465736372697074696f6e",
+            "7821546f6b656e73206c6f636b65642062792076657374696e67207363686564756c65",
             "6a636f6e74726f6c6c6572",
             "a1",
             "6873696d706c655630",
@@ -140,6 +157,26 @@ mod test {
             "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
         );
         assert_eq!(hex::encode(&encoded), expected);
+    }
+
+    fn example_lock_metadata() -> LockMetadata {
+        let mut additional = HashMap::new();
+        additional.insert("issuer".to_string(), Value::Text("Concordium".to_string()));
+        additional.insert("version".to_string(), Value::Positive(1));
+        LockMetadata {
+            name: Some("Vesting lock".to_string()),
+            description: Some("Tokens locked by vesting schedule".to_string()),
+            additional,
+        }
+    }
+
+    #[test]
+    fn test_lock_info_cbor_round_trip_with_metadata() {
+        let mut lock_info = example_lock_info();
+        lock_info.metadata = Some(example_lock_metadata().encode_raw_cbor());
+        let encoded = cbor::cbor_encode(&lock_info);
+        let decoded: LockInfo = cbor::cbor_decode(&encoded).expect("CBOR decode failed");
+        assert_eq!(decoded, lock_info);
     }
 
     #[test]

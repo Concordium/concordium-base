@@ -160,13 +160,13 @@ testLockRejectReasonJSONRepresentation = do
             (AE.object ["tag" AE..= ("LockTokenNotPermitted" :: String), "contents" AE..= tokenDetails])
   where
     account = AccountAddress $ FBS.pack $ replicate 32 1
-    accountDetails = LockAccountRejectReasonDetails{lockId, account}
+    accountDetails = LockAccountRejectReasonDetails{larrdLockId = lockId, larrdAccount = account}
     assertJSON reason expected = do
         AE.toJSON reason `shouldBe` expected
         AE.eitherDecode (AE.encode reason) `shouldBe` Right expected
         AE.fromJSON expected `shouldBe` AE.Success reason
     lockId = LockId{liAccountIndex = 1, liSequenceNumber = 2, liCreationOrder = 3}
-    tokenDetails = LockTokenRejectReasonDetails{lockId, tokenId}
+    tokenDetails = LockTokenRejectReasonDetails{ltrrdLockId = lockId, ltrrdTokenId = tokenId}
     tokenId = TokenId "CCD"
 
 -- | Test that decoding is the inverse of encoding for 'ValidResult's.
