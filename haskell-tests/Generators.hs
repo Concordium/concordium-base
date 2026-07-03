@@ -455,6 +455,7 @@ genChainParametersV0 = do
     _cpPoolParameters <- genPoolParametersV0
     let _cpFinalizationCommitteeParameters = NoParam
     let _cpValidatorScoreParameters = NoParam
+    let _cpMaxLockDuration = NoParam
     return ChainParameters{..}
 
 genChainParametersV1 :: Gen (ChainParameters' 'ChainParametersV1)
@@ -469,6 +470,7 @@ genChainParametersV1 = do
     _cpPoolParameters <- genPoolParametersV1
     let _cpFinalizationCommitteeParameters = NoParam
     let _cpValidatorScoreParameters = NoParam
+    let _cpMaxLockDuration = NoParam
     return ChainParameters{..}
 
 genFinalizationCommitteeParameters :: Gen FinalizationCommitteeParameters
@@ -499,6 +501,7 @@ genChainParametersV2 = do
     _cpPoolParameters <- genPoolParametersV1
     _cpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
     let _cpValidatorScoreParameters = NoParam
+    let _cpMaxLockDuration = NoParam
     return ChainParameters{..}
 
 genValidatorScoreParameters :: Gen ValidatorScoreParameters
@@ -518,6 +521,7 @@ genChainParametersV3 = do
     _cpPoolParameters <- genPoolParametersV1
     _cpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
     _cpValidatorScoreParameters <- SomeParam <$> genValidatorScoreParameters
+    _cpMaxLockDuration <- SomeParam <$> oneof [pure Nothing, Just <$> genDuration]
     return ChainParameters{..}
 
 genGenesisChainParametersV0 :: Gen (GenesisChainParameters' 'ChainParametersV0)
@@ -532,6 +536,7 @@ genGenesisChainParametersV0 = do
     gcpPoolParameters <- genPoolParametersV0
     let gcpFinalizationCommitteeParameters = NoParam
     let gcpValidatorScoreParameters = NoParam
+    let gcpMaxLockDuration = NoParam
     return GenesisChainParameters{..}
 
 genGenesisChainParametersV1 :: Gen (GenesisChainParameters' 'ChainParametersV1)
@@ -546,6 +551,7 @@ genGenesisChainParametersV1 = do
     gcpPoolParameters <- genPoolParametersV1
     let gcpFinalizationCommitteeParameters = NoParam
     let gcpValidatorScoreParameters = NoParam
+    let gcpMaxLockDuration = NoParam
     return GenesisChainParameters{..}
 
 genGenesisChainParametersV2 :: Gen (GenesisChainParameters' 'ChainParametersV2)
@@ -560,6 +566,7 @@ genGenesisChainParametersV2 = do
     gcpPoolParameters <- genPoolParametersV1
     gcpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
     let gcpValidatorScoreParameters = NoParam
+    let gcpMaxLockDuration = NoParam
     return GenesisChainParameters{..}
 
 genGenesisChainParametersV3 :: Gen (GenesisChainParameters' 'ChainParametersV3)
@@ -574,6 +581,7 @@ genGenesisChainParametersV3 = do
     gcpPoolParameters <- genPoolParametersV1
     gcpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
     gcpValidatorScoreParameters <- SomeParam <$> genValidatorScoreParameters
+    gcpMaxLockDuration <- SomeParam <$> oneof [pure Nothing, Just <$> genDuration]
     return GenesisChainParameters{..}
 
 genCooldownParametersV0 :: Gen (CooldownParameters' 'CooldownParametersVersion0)
@@ -1072,6 +1080,7 @@ genAuthorizations = do
     asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure (sing @auv)) genAccessStructure
     asTimeParameters <- conditionallyA (sSupportsTimeParameters (sing @auv)) genAccessStructure
     asCreatePLT <- conditionallyA (sSupportsCreatePLT (sing @auv)) genAccessStructure
+    asTokenParameters <- conditionallyA (sSupportsTokenParameters (sing @auv)) genAccessStructure
     return Authorizations{..}
 
 genProtocolUpdate :: Gen ProtocolUpdate
@@ -1274,6 +1283,7 @@ genRootUpdate sauv =
             SAuthorizationsVersion0 -> Level2KeysRootUpdate <$> genAuthorizations
             SAuthorizationsVersion1 -> Level2KeysRootUpdateV1 <$> genAuthorizations
             SAuthorizationsVersion2 -> Level2KeysRootUpdateV2 <$> genAuthorizations
+            SAuthorizationsVersion3 -> Level2KeysRootUpdateV3 <$> genAuthorizations
         ]
 
 genLevel1Update :: (IsAuthorizationsVersion auv) => SAuthorizationsVersion auv -> Gen Level1Update
@@ -1284,10 +1294,11 @@ genLevel1Update sauv =
             SAuthorizationsVersion0 -> Level2KeysLevel1Update <$> genAuthorizations
             SAuthorizationsVersion1 -> Level2KeysLevel1UpdateV1 <$> genAuthorizations
             SAuthorizationsVersion2 -> Level2KeysLevel1UpdateV2 <$> genAuthorizations
+            SAuthorizationsVersion3 -> Level2KeysLevel1UpdateV3 <$> genAuthorizations
         ]
 
-genLevel2UpdatePayload :: SChainParametersVersion cpv -> Gen UpdatePayload
-genLevel2UpdatePayload scpv =
+genLevel2UpdatePayloadForChainParameters :: SChainParametersVersion cpv -> Gen UpdatePayload
+genLevel2UpdatePayloadForChainParameters scpv =
     case scpv of
         SChainParametersV0 ->
             oneof
@@ -1348,10 +1359,16 @@ genLevel2UpdatePayload scpv =
                   GASRewardsCPV2UpdatePayload <$> genGASRewards
                 ]
 
+genLevel2UpdatePayload :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen UpdatePayload
+genLevel2UpdatePayload spv =
+    oneof $
+        [genLevel2UpdatePayloadForChainParameters $ sChainParametersVersionFor spv]
+            ++ [MaxLockDurationUpdatePayload <$> genDuration | supportsMaxLockDurationUpdate spv]
+
 genUpdatePayload :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen UpdatePayload
 genUpdatePayload spv =
     oneof
-        [ genLevel2UpdatePayload $ sChainParametersVersionFor spv,
+        [ genLevel2UpdatePayload spv,
           RootUpdatePayload <$> genRootUpdate (sAuthorizationsVersionFor spv),
           Level1UpdatePayload <$> genLevel1Update (sAuthorizationsVersionFor spv)
         ]
@@ -1369,7 +1386,7 @@ genLevel2RawUpdateInstruction scpv = do
     ruiSeqNumber <- Nonce <$> arbitrary
     ruiEffectiveTime <- oneof [return 0, TransactionTime <$> arbitrary]
     ruiTimeout <- TransactionTime <$> arbitrary
-    ruiPayload <- genLevel2UpdatePayload scpv
+    ruiPayload <- genLevel2UpdatePayloadForChainParameters scpv
     return RawUpdateInstruction{..}
 
 -- | Generate an 'Authorizations' structure and the list of key pairs.
@@ -1385,6 +1402,7 @@ genAuthorizationsAndKeys thr = do
             SAuthorizationsVersion0 -> fromIntegral thr * 12
             SAuthorizationsVersion1 -> fromIntegral thr * 14
             SAuthorizationsVersion2 -> fromIntegral thr * 15
+            SAuthorizationsVersion3 -> fromIntegral thr * 16
     kps <- vectorOf nKeys genSigSchemeKeyPair
     let asKeys = Vec.fromList $ correspondingVerifyKey <$> kps
     let genAccessStructure = do
@@ -1406,6 +1424,7 @@ genAuthorizationsAndKeys thr = do
     asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure (sing @auv)) genAccessStructure
     asTimeParameters <- conditionallyA (sSupportsTimeParameters (sing @auv)) genAccessStructure
     asCreatePLT <- conditionallyA (sSupportsCreatePLT (sing @auv)) genAccessStructure
+    asTokenParameters <- conditionallyA (sSupportsTokenParameters (sing @auv)) genAccessStructure
     return (Authorizations{..}, kps)
 
 genLevel1Keys ::
