@@ -93,7 +93,6 @@ library
       Concordium.Types.Locks
       Concordium.Types.Locks.CBOR
       Concordium.Types.Memo
-      Concordium.Types.Migration
       Concordium.Types.Parameters
       Concordium.Types.ProtocolLevelTokens.CBOR
       Concordium.Types.ProtocolVersion
