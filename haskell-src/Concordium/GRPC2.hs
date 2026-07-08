@@ -1147,6 +1147,7 @@ convertUpdatePayload ut pl = case (ut, pl) of
     (Updates.UpdateFinalizationCommitteeParameters, Updates.FinalizationCommitteeParametersUpdatePayload fcp) -> Right . Proto.make $ ProtoFields.finalizationCommitteeParametersUpdate .= toProto fcp
     (Updates.UpdateValidatorScoreParameters, Updates.ValidatorScoreParametersUpdatePayload vsp) -> Right . Proto.make $ ProtoFields.validatorScoreParametersUpdate .= toProto vsp
     (Updates.UpdateCreatePLT, Updates.CreatePLTUpdatePayload cplt) -> Right . Proto.make $ ProtoFields.createPltUpdate .= toProto cplt
+    (Updates.UpdateMaxLockDuration, Updates.MaxLockDurationUpdatePayload duration) -> Right . Proto.make $ ProtoFields.maxLockDurationUpdate .= toProto duration
     _ -> Left CEInvalidUpdateResult
 
 -- | The different conversions errors possible in @toBlockItemStatus@ (and the helper to* functions it calls).
@@ -1861,6 +1862,7 @@ instance ToProto Updates.UpdateType where
     toProto Updates.UpdateFinalizationCommitteeParameters = Proto.UPDATE_FINALIZATION_COMMITTEE_PARAMETERS
     toProto Updates.UpdateValidatorScoreParameters = Proto.UPDATE_VALIDATOR_SCORE_PARAMETERS
     toProto Updates.UpdateCreatePLT = Proto.UPDATE_CREATE_PLT
+    toProto Updates.UpdateMaxLockDuration = Proto.UPDATE_MAX_LOCK_DURATION
 
 instance ToProto TransactionType where
     type Output TransactionType = Proto.TransactionType
