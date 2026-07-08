@@ -14,14 +14,39 @@ import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Genesis.Data.Base as Base
 import qualified Concordium.Genesis.Data.BaseV1 as BaseV1
 import Concordium.Types
+import Concordium.Types.Updates
 
--- | Parameters used to migrate state from 'P0' to 'P11'.
-data StateMigrationData = StateMigrationData
+-- | Parameters data type for the 'P10' to 'P11' protocol update.
+--  This is provided as a parameter to the protocol update chain update instruction.
+data ProtocolUpdateData = ProtocolUpdateData
+    { -- | Access structure defining the keys and threshold for token and lock related parameter updates.
+      updateTokenParametersAccessStructure :: !AccessStructure,
+      -- | Initial maximum relative duration for protocol-level token locks.
+      updateMaxLockDuration :: !Duration
+    }
+    deriving (Eq, Show)
+
+instance Serialize ProtocolUpdateData where
+    put ProtocolUpdateData{..} = do
+        put updateTokenParametersAccessStructure
+        put updateMaxLockDuration
+    get = do
+        updateTokenParametersAccessStructure <- get
+        updateMaxLockDuration <- get
+        return ProtocolUpdateData{..}
+
+-- | Parameters used to migrate state from 'P10' to 'P11'.
+newtype StateMigrationData = StateMigrationData
+    { -- | Data provided by the protocol update to be used in the migration.
+      migrationProtocolUpdateData :: ProtocolUpdateData
+    }
     deriving (Eq, Show)
 
 instance Serialize StateMigrationData where
-    put StateMigrationData = return ()
-    get = return StateMigrationData
+    put StateMigrationData{..} = put migrationProtocolUpdateData
+    get = do
+        migrationProtocolUpdateData <- get
+        return StateMigrationData{..}
 
 -- | Initial genesis data for the P11 protocol version.
 data GenesisDataP11 = GDP11Initial
