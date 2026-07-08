@@ -872,6 +872,8 @@ pub enum UpdatePayload {
     ValidatorScoreParametersCPV3(ValidatorScoreParameters),
     #[cfg_attr(feature = "serde_deprecated", serde(rename = "createPlt"))]
     CreatePlt(CreatePlt),
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "maxLockDuration"))]
+    MaxLockDuration(concordium_contracts_common::Duration),
 }
 
 #[derive(Debug, Clone, PartialEq, common::Serialize)]
@@ -954,6 +956,9 @@ pub enum UpdateType {
     /// Create a new protocol level token. Only applies to
     /// protocol version [`P9`](ProtocolVersion::P9) and up.
     UpdateCreatePLT,
+    /// Update the maximum relative duration for protocol-level token locks.
+    /// Only applies to protocol version [`P11`](ProtocolVersion::P11) and up.
+    UpdateMaxLockDuration,
 }
 
 impl UpdatePayload {
@@ -986,6 +991,7 @@ impl UpdatePayload {
             }
             UpdatePayload::ValidatorScoreParametersCPV3(_) => UpdateValidatorScoreParameters,
             UpdatePayload::CreatePlt(_) => UpdateCreatePLT,
+            UpdatePayload::MaxLockDuration(_) => UpdateMaxLockDuration,
         }
     }
 }
@@ -1275,6 +1281,10 @@ impl Serial for UpdatePayload {
                 24u8.serial(out);
                 update.serial(out)
             }
+            UpdatePayload::MaxLockDuration(update) => {
+                25u8.serial(out);
+                update.serial(out)
+            }
         }
     }
 }
@@ -1330,6 +1340,7 @@ impl Deserial for UpdatePayload {
             )),
             23u8 => Ok(UpdatePayload::ValidatorScoreParametersCPV3(source.get()?)),
             24u8 => Ok(UpdatePayload::CreatePlt(source.get()?)),
+            25u8 => Ok(UpdatePayload::MaxLockDuration(source.get()?)),
             tag => anyhow::bail!("Unknown update payload tag {}", tag),
         }
     }
@@ -1431,6 +1442,25 @@ mod tests {
         };
         assert!(decoded_level1_v3.create_plt.is_some());
         assert!(decoded_level1_v3.token_parameters.is_some());
+    }
+
+    #[test]
+    fn test_max_lock_duration_payload_encode_decode() {
+        let duration = concordium_contracts_common::Duration::from_millis(12345);
+        let payload = UpdatePayload::MaxLockDuration(duration);
+        let mut bytes = Vec::new();
+        payload.serial(&mut bytes);
+        assert_eq!(bytes[0], 25);
+        let decoded = UpdatePayload::deserial(&mut Cursor::new(&bytes))
+            .expect("Failed decoding max lock duration payload");
+        let UpdatePayload::MaxLockDuration(decoded) = decoded else {
+            panic!("Unexpected update payload type");
+        };
+        assert_eq!(duration, decoded);
+        assert!(matches!(
+            payload.update_type(),
+            UpdateType::UpdateMaxLockDuration
+        ));
     }
 
     #[test]
