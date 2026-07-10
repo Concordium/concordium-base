@@ -2308,6 +2308,7 @@ instance ToProto (TransactionTime, QueryTypes.PendingUpdateEffect) where
             QueryTypes.PUELevel2KeysV0 auth -> ProtoFields.level2KeysCpv0 .= toProto auth
             QueryTypes.PUELevel2KeysV1 auth -> ProtoFields.level2KeysCpv1 .= toProto auth
             QueryTypes.PUELevel2KeysV2 auth -> ProtoFields.level2KeysCpv1 .= toProto auth
+            QueryTypes.PUELevel2KeysV3 auth -> ProtoFields.level2KeysCpv1 .= toProto auth
             QueryTypes.PUEProtocol protocolUpdate -> ProtoFields.protocol .= toProto protocolUpdate
             QueryTypes.PUEElectionDifficulty electionDifficulty -> ProtoFields.electionDifficulty .= toProto electionDifficulty
             QueryTypes.PUEEuroPerEnergy euroPerEnergy -> ProtoFields.euroPerEnergy .= toProto euroPerEnergy
