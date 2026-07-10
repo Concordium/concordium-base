@@ -2330,6 +2330,7 @@ instance ToProto (TransactionTime, QueryTypes.PendingUpdateEffect) where
             QueryTypes.PUEBlockEnergyLimit blockEnergyLimit -> ProtoFields.blockEnergyLimit .= toProto blockEnergyLimit
             QueryTypes.PUEFinalizationCommitteeParameters finalizationCommitteeParameters -> ProtoFields.finalizationCommitteeParameters .= toProto finalizationCommitteeParameters
             QueryTypes.PUEValidatorScoreParameters validatorScoreParameters -> ProtoFields.validatorScoreParameters .= toProto validatorScoreParameters
+            QueryTypes.PUEMaxLockDuration maxLockDuration -> ProtoFields.maxLockDuration .= toProto maxLockDuration
 
 instance ToProto QueryTypes.NextUpdateSequenceNumbers where
     type Output QueryTypes.NextUpdateSequenceNumbers = Proto.NextUpdateSequenceNumbers
@@ -2356,6 +2357,7 @@ instance ToProto QueryTypes.NextUpdateSequenceNumbers where
         ProtoFields.finalizationCommitteeParameters .= toProto _nusnFinalizationCommitteeParameters
         ProtoFields.validatorScoreParameters .= toProto _nusnValidatorScoreParameters
         ProtoFields.protocolLevelTokens .= toProto _nusnProtocolLevelTokensParameters
+        ProtoFields.maxLockDuration .= toProto _nusnMaxLockDuration
 
 instance ToProto Epoch where
     type Output Epoch = Proto.Epoch
