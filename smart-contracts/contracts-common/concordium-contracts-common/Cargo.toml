@@ -98,7 +98,7 @@ rand_pcg = "0.3"
 
 
 [package.metadata.docs.rs]
-# This sets the default target to `wasm32-unknown-unknown`, and builds both the wasm and x86 targets.
+# This sets the default target to `wasm32v1`, and builds both the wasm and x86 targets.
 # This is useful because some parts of documentation only exist on specific platforms.
-targets = ["wasm32-unknown-unknown", "x86_64-unknown-linux-gnu"]
+targets = ["wasm32v1", "x86_64-unknown-linux-gnu"]
 features = ["derive-serde", "std"]

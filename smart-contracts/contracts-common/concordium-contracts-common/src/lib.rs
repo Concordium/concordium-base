@@ -19,8 +19,8 @@
 //!
 //! ## Wasm32
 //! This crate supports both compilation to x86 native code, as well as
-//! to the wasm32-unknown-unknown target. When there is a conflict, the
-//! preference should always be to make the wasm32-unknown-unknown the more
+//! to the wasm32v1 target. When there is a conflict, the
+//! preference should always be to make the wasm32v1 the more
 //! efficient one.
 //!
 //! ## `concordium-std`
