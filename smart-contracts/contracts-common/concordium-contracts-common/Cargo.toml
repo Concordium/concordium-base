@@ -76,6 +76,7 @@ version = "0.4"
 default = ["std"]
 
 std = ["fnv/std"]
+# Enabling the wasm-test feature changes the #[concoridum_test] macro to output test functions callable from WASM interpreter
 wasm-test = ["concordium-contracts-common-derive/wasm-test"]
 # Make smart contract macros generate function in the smart contract that allows inspecting the schema of the contract functions.
 build-schema = ["concordium-contracts-common-derive/build-schema"]
