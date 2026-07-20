@@ -80,7 +80,9 @@ std = ["fnv/std"]
 wasm-test = ["concordium-contracts-common-derive/wasm-test"]
 # Make smart contract macros generate function in the smart contract that allows inspecting the schema of the contract functions.
 build-schema = ["concordium-contracts-common-derive/build-schema"]
+# Derives Arbitrary on types (used by property tests). Also exposes the concordium_quickcheck macro.
 concordium-quickcheck = ["getrandom", "quickcheck", "concordium-contracts-common-derive/concordium-quickcheck"]
+# Implements serde serialization on types
 derive-serde = ["serde", "serde_json", "std", "bs58", "chrono", "num-bigint", "num-traits", "num-integer", "rust_decimal", "thiserror", "hex", "base64"]
 # Derives Arbitrary on types (used by wasm-fuzz tests)
 fuzz = ["derive-serde", "arbitrary"]
