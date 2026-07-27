@@ -14,7 +14,7 @@ readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 arbitrary = { version = "1.3", features = ["derive"], optional = true }
-base64 = "0.21"
+base64 = { version = "0.21", optional = true }
 getrandom = { version = "0.2", features = ["custom"], optional = true }
 quickcheck = { version = "1.0.3", optional = true }
 
@@ -76,11 +76,17 @@ version = "0.4"
 default = ["std"]
 
 std = ["fnv/std"]
+# Enabling the wasm-test feature changes the #[concoridum_test] macro to output test functions callable from WASM interpreter
 wasm-test = ["concordium-contracts-common-derive/wasm-test"]
+# Make smart contract macros generate function in the smart contract that allows inspecting the schema of the contract functions.
 build-schema = ["concordium-contracts-common-derive/build-schema"]
+# Derives Arbitrary on types (used by property tests). Also exposes the concordium_quickcheck macro.
 concordium-quickcheck = ["getrandom", "quickcheck", "concordium-contracts-common-derive/concordium-quickcheck"]
-derive-serde = ["serde", "serde_json", "std", "bs58", "chrono", "num-bigint", "num-traits", "num-integer", "rust_decimal", "thiserror", "hex"]
+# Implements serde serialization on types
+derive-serde = ["serde", "serde_json", "std", "bs58", "chrono", "num-bigint", "num-traits", "num-integer", "rust_decimal", "thiserror", "hex", "base64"]
+# Derives Arbitrary on types (used by wasm-fuzz tests)
 fuzz = ["derive-serde", "arbitrary"]
+# Re-export macros from concordium-contracts-common-derive used in smart contracts
 smart-contract = []
 
 [lib]
@@ -95,7 +101,7 @@ rand_pcg = "0.3"
 
 
 [package.metadata.docs.rs]
-# This sets the default target to `wasm32-unknown-unknown`, and builds both the wasm and x86 targets.
+# This sets the default target to `wasm32v1`, and builds both the wasm and x86 targets.
 # This is useful because some parts of documentation only exist on specific platforms.
-targets = ["wasm32-unknown-unknown", "x86_64-unknown-linux-gnu"]
+targets = ["wasm32v1-none", "x86_64-unknown-linux-gnu"]
 features = ["derive-serde", "std"]

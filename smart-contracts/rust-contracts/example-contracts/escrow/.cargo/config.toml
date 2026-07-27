@@ -1,3 +1,0 @@
-# Default build target is wasm
-[build]
-target = "wasm32-unknown-unknown"

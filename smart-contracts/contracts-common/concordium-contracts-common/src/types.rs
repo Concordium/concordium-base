@@ -1,17 +1,14 @@
 use crate as concordium_std;
 pub use crate::hashes::ModuleReference;
 use crate::{constants, to_bytes, Serial};
-#[cfg(all(not(feature = "std"), feature = "concordium-quickcheck"))]
+#[cfg(feature = "concordium-quickcheck")]
 use alloc::boxed::Box;
-#[cfg(not(feature = "std"))]
 use alloc::collections::BTreeMap;
-#[cfg(not(feature = "std"))]
 use alloc::{borrow::ToOwned, string::String, string::ToString, vec::Vec};
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
 use cmp::Ordering;
 use concordium_contracts_common_derive::SchemaType;
-#[cfg(not(feature = "std"))]
 use core::{cmp, convert, fmt, hash, iter, ops, str};
 use core::{marker::PhantomData, str::FromStr};
 use hash::Hash;
@@ -21,10 +18,6 @@ use quickcheck::Gen;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 #[cfg(feature = "derive-serde")]
 pub use serde_impl::*;
-#[cfg(feature = "std")]
-use std::collections::BTreeMap;
-#[cfg(feature = "std")]
-use std::{cmp, convert, fmt, hash, iter, ops, str};
 
 /// Reexport of the `HashMap` from `hashbrown` with the default hasher set to
 /// the `fnv` hash function.
