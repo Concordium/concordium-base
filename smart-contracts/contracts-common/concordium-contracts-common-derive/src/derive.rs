@@ -4,7 +4,7 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::ToTokens;
 use std::{collections::HashMap, convert::TryFrom, ops::Neg};
-use syn::{punctuated::Punctuated, spanned::Spanned, DataEnum, Ident, Meta};
+use syn::{parse_quote, punctuated::Punctuated, spanned::Spanned, DataEnum, Ident, Meta};
 
 /// Check a condition, if false return early with a provided error message
 /// wrapped in a `syn::Error`. Similar to `ensure!` from the `anyhow` crate.
@@ -1685,6 +1685,11 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
     let read_ident = format_ident!("__R", span = span);
     let container_attributes = ContainerAttributes::try_from(ast.attrs.as_slice())?;
 
+    let state_parameter = container_attributes
+        .state_parameter
+        .clone()
+        .unwrap_or(parse_quote!(concordium_std::StateApi));
+
     let source_ident = Ident::new("________________source", Span::call_site());
     let state_ident = Ident::new("_______________________________state", Span::call_site());
     let body_tokens = match ast.data {
@@ -1707,7 +1712,7 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
                             &state_ident,
                             &field_ident,
                             &source_ident,
-                            state_parameter,
+                            &state_parameter,
                         )?);
                         names.extend(quote!(#field_ident,))
                     }
@@ -1721,7 +1726,7 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
                             &state_ident,
                             &field_ident,
                             &source_ident,
-                            state_parameter,
+                            &state_parameter,
                         )?);
                         names.extend(quote!(#field_ident,))
                     }
@@ -1782,7 +1787,7 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
                                 &state_ident,
                                 name,
                                 &source,
-                                state_parameter,
+                                &state_parameter,
                             )
                         })
                         .collect::<syn::Result<proc_macro2::TokenStream>>()?;
@@ -2124,7 +2129,8 @@ fn impl_deletable_field(ident: &proc_macro2::TokenStream) -> syn::Result<proc_ma
 
 pub fn impl_deletable(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
     let data_name = &ast.ident;
-    let state_parameter = find_state_parameter_attribute(&ast.attrs)?;
+    let state_parameter = find_state_parameter_attribute(&ast.attrs)?
+        .unwrap_or(parse_quote!(concordium_std::StateApi));
 
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
     let where_predicates = where_clauses.map(|c| c.predicates.clone());
@@ -2202,15 +2208,9 @@ pub fn impl_deletable(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
         _ => unimplemented!("#[derive(Deletable)] is not implemented for union."),
     };
 
-    let where_state_parameter = if let Some(state_parameter) = state_parameter {
-        quote! { #state_parameter : HasStateApi, }
-    } else {
-        Default::default()
-    };
-
     let gen = quote! {
         #[automatically_derived]
-        impl #impl_generics Deletable for #data_name #ty_generics where #where_state_parameter #where_predicates {
+        impl #impl_generics Deletable for #data_name #ty_generics where #state_parameter : HasStateApi, #where_predicates {
             fn delete(self) {
                 use concordium_std::Deletable;
                 #body

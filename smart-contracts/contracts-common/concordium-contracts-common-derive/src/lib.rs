@@ -241,7 +241,7 @@ fn serialize_derive_worker(input: TokenStream) -> syn::Result<TokenStream> {
 ///     c: Vec<T>,
 /// }
 ///
-/// # Together with deprecated usage of generic state type:
+/// # Together with generic parameter for low-level state type:
 ///
 /// Please note that it is necessary to specify the generic parameter name for
 /// the [`HasStateApi`](../concordium_std/trait.HasStateApi.html) generic
@@ -465,6 +465,23 @@ pub fn reject_derive(input: TokenStream) -> TokenStream {
 /// #[derive(Serial, DeserialWithState, Deletable)]
 /// struct MyState {
 ///    my_state_map: StateMap<SomeType, SomeOtherType>,
+/// }
+///
+/// # Together with generic parameter for low-level state type:
+///
+/// Please note that it is necessary to specify the generic parameter name for
+/// the [`HasStateApi`](../concordium_std/trait.HasStateApi.html) generic
+/// parameter if your type has such a parameter.
+/// To do so, use the `#[concordium(state_parameter =
+/// "NameOfGenericParameter")]` attribute on the type you are deriving
+/// `Deletable` for.
+///
+/// # Example
+/// ``` ignore
+/// #[derive(Serial, DeserialWithState, Deletable)]
+/// #[concordium(state_parameter = "S")]
+/// struct MyState<S = StateApi> {
+///    my_state_map: StateMap<SomeType, SomeOtherType, S>,
 /// }
 /// ```
 #[proc_macro_derive(Deletable, attributes(concordium))]
