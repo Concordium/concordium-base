@@ -26,118 +26,84 @@ jobs:
         run: ./.diff-wat-wasm.sh
 
   "lint_fmt":
-    name: smart-contracts/${{ matrix.build-dir }} lint:fmt
-    # Don't run on draft pull requests
-    if: ${{ !github.event.pull_request.draft }}
+    name: smart-contracts fmt
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        build-dir:
-          - 'wasm-transform'
-          - 'wasm-chain-integration'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Format
-        working-directory: smart-contracts/${{ matrix.build-dir }}
+        working-directory: smart-contracts
         run: |
-          rustup default ${{ env.RUST_VERSION }}
           rustup component add rustfmt
           cargo fmt -- --color=always --check
 
   "lint_doc":
-    name: smart-contracts/${{ matrix.build-dir }} lint:fmt
-    # Don't run on draft pull requests
-    if: ${{ !github.event.pull_request.draft }}
+    name: smart-contracts doc
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        build-dir:
-          - 'wasm-transform'
-          - 'wasm-chain-integration'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Format
-        working-directory: smart-contracts/${{ matrix.build-dir }}
+      - name: Docs
+        working-directory: smart-contracts
         run: |
-          rustup default ${{ env.RUST_VERSION }}
           rustup component add rust-docs
           RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
 
-
-
-  "lint_clippy_wasm_transform":
-    name: smart-contracts/${{ matrix.build-dir }} lint:clippy
-    # Don't run on draft pull requests
-    if: ${{ !github.event.pull_request.draft }}
+  "lint_clippy":
+    name: smart-contracts clippy
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        build-dir:
-          - 'wasm-transform'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
       - name: Clippy
-        working-directory: smart-contracts/${{ matrix.build-dir }}
+        working-directory: smart-contracts
         run: |
-          git config --global url."https://github.com/".insteadOf "git@github.com:"
-          rustup default ${{ env.RUST_VERSION }}
           rustup component add clippy
-          cargo clippy --color=always --tests --benches -- -Dclippy::all
+          cargo clippy --color=always --all-targets --all-features -- -D warnings
 
-  "lint_clippy_wasm_chain_integration":
-    name: smart-contracts/${{ matrix.build-dir }} lint:clippy
-    # Don't run on draft pull requests
-    if: ${{ !github.event.pull_request.draft }}
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        build-dir:
-          - 'wasm-chain-integration'
-        features:
-          - 'enable-ffi'
-          - 'display-state'
-          - 'async'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - name: Clippy
-        working-directory: smart-contracts/${{ matrix.build-dir }}
-        run: |
-          git config --global url."https://github.com/".insteadOf "git@github.com:"
-          rustup default ${{ env.RUST_VERSION }}
-          rustup component add clippy
-          cargo clippy --locked --features ${{ matrix.features }} --no-default-features --color=always --tests --benches -- -Dclippy::all
+#  "lint_clippy_wasm_chain_integration":
+#    name: smart-contracts/${{ matrix.build-dir }} lint:clippy
+#    # Don't run on draft pull requests
+#    if: ${{ !github.event.pull_request.draft }}
+#    runs-on: ubuntu-latest
+#    strategy:
+#      matrix:
+#        build-dir:
+#          - 'wasm-chain-integration'
+#        features:
+#          - 'enable-ffi'
+#          - 'display-state'
+#          - 'async'
+#    steps:
+#      - name: Checkout
+#        uses: actions/checkout@v4
+#        with:
+#          submodules: recursive
+#      - name: Clippy
+#        working-directory: smart-contracts/${{ matrix.build-dir }}
+#        run: |
+#          git config --global url."https://github.com/".insteadOf "git@github.com:"
+#          rustup default ${{ env.RUST_VERSION }}
+#          rustup component add clippy
+#          cargo clippy --locked --features ${{ matrix.features }} --no-default-features --color=always --tests --benches -- -Dclippy::all
 
 
   "cargo_test":
-    name: ${{ matrix.build-dir }} cargo:test
+    name: smart-contracts test
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        build-dir:
-          - 'wasm-transform'
-          - 'wasm-chain-integration'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
       - name: Test
-        working-directory: smart-contracts/${{ matrix.build-dir }}
+        working-directory: smart-contracts
         run: |
-          rustup default ${{ env.RUST_VERSION }}
-          cargo test
-
-
+          cargo test --all-features
 
   "wasm-core-spec_cargo_test":
     name: wasm-core-spec cargo:test
@@ -150,6 +116,62 @@ jobs:
       - name: Test
         working-directory: smart-contracts/wasm-test
         run: |
-          rustup default ${{ env.RUST_VERSION }}
           cargo build
           ./target/debug/wasm-test --dir ../testdata/wasm-spec-test-suite/core/
+
+
+#  clippy:
+#    name: Clippy on concordium-contracts-common
+#    runs-on: ubuntu-latest
+#    strategy:
+#      matrix:
+#        features:
+#          - ""
+#          - "std"
+#          - "derive-serde"
+#          - "fuzz"
+#          - "smart-contract"
+#          - "wasm-test"
+#          - "build-schema"
+#          - "concordium-quickcheck"
+#        target:
+#          - wasm32-unknown-unknown
+#          - x86_64-unknown-linux-gnu
+#    steps:
+#      - name: Checkout sources
+#        uses: actions/checkout@v2
+#
+#      - name: Run cargo clippy
+#        run: |
+#          rustup default ${{ env.RUST_VERSION }}
+#          rustup component add clippy
+#          rustup target add ${{ matrix.target }}
+#          cargo clippy --manifest-path=concordium-contracts-common/Cargo.toml --target=${{ matrix.target }} --features=${{ matrix.features }} --no-default-features -- -D warnings
+#
+#  clippy-on-derive:
+#    name: Clippy on concordium-contracts-common-derive
+#    runs-on: ubuntu-latest
+#    strategy:
+#      matrix:
+#        features:
+#          - ""
+#          - "wasm-test"
+#          - "build-schema"
+#          - "concordium-quickcheck"
+#        target:
+#          - wasm32-unknown-unknown
+#          - x86_64-unknown-linux-gnu
+#    steps:
+#      - name: Checkout sources
+#        uses: actions/checkout@v2
+#
+#      - name: Run cargo clippy
+#        run: |
+#          rustup default ${{ env.RUST_VERSION }}
+#          rustup component add clippy
+#          rustup target add ${{ matrix.target }}
+#          cargo clippy --manifest-path=concordium-contracts-common-derive/Cargo.toml --target=${{ matrix.target }} --no-default-features -- -D warnings
+#
+#
+
+# todo ar wasmv1-none check: cargo check --target wasm32v1-none --no-default-features --features smart-contract
