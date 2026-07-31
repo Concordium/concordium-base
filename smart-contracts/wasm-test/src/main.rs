@@ -380,7 +380,7 @@ fn main() -> anyhow::Result<()> {
                                         wast::QuoteModule::Quote(mods_bytes) => {
                                             for bytes in mods_bytes {
                                                 fail_test!(
-                                                    validate(&bytes).is_ok() =>
+                                                    validate(bytes).is_ok() =>
                                                     span,
                                                     file_name,
                                                     input,

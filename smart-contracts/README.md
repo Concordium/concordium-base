@@ -3,54 +3,14 @@
 This directory contains several packages to support smart contracts on and off-chain.
 
 Currently it consists of the following parts
-- [rust-contracts](./rust-contracts) which is the collection of base libraries and example smart contracts written in Rust.
+- [contracts-common](./contracts-common), library shared between smart contracts and other Rust targets like the Rust SDK and the Rust Scheduler in the node
 - [concordium-wasm](./wasm-transform), an interpreter and validator providing the functionality needed by the scheduler to execute smart contracts.
 - [concordium-smart-contract-engine](./wasm-chain-integration/) exposes the interface needed by the node
+- [wasm-test](./wasm-test) implements tests of the WASM interpreter against official test vectors
 
-## Rust-contracts
+### Compilation options for smart contracts
 
-The [rust-contracts](./rust-contracts) contains [example-contracts](./rust-contracts/example-contracts) is for testing.
-**They are toy contracts utterly unsuitable for any production use.**
-The list of currently implemented contracts is as follows:
-- [counter](./rust-contracts/example-contracts/counter) a counter contract with a simple logic on who can increment the counter. This is the minimal example.
-- [fib](./rust-contracts/example-contracts/fib) a contract calculating the requested fibonacci number, either directly or with recursive contract invocations; this is useful to demonstrate cost accounting.
-- [simple-game](./rust-contracts/example-contracts/simple-game) a more complex smart contract which allows users to submit strings that are then hashed, and
-  the lowest one wins after the game is over (which is determined by timeout).
-  This contract uses
-  - sending tokens to accounts
-  - bringing in complex dependencies (containers, sha2, hex encoding)
-  - more complex state, that is only partially updated.
-- [escrow](./rust-contracts/example-contracts/escrow) a toy escrow contract which allows a buyer to submit a deposit which is held until the buyer is satisfied that they have received their goods, or an arbiter makes a judgement as a result of either the buyer or seller raising a dispute.
-- [lockup](./rust-contracts/example-contracts/lockup) a contract which implements a CCD lockup, where those CCD vest over a pre-determined schedule, and vested CCD can be withdrawn by any one of potentially several account holders. The contract also allows for a set of accounts to have the power to veto the vesting of future CCD, e.g. for cases where an employee's vesting schedule is contingent on their continued employment.
-- [erc20](./rust-contracts/example-contracts/erc20) an implementation of the [token standard](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-20.md) popular in Ethereum used by other applications, such as wallets.
-
-
-### Compilation options
-
-Since a contract running on the chain will typically not be able to recover from
-panics, and error traces are not reported, it is useful not to bloat code size
-with them. Setting `panic=abort` will make it so that the compiler will generate
-simple `Wasm` traps on any panic that occurs. This option can be specified
-either in `.cargo/config` as exemplified in
-[counter/.cargo/config](./rust-contracts/example-contracts/counter/.cargo/config),
-or in the `Cargo.toml` file as
-
-```
-[profile.release]
-# Don't unwind on panics, just trap.
-panic = "abort"
-```
-
-The latter will only set this option in `release` builds, for debug builds use
-
-```
-[profile.dev]
-# Don't unwind on panics, just trap.
-panic = "abort"
-```
-instead.
-
-An additional option that might be useful to minimize code size at the cost of
+An option that might be useful to minimize code size at the cost of
 some performance in some cases is
 ```
 [profile.release]
@@ -157,26 +117,19 @@ trait SchemaType {
 }
 ```
 
-To build the schema, the `Cargo.toml` must include the `build-schema` feature, which is used by the contract building tool.
-```toml
-...
-[features]
-build-schema = []
-...
-```
 Running `cargo concordium build` with either `--schema-embed` or `--schema-output=<file>` will then first compile the contract with the `build-schema` feature enabled, generate the schema from the contract module and then compile the contract again without the code for generating the schema, and either embed the schema as bytes into this or output the bytes into a file (or both).
 
 The reason for compiling the contract again is to avoid including dependencies from the schema generation into the final contract, resulting in smaller modules.
 
 
-# Removing Host Information from Binary
+# Removing host information from smart contract binary
 By default the compiled binary from a rust crate contains some information from the host machine, namely rust-related paths such as the path to `.cargo`. This can be seen by inspecting the produced binary:
 
 Lets assume your username is `tom` and you have a smart contract `foo` located in your home folder, which you compiled in release-mode to WASM32.
-By running the following command inside the `foo` folder, you will be able to see the paths included in the binary: `strings target/wasm32-unknown-unknown/release/foo.wasm | grep tom`
+By running the following command inside the `foo` folder, you will be able to see the paths included in the binary: `strings target/wasm32v1-none/release/foo.wasm | grep tom`
 
 To remove the host information, the path prefixes can be remapped using a flag given to the compiler.
-`RUSTFLAGS=--remap-path-prefix=/home/tom=secret cargo build --release --target wasm32-unknown-unknown`, where `/home/tom` is the prefix you want to change into `secret`.
+`RUSTFLAGS=--remap-path-prefix=/home/tom=secret cargo build --release --target wasm32v1-none`, where `/home/tom` is the prefix you want to change into `secret`.
 The flag can be specified multiple times to remap multiple prefixes.
 
 The flags can also be set permanently in the `.cargo/config` file in your crate, under the `build` section:

@@ -9,13 +9,8 @@ on:
         - main
 
   pull_request:
-    branches:
-        - main
 
   workflow_dispatch: # allows manual trigger
-
-env:
-  RUST_VERSION: 1.85
 
 jobs:
 
@@ -72,30 +67,7 @@ jobs:
           rustup component add rust-docs
           RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
 
-  "lint_fmt_example_contracts":
-    name: ${{ matrix.example-contract }} lint:fmt
-    # Don't run on draft pull requests
-    if: ${{ !github.event.pull_request.draft }}
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        example-contract:
-          - 'escrow'
-          - 'lockup'
-          - 'use-all-host-functions'
-          - 'rate-limited'
-          - 'counter'
-          - 'context-test'
-          - 'fib'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Format
-        working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
-        run: |
-          rustup default ${{ env.RUST_VERSION }}
-          rustup component add rustfmt
-          cargo fmt -- --color=always --check
+
 
   "lint_clippy_wasm_transform":
     name: smart-contracts/${{ matrix.build-dir }} lint:clippy
@@ -145,32 +117,6 @@ jobs:
           rustup component add clippy
           cargo clippy --locked --features ${{ matrix.features }} --no-default-features --color=always --tests --benches -- -Dclippy::all
 
-  "lint_clippy_example_contracts":
-    name: smart-contracts/${{ matrix.example-contract }} lint:clippy
-    # Don't run on draft pull requests
-    if: ${{ !github.event.pull_request.draft }}
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        example-contract:
-          - 'escrow'
-          - 'lockup'
-          - 'use-all-host-functions'
-          - 'rate-limited'
-          - 'counter'
-          - 'context-test'
-          - 'fib'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Clippy
-        working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
-        run: |
-          git config --global url."https://github.com/".insteadOf "git@github.com:"
-          rustup default ${{ env.RUST_VERSION }}
-          rustup component add clippy
-          rustup target add wasm32-unknown-unknown
-          cargo clippy --locked --color=always --tests -- -Dclippy::all
 
   "cargo_test":
     name: ${{ matrix.build-dir }} cargo:test
@@ -191,31 +137,7 @@ jobs:
           rustup default ${{ env.RUST_VERSION }}
           cargo test
 
-  "cargo_test_example_contracts":
-    name: ${{ matrix.example-contract }} cargo:test
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        example-contract:
-          - 'counter'
-          # removed because test fail with "implement me"
-          # - 'escrow'
-          
-          # the following 2 contracts fail to build due to:
-          # error: building tests with panic=abort is not supported without `-Zpanic_abort_tests`
-          # - 'fib'
-          # - 'lockup'
-          
-          #Remaining example contracts have not yet been added to ci
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Test
-        working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
-        run: |
-          git config --global url."https://github.com/".insteadOf "git@github.com:"
-          rustup default ${{ env.RUST_VERSION }}
-          cargo test --target x86_64-unknown-linux-gnu
+
 
   "wasm-core-spec_cargo_test":
     name: wasm-core-spec cargo:test
