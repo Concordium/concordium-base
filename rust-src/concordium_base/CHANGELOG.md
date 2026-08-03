@@ -1,6 +1,7 @@
 ## Unreleased
 
-- The flag `serde_deprecated` now guards `serde::Serialize` and `serde::Deserialize` implemetations on the following types. The implementations will eventually be removed.
+- Set minimum supported Rust version to 1.85.
+- The flag `serde_deprecated` now guards `serde::Serialize` and `serde::Deserialize` implementations on the following types. The implementations will eventually be removed.
   - `protocol_level_tokens::token_metadata_url::MetadataUrl`
   - `protocol_level_tokens::token_amount::TokenAmount`
   - `protocol_level_tokens::token_amount::TokenAmountJson`

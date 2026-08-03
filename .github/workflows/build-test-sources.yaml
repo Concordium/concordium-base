@@ -120,7 +120,7 @@ jobs:
     strategy:
       matrix:
         plan:
-        - rust: 1.73 # Should be MSRV
+        - rust: 1.85 # Should be MSRV
 
     steps:
     - name: Checkout

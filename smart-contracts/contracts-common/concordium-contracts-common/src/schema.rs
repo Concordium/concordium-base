@@ -4,25 +4,15 @@
 //! a way that is better than constructing raw bytes as parameters.
 
 use crate::{impls::*, traits::*, types::*};
-#[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
-#[cfg(not(feature = "std"))]
 use alloc::{collections, string::String, vec::Vec};
 use collections::{BTreeMap, BTreeSet};
-#[cfg(not(feature = "std"))]
 use core::{
     convert::{TryFrom, TryInto},
     num::TryFromIntError,
 };
 #[cfg(feature = "derive-serde")]
 pub use impls::VersionedSchemaError;
-/// Contract schema related types
-#[cfg(feature = "std")]
-use std::{
-    collections,
-    convert::{TryFrom, TryInto},
-    num::TryFromIntError,
-};
 
 /// The `SchemaType` trait provides means to generate a schema for structures.
 /// Schemas are used to make structures human readable and to avoid dealing
