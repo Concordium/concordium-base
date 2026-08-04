@@ -138,6 +138,10 @@ testLockRejectReasonJSONRepresentation = do
         assertJSON
             (LockExpired lockId)
             (AE.object ["tag" AE..= ("LockExpired" :: String), "contents" AE..= lockId])
+    it "encodes and decodes LockDurationTooLong with contents" $
+        assertJSON
+            (LockDurationTooLong lockId)
+            (AE.object ["tag" AE..= ("LockDurationTooLong" :: String), "contents" AE..= lockId])
     it "encodes and decodes lock account rejects with contents" $ do
         assertJSON
             (LockFundNotAuthorized accountDetails)

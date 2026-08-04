@@ -805,6 +805,7 @@ instance ToProto RejectReason where
                             ProtoFields.tokenId .= toProto ltrrdTokenId
                         )
         LockRecipientNotPermitted LockAccountRejectReasonDetails{larrdLockId, larrdAccount} -> Proto.make $ ProtoFields.lockRecipientNotPermitted .= mkLockOpNotAuth larrdLockId larrdAccount
+        LockDurationTooLong lockId -> Proto.make $ ProtoFields.lockDurationTooLong .= toProto lockId
       where
         mkLockOpNotAuth lockId address = Proto.make $ do
             ProtoFields.lockId .= toProto lockId

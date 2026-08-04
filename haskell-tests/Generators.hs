@@ -908,7 +908,8 @@ instance Arbitrary RejectReason where
               LockReturnNotAuthorized <$> genLockAccountRejectReasonDetails,
               LockCancelNotAuthorized <$> genLockAccountRejectReasonDetails,
               LockTokenNotPermitted <$> genLockTokenRejectReasonDetails,
-              LockRecipientNotPermitted <$> genLockAccountRejectReasonDetails
+              LockRecipientNotPermitted <$> genLockAccountRejectReasonDetails,
+              LockDurationTooLong <$> genLockId
             ]
 
 genValidResult :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen ValidResult
