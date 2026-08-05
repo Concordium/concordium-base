@@ -411,6 +411,7 @@ $( singletons
             = AuthorizationsVersion0 -- \^Initial set of authorizations
             | AuthorizationsVersion1 -- \^Adds cooldown parameters and time parameters
             | AuthorizationsVersion2 -- \^Adds authorization for the CreatePLT chain update
+            | AuthorizationsVersion3 -- \^Adds authorization for token and lock related parameter updates
 
         -- \|The authorizations version associated with a protocol version.
         authorizationsVersionFor :: ProtocolVersion -> AuthorizationsVersion
@@ -424,7 +425,7 @@ $( singletons
         authorizationsVersionFor P8 = AuthorizationsVersion1
         authorizationsVersionFor P9 = AuthorizationsVersion2
         authorizationsVersionFor P10 = AuthorizationsVersion2
-        authorizationsVersionFor P11 = AuthorizationsVersion2
+        authorizationsVersionFor P11 = AuthorizationsVersion3
 
         -- \|Transaction outcomes versions.
         -- The difference between the two versions are only related
@@ -754,6 +755,7 @@ type family IsCompatibleAuthorizationsVersion cpv auv where
     IsCompatibleAuthorizationsVersion ChainParametersV2 AuthorizationsVersion1 = True
     IsCompatibleAuthorizationsVersion ChainParametersV3 AuthorizationsVersion1 = True
     IsCompatibleAuthorizationsVersion ChainParametersV3 AuthorizationsVersion2 = True
+    IsCompatibleAuthorizationsVersion ChainParametersV3 AuthorizationsVersion3 = True
     IsCompatibleAuthorizationsVersion _ _ = False
 
 -- | Constraint that an account version supports delegation.

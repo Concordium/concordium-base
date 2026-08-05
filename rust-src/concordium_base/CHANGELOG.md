@@ -1,4 +1,5 @@
 ## Unreleased
+- Added `UpdatePayload::MaxLockDuration`, `UpdateType::UpdateMaxLockDuration`, and P11 token-parameters authorization wire support.
 - Added new `Payload::MetaUpdate` payload type.
 - Added `meta_operations` module that defines the operations that make up the body of a `Payload::MetaUpdate`.
 - Removed `Buffer::start`, `Buffer::start_hint` and `Buffer::result` from the trait `concordium_base::common::Buffer`. 
