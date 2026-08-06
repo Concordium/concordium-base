@@ -236,6 +236,9 @@ module Concordium.Types.ProtocolVersion (
     PVSupportsPLT,
     PVSupportsHaskellManagedPLT,
     PVSupportsRustManagedPLT,
+    SupportsRustManagedECP,
+    sSupportsRustManagedECP,
+    PVSupportsRustManagedECP,
     -- | Version of PLT state (disregarding PLT account state which is handled separately).
     --
     -- * 'PLTStateNone': there is no PLT state (on protocol versions where 'SupportsPLT' is 'False')
@@ -829,6 +832,28 @@ type PVSupportsHaskellManagedPLT (pv :: ProtocolVersion) =
 -- that the PLT state is managed in Rust (the alternative is that it is managed in Haskell).
 type PVSupportsRustManagedPLT (pv :: ProtocolVersion) =
     (PVSupportsPLT pv, PltStateVersionFor pv ~ 'PLTStateV1)
+
+-- | Whether a protocol version supports Rust-managed external chain parameters.
+type family SupportsRustManagedECP (pv :: ProtocolVersion) :: Bool where
+    SupportsRustManagedECP pv =
+        SupportsRustManagedECPForAuthorizations (AuthorizationsVersionFor pv)
+
+type family SupportsRustManagedECPForAuthorizations (auv :: AuthorizationsVersion) :: Bool where
+    SupportsRustManagedECPForAuthorizations 'AuthorizationsVersion3 = 'True
+    SupportsRustManagedECPForAuthorizations _ = 'False
+
+-- | Singleton counterpart of 'SupportsRustManagedECP'.
+sSupportsRustManagedECP :: SProtocolVersion pv -> SBool (SupportsRustManagedECP pv)
+sSupportsRustManagedECP spv = case sAuthorizationsVersionFor spv of
+    SAuthorizationsVersion0 -> SFalse
+    SAuthorizationsVersion1 -> SFalse
+    SAuthorizationsVersion2 -> SFalse
+    SAuthorizationsVersion3 -> STrue
+
+-- | Constraint that a protocol version supports Rust-managed external chain
+-- parameters.
+type PVSupportsRustManagedECP (pv :: ProtocolVersion) =
+    (PVSupportsRustManagedPLT pv, SupportsRustManagedECP pv ~ 'True)
 
 -- | Constraint on a type level 'PLTStateVersion' that can be used to get a corresponding
 --  'SPLTStateVersion' (see 'pltStateVersion'). (An alias for 'SingI'.)
