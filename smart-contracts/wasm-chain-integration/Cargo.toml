@@ -68,8 +68,5 @@ harness = false
 name = "trie_benches"
 harness = false
 
-[profile.release]
-codegen-units = 1
-
 [package.metadata.docs.rs]
 features = ["display-state", "async"]

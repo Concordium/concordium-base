@@ -1,0 +1,14 @@
+[workspace]
+resolver = "3"
+
+members = [
+   "contracts-common/concordium-contracts-common",
+   "contracts-common/concordium-contracts-common-derive",
+   "wasm-chain-integration",
+   "wasm-transform",
+   "wasm-test",
+   #"wasm-fuzz", # not currently added, since it does not compile, add it when compile is fixed
+]
+
+# Exclude testdata/contracts for now, since they are not kept up to date
+exclude = ["testdata/contracts"]

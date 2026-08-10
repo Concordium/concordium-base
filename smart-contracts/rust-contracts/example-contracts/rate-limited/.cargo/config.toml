@@ -1,7 +1,0 @@
-# Default build target is wasm
-[build]
-target = "wasm32-unknown-unknown"
-
-[target.wasm32-unknown-unknown]
-# rustflags = ["-C", "panic=abort"]
-runner = ["cargo", "concordium", "test", "--source"]

@@ -19,8 +19,8 @@
 //!
 //! ## Wasm32
 //! This crate supports both compilation to x86 native code, as well as
-//! to the wasm32-unknown-unknown target. When there is a conflict, the
-//! preference should always be to make the wasm32-unknown-unknown the more
+//! to the wasm32v1-none target. When there is a conflict, the
+//! preference should always be to make the wasm32v1-none the more
 //! efficient one.
 //!
 //! ## `concordium-std`
@@ -80,13 +80,9 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[cfg(not(feature = "std"))]
 extern crate alloc;
 
-#[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
-#[cfg(feature = "std")]
-use std::{string::String, vec::Vec};
 
 #[macro_use]
 mod traits;

@@ -1,7 +1,0 @@
-[workspace]
-resolver = "2"
-
-members = [
-    "concordium-contracts-common",
-    "concordium-contracts-common-derive",
-]

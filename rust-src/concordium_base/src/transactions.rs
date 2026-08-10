@@ -1925,9 +1925,10 @@ pub fn verify_signature_transaction_sign_hash_v1(
     signatures: &TransactionSignaturesV1,
 ) -> bool {
     let sender_sig_ok = verify_data_signature(sender_keys, hash, &signatures.sender.signatures);
-    let sponsor_sig_ok = signatures.sponsor.as_ref().map_or(true, |sig| {
-        verify_data_signature(sponsor_keys, hash, &sig.signatures)
-    });
+    let sponsor_sig_ok = signatures
+        .sponsor
+        .as_ref()
+        .is_none_or(|sig| verify_data_signature(sponsor_keys, hash, &sig.signatures));
     sender_sig_ok && sponsor_sig_ok
 }
 

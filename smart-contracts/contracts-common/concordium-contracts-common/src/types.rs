@@ -1,17 +1,14 @@
 use crate as concordium_std;
 pub use crate::hashes::ModuleReference;
 use crate::{constants, to_bytes, Serial};
-#[cfg(all(not(feature = "std"), feature = "concordium-quickcheck"))]
+#[cfg(feature = "concordium-quickcheck")]
 use alloc::boxed::Box;
-#[cfg(not(feature = "std"))]
 use alloc::collections::BTreeMap;
-#[cfg(not(feature = "std"))]
 use alloc::{borrow::ToOwned, string::String, string::ToString, vec::Vec};
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
 use cmp::Ordering;
 use concordium_contracts_common_derive::SchemaType;
-#[cfg(not(feature = "std"))]
 use core::{cmp, convert, fmt, hash, iter, ops, str};
 use core::{marker::PhantomData, str::FromStr};
 use hash::Hash;
@@ -21,10 +18,6 @@ use quickcheck::Gen;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 #[cfg(feature = "derive-serde")]
 pub use serde_impl::*;
-#[cfg(feature = "std")]
-use std::collections::BTreeMap;
-#[cfg(feature = "std")]
-use std::{cmp, convert, fmt, hash, iter, ops, str};
 
 /// Reexport of the `HashMap` from `hashbrown` with the default hasher set to
 /// the `fnv` hash function.
@@ -3296,10 +3289,10 @@ mod test {
     fn test_json_serialization_and_deserialization_of_signature_ed25519() {
         let hex_string = "FC87CE9497CBD9DDDFB6CED31914D4FB93DD158EEFE7AF927AB31BB47178E61A33BEA52568475C161EC5B7A5E86B9F5F0274274192665D83197C4CE9A24C7C06";
 
-        let signature = SignatureEd25519::from_str(&hex_string.to_string()).unwrap();
+        let signature = SignatureEd25519::from_str(hex_string).unwrap();
 
         // Serialize to JSON
-        let serialized = serde_json::to_value(&signature).unwrap();
+        let serialized = serde_json::to_value(signature).unwrap();
 
         // Deserialize from JSON
         let deserialized: SignatureEd25519 = serde_json::from_value(serialized).unwrap();
@@ -3315,10 +3308,10 @@ mod test {
     fn test_json_serialization_and_deserialization_of_signature_ecdsa_secp256k1() {
         let hex_string = "FC87CE9497CBD9DDDFB6CED31914D4FB93DD158EEFE7AF927AB31BB47178E61A33BEA52568475C161EC5B7A5E86B9F5F0274274192665D83197C4CE9A24C7C06";
 
-        let signature = SignatureEcdsaSecp256k1::from_str(&hex_string.to_string()).unwrap();
+        let signature = SignatureEcdsaSecp256k1::from_str(hex_string).unwrap();
 
         // Serialize to JSON
-        let serialized = serde_json::to_value(&signature).unwrap();
+        let serialized = serde_json::to_value(signature).unwrap();
 
         // Deserialize from JSON
         let deserialized: SignatureEcdsaSecp256k1 = serde_json::from_value(serialized).unwrap();
@@ -3334,8 +3327,7 @@ mod test {
     fn test_json_serialization_and_deserialization_of_signature() {
         let hex_string = "FC87CE9497CBD9DDDFB6CED31914D4FB93DD158EEFE7AF927AB31BB47178E61A33BEA52568475C161EC5B7A5E86B9F5F0274274192665D83197C4CE9A24C7C06";
 
-        let signature =
-            Signature::Ed25519(SignatureEd25519::from_str(&hex_string.to_string()).unwrap());
+        let signature = Signature::Ed25519(SignatureEd25519::from_str(hex_string).unwrap());
 
         // Serialize to JSON
         let serialized = serde_json::to_value(&signature).unwrap();
@@ -3354,8 +3346,7 @@ mod test {
     fn test_json_serialization_and_deserialization_of_credential_signature() {
         let hex_string = "FC87CE9497CBD9DDDFB6CED31914D4FB93DD158EEFE7AF927AB31BB47178E61A33BEA52568475C161EC5B7A5E86B9F5F0274274192665D83197C4CE9A24C7C06";
 
-        let signature =
-            Signature::Ed25519(SignatureEd25519::from_str(&hex_string.to_string()).unwrap());
+        let signature = Signature::Ed25519(SignatureEd25519::from_str(hex_string).unwrap());
 
         let mut sig_map = BTreeMap::new();
         sig_map.insert(0u8, signature);
@@ -3379,8 +3370,7 @@ mod test {
     fn test_json_serialization_and_deserialization_of_account_signature() {
         let hex_string = "FC87CE9497CBD9DDDFB6CED31914D4FB93DD158EEFE7AF927AB31BB47178E61A33BEA52568475C161EC5B7A5E86B9F5F0274274192665D83197C4CE9A24C7C06";
 
-        let signature =
-            Signature::Ed25519(SignatureEd25519::from_str(&hex_string.to_string()).unwrap());
+        let signature = Signature::Ed25519(SignatureEd25519::from_str(hex_string).unwrap());
 
         let mut sig_map = BTreeMap::new();
         sig_map.insert(0u8, signature);
@@ -3413,7 +3403,7 @@ mod test {
         if let Ok(timestamp) = Timestamp::from_str(&millis.to_string()) {
             assert_eq!(timestamp.millis, millis);
         } else {
-            assert!(false)
+            panic!()
         };
     }
 
@@ -3424,7 +3414,7 @@ mod test {
         if let Ok(timestamp) = Timestamp::from_str(datetime) {
             assert_eq!(timestamp.millis, 42);
         } else {
-            assert!(false)
+            panic!()
         };
     }
 
