@@ -17,7 +17,6 @@ proc-macro = true
 [features]
 wasm-test = []
 build-schema = []
-concordium-quickcheck = []
 
 [dependencies]
 syn = { version = "2.0", features = [ "full", "extra-traits" ] }
