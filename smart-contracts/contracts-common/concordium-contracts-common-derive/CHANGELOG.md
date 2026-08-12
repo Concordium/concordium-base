@@ -3,6 +3,8 @@
 ## Unreleased changes
 
 - Set minimum supported Rust version to 1.85.
+- The derive macros `DeserialWithState` and `Deletable` no longer requires specifying `#[concordium(state_parameter = "S")]`, 
+  it will default to `StateApi` type. 
 - Removed native support for `concordium_cfg_test`.
 
 ## concordium-contracts-common-derive 4.1.0 (2024-03-25)

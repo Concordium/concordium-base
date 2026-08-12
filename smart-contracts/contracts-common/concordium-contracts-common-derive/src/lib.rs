@@ -231,9 +231,23 @@ fn serialize_derive_worker(input: TokenStream) -> syn::Result<TokenStream> {
 /// [`StateSet`](../concordium_std/struct.StateSet.html), or
 /// [`StateMap`](../concordium_std/struct.StateMap.html).
 ///
+/// # Example
+/// ``` ignore
+/// #[derive(DeserialWithState)]
+/// struct Foo<T> {
+///     a: StateMap<u8, u8>,
+///     #[concordium(size_length = 1)]
+///     b: String,
+///     c: Vec<T>,
+/// }
+///```
+///
+/// # Together with generic parameter for low-level state type:
+///
 /// Please note that it is necessary to specify the generic parameter name for
 /// the [`HasStateApi`](../concordium_std/trait.HasStateApi.html) generic
-/// parameter. To do so, use the `#[concordium(state_parameter =
+/// parameter if your type has such a parameter.
+/// To do so, use the `#[concordium(state_parameter =
 /// "NameOfGenericParameter")]` attribute on the type you are deriving
 /// `DeserialWithState` for.
 ///
@@ -447,9 +461,19 @@ pub fn reject_derive(input: TokenStream) -> TokenStream {
 /// [`StateSet`](../concordium_std/struct.StateSet.html), or
 /// [`StateMap`](../concordium_std/struct.StateMap.html).
 ///
-/// Please note that it is
-/// necessary to specify the generic parameter name for the
-/// [`HasStateApi`](../concordium_std/trait.HasStateApi.html) generic parameter.
+/// # Example
+/// ``` ignore
+/// #[derive(Serial, DeserialWithState, Deletable)]
+/// struct MyState {
+///    my_state_map: StateMap<SomeType, SomeOtherType>,
+/// }
+/// ```
+///
+/// # Together with generic parameter for low-level state type:
+///
+/// Please note that it is necessary to specify the generic parameter name for
+/// the [`HasStateApi`](../concordium_std/trait.HasStateApi.html) generic
+/// parameter if your type has such a parameter.
 /// To do so, use the `#[concordium(state_parameter =
 /// "NameOfGenericParameter")]` attribute on the type you are deriving
 /// `Deletable` for.
