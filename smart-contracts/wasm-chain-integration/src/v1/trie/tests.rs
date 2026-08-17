@@ -167,6 +167,51 @@ fn prop_insert_freeze_lookup() {
 }
 
 #[test]
+fn cold_indirect_value_size_loads_only_metadata() {
+    struct CountingLoader {
+        bytes: Vec<u8>,
+        payload_bytes_loaded: usize,
+    }
+
+    impl BackingStoreLoad for CountingLoader {
+        type R = Vec<u8>;
+
+        fn load_raw(&mut self, location: Reference) -> LoadResult<Self::R> {
+            let start = usize::try_from(u64::from(location)).unwrap();
+            let len = u64::from_be_bytes(self.bytes[start..start + 8].try_into().unwrap());
+            let len = usize::try_from(len).unwrap();
+            self.payload_bytes_loaded += len;
+            Ok(self.bytes[start + 8..start + 8 + len].to_vec())
+        }
+
+        fn load_raw_length(&mut self, location: Reference) -> LoadResult<u64> {
+            let start = usize::try_from(u64::from(location)).unwrap();
+            Ok(u64::from_be_bytes(
+                self.bytes[start..start + 8].try_into().unwrap(),
+            ))
+        }
+    }
+
+    let payload = vec![7; 65];
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&(payload.len() as u64).to_be_bytes());
+    bytes.extend_from_slice(&payload);
+    let mut loader = CountingLoader {
+        bytes,
+        payload_bytes_loaded: 0,
+    };
+    let value = InlineOrHashed::Indirect(Hashed::new(
+        payload.hash(&mut loader),
+        CachedRef::Disk {
+            reference: Reference::from(0u64),
+        },
+    ));
+
+    assert_eq!(value.len(&mut loader).unwrap(), payload.len());
+    assert_eq!(loader.payload_bytes_loaded, 0);
+}
+
+#[test]
 /// Check that storing also uncaches the data.
 fn prop_storing_uncaches() {
     let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {

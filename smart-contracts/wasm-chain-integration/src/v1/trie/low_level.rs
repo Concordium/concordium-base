@@ -437,7 +437,7 @@ impl<V: Loadable> CachedRef<V> {
     /// Get a reference to the contained value. In case the value is only on
     /// disk this will load it.
     #[inline]
-    pub fn get<L: BackingStoreLoad>(&self, loader: &mut L) -> MaybeOwned<V> {
+    pub fn get<L: BackingStoreLoad>(&self, loader: &mut L) -> MaybeOwned<'_, V> {
         match self {
             CachedRef::Disk { reference } => {
                 let loaded = V::load_from_location(loader, *reference).unwrap();
@@ -445,6 +445,20 @@ impl<V: Loadable> CachedRef<V> {
             }
             CachedRef::Memory { value, .. } => MaybeOwned::Borrowed(value),
             CachedRef::Cached { value, .. } => MaybeOwned::Borrowed(value),
+        }
+    }
+}
+
+impl<V: AsRef<[u8]>> CachedRef<V> {
+    /// Return the payload length. Do not load a value that exists only in
+    /// backing storage.
+    fn len(&self, loader: &mut impl BackingStoreLoad) -> LoadResult<usize> {
+        match self {
+            CachedRef::Disk { reference } => usize::try_from(loader.load_raw_length(*reference)?)
+                .map_err(|_| LoadError::OutOfBoundsRead),
+            CachedRef::Memory { value } | CachedRef::Cached { value, .. } => {
+                Ok(value.as_ref().len())
+            }
         }
     }
 }
@@ -707,7 +721,7 @@ impl Stem {
     }
 
     /// Return an iterator over the chunks of the stem.
-    pub fn iter(&self) -> StemIter {
+    pub fn iter(&self) -> StemIter<'_> {
         StemIter {
             data: &self.data,
             pos: 0,
@@ -969,7 +983,7 @@ impl InlineOrHashed {
     #[inline(always)]
     /// Get a reference to the contained value. In case the value is only on
     /// disk it is loaded using the provided loader.
-    pub(crate) fn get(&self, loader: &mut impl BackingStoreLoad) -> ByteSlice {
+    pub(crate) fn get(&self, loader: &mut impl BackingStoreLoad) -> ByteSlice<'_> {
         match self {
             InlineOrHashed::Inline { len, data } => {
                 MaybeOwned::Borrowed(&data[0..usize::from(*len)])
@@ -984,6 +998,15 @@ impl InlineOrHashed {
         }
     }
 
+    /// Return the value length. For a cold indirect value, read only the
+    /// fixed-size backing-store metadata.
+    pub(crate) fn len(&self, loader: &mut impl BackingStoreLoad) -> LoadResult<usize> {
+        match self {
+            InlineOrHashed::Inline { len, .. } => Ok(usize::from(*len)),
+            InlineOrHashed::Indirect(indirect) => indirect.data.len(loader),
+        }
+    }
+
     #[inline(always)]
     /// Get a reference to the contained value as well as the hash in case the
     /// value is stored with an explicit hash. In case the value is stored
@@ -991,7 +1014,7 @@ impl InlineOrHashed {
     pub(crate) fn get_ref_and_hash(
         &self,
         loader: &mut impl BackingStoreLoad,
-    ) -> (Option<&Hash>, ByteSlice) {
+    ) -> (Option<&Hash>, ByteSlice<'_>) {
         match self {
             InlineOrHashed::Inline { len, data } => {
                 (None, MaybeOwned::Borrowed(&data[0..usize::from(*len)]))
@@ -2401,6 +2424,35 @@ impl MutableTrie {
             }
             Entry::Mutable { entry_idx } => values.get(entry_idx).map(|b| f(&b[..])),
             Entry::Deleted => None,
+        }
+    }
+
+    /// Return the entry length. Do not put a cold persisted value in memory.
+    /// Return `None` for an invalidated entry. Return an error for a
+    /// backing-store failure.
+    pub fn entry_size(
+        &self,
+        entry: EntryId,
+        loader: &mut impl BackingStoreLoad,
+    ) -> LoadResult<Option<usize>> {
+        let values = &self.values;
+        let borrowed_values = &self.borrowed_values;
+        match self.entries[entry] {
+            Entry::ReadOnly {
+                borrowed,
+                entry_idx,
+            } => {
+                if borrowed {
+                    let Some(value) = borrowed_values.get(entry_idx) else {
+                        return Ok(None);
+                    };
+                    value.borrow().len(loader).map(Some)
+                } else {
+                    Ok(values.get(entry_idx).map(Vec::len))
+                }
+            }
+            Entry::Mutable { entry_idx } => Ok(values.get(entry_idx).map(Vec::len)),
+            Entry::Deleted => Ok(None),
         }
     }
 

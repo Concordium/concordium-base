@@ -46,6 +46,8 @@ pub enum LoadError {
     },
     #[error("Out of bounds read.")]
     OutOfBoundsRead,
+    #[error("Backing-store callback failed.")]
+    CallbackFailure,
 }
 
 /// Result of loading data from persistent storage.
@@ -209,6 +211,9 @@ pub trait BackingStoreLoad {
     /// Load the provided value from the given location. The implementatation of
     /// this should match [BackingStoreStore::store_raw].
     fn load_raw(&mut self, location: Reference) -> LoadResult<Self::R>;
+
+    /// Load only the metadata that contains the stored payload length.
+    fn load_raw_length(&mut self, location: Reference) -> LoadResult<u64>;
 }
 
 impl BackingStoreStore for Vec<u8> {
@@ -265,6 +270,18 @@ impl<A: AsRef<[u8]>> BackingStoreLoad for Loader<A> {
         let end = (pos + 8 + len) as usize;
         if end <= slice.len() {
             Ok(slice[pos as usize + 8..end].into())
+        } else {
+            Err(LoadError::OutOfBoundsRead)
+        }
+    }
+
+    fn load_raw_length(&mut self, location: Reference) -> LoadResult<u64> {
+        let slice = self.inner.as_ref();
+        let mut c = std::io::Cursor::new(slice);
+        let pos = c.seek(SeekFrom::Start(location.into()))?;
+        let len = c.read_u64::<BigEndian>()?;
+        if pos + 8 + len <= slice.len() as u64 {
+            Ok(len)
         } else {
             Err(LoadError::OutOfBoundsRead)
         }

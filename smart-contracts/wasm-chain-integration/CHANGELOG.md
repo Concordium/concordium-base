@@ -1,6 +1,18 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+
 ## Unreleased
+
+### Changed
+
+- Added the required `BackingStoreLoad::load_raw_length` method. Implementations must use this method to return the stored payload length without loading the payload.
+- Added `LoadLengthCallback` and `BackingStoreLoadCallback` for backing-store length queries through the FFI.
+- Added the `CallbackFailure` variant to `LoadError`.
+- Changed the V1 FFI functions that read the backing store. These functions now require a `LoadLengthCallback` in addition to a `LoadCallback`. This change is a breaking change to the FFI.
+- Changed V1 contract-state entry-size queries. For a cold persisted value, the engine reads only the fixed-size storage metadata. This change does not change contract results or Interpreter Energy.
+
+### Added
 
 - Extend FFI with functions for lookup and inserting values into the state trie.
 

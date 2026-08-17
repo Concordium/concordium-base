@@ -1061,7 +1061,7 @@ pub(crate) mod host {
     ) -> machine::RunResult<()> {
         let entry_index = unsafe { stack.pop_u64() };
         energy.tick_energy(constants::ENTRY_SIZE_COST)?;
-        let result = state.entry_size(InstanceStateEntry::from(entry_index));
+        let result = state.entry_size(InstanceStateEntry::from(entry_index))?;
         stack.push_value(result);
         Ok(())
     }

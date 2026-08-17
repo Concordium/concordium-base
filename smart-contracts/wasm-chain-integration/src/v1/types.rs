@@ -1308,24 +1308,26 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
 
     /// Return the size of the entry, or u32::MAX in case the entry has already
     /// been invalidated.
-    pub(crate) fn entry_size(&mut self, entry: InstanceStateEntry) -> u32 {
+    pub(crate) fn entry_size(&mut self, entry: InstanceStateEntry) -> StateResult<u32> {
         let (gen, idx) = entry.split();
         if gen != self.current_generation {
-            return u32::MAX;
+            return Ok(u32::MAX);
         }
-        if let Some(entry) = self.entry_mapping.get(idx) {
-            let res = self
-                .state_trie
-                .with_entry(*entry, &mut self.backing_store, |v| v.len() as u32);
-            if let Some(res) = res {
-                res
-            } else {
-                // entry was invalidated.
-                u32::MAX
-            }
-        } else {
-            u32::MAX
-        }
+        let Some(entry) = self.entry_mapping.get(idx) else {
+            return Ok(u32::MAX);
+        };
+        let Some(size) = self
+            .state_trie
+            .entry_size(*entry, &mut self.backing_store)?
+        else {
+            // The entry was invalidated.
+            return Ok(u32::MAX);
+        };
+        ensure!(
+            size <= constants::MAX_ENTRY_SIZE,
+            "Persisted V1 entry exceeds the maximum entry size."
+        );
+        u32::try_from(size).context("V1 entry size does not fit in u32.")
     }
 
     /// Resize the entry to the new size. Returns

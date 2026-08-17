@@ -259,7 +259,7 @@ fn test_size_of_invalid_entry() -> anyhow::Result<()> {
         "Deleting an entry should return 1."
     );
     ensure!(
-        state.entry_size(entry) == u32::MAX,
+        state.entry_size(entry)? == u32::MAX,
         "Entry size of invalidated entry should return u32::MAX."
     );
     ensure!(
@@ -275,13 +275,11 @@ fn test_size_of_invalid_entry() -> anyhow::Result<()> {
         "Deleting prefix on non existent part of state should return Ok(1)."
     );
     ensure!(
-        state.entry_size(42.into()) == u32::MAX,
+        state.entry_size(42.into())? == u32::MAX,
         "Entry size of non existent entry should return u32::MAX."
     );
     Ok(())
 }
-
-/// Entry size/resize focused tests ///
 
 #[test]
 /// This test performs the following tasks:
@@ -313,7 +311,7 @@ fn prop_entry_write_resizing() {
                 "Write should return the correct length written"
             );
 
-            let entry_size = state.entry_size(entry);
+            let entry_size = state.entry_size(entry)?;
             ensure!(
                 entry_size as usize == v.len(),
                 "Entry size {:?} for key {:?} not correct expected {:?}.",
@@ -745,7 +743,7 @@ fn test_invalid_generation_operations() -> anyhow::Result<()> {
     );
 
     ensure!(
-        state.entry_size(entry_invalid_gen) == u32::MAX,
+        state.entry_size(entry_invalid_gen)? == u32::MAX,
         "Getting size of entry with invalid generation should return u32::MAX."
     );
 
