@@ -24,6 +24,13 @@ use std::{
 type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
 type G1 = ArkGroup<G1Projective>;
 
+/// An unexpected Rust panic was caught before it could cross the FFI boundary.
+const VERIFY_CDI_FFI_PANIC: i32 = -11;
+
+fn catch_ffi_unwind(f: impl FnOnce() -> i32 + std::panic::UnwindSafe) -> i32 {
+    std::panic::catch_unwind(f).unwrap_or(VERIFY_CDI_FFI_PANIC)
+}
+
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 extern "C" fn verify_initial_cdi_ffi(
@@ -64,6 +71,31 @@ extern "C" fn verify_cdi_ffi(
     cdi_len: size_t,
     addr_ptr: *const u8, // pointer to an account address, or null, 32 bytes
     expiry: u64,         // if addr_ptr is null this is used
+) -> i32 {
+    catch_ffi_unwind(|| {
+        verify_cdi_ffi_impl(
+            gc_ptr,
+            ip_info_ptr,
+            ars_infos_ptr,
+            ars_infos_len,
+            cdi_ptr,
+            cdi_len,
+            addr_ptr,
+            expiry,
+        )
+    })
+}
+
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+fn verify_cdi_ffi_impl(
+    gc_ptr: *const GlobalContext<G1>,
+    ip_info_ptr: *const IpInfo<Bls12>,
+    ars_infos_ptr: *const *mut ArInfo<G1>,
+    ars_infos_len: size_t,
+    cdi_ptr: *const u8,
+    cdi_len: size_t,
+    addr_ptr: *const u8,
+    expiry: u64,
 ) -> i32 {
     if gc_ptr.is_null() {
         return -9;
@@ -604,6 +636,14 @@ mod test {
     const EXPIRY: TransactionTime = TransactionTime {
         seconds: 111111111111111111,
     };
+
+    #[test]
+    fn test_catch_ffi_unwind() {
+        assert_eq!(
+            catch_ffi_unwind(|| panic!("test panic at FFI boundary")),
+            VERIFY_CDI_FFI_PANIC
+        );
+    }
 
     #[test]
     fn test_pipeline() {
