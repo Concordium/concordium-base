@@ -4,7 +4,7 @@ use crate::{
         types::{KeyIndex, KeyPair, TransactionTime},
         *,
     },
-    curve_arithmetic::{Curve, Pairing},
+    curve_arithmetic::Curve,
     dodis_yampolskiy_prf as prf,
     elgamal::{PublicKey, SecretKey},
     id::{
@@ -16,7 +16,6 @@ use crate::{
         secret_sharing::Threshold,
         types::*,
     },
-    ps_sig,
 };
 use ed25519::SigningKey;
 use ed25519_dalek as ed25519;
@@ -190,10 +189,17 @@ pub fn test_create_attributes() -> ExampleAttributeList {
 /// proof of knowledge of the identity provider's signature satisfiable without
 /// knowing a signature at all. Such a credential must therefore never be
 /// accepted, which is ensured by rejecting it already when it is parsed, see the
-/// `Deserial` instance of [`ps_sig::Signature`].
+/// `Deserial` instance of `ps_sig::Signature`.
+///
+/// This module is also compiled without `cfg(test)` under the
+/// `internal-test-helpers` feature, where neither `serialize_deserialize` nor
+/// `Signature::new_unchecked` exists, hence the gate.
+#[cfg(test)]
 fn assert_zero_blinded_signature_rejected(
     cdi: &CredentialDeploymentInfo<IpPairing, ArCurve, ExampleAttribute>,
 ) {
+    use crate::{curve_arithmetic::Pairing, ps_sig};
+
     let mut cdi = cdi.clone();
     cdi.proofs.id_proofs.sig = ps_sig::BlindedSignature {
         sig: ps_sig::Signature::new_unchecked(
