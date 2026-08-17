@@ -301,11 +301,11 @@ pub fn verify_scalars<C: Curve>(
 /// - `Q` - the elliptic curve point `Q`
 /// - `proof` - the inner product proof
 ///
-/// Preconditions:
-/// `G_vec` and `H_vec` must be of the same length, and this length must a power
-/// of 2.
+/// Returns `false` if `G_vec` and `H_vec` have different lengths or their
+/// common length is not a power of two.
 #[allow(non_snake_case)]
-pub fn verify_inner_product<C: Curve>(
+#[cfg(test)]
+pub(crate) fn verify_inner_product<C: Curve>(
     transcript: &mut impl TranscriptProtocol,
     G_vec: &[C],
     H_vec: &[C],
@@ -313,6 +313,10 @@ pub fn verify_inner_product<C: Curve>(
     Q: &C,
     proof: &InnerProductProof<C>,
 ) -> bool {
+    if G_vec.len() != H_vec.len() || !G_vec.len().is_power_of_two() {
+        return false;
+    }
+
     // call verify_inner_product_with_scalars
     // Since H is directly given, set all exponents for H to 1
     let n = G_vec.len();
@@ -537,7 +541,27 @@ mod tests {
             &P_prime,
             &Q,
             &proof
-        ))
+        ));
+
+        let mut transcript = RandomOracle::empty();
+        assert!(!verify_inner_product(
+            &mut transcript,
+            &G_vec,
+            &H_vec[..n - 1],
+            &P_prime,
+            &Q,
+            &proof,
+        ));
+
+        let mut transcript = RandomOracle::empty();
+        assert!(!verify_inner_product(
+            &mut transcript,
+            &G_vec[..n - 1],
+            &H_vec[..n - 1],
+            &P_prime,
+            &Q,
+            &proof,
+        ));
     }
 
     #[test]
