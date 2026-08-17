@@ -230,6 +230,13 @@ pub fn verify_scalars<C: Curve>(
     n: usize,
     proof: &InnerProductProof<C>,
 ) -> Option<VerificationScalars<C>> {
+    // An inner-product proof for vectors of length n has exactly log2(n)
+    // rounds. Besides rejecting malformed proofs, checking this here ensures
+    // that the challenge vector is long enough for the indexing below.
+    if !n.is_power_of_two() || proof.lr_vec.len() != n.trailing_zeros() as usize {
+        return None;
+    }
+
     // let n = G_vec.len();
     let L_R = &proof.lr_vec;
     let a = proof.a;
@@ -531,5 +538,48 @@ mod tests {
             &Q,
             &proof
         ))
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn malformed_inner_product_proof_round_count_is_rejected() {
+        let rng = &mut thread_rng();
+        let n = 4;
+        let G_vec: Vec<_> = (0..n).map(|_| SomeCurve::generate(rng)).collect();
+        let H_vec: Vec<_> = (0..n).map(|_| SomeCurve::generate(rng)).collect();
+        let a_vec: Vec<_> = (0..n).map(|_| SomeCurve::generate_scalar(rng)).collect();
+        let b_vec: Vec<_> = (0..n).map(|_| SomeCurve::generate_scalar(rng)).collect();
+        let Q = SomeCurve::generate(rng);
+        let P_prime = multiexp(&G_vec, &a_vec)
+            .plus_point(&multiexp(&H_vec, &b_vec))
+            .plus_point(&Q.mul_by_scalar(&inner_product(&a_vec, &b_vec)));
+
+        let mut prover_transcript = RandomOracle::empty();
+        let proof = prove_inner_product(&mut prover_transcript, &G_vec, &H_vec, &Q, &a_vec, &b_vec)
+            .unwrap();
+
+        let mut short_proof = proof.clone();
+        short_proof.lr_vec.pop();
+        let mut verifier_transcript = RandomOracle::empty();
+        assert!(!verify_inner_product(
+            &mut verifier_transcript,
+            &G_vec,
+            &H_vec,
+            &P_prime,
+            &Q,
+            &short_proof,
+        ));
+
+        let mut long_proof = proof.clone();
+        long_proof.lr_vec.push(long_proof.lr_vec[0]);
+        let mut verifier_transcript = RandomOracle::empty();
+        assert!(!verify_inner_product(
+            &mut verifier_transcript,
+            &G_vec,
+            &H_vec,
+            &P_prime,
+            &Q,
+            &long_proof,
+        ));
     }
 }
