@@ -592,7 +592,7 @@ fn signature_knowledge_verifier<
 
 #[cfg(test)]
 mod test {
-    use crate::curve_arithmetic::Value;
+    use crate::curve_arithmetic::{Curve, Value};
     use crate::elgamal::Message;
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
     use crate::id::identity_attributes_credentials::{
@@ -607,6 +607,7 @@ mod test {
         IpData, IpInfo, YearMonth,
     };
     use crate::id::{identity_provider, test};
+    use crate::ps_sig;
     use crate::random_oracle::RandomOracle;
     use assert_matches::assert_matches;
     use std::collections::BTreeMap;
@@ -994,6 +995,58 @@ mod test {
             &mut transcript,
         );
         assert_matches!(res, Err(AttributeCommitmentVerificationError::Signature));
+    }
+
+    /// Test that credentials proved with the zero signature are rejected.
+    ///
+    /// A blinded signature whose first component is the identity of G1 makes the proof of
+    /// knowledge of the identity provider's signature satisfiable without knowing a
+    /// signature: the pairing component of both the statement and its preimage under the
+    /// homomorphism is the identity of the target group, no matter what the witness is.
+    /// An attacker can therefore run the honest prover on an identity object with
+    /// attributes of their own choosing and no signature, and obtain a proof which the
+    /// sigma protocol verifier accepts. Such credentials are instead rejected because
+    /// they cannot be parsed, see the `Deserial` instance of [`ps_sig::Signature`].
+    #[test]
+    pub fn test_identity_attributes_zero_signature_rejected() {
+        let mut id_object_fixture = identity_object_fixture();
+        // An identity object with an attribute that the identity provider never signed,
+        // and with no signature at all.
+        let forged_value = AttributeKind::from(1234);
+        id_object_fixture
+            .id_object
+            .alist
+            .alist
+            .insert(TAG_0, forged_value.clone());
+        id_object_fixture.id_object.signature =
+            ps_sig::Signature::new_unchecked(G1::zero_point(), G1::zero_point());
+
+        let attributes_handling = BTreeMap::from([(TAG_0, IdentityAttributeHandling::Reveal)]);
+        let mut transcript = RandomOracle::empty();
+        let (id_attr_info, _) = prove_identity_attributes(
+            &id_object_fixture.global_ctx,
+            ip_context(&id_object_fixture),
+            &id_object_fixture.id_object,
+            &id_object_fixture.id_use_data,
+            &attributes_handling,
+            &mut seed0(),
+            &mut transcript,
+        )
+        .expect("prove");
+
+        // These are the credentials the attacker would present.
+        assert_matches!(id_attr_info.values.attributes.get(&TAG_0), Some(IdentityAttribute::Revealed(a)) => {
+            assert_eq!(a, &forged_value);
+        });
+
+        // They cannot be parsed, and hence never reach the verifier.
+        let parsed: common::ParseResult<
+            IdentityAttributesCredentialsInfo<Bls12, G1, AttributeKind>,
+        > = common::from_bytes(&mut common::to_bytes(&id_attr_info).as_slice());
+        assert!(
+            parsed.is_err(),
+            "Credentials with a zero blinded signature must not be deserialized."
+        );
     }
 
     /// Test that the verifier does not accept the proof if the

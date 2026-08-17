@@ -197,7 +197,7 @@ mod tests {
                     let message = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
                     let sig = sk.sign_known_message(&message, &mut csprng);
                     assert!(sig.is_ok());
-                    let dummy = Signature(
+                    let dummy = Signature::new_unchecked(
                         <$pairing_type as Pairing>::G1::zero_point(),
                         <$pairing_type as Pairing>::G1::zero_point(),
                     );
