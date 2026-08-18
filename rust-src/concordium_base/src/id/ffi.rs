@@ -87,6 +87,7 @@ extern "C" fn verify_cdi_ffi(
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[allow(clippy::too_many_arguments)]
 fn verify_cdi_ffi_impl(
     gc_ptr: *const GlobalContext<G1>,
     ip_info_ptr: *const IpInfo<Bls12>,
