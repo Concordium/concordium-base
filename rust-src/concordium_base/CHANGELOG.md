@@ -86,6 +86,7 @@
     a signature, and `Signature::a` and `Signature::b` to access its components.
   - Deserialization of `ps_sig::Signature`, and thereby of `ps_sig::BlindedSignature`, now fails if the first
     component is the identity of `G1`. The serialization format is unchanged.
+- Fixes a bug where `verify_cdi` accepts credentials with an empty AR map.
 
 ## 10.0.0 (2026-01-09)
 
