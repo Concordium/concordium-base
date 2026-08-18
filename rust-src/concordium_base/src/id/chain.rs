@@ -63,13 +63,15 @@ pub fn verify_cdi<
     // (corresponding to the degree+1)
     let addr = new_or_existing.as_ref().right();
     let rt_usize: usize = cdi.values.threshold.into();
-    if rt_usize
-        != cdi
-            .proofs
-            .id_proofs
-            .commitments
-            .cmm_id_cred_sec_sharing_coeff
-            .len()
+    if cdi.values.ar_data.is_empty()
+        || rt_usize > cdi.values.ar_data.len()
+        || rt_usize
+            != cdi
+                .proofs
+                .id_proofs
+                .commitments
+                .cmm_id_cred_sec_sharing_coeff
+                .len()
     {
         return Err(CdiVerificationError::Ar);
     }
@@ -489,6 +491,68 @@ mod tests {
             &Right(existing_reg_id),
         );
         assert_eq!(cdi_check, Ok(()));
+
+        let mut empty_ar_cdi = cdi.clone();
+        empty_ar_cdi.values.ar_data.clear();
+        empty_ar_cdi.proofs.id_proofs.proof_id_cred_pub.clear();
+        let empty_ar_check = verify_cdi(
+            &global_ctx,
+            &ip_info,
+            &ars_infos,
+            &empty_ar_cdi,
+            &Right(existing_reg_id),
+        );
+        assert_eq!(empty_ar_check, Err(CdiVerificationError::Ar));
+
+        let revocation_threshold: usize = cdi.values.threshold.into();
+        assert!(cdi.values.ar_data.len() > revocation_threshold);
+        let mut excessive_threshold_cdi = cdi.clone();
+        while excessive_threshold_cdi.values.ar_data.len() >= revocation_threshold {
+            let ar = *excessive_threshold_cdi
+                .values
+                .ar_data
+                .keys()
+                .next_back()
+                .expect("AR data is non-empty");
+            excessive_threshold_cdi.values.ar_data.remove(&ar);
+            excessive_threshold_cdi
+                .proofs
+                .id_proofs
+                .proof_id_cred_pub
+                .remove(&ar);
+        }
+        let excessive_threshold_check = verify_cdi(
+            &global_ctx,
+            &ip_info,
+            &ars_infos,
+            &excessive_threshold_cdi,
+            &Right(existing_reg_id),
+        );
+        assert_eq!(excessive_threshold_check, Err(CdiVerificationError::Ar));
+
+        let mut threshold_boundary_cdi = cdi.clone();
+        while threshold_boundary_cdi.values.ar_data.len() > revocation_threshold {
+            let ar = *threshold_boundary_cdi
+                .values
+                .ar_data
+                .keys()
+                .next_back()
+                .expect("AR data is non-empty");
+            threshold_boundary_cdi.values.ar_data.remove(&ar);
+            threshold_boundary_cdi
+                .proofs
+                .id_proofs
+                .proof_id_cred_pub
+                .remove(&ar);
+        }
+        let threshold_boundary_check = verify_cdi(
+            &global_ctx,
+            &ip_info,
+            &ars_infos,
+            &threshold_boundary_cdi,
+            &Right(existing_reg_id),
+        );
+        assert_ne!(threshold_boundary_check, Err(CdiVerificationError::Ar));
     }
 
     /// This tests the credential creation flow, where no initial account was
