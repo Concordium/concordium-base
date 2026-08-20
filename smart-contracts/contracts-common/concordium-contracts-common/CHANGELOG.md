@@ -5,7 +5,8 @@
 - Set minimum supported Rust version to 1.85.
 - Updated documentation to refer to the target `wasm32v1-none` instead of `wasm32-unknown-unknown`. The target
   `wasm32v1-none` will be used for smart contracts instead of `wasm32-unknown-unknown`. 
-
+- Removed the feature flag `concordium-quickcheck`. Property based tests using `quickcheck` and run in WASM are no longer supported.
+- 
 ## concordium-contracts-common 9.2.0 (2024-08-27)
 
 - Add `TryFrom` implementation to convert `&[u8]` to `AccountAddress`, when feature `derive-serde` is enabled.

@@ -6,6 +6,7 @@
 - The derive macros `DeserialWithState` and `Deletable` no longer requires specifying `#[concordium(state_parameter = "S")]`, 
   it will default to `StateApi` type. 
 - Removed native support for `concordium_cfg_test`.
+- Removed the feature flag `concordium-quickcheck` and the macro `concordium_quickcheck`. Property based tests using `quickcheck` and run in WASM are no longer supported.
 
 ## concordium-contracts-common-derive 4.1.0 (2024-03-25)
 
