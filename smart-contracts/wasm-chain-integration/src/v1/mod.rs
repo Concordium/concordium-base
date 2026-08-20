@@ -1020,7 +1020,7 @@ pub(crate) mod host {
         let dest_end = dest_start + length as usize;
         ensure!(dest_end <= memory.len(), "Illegal memory access.");
         let dest = &mut memory[dest_start..dest_end];
-        let result = state.entry_read(InstanceStateEntry::from(entry_index), dest, offset);
+        let result = state.entry_read(InstanceStateEntry::from(entry_index), dest, offset)?;
         stack.push_value(result);
         Ok(())
     }

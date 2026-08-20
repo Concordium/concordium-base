@@ -177,11 +177,7 @@ fn cold_indirect_value_size_loads_only_metadata() {
         type R = Vec<u8>;
 
         fn load_raw(&mut self, location: Reference) -> LoadResult<Self::R> {
-            let start = usize::try_from(u64::from(location)).unwrap();
-            let len = u64::from_be_bytes(self.bytes[start..start + 8].try_into().unwrap());
-            let len = usize::try_from(len).unwrap();
-            self.payload_bytes_loaded += len;
-            Ok(self.bytes[start + 8..start + 8 + len].to_vec())
+            unreachable!()
         }
 
         fn load_raw_length(&mut self, location: Reference) -> LoadResult<u64> {
@@ -189,6 +185,15 @@ fn cold_indirect_value_size_loads_only_metadata() {
             Ok(u64::from_be_bytes(
                 self.bytes[start..start + 8].try_into().unwrap(),
             ))
+        }
+
+        fn load_raw_range(
+            &mut self,
+            location: Reference,
+            offset: u64,
+            length: usize,
+        ) -> LoadResult<Self::R> {
+            unreachable!()
         }
     }
 
@@ -209,6 +214,181 @@ fn cold_indirect_value_size_loads_only_metadata() {
 
     assert_eq!(value.len(&mut loader).unwrap(), payload.len());
     assert_eq!(loader.payload_bytes_loaded, 0);
+}
+
+#[test]
+fn cold_indirect_value_read_loads_only_requested_payload() {
+    struct CountingLoader {
+        bytes: Vec<u8>,
+        requested_ranges: Vec<(u64, usize)>,
+        payload_bytes_loaded: usize,
+    }
+
+    impl BackingStoreLoad for CountingLoader {
+        type R = Vec<u8>;
+
+        fn load_raw(&mut self, _location: Reference) -> LoadResult<Self::R> {
+            panic!("a partial read must not load the complete value")
+        }
+
+        fn load_raw_length(&mut self, location: Reference) -> LoadResult<u64> {
+            let start = usize::try_from(u64::from(location)).unwrap();
+            Ok(u64::from_be_bytes(
+                self.bytes[start..start + 8].try_into().unwrap(),
+            ))
+        }
+
+        fn load_raw_range(
+            &mut self,
+            location: Reference,
+            offset: u64,
+            length: usize,
+        ) -> LoadResult<Self::R> {
+            self.requested_ranges.push((offset, length));
+            let start = usize::try_from(u64::from(location)).unwrap() + 8;
+            let payload_len = usize::try_from(self.load_raw_length(location)?).unwrap();
+            let offset = usize::try_from(offset).unwrap().min(payload_len);
+            let count = length.min(payload_len - offset);
+            self.payload_bytes_loaded += count;
+            Ok(self.bytes[start + offset..start + offset + count].to_vec())
+        }
+    }
+
+    let payload = vec![
+        7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71,
+    ];
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&(payload.len() as u64).to_be_bytes());
+    bytes.extend_from_slice(&payload);
+    let mut loader = CountingLoader {
+        bytes,
+        requested_ranges: Vec::new(),
+        payload_bytes_loaded: 0,
+    };
+    let value = InlineOrHashed::Indirect(Hashed::new(
+        payload.hash(&mut loader),
+        CachedRef::Disk {
+            reference: Reference::from(0u64),
+        },
+    ));
+    let mut destination = [0; 1];
+
+    assert_eq!(
+        value.read_range(&mut loader, &mut destination, 9).unwrap(),
+        1
+    );
+    assert_eq!(destination, [41]);
+    assert_eq!(loader.requested_ranges, vec![(9, 1)]);
+    assert_eq!(loader.payload_bytes_loaded, 1);
+
+    let mut crossing_end = [0; 4];
+    assert_eq!(
+        value
+            .read_range(&mut loader, &mut crossing_end, 15)
+            .unwrap(),
+        2
+    );
+    assert_eq!(&crossing_end[..2], &[67, 71]);
+    assert_eq!(value.read_range(&mut loader, &mut [0; 2], 17).unwrap(), 0);
+    assert_eq!(value.read_range(&mut loader, &mut [0; 2], 100).unwrap(), 0);
+
+    let calls_before_empty_read = loader.requested_ranges.len();
+    assert_eq!(value.read_range(&mut loader, &mut [], 0).unwrap(), 0);
+    assert_eq!(loader.requested_ranges.len(), calls_before_empty_read);
+    assert_eq!(loader.payload_bytes_loaded, 3);
+    assert!(matches!(
+        value,
+        InlineOrHashed::Indirect(Hashed {
+            data: CachedRef::Disk { .. },
+            ..
+        })
+    ));
+}
+
+#[test]
+fn entry_ranges_match_across_inline_memory_cached_and_persisted_values() {
+    let payload: Vec<u8> = (0..32).collect();
+    let mut stored = Vec::new();
+    stored.extend_from_slice(&(payload.len() as u64).to_be_bytes());
+    stored.extend_from_slice(&payload);
+    let hash = Hash::zero();
+    let values = [
+        InlineOrHashed::new(&mut (), payload.clone()),
+        InlineOrHashed::Indirect(Hashed::new(
+            hash,
+            CachedRef::Memory {
+                value: payload.clone().into_boxed_slice(),
+            },
+        )),
+        InlineOrHashed::Indirect(Hashed::new(
+            hash,
+            CachedRef::Cached {
+                reference: Reference::from(0u64),
+                value: payload.clone().into_boxed_slice(),
+            },
+        )),
+        InlineOrHashed::Indirect(Hashed::new(
+            hash,
+            CachedRef::Disk {
+                reference: Reference::from(0u64),
+            },
+        )),
+    ];
+
+    for (offset, requested) in [(3, 5), (30, 5), (32, 5), (100, 5), (0, 0)] {
+        let expected_count = requested.min(payload.len().saturating_sub(offset.min(payload.len())));
+        let expected =
+            &payload[offset.min(payload.len())..offset.min(payload.len()) + expected_count];
+        for value in &values {
+            let mut destination = vec![255; requested];
+            let actual_count = value
+                .read_range(
+                    &mut Loader::new(stored.as_slice()),
+                    &mut destination,
+                    offset as u64,
+                )
+                .unwrap();
+            assert_eq!(actual_count, expected_count);
+            assert_eq!(&destination[..actual_count], expected);
+            assert!(destination[actual_count..].iter().all(|byte| *byte == 255));
+        }
+    }
+}
+
+#[test]
+fn persisted_range_larger_than_request_is_rejected() {
+    struct OversizedRangeLoader;
+
+    impl BackingStoreLoad for OversizedRangeLoader {
+        type R = Vec<u8>;
+
+        fn load_raw(&mut self, _location: Reference) -> LoadResult<Self::R> {
+            unreachable!()
+        }
+
+        fn load_raw_length(&mut self, _location: Reference) -> LoadResult<u64> {
+            Ok(65)
+        }
+
+        fn load_raw_range(
+            &mut self,
+            _location: Reference,
+            _offset: u64,
+            length: usize,
+        ) -> LoadResult<Self::R> {
+            Ok(vec![0; length + 1])
+        }
+    }
+
+    let value = InlineOrHashed::Indirect(Hashed::new(
+        Hash::zero(),
+        CachedRef::Disk {
+            reference: Reference::from(0u64),
+        },
+    ));
+    assert!(value
+        .read_range(&mut OversizedRangeLoader, &mut [0; 1], 0)
+        .is_err());
 }
 
 #[test]

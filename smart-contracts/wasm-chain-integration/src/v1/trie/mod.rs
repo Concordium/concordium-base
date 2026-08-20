@@ -37,6 +37,11 @@ pub type LoadCallback = extern "C" fn(Reference) -> *mut Vec<u8>;
 /// successful read. It returns a nonzero value after a failed read.
 pub type LoadLengthCallback = extern "C" fn(Reference, *mut u64) -> u8;
 
+/// An external function that reads a clamped payload range into a Rust vector.
+/// The function returns zero and writes an allocated vector to `out` after a
+/// successful read. It returns a nonzero value after a failed read.
+pub type LoadRangeCallback = extern "C" fn(Reference, u64, libc::size_t, *mut *mut Vec<u8>) -> u8;
+
 /// Named operations that give contract execution access to immutable backing
 /// storage. The caller owns the callbacks. It must keep them alive during the
 /// complete execution, including interruptions and resumed executions.
@@ -44,11 +49,20 @@ pub type LoadLengthCallback = extern "C" fn(Reference, *mut u64) -> u8;
 pub struct BackingStoreLoadCallback {
     load: LoadCallback,
     load_length: LoadLengthCallback,
+    load_range: LoadRangeCallback,
 }
 
 impl BackingStoreLoadCallback {
-    pub fn new(load: LoadCallback, load_length: LoadLengthCallback) -> Self {
-        Self { load, load_length }
+    pub fn new(
+        load: LoadCallback,
+        load_length: LoadLengthCallback,
+        load_range: LoadRangeCallback,
+    ) -> Self {
+        Self {
+            load,
+            load_length,
+            load_range,
+        }
     }
 }
 
@@ -68,6 +82,25 @@ impl BackingStoreLoad for BackingStoreLoadCallback {
             Ok(length)
         } else {
             Err(LoadError::CallbackFailure)
+        }
+    }
+
+    #[inline]
+    fn load_raw_range(
+        &mut self,
+        location: Reference,
+        offset: u64,
+        length: usize,
+    ) -> LoadResult<Self::R> {
+        let mut ptr = std::ptr::null_mut();
+        if (self.load_range)(location, offset, length, &mut ptr) != 0 || ptr.is_null() {
+            return Err(LoadError::CallbackFailure);
+        }
+        let value = *unsafe { Box::from_raw(ptr) };
+        if value.len() > length {
+            Err(LoadError::OutOfBoundsRead)
+        } else {
+            Ok(value)
         }
     }
 }

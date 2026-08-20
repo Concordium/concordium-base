@@ -1229,29 +1229,18 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         entry: InstanceStateEntry,
         dest: &mut [u8],
         offset: u32,
-    ) -> u32 {
+    ) -> StateResult<u32> {
         let (gen, idx) = entry.split();
         if gen != self.current_generation {
-            return u32::MAX;
+            return Ok(u32::MAX);
         }
-        if let Some(entry) = self.entry_mapping.get(idx) {
-            let res = self
-                .state_trie
-                .with_entry(*entry, &mut self.backing_store, |v| {
-                    let offset = std::cmp::min(v.len(), offset as usize);
-                    let num_copied = std::cmp::min(v.len().saturating_sub(offset), dest.len());
-                    dest[0..num_copied].copy_from_slice(&v[offset..offset + num_copied]);
-                    num_copied as u32
-                });
-            if let Some(res) = res {
-                res
-            } else {
-                // Entry has been invalidated.
-                u32::MAX
-            }
-        } else {
-            u32::MAX
-        }
+        let Some(entry) = self.entry_mapping.get(idx) else {
+            return Ok(u32::MAX);
+        };
+        Ok(self
+            .state_trie
+            .entry_read(*entry, &mut self.backing_store, dest, u64::from(offset))?
+            .map_or(u32::MAX, |count| count as u32))
     }
 
     /// Write a section of the entry, and return how much was written, or

@@ -1,11 +1,113 @@
 use super::{
     trie::{self, MutableState},
     types::*,
+    DebugTracker, HostFunctionV1, ReceiveHost, ReceiveParams, StateLessReceiveHost,
 };
 use anyhow::{ensure, Context};
+use concordium_contracts_common::{
+    Address, Amount, ChainMetadata, ContractAddress, OwnedEntrypointName, Timestamp,
+};
+use concordium_wasm::{
+    machine, parse,
+    validate::{self, ValidationConfig},
+    CostConfigurationV1,
+};
 use quickcheck::*;
 
 const NUM_TESTS: u64 = 100000;
+
+#[test]
+/// This test verifies the energy cost for state entry reads:
+/// 1. A read that extends past the end of an entry charges the requested length.
+/// 2. A read of an invalid entry charges the requested length.
+fn entry_read_energy_uses_requested_length_for_end_crossing_and_invalid_reads() {
+    let contract_bytes = include_bytes!("../../test-data/code/v1/state-entry-read-energy.wasm");
+    let skeleton = parse::parse_skeleton(contract_bytes).unwrap();
+    let mut module = validate::validate_module(
+        ValidationConfig::V1,
+        &ConcordiumAllowedImports {
+            support_upgrade: true,
+            enable_debug: false,
+        },
+        &skeleton,
+    )
+    .unwrap();
+    module.inject_metering(CostConfigurationV1).unwrap();
+    let artifact = module.compile::<ProcessedImports>().unwrap();
+
+    let owner = concordium_contracts_common::AccountAddress([0; 32]);
+    let receive_context = ReceiveContext {
+        common: super::super::v0::ReceiveContext {
+            metadata: ChainMetadata {
+                slot_time: Timestamp::from_timestamp_millis(0),
+            },
+            invoker: owner,
+            self_address: ContractAddress {
+                index: 0,
+                subindex: 0,
+            },
+            self_balance: Amount::zero(),
+            sender: Address::Account(owner),
+            owner,
+            sender_policies: &[],
+        },
+        entrypoint: OwnedEntrypointName::new_unchecked("entrypoint".into()),
+    };
+    let requested_length = 100u64;
+    let run = |value: Option<Vec<u8>>, expected_result: u32| {
+        let mut loader = trie::Loader::new(Vec::new());
+        let mut mutable_state = if let Some(value) = value {
+            let mut state_trie = trie::low_level::MutableTrie::empty();
+            state_trie.insert(&mut loader, &[], value).unwrap();
+            let persistent = state_trie
+                .freeze(&mut loader, &mut trie::EmptyCollector)
+                .unwrap();
+            trie::PersistentState::from(persistent).thaw()
+        } else {
+            trie::PersistentState::Empty.thaw()
+        };
+        let inner = mutable_state.get_inner(&mut loader);
+        let state = InstanceState::new(loader, inner);
+        let mut host = ReceiveHost {
+            energy: crate::InterpreterEnergy::new(100_000),
+            stateless: StateLessReceiveHost {
+                activation_frames: crate::constants::MAX_ACTIVATION_FRAMES,
+                logs: super::super::v0::Logs::new(),
+                receive_ctx: &receive_context,
+                return_value: Vec::new(),
+                parameters: vec![Vec::new()],
+                params: ReceiveParams::new_p5(),
+            },
+            state,
+            trace: DebugTracker::default(),
+        };
+        let outcome = artifact
+            .run(
+                &mut host,
+                "test.state_entry_read",
+                &[machine::Value::I64(requested_length as i64)],
+            )
+            .unwrap();
+        let machine::ExecutionOutcome::Success { result, .. } = outcome else {
+            panic!("Execution was interrupted.");
+        };
+        assert_eq!(result, Some(machine::Value::I32(expected_result as i32)));
+        let (calls, total) = host
+            .trace
+            .host_call_summary()
+            .get(&HostFunctionV1::Common(CommonFunc::StateEntryRead))
+            .copied()
+            .unwrap();
+        assert_eq!(calls, 1);
+        assert_eq!(
+            total.energy,
+            crate::constants::read_entry_cost(requested_length as u32)
+        );
+    };
+
+    run(Some(vec![7; 8]), 8);
+    run(None, u32::MAX);
+}
 
 #[test]
 /// This tests performs the following tasks:
@@ -50,14 +152,14 @@ fn prop_create_write_read_delete() {
             );
 
             let mut buff0 = vec![0; v.len()];
-            let read0 = state.entry_read(entry, &mut buff0, 0);
+            let read0 = state.entry_read(entry, &mut buff0, 0)?;
             ensure!(
                 read0 as usize == v.len(),
                 "Unexpected read length {:?} expected {:?}.",
                 read0,
                 v.len()
             );
-            let read1 = state.entry_read(lookup_entry, &mut buff0, 0);
+            let read1 = state.entry_read(lookup_entry, &mut buff0, 0)?;
             ensure!(
                 read1 as usize == v.len(),
                 "Unexpected read length {:?} expected {:?}.",
@@ -74,7 +176,7 @@ fn prop_create_write_read_delete() {
             );
             let mut buff0 = vec![0; v.len()];
             ensure!(
-                state.entry_read(entry, &mut buff0, 0) == u32::MAX,
+                state.entry_read(entry, &mut buff0, 0)? == u32::MAX,
                 "Reading an invalidated entry should return u32::MAX."
             );
 
@@ -92,7 +194,7 @@ fn prop_create_write_read_delete() {
             );
 
             ensure!(
-                state.entry_read(entry, &mut buff0, 0) == u32::MAX,
+                state.entry_read(entry, &mut buff0, 0)? == u32::MAX,
                 "Entry should have been invalidated."
             );
         }
@@ -152,7 +254,7 @@ fn test_overflowing_write_resize() -> anyhow::Result<()> {
         "The data should be written"
     );
     ensure!(
-        state.entry_read(entry, &mut non_overflowing_buffer, 0) as usize
+        state.entry_read(entry, &mut non_overflowing_buffer, 0)? as usize
             == non_overflowing_buffer.len(),
         "The whole buffer should be written to."
     );
@@ -167,7 +269,7 @@ fn test_overflowing_write_resize() -> anyhow::Result<()> {
     );
 
     ensure!(
-        state.entry_read(entry, &mut overflowing_buffer, 0) as usize
+        state.entry_read(entry, &mut overflowing_buffer, 0)? as usize
             == overflowing_buffer.len() - 1,
         "Only 2^31 bytes should be read."
     );
@@ -730,7 +832,7 @@ fn test_invalid_generation_operations() -> anyhow::Result<()> {
     let entry_invalid_gen = InstanceStateEntry::new(gen + 1, idx); // invalid generation
     let mut buff = vec![0; 32];
     ensure!(
-        state.entry_read(entry_invalid_gen, &mut buff, 0) == u32::MAX,
+        state.entry_read(entry_invalid_gen, &mut buff, 0)? == u32::MAX,
         "Reading entry with invalid generation should return u32::MAX"
     );
 

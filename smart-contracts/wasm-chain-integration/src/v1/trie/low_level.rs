@@ -461,6 +461,32 @@ impl<V: AsRef<[u8]>> CachedRef<V> {
             }
         }
     }
+
+    /// Copy a clamped range without loading or caching the complete value.
+    fn read_range(
+        &self,
+        loader: &mut impl BackingStoreLoad,
+        destination: &mut [u8],
+        offset: u64,
+    ) -> LoadResult<usize> {
+        match self {
+            CachedRef::Disk { reference } => {
+                if destination.is_empty() {
+                    return Ok(0);
+                }
+                let loaded = loader.load_raw_range(*reference, offset, destination.len())?;
+                let bytes = loaded.as_ref();
+                if bytes.len() > destination.len() {
+                    return Err(LoadError::OutOfBoundsRead);
+                }
+                destination[..bytes.len()].copy_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            CachedRef::Memory { value } | CachedRef::Cached { value, .. } => {
+                Ok(copy_range(value.as_ref(), destination, offset))
+            }
+        }
+    }
 }
 
 impl<V> CachedRef<V> {
@@ -958,6 +984,15 @@ fn read_buf(source: &mut impl std::io::Read, len: u8) -> LoadResult<InlineOrHash
 /// A slice of bytes, either owned or borrowed.
 pub type ByteSlice<'a> = MaybeOwned<'a, Box<[u8]>, [u8]>;
 
+fn copy_range(source: &[u8], destination: &mut [u8], offset: u64) -> usize {
+    let offset = usize::try_from(offset)
+        .unwrap_or(usize::MAX)
+        .min(source.len());
+    let count = destination.len().min(source.len() - offset);
+    destination[..count].copy_from_slice(&source[offset..offset + count]);
+    count
+}
+
 impl InlineOrHashed {
     /// Construct a new value from the provided byte array. The value is hashed
     /// in the provided context in case it is larger than
@@ -1004,6 +1039,23 @@ impl InlineOrHashed {
         match self {
             InlineOrHashed::Inline { len, .. } => Ok(usize::from(*len)),
             InlineOrHashed::Indirect(indirect) => indirect.data.len(loader),
+        }
+    }
+
+    /// Copy a clamped range. A cold indirect value stays out of memory.
+    pub(crate) fn read_range(
+        &self,
+        loader: &mut impl BackingStoreLoad,
+        destination: &mut [u8],
+        offset: u64,
+    ) -> LoadResult<usize> {
+        match self {
+            InlineOrHashed::Inline { len, data } => {
+                Ok(copy_range(&data[..usize::from(*len)], destination, offset))
+            }
+            InlineOrHashed::Indirect(indirect) => {
+                indirect.data.read_range(loader, destination, offset)
+            }
         }
     }
 
@@ -2424,6 +2476,44 @@ impl MutableTrie {
             }
             Entry::Mutable { entry_idx } => values.get(entry_idx).map(|b| f(&b[..])),
             Entry::Deleted => None,
+        }
+    }
+
+    /// Copy a clamped entry range. Do not put a cold persisted value in memory.
+    /// Return `None` for an invalidated entry.
+    /// Return an error for a backing-store failure.
+    pub fn entry_read(
+        &self,
+        entry: EntryId,
+        loader: &mut impl BackingStoreLoad,
+        destination: &mut [u8],
+        offset: u64,
+    ) -> LoadResult<Option<usize>> {
+        let values = &self.values;
+        let borrowed_values = &self.borrowed_values;
+        match self.entries[entry] {
+            Entry::ReadOnly {
+                borrowed,
+                entry_idx,
+            } => {
+                if borrowed {
+                    let Some(value) = borrowed_values.get(entry_idx) else {
+                        return Ok(None);
+                    };
+                    value
+                        .borrow()
+                        .read_range(loader, destination, offset)
+                        .map(Some)
+                } else {
+                    Ok(values
+                        .get(entry_idx)
+                        .map(|value| copy_range(value, destination, offset)))
+                }
+            }
+            Entry::Mutable { entry_idx } => Ok(values
+                .get(entry_idx)
+                .map(|value| copy_range(value, destination, offset))),
+            Entry::Deleted => Ok(None),
         }
     }
 
