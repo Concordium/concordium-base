@@ -35,7 +35,7 @@ pub struct RangeProof<C: Curve> {
 
 #[cfg(test)]
 impl<C: Curve> RangeProof<C> {
-    pub(crate) fn truncate_inner_product_proof(&mut self) {
+    pub(crate) fn truncate_inner_product_proof_for_test(&mut self) {
         self.ip_proof
             .lr_vec
             .pop()
