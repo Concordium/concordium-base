@@ -464,7 +464,7 @@ mod tests {
             .proofs
             .id_proofs
             .cred_counter_less_than_max_accounts
-            .truncate_inner_product_proof();
+            .truncate_inner_product_proof_for_test();
         let cdi_check = verify_cdi(
             &global_ctx,
             &ip_info,
