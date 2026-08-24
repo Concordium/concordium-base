@@ -821,6 +821,23 @@ mod test {
             EXPIRY.seconds,
         );
         assert_eq!(cdi_check, 1);
+
+        let mut empty_ar_cdi = cdi.clone();
+        empty_ar_cdi.values.ar_data.clear();
+        empty_ar_cdi.proofs.id_proofs.proof_id_cred_pub.clear();
+        let empty_ar_cdi_bytes = to_bytes(&empty_ar_cdi);
+        let empty_ar_cdi_check = verify_cdi_ffi(
+            gc_ptr,
+            ip_info_ptr,
+            ars_infos_ptr.as_ptr(),
+            0,
+            empty_ar_cdi_bytes.as_ptr(),
+            empty_ar_cdi_bytes.len() as size_t,
+            std::ptr::null(),
+            EXPIRY.seconds,
+        );
+        assert_eq!(empty_ar_cdi_check, -6);
+
         let wrong_cdi_bytes = to_bytes(&wrong_cdi);
         let wrong_cdi_bytes_len = wrong_cdi_bytes.len() as size_t;
         let wrong_cdi_check = verify_cdi_ffi(

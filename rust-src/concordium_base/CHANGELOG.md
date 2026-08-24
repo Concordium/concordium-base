@@ -79,6 +79,7 @@
 - In V1 identity based verifiable presentations, it has been changed such that the same attribute 
   can be used both in set membership and range proofs, and at the same time being revealed. It was already possible
   for account credentials.
+- Fixes a bug where `verify_cdi` accepts credentials with an empty AR map.
 
 ## 10.0.0 (2026-01-09)
 
