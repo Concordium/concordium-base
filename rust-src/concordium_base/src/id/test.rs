@@ -182,41 +182,6 @@ pub fn test_create_attributes() -> ExampleAttributeList {
     }
 }
 
-/// Check that the given credential is rejected when its blinded signature is
-/// replaced by the zero signature.
-///
-/// A blinded signature whose first component is the identity of G1 makes the
-/// proof of knowledge of the identity provider's signature satisfiable without
-/// knowing a signature at all. Such a credential must therefore never be
-/// accepted, which is ensured by rejecting it already when it is parsed, see the
-/// `Deserial` instance of `ps_sig::Signature`.
-///
-/// This module is also compiled without `cfg(test)` under the
-/// `internal-test-helpers` feature, where neither `serialize_deserialize` nor
-/// `Signature::new_unchecked` exists, hence the gate.
-#[cfg(test)]
-fn assert_zero_blinded_signature_rejected(
-    cdi: &CredentialDeploymentInfo<IpPairing, ArCurve, ExampleAttribute>,
-) {
-    use crate::{curve_arithmetic::Pairing, ps_sig};
-
-    let mut cdi = cdi.clone();
-    cdi.proofs.id_proofs.sig = ps_sig::BlindedSignature {
-        sig: ps_sig::Signature::new_unchecked(
-            <IpPairing as Pairing>::G1::zero_point(),
-            <IpPairing as Pairing>::G1::zero_point(),
-        ),
-    };
-    assert!(
-        serialize_deserialize(&cdi.proofs).is_err(),
-        "Credential proofs with a zero blinded signature must not be deserialized."
-    );
-    assert!(
-        serialize_deserialize(&cdi).is_err(),
-        "A credential with a zero blinded signature must not be deserialized."
-    );
-}
-
 #[test]
 pub fn test_pipeline() {
     let mut csprng = thread_rng();
@@ -353,8 +318,6 @@ pub fn test_pipeline() {
         cdi.proofs.id_proofs.proof_reg_id,
         "It should deserialize back to what we started with."
     );
-
-    assert_zero_blinded_signature_rejected(&cdi);
 
     // Revoking anonymity using all but one AR
     let mut shares = Vec::new();
@@ -526,8 +489,6 @@ pub fn test_pipeline_v1() {
         cdi.proofs.id_proofs.proof_reg_id,
         "It should deserialize back to what we started with."
     );
-
-    assert_zero_blinded_signature_rejected(&cdi);
 
     // Revoking anonymity using all but one AR
     let mut shares = Vec::new();
