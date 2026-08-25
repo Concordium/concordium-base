@@ -176,7 +176,7 @@ fn cold_indirect_value_size_loads_only_metadata() {
     impl BackingStoreLoad for CountingLoader {
         type R = Vec<u8>;
 
-        fn load_raw(&mut self, location: Reference) -> LoadResult<Self::R> {
+        fn load_raw(&mut self, _location: Reference) -> LoadResult<Self::R> {
             unreachable!()
         }
 
@@ -189,9 +189,9 @@ fn cold_indirect_value_size_loads_only_metadata() {
 
         fn load_raw_range(
             &mut self,
-            location: Reference,
-            offset: u64,
-            length: usize,
+            _location: Reference,
+            _offset: u64,
+            _length: usize,
         ) -> LoadResult<Self::R> {
             unreachable!()
         }
@@ -352,6 +352,103 @@ fn entry_ranges_match_across_inline_memory_cached_and_persisted_values() {
             assert_eq!(&destination[..actual_count], expected);
             assert!(destination[actual_count..].iter().all(|byte| *byte == 255));
         }
+    }
+}
+
+#[test]
+fn invalidated_entries_do_not_access_values_across_representations() {
+    struct RejectingLoader {
+        bytes: Vec<u8>,
+        reject_access: bool,
+    }
+
+    impl BackingStoreLoad for RejectingLoader {
+        type R = <Loader<Vec<u8>> as BackingStoreLoad>::R;
+
+        fn load_raw(&mut self, location: Reference) -> LoadResult<Self::R> {
+            assert!(
+                !self.reject_access,
+                "invalid entries must not load payloads"
+            );
+            Loader::new(&self.bytes).load_raw(location)
+        }
+
+        fn load_raw_length(&mut self, location: Reference) -> LoadResult<u64> {
+            assert!(
+                !self.reject_access,
+                "invalid entries must not retrieve lengths"
+            );
+            Loader::new(&self.bytes).load_raw_length(location)
+        }
+
+        fn load_raw_range(
+            &mut self,
+            location: Reference,
+            offset: u64,
+            length: usize,
+        ) -> LoadResult<Self::R> {
+            assert!(
+                !self.reject_access,
+                "invalid entries must not retrieve ranges"
+            );
+            Loader::new(&self.bytes).load_raw_range(location, offset, length)
+        }
+    }
+
+    fn assert_invalidated_entry_does_not_access_store(
+        mut trie: MutableTrie,
+        loader: &mut RejectingLoader,
+    ) {
+        let entry = trie.get_entry(loader, &[]).expect("entry exists");
+        assert!(trie.delete(loader, &[]).unwrap());
+        loader.reject_access = true;
+
+        let mut destination = [255; 4];
+        assert_eq!(trie.entry_size(entry, loader).unwrap(), None);
+        assert_eq!(
+            trie.entry_read(entry, loader, &mut destination, 0).unwrap(),
+            None
+        );
+        assert_eq!(destination, [255; 4]);
+    }
+
+    // The two payload sizes create inline and indirect in-memory values.
+    for payload in [vec![7; 8], vec![7; 65]] {
+        let (trie, mut construction_loader) = make_mut_trie(vec![(Vec::new(), payload)]);
+        let frozen = trie
+            .freeze(&mut construction_loader, &mut EmptyCollector)
+            .unwrap();
+        let mut loader = RejectingLoader {
+            bytes: Vec::new(),
+            reject_access: false,
+        };
+        let mutable = frozen.make_mutable(0, &mut loader);
+        assert_invalidated_entry_does_not_access_store(mutable, &mut loader);
+    }
+
+    // The two modes leave the indirect value persisted or cache it in memory.
+    for cache_value in [false, true] {
+        let (trie, mut construction_loader) = make_mut_trie(vec![(Vec::new(), vec![7; 65])]);
+        let mut frozen = trie
+            .freeze(&mut construction_loader, &mut EmptyCollector)
+            .unwrap();
+        let mut bytes = Vec::new();
+        let root_node = frozen.store_update(&mut bytes).unwrap();
+        let root = bytes.store_raw(&root_node).unwrap();
+        let mut loader = RejectingLoader {
+            bytes,
+            reject_access: false,
+        };
+        let mut persisted =
+            CachedRef::<Hashed<Node>>::load_from_location(&mut loader, root).unwrap();
+        if cache_value {
+            persisted
+                .load_and_cache(&mut loader)
+                .data
+                .cache(&mut loader);
+        }
+        let mutable = persisted.make_mutable(0, &mut loader);
+        assert_invalidated_entry_does_not_access_store(mutable, &mut loader);
     }
 }
 

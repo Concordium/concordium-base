@@ -1,3 +1,12 @@
+//! Behavioral tests for V1 mutable contract state and host operations.
+//!
+//! This module uses crate-private state constructors, handle mappings, and host
+//! traces to create precise state generations and invalidation scenarios. These
+//! tests cannot use only the public crate API without a large interruption and
+//! resumption setup. The tests use compiled Wasm host calls where contract-visible
+//! results and exact Interpreter Energy are relevant. They use lower-level state
+//! APIs when they must verify internal state guarantees.
+
 use super::{
     trie::{self, MutableState},
     types::*,
@@ -8,6 +17,7 @@ use concordium_contracts_common::{
     Address, Amount, ChainMetadata, ContractAddress, OwnedEntrypointName, Timestamp,
 };
 use concordium_wasm::{
+    artifact::{Artifact, CompiledFunction},
     machine, parse,
     validate::{self, ValidationConfig},
     CostConfigurationV1,
@@ -16,58 +26,156 @@ use quickcheck::*;
 
 const NUM_TESTS: u64 = 100000;
 
-#[test]
-/// This test verifies the energy cost for state entry reads:
-/// 1. A read that extends past the end of an entry charges the requested length.
-/// 2. A read of an invalid entry charges the requested length.
-fn entry_read_energy_uses_requested_length_for_end_crossing_and_invalid_reads() {
-    let contract_bytes = include_bytes!("../../test-data/code/v1/state-entry-read-energy.wasm");
-    let skeleton = parse::parse_skeleton(contract_bytes).unwrap();
-    let mut module = validate::validate_module(
-        ValidationConfig::V1,
-        &ConcordiumAllowedImports {
-            support_upgrade: true,
-            enable_debug: false,
-        },
-        &skeleton,
-    )
-    .unwrap();
-    module.inject_metering(CostConfigurationV1).unwrap();
-    let artifact = module.compile::<ProcessedImports>().unwrap();
+/// Reject every backing-store operation to prove that an invalid handle does
+/// not retrieve persisted data.
+struct RejectingBackingStore;
 
-    let owner = concordium_contracts_common::AccountAddress([0; 32]);
-    let receive_context = ReceiveContext {
-        common: super::super::v0::ReceiveContext {
-            metadata: ChainMetadata {
-                slot_time: Timestamp::from_timestamp_millis(0),
+impl trie::BackingStoreLoad for RejectingBackingStore {
+    type R = Vec<u8>;
+
+    fn load_raw(&mut self, _location: trie::Reference) -> trie::LoadResult<Self::R> {
+        panic!("invalid entries must not load payloads")
+    }
+
+    fn load_raw_length(&mut self, _location: trie::Reference) -> trie::LoadResult<u64> {
+        panic!("invalid entries must not retrieve lengths")
+    }
+
+    fn load_raw_range(
+        &mut self,
+        _location: trie::Reference,
+        _offset: u64,
+        _length: usize,
+    ) -> trie::LoadResult<Self::R> {
+        panic!("invalid entries must not retrieve ranges")
+    }
+}
+
+/// Select the entry-handle state that the Wasm compatibility fixture creates.
+#[derive(Clone, Copy)]
+#[repr(u64)]
+enum EntryHandleScenario {
+    /// Use the current handle without invalidating it.
+    Valid = 0,
+    /// Delete the entry directly before using its handle.
+    Deleted = 1,
+    /// Use a generation-0 handle against generation-1 state.
+    Stale = 2,
+    /// Use a current-generation handle with no entry mapping.
+    Absent = 3,
+    /// Delete the entry by prefix before using its handle.
+    PrefixInvalidated = 4,
+}
+
+/// Record the contract-visible result and host-call Energy for one operation.
+#[derive(Debug, PartialEq, Eq)]
+struct EntryOperationOutcome {
+    /// The value returned to the Wasm contract.
+    result: u32,
+    /// The Interpreter Energy charged by the selected host function.
+    energy: u64,
+}
+
+const ENTRY_OPERATION_VALUE: [u8; 8] = [7; 8];
+
+/// Compile and run the Wasm fixture for entry size and read compatibility tests.
+///
+/// The harness builds persistent state from supplied key-value pairs. It thaws
+/// that state for each operation and advances it to generation 1. This setup
+/// lets a fixture supply valid, deleted,
+/// stale, absent, and prefix-invalidated handles while the harness records the
+/// result and exact host-call Energy. The harness keeps crate-private execution
+/// setup and packed fixture arguments out of the behavioral tests so each test
+/// can state one compatibility guarantee clearly.
+struct EntryOperationHarness {
+    artifact: Artifact<ProcessedImports, CompiledFunction>,
+    initial_state: trie::PersistentState,
+}
+
+impl EntryOperationHarness {
+    /// Compile the metered Wasm fixture and construct its initial state from
+    /// the supplied key-value pairs.
+    fn new(initial_entries: Vec<(Vec<u8>, trie::Value)>) -> Self {
+        let contract_bytes = include_bytes!("../../test-data/code/v1/state-entry-read-energy.wasm");
+        let skeleton = parse::parse_skeleton(contract_bytes).unwrap();
+        let mut module = validate::validate_module(
+            ValidationConfig::V1,
+            &ConcordiumAllowedImports {
+                support_upgrade: true,
+                enable_debug: false,
             },
-            invoker: owner,
-            self_address: ContractAddress {
-                index: 0,
-                subindex: 0,
+            &skeleton,
+        )
+        .unwrap();
+        module.inject_metering(CostConfigurationV1).unwrap();
+        let initial_state = trie::PersistentState::from_iterator(
+            initial_entries
+                .iter()
+                .map(|(key, value)| (key.as_slice(), value.clone())),
+        );
+        Self {
+            artifact: module.compile::<ProcessedImports>().unwrap(),
+            initial_state,
+        }
+    }
+
+    /// Run one entry-size operation for the selected handle scenario.
+    fn entry_size(&self, scenario: EntryHandleScenario) -> EntryOperationOutcome {
+        self.run(
+            "test.state_entry_size",
+            &[machine::Value::I64(scenario as i64)],
+            CommonFunc::StateEntrySize,
+        )
+    }
+
+    /// Run one entry-read operation for the selected handle scenario and range.
+    fn entry_read(
+        &self,
+        scenario: EntryHandleScenario,
+        requested_length: u32,
+        offset: u32,
+    ) -> EntryOperationOutcome {
+        let operation =
+            u64::from(requested_length) | (u64::from(offset) << 32) | ((scenario as u64) << 60);
+        self.run(
+            "test.state_entry_read",
+            &[machine::Value::I64(operation as i64)],
+            CommonFunc::StateEntryRead,
+        )
+    }
+
+    /// Execute one fixture export against a fresh generation-1 state and
+    /// return the selected host call's observable result and Energy.
+    fn run(
+        &self,
+        export: &str,
+        arguments: &[machine::Value],
+        function: CommonFunc,
+    ) -> EntryOperationOutcome {
+        let owner = concordium_contracts_common::AccountAddress([0; 32]);
+        let receive_context = ReceiveContext {
+            common: super::super::v0::ReceiveContext {
+                metadata: ChainMetadata {
+                    slot_time: Timestamp::from_timestamp_millis(0),
+                },
+                invoker: owner,
+                self_address: ContractAddress {
+                    index: 0,
+                    subindex: 0,
+                },
+                self_balance: Amount::zero(),
+                sender: Address::Account(owner),
+                owner,
+                sender_policies: &[],
             },
-            self_balance: Amount::zero(),
-            sender: Address::Account(owner),
-            owner,
-            sender_policies: &[],
-        },
-        entrypoint: OwnedEntrypointName::new_unchecked("entrypoint".into()),
-    };
-    let requested_length = 100u64;
-    let run = |value: Option<Vec<u8>>, expected_result: u32| {
-        let mut loader = trie::Loader::new(Vec::new());
-        let mut mutable_state = if let Some(value) = value {
-            let mut state_trie = trie::low_level::MutableTrie::empty();
-            state_trie.insert(&mut loader, &[], value).unwrap();
-            let persistent = state_trie
-                .freeze(&mut loader, &mut trie::EmptyCollector)
-                .unwrap();
-            trie::PersistentState::from(persistent).thaw()
-        } else {
-            trie::PersistentState::Empty.thaw()
+            entrypoint: OwnedEntrypointName::new_unchecked("entrypoint".into()),
         };
+        let mut loader = trie::Loader::new(Vec::new());
+        let mut mutable_state = self.initial_state.thaw();
         let inner = mutable_state.get_inner(&mut loader);
-        let state = InstanceState::new(loader, inner);
+        // A state update during an interrupt advances the generation and makes
+        // generation-0 handles stale.
+        let state = InstanceState::migrate(true, 0, Vec::new(), Vec::new(), loader, inner);
         let mut host = ReceiveHost {
             energy: crate::InterpreterEnergy::new(100_000),
             stateless: StateLessReceiveHost {
@@ -81,32 +189,81 @@ fn entry_read_energy_uses_requested_length_for_end_crossing_and_invalid_reads() 
             state,
             trace: DebugTracker::default(),
         };
-        let outcome = artifact
-            .run(
-                &mut host,
-                "test.state_entry_read",
-                &[machine::Value::I64(requested_length as i64)],
-            )
-            .unwrap();
-        let machine::ExecutionOutcome::Success { result, .. } = outcome else {
-            panic!("Execution was interrupted.");
+        let outcome = self.artifact.run(&mut host, export, arguments).unwrap();
+        let machine::ExecutionOutcome::Success {
+            result: Some(machine::Value::I32(result)),
+            ..
+        } = outcome
+        else {
+            panic!("Entry operation did not complete successfully.");
         };
-        assert_eq!(result, Some(machine::Value::I32(expected_result as i32)));
         let (calls, total) = host
             .trace
             .host_call_summary()
-            .get(&HostFunctionV1::Common(CommonFunc::StateEntryRead))
+            .get(&HostFunctionV1::Common(function))
             .copied()
             .unwrap();
         assert_eq!(calls, 1);
-        assert_eq!(
-            total.energy,
-            crate::constants::read_entry_cost(requested_length as u32)
-        );
-    };
+        EntryOperationOutcome {
+            result: result as u32,
+            energy: total.energy,
+        }
+    }
+}
 
-    run(Some(vec![7; 8]), 8);
-    run(None, u32::MAX);
+#[test]
+fn entry_size_results_and_energy_are_compatible() {
+    let harness = EntryOperationHarness::new(vec![(Vec::new(), ENTRY_OPERATION_VALUE.to_vec())]);
+    for (scenario, expected_result) in [
+        (EntryHandleScenario::Valid, 8),
+        (EntryHandleScenario::Deleted, u32::MAX),
+        (EntryHandleScenario::Stale, u32::MAX),
+        (EntryHandleScenario::Absent, u32::MAX),
+        (EntryHandleScenario::PrefixInvalidated, u32::MAX),
+    ] {
+        assert_eq!(
+            harness.entry_size(scenario),
+            EntryOperationOutcome {
+                result: expected_result,
+                energy: crate::constants::ENTRY_SIZE_COST,
+            }
+        );
+    }
+}
+
+#[test]
+fn valid_entry_read_boundaries_and_energy_are_compatible() {
+    let harness = EntryOperationHarness::new(vec![(Vec::new(), ENTRY_OPERATION_VALUE.to_vec())]);
+    for (requested_length, offset, expected_result) in
+        [(4, 0, 4), (100, 0, 8), (4, 8, 0), (4, 100, 0)]
+    {
+        assert_eq!(
+            harness.entry_read(EntryHandleScenario::Valid, requested_length, offset),
+            EntryOperationOutcome {
+                result: expected_result,
+                energy: crate::constants::read_entry_cost(requested_length),
+            }
+        );
+    }
+}
+
+#[test]
+fn invalid_entry_reads_return_the_sentinel_with_compatible_energy() {
+    let harness = EntryOperationHarness::new(vec![(Vec::new(), ENTRY_OPERATION_VALUE.to_vec())]);
+    for scenario in [
+        EntryHandleScenario::Deleted,
+        EntryHandleScenario::Stale,
+        EntryHandleScenario::Absent,
+        EntryHandleScenario::PrefixInvalidated,
+    ] {
+        assert_eq!(
+            harness.entry_read(scenario, 4, 0),
+            EntryOperationOutcome {
+                result: u32::MAX,
+                energy: crate::constants::read_entry_cost(4),
+            }
+        );
+    }
 }
 
 #[test]
@@ -338,15 +495,10 @@ fn test_overflowing_write_resize() -> anyhow::Result<()> {
 }
 
 #[test]
-/// Test that:
-/// 1. Getting the size of an invalid entry returns u32::MAX.
-/// 2. Deleting an invalidated entry returns u32::MAX.
-/// 3. Looking up an invalid entry returns InstanceStateEntryOption::NEW_NONE.
-/// 4. Delete prefix on non existent key in tree returns 1.
-fn test_size_of_invalid_entry() -> anyhow::Result<()> {
-    let mut loader = trie::Loader {
-        inner: Vec::<u8>::new(),
-    };
+/// Invalid entries return u32::MAX for size and read operations without
+/// accessing the backing store.
+fn test_size_and_read_of_invalid_entry() -> anyhow::Result<()> {
+    let mut loader = RejectingBackingStore;
     let mut m_state = MutableState::initial_state();
     let inner = m_state.get_inner(&mut loader);
     let mut state = InstanceState::new(loader, inner);
@@ -364,6 +516,15 @@ fn test_size_of_invalid_entry() -> anyhow::Result<()> {
         state.entry_size(entry)? == u32::MAX,
         "Entry size of invalidated entry should return u32::MAX."
     );
+    let mut destination = [255; 4];
+    ensure!(
+        state.entry_read(entry, &mut destination, 0)? == u32::MAX,
+        "Reading an invalidated entry should return u32::MAX."
+    );
+    ensure!(
+        destination == [255; 4],
+        "Reading an invalidated entry should not modify the destination."
+    );
     ensure!(
         state.lookup_entry(&[42]) == InstanceStateEntryOption::NEW_NONE,
         "Lookup on non existent entry should return None."
@@ -376,9 +537,14 @@ fn test_size_of_invalid_entry() -> anyhow::Result<()> {
         res == 1,
         "Deleting prefix on non existent part of state should return Ok(1)."
     );
+    let absent_entry = InstanceStateEntry::new(0, 42);
     ensure!(
-        state.entry_size(42.into())? == u32::MAX,
+        state.entry_size(absent_entry)? == u32::MAX,
         "Entry size of non existent entry should return u32::MAX."
+    );
+    ensure!(
+        state.entry_read(absent_entry, &mut destination, 0)? == u32::MAX,
+        "Reading a non existent entry should return u32::MAX."
     );
     Ok(())
 }
@@ -812,12 +978,10 @@ fn test_iterator_deletion_and_consuming() -> anyhow::Result<()> {
 }
 
 #[test]
-/// Tests that operations on entries and iterators with invalid generations
-/// fails as expected.
+/// Operations reject stale entry handles and iterator handles from a different
+/// generation.
 fn test_invalid_generation_operations() -> anyhow::Result<()> {
-    let mut loader = trie::Loader {
-        inner: Vec::<u8>::new(),
-    };
+    let mut loader = RejectingBackingStore;
     let mut m_state = MutableState::initial_state();
     let inner = m_state.get_inner(&mut loader);
     let mut state = InstanceState::new(loader, inner);
@@ -828,33 +992,35 @@ fn test_invalid_generation_operations() -> anyhow::Result<()> {
         .convert()
         .context("Returned entry id should be Some.")?;
 
-    let (gen, idx) = entry.split();
-    let entry_invalid_gen = InstanceStateEntry::new(gen + 1, idx); // invalid generation
+    let (entry_generation, _) = entry.split();
+    state.current_generation = entry_generation + 1;
+    state.entry_mapping.clear();
+    let stale_entry = entry;
     let mut buff = vec![0; 32];
     ensure!(
-        state.entry_read(entry_invalid_gen, &mut buff, 0)? == u32::MAX,
-        "Reading entry with invalid generation should return u32::MAX"
+        state.entry_read(stale_entry, &mut buff, 0)? == u32::MAX,
+        "Reading a stale entry should return u32::MAX"
     );
 
     let write_res = state
-        .entry_write(&mut energy, entry_invalid_gen, &buff, 0)
-        .context("Writing to entry with invalid generation should return u32::MAX.")?;
+        .entry_write(&mut energy, stale_entry, &buff, 0)
+        .context("Writing to a stale entry should return u32::MAX.")?;
     ensure!(
         write_res == u32::MAX,
-        "Writing to entry with invalid generation should return u32::MAX"
+        "Writing to a stale entry should return u32::MAX"
     );
 
     ensure!(
-        state.entry_size(entry_invalid_gen)? == u32::MAX,
-        "Getting size of entry with invalid generation should return u32::MAX."
+        state.entry_size(stale_entry)? == u32::MAX,
+        "Getting the size of a stale entry should return u32::MAX."
     );
 
     let resize_res = state
-        .entry_resize(&mut energy, entry_invalid_gen, 42)
-        .context("Resizing entry with invalid generation should return u32::MAX.")?;
+        .entry_resize(&mut energy, stale_entry, 42)
+        .context("Resizing a stale entry should return u32::MAX.")?;
     ensure!(
         resize_res == u32::MAX,
-        "Resizing entry with invalid generation should return u32::MAX"
+        "Resizing a stale entry should return u32::MAX"
     );
 
     let iter = state

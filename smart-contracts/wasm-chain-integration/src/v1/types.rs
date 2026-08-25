@@ -1222,8 +1222,10 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         }
     }
 
-    /// Read a section of the entry, and return how much was read, or u32::MAX,
-    /// in case the entry has already been invalidated.
+    /// Read a section of the entry. Return the number of bytes that exist in
+    /// the requested range. A valid read at or beyond the entry end returns 0.
+    /// An invalid handle returns `u32::MAX`. A backing-store failure is an
+    /// internal error and does not return the invalid-handle sentinel.
     pub(crate) fn entry_read(
         &mut self,
         entry: InstanceStateEntry,
@@ -1295,8 +1297,9 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         }
     }
 
-    /// Return the size of the entry, or u32::MAX in case the entry has already
-    /// been invalidated.
+    /// Return the entry size. An invalid handle returns `u32::MAX`. A
+    /// backing-store failure is an internal error and does not return the
+    /// invalid-handle sentinel.
     pub(crate) fn entry_size(&mut self, entry: InstanceStateEntry) -> StateResult<u32> {
         let (gen, idx) = entry.split();
         if gen != self.current_generation {
