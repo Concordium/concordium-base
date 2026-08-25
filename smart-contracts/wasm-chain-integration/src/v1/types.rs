@@ -1222,36 +1222,27 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         }
     }
 
-    /// Read a section of the entry, and return how much was read, or u32::MAX,
-    /// in case the entry has already been invalidated.
+    /// Read a section of the entry. Return the number of bytes that exist in
+    /// the requested range. A valid read at or beyond the entry end returns 0.
+    /// An invalid handle returns `u32::MAX`. A backing-store failure is an
+    /// internal error and does not return the invalid-handle sentinel.
     pub(crate) fn entry_read(
         &mut self,
         entry: InstanceStateEntry,
         dest: &mut [u8],
         offset: u32,
-    ) -> u32 {
+    ) -> StateResult<u32> {
         let (gen, idx) = entry.split();
         if gen != self.current_generation {
-            return u32::MAX;
+            return Ok(u32::MAX);
         }
-        if let Some(entry) = self.entry_mapping.get(idx) {
-            let res = self
-                .state_trie
-                .with_entry(*entry, &mut self.backing_store, |v| {
-                    let offset = std::cmp::min(v.len(), offset as usize);
-                    let num_copied = std::cmp::min(v.len().saturating_sub(offset), dest.len());
-                    dest[0..num_copied].copy_from_slice(&v[offset..offset + num_copied]);
-                    num_copied as u32
-                });
-            if let Some(res) = res {
-                res
-            } else {
-                // Entry has been invalidated.
-                u32::MAX
-            }
-        } else {
-            u32::MAX
-        }
+        let Some(entry) = self.entry_mapping.get(idx) else {
+            return Ok(u32::MAX);
+        };
+        Ok(self
+            .state_trie
+            .entry_read(*entry, &mut self.backing_store, dest, u64::from(offset))?
+            .map_or(u32::MAX, |count| count as u32))
     }
 
     /// Write a section of the entry, and return how much was written, or
@@ -1306,26 +1297,29 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         }
     }
 
-    /// Return the size of the entry, or u32::MAX in case the entry has already
-    /// been invalidated.
-    pub(crate) fn entry_size(&mut self, entry: InstanceStateEntry) -> u32 {
+    /// Return the entry size. An invalid handle returns `u32::MAX`. A
+    /// backing-store failure is an internal error and does not return the
+    /// invalid-handle sentinel.
+    pub(crate) fn entry_size(&mut self, entry: InstanceStateEntry) -> StateResult<u32> {
         let (gen, idx) = entry.split();
         if gen != self.current_generation {
-            return u32::MAX;
+            return Ok(u32::MAX);
         }
-        if let Some(entry) = self.entry_mapping.get(idx) {
-            let res = self
-                .state_trie
-                .with_entry(*entry, &mut self.backing_store, |v| v.len() as u32);
-            if let Some(res) = res {
-                res
-            } else {
-                // entry was invalidated.
-                u32::MAX
-            }
-        } else {
-            u32::MAX
-        }
+        let Some(entry) = self.entry_mapping.get(idx) else {
+            return Ok(u32::MAX);
+        };
+        let Some(size) = self
+            .state_trie
+            .entry_size(*entry, &mut self.backing_store)?
+        else {
+            // The entry was invalidated.
+            return Ok(u32::MAX);
+        };
+        ensure!(
+            size <= constants::MAX_ENTRY_SIZE,
+            "Persisted V1 entry exceeds the maximum entry size."
+        );
+        u32::try_from(size).context("V1 entry size does not fit in u32.")
     }
 
     /// Resize the entry to the new size. Returns
