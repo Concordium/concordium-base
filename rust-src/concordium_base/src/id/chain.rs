@@ -460,6 +460,22 @@ mod tests {
         let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
         assert_eq!(cdi_check, Ok(()));
 
+        // A malformed inner-product proof must be rejected without panicking.
+        let mut cdi_with_truncated_range_proof = cdi.clone();
+        cdi_with_truncated_range_proof
+            .proofs
+            .id_proofs
+            .cred_counter_less_than_max_accounts
+            .truncate_inner_product_proof_for_test();
+        let cdi_check = verify_cdi(
+            &global_ctx,
+            &ip_info,
+            &ars_infos,
+            &cdi_with_truncated_range_proof,
+            &Left(EXPIRY),
+        );
+        assert_eq!(cdi_check, Err(CdiVerificationError::Proof));
+
         // Testing with an existing RegId (i.e. an existing account)
         let existing_reg_id = account_address_from_registration_id(&cdi.values.cred_id);
         let cred_data = CredentialData {

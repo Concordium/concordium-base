@@ -33,6 +33,16 @@ pub struct RangeProof<C: Curve> {
     ip_proof: InnerProductProof<C>,
 }
 
+#[cfg(test)]
+impl<C: Curve> RangeProof<C> {
+    pub(crate) fn truncate_inner_product_proof_for_test(&mut self) {
+        self.ip_proof
+            .lr_vec
+            .pop()
+            .expect("inner-product proof should contain at least one round");
+    }
+}
+
 /// Determine whether the `i`-th bit (counting from least significant) is set in
 /// the given u64 value.
 fn ith_bit_bool(v: u64, i: u8) -> bool {
