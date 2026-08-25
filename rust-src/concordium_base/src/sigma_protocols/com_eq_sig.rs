@@ -84,8 +84,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         let g_tilda = self.ps_pub_key.g_tilda;
-        let a_hat = self.blinded_sig.sig.0;
-        let _b_hat = self.blinded_sig.sig.1;
+        let a_hat = self.blinded_sig.sig.a();
+        let _b_hat = self.blinded_sig.sig.b();
         let _cX_tilda = self.ps_pub_key.x_tilda;
         let cY_tilda = |i| self.ps_pub_key.y_tildas[i];
         let cmm_key = self.comm_key;
@@ -189,8 +189,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
         response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         let g_tilda = self.ps_pub_key.g_tilda;
-        let a_hat = self.blinded_sig.sig.0;
-        let b_hat = self.blinded_sig.sig.1;
+        let a_hat = self.blinded_sig.sig.a();
+        let b_hat = self.blinded_sig.sig.b();
         let cX_tilda = self.ps_pub_key.x_tilda;
         let cY_tildas = &self.ps_pub_key.y_tildas;
         let cmm_key = self.comm_key;
@@ -347,7 +347,7 @@ mod tests {
                 {
                     let tmp = wrong_ces.blinded_sig;
                     wrong_ces.blinded_sig = BlindedSignature {
-                        sig: Signature(G1::generate(csprng), G1::generate(csprng)),
+                        sig: Signature::arbitrary(csprng),
                     };
                     assert!(!verify(&mut ro.split(), &wrong_ces, &proof));
                     wrong_ces.blinded_sig = tmp;
