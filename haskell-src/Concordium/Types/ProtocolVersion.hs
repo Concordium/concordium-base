@@ -236,6 +236,9 @@ module Concordium.Types.ProtocolVersion (
     PVSupportsPLT,
     PVSupportsHaskellManagedPLT,
     PVSupportsRustManagedPLT,
+    SupportsRustManagedECP,
+    sSupportsRustManagedECP,
+    PVSupportsRustManagedECP,
     -- | Version of PLT state (disregarding PLT account state which is handled separately).
     --
     -- * 'PLTStateNone': there is no PLT state (on protocol versions where 'SupportsPLT' is 'False')
@@ -411,6 +414,7 @@ $( singletons
             = AuthorizationsVersion0 -- \^Initial set of authorizations
             | AuthorizationsVersion1 -- \^Adds cooldown parameters and time parameters
             | AuthorizationsVersion2 -- \^Adds authorization for the CreatePLT chain update
+            | AuthorizationsVersion3 -- \^Adds authorization for token and lock related parameter updates
 
         -- \|The authorizations version associated with a protocol version.
         authorizationsVersionFor :: ProtocolVersion -> AuthorizationsVersion
@@ -424,7 +428,7 @@ $( singletons
         authorizationsVersionFor P8 = AuthorizationsVersion1
         authorizationsVersionFor P9 = AuthorizationsVersion2
         authorizationsVersionFor P10 = AuthorizationsVersion2
-        authorizationsVersionFor P11 = AuthorizationsVersion2
+        authorizationsVersionFor P11 = AuthorizationsVersion3
 
         -- \|Transaction outcomes versions.
         -- The difference between the two versions are only related
@@ -754,6 +758,7 @@ type family IsCompatibleAuthorizationsVersion cpv auv where
     IsCompatibleAuthorizationsVersion ChainParametersV2 AuthorizationsVersion1 = True
     IsCompatibleAuthorizationsVersion ChainParametersV3 AuthorizationsVersion1 = True
     IsCompatibleAuthorizationsVersion ChainParametersV3 AuthorizationsVersion2 = True
+    IsCompatibleAuthorizationsVersion ChainParametersV3 AuthorizationsVersion3 = True
     IsCompatibleAuthorizationsVersion _ _ = False
 
 -- | Constraint that an account version supports delegation.
@@ -827,6 +832,28 @@ type PVSupportsHaskellManagedPLT (pv :: ProtocolVersion) =
 -- that the PLT state is managed in Rust (the alternative is that it is managed in Haskell).
 type PVSupportsRustManagedPLT (pv :: ProtocolVersion) =
     (PVSupportsPLT pv, PltStateVersionFor pv ~ 'PLTStateV1)
+
+-- | Whether a protocol version supports Rust-managed external chain parameters.
+type family SupportsRustManagedECP (pv :: ProtocolVersion) :: Bool where
+    SupportsRustManagedECP pv =
+        SupportsRustManagedECPForAuthorizations (AuthorizationsVersionFor pv)
+
+type family SupportsRustManagedECPForAuthorizations (auv :: AuthorizationsVersion) :: Bool where
+    SupportsRustManagedECPForAuthorizations 'AuthorizationsVersion3 = 'True
+    SupportsRustManagedECPForAuthorizations _ = 'False
+
+-- | Singleton counterpart of 'SupportsRustManagedECP'.
+sSupportsRustManagedECP :: SProtocolVersion pv -> SBool (SupportsRustManagedECP pv)
+sSupportsRustManagedECP spv = case sAuthorizationsVersionFor spv of
+    SAuthorizationsVersion0 -> SFalse
+    SAuthorizationsVersion1 -> SFalse
+    SAuthorizationsVersion2 -> SFalse
+    SAuthorizationsVersion3 -> STrue
+
+-- | Constraint that a protocol version supports Rust-managed external chain
+-- parameters.
+type PVSupportsRustManagedECP (pv :: ProtocolVersion) =
+    (PVSupportsRustManagedPLT pv, SupportsRustManagedECP pv ~ 'True)
 
 -- | Constraint on a type level 'PLTStateVersion' that can be used to get a corresponding
 --  'SPLTStateVersion' (see 'pltStateVersion'). (An alias for 'SingI'.)

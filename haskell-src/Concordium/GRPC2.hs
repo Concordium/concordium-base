@@ -805,6 +805,7 @@ instance ToProto RejectReason where
                             ProtoFields.tokenId .= toProto ltrrdTokenId
                         )
         LockRecipientNotPermitted LockAccountRejectReasonDetails{larrdLockId, larrdAccount} -> Proto.make $ ProtoFields.lockRecipientNotPermitted .= mkLockOpNotAuth larrdLockId larrdAccount
+        LockDurationTooLong lockId -> Proto.make $ ProtoFields.lockDurationTooLong .= toProto lockId
       where
         mkLockOpNotAuth lockId address = Proto.make $ do
             ProtoFields.lockId .= toProto lockId
@@ -1129,10 +1130,12 @@ convertUpdatePayload ut pl = case (ut, pl) of
     (Updates.UpdateLevel2Keys, Updates.RootUpdatePayload ru@(Updates.Level2KeysRootUpdate{})) -> Right . Proto.make $ ProtoFields.rootUpdate .= toProto ru
     (Updates.UpdateLevel2Keys, Updates.RootUpdatePayload ru@(Updates.Level2KeysRootUpdateV1{})) -> Right . Proto.make $ ProtoFields.rootUpdate .= toProto ru
     (Updates.UpdateLevel2Keys, Updates.RootUpdatePayload ru@(Updates.Level2KeysRootUpdateV2{})) -> Right . Proto.make $ ProtoFields.rootUpdate .= toProto ru
+    (Updates.UpdateLevel2Keys, Updates.RootUpdatePayload ru@(Updates.Level2KeysRootUpdateV3{})) -> Right . Proto.make $ ProtoFields.rootUpdate .= toProto ru
     (Updates.UpdateLevel1Keys, Updates.Level1UpdatePayload u@(Updates.Level1KeysLevel1Update{})) -> Right . Proto.make $ ProtoFields.level1Update .= toProto u
     (Updates.UpdateLevel2Keys, Updates.Level1UpdatePayload u@(Updates.Level2KeysLevel1Update{})) -> Right . Proto.make $ ProtoFields.level1Update .= toProto u
     (Updates.UpdateLevel2Keys, Updates.Level1UpdatePayload u@(Updates.Level2KeysLevel1UpdateV1{})) -> Right . Proto.make $ ProtoFields.level1Update .= toProto u
     (Updates.UpdateLevel2Keys, Updates.Level1UpdatePayload u@(Updates.Level2KeysLevel1UpdateV2{})) -> Right . Proto.make $ ProtoFields.level1Update .= toProto u
+    (Updates.UpdateLevel2Keys, Updates.Level1UpdatePayload u@(Updates.Level2KeysLevel1UpdateV3{})) -> Right . Proto.make $ ProtoFields.level1Update .= toProto u
     (Updates.UpdateAddAnonymityRevoker, Updates.AddAnonymityRevokerUpdatePayload ai) -> Right . Proto.make $ ProtoFields.addAnonymityRevokerUpdate .= toProto ai
     (Updates.UpdateAddIdentityProvider, Updates.AddIdentityProviderUpdatePayload ip) -> Right . Proto.make $ ProtoFields.addIdentityProviderUpdate .= toProto ip
     (Updates.UpdateCooldownParameters, Updates.CooldownParametersCPV1UpdatePayload cp) -> Right $ Proto.make $ ProtoFields.cooldownParametersCpv1Update .= toProto cp
@@ -1145,6 +1148,7 @@ convertUpdatePayload ut pl = case (ut, pl) of
     (Updates.UpdateFinalizationCommitteeParameters, Updates.FinalizationCommitteeParametersUpdatePayload fcp) -> Right . Proto.make $ ProtoFields.finalizationCommitteeParametersUpdate .= toProto fcp
     (Updates.UpdateValidatorScoreParameters, Updates.ValidatorScoreParametersUpdatePayload vsp) -> Right . Proto.make $ ProtoFields.validatorScoreParametersUpdate .= toProto vsp
     (Updates.UpdateCreatePLT, Updates.CreatePLTUpdatePayload cplt) -> Right . Proto.make $ ProtoFields.createPltUpdate .= toProto cplt
+    (Updates.UpdateMaxLockDuration, Updates.MaxLockDurationUpdatePayload duration) -> Right . Proto.make $ ProtoFields.maxLockDurationUpdate .= toProto duration
     _ -> Left CEInvalidUpdateResult
 
 -- | The different conversions errors possible in @toBlockItemStatus@ (and the helper to* functions it calls).
@@ -1238,6 +1242,7 @@ instance ToProto Updates.Level1Update where
     toProto Updates.Level2KeysLevel1Update{..} = Proto.make $ ProtoFields.level2KeysUpdateV0 .= toProto l2kl1uAuthorizations
     toProto Updates.Level2KeysLevel1UpdateV1{..} = Proto.make $ ProtoFields.level2KeysUpdateV1 .= toProto l2kl1uAuthorizationsV1
     toProto Updates.Level2KeysLevel1UpdateV2{..} = Proto.make $ ProtoFields.level2KeysUpdateV1 .= toProto l2kl1uAuthorizationsV2
+    toProto Updates.Level2KeysLevel1UpdateV3{..} = Proto.make $ ProtoFields.level2KeysUpdateV1 .= toProto l2kl1uAuthorizationsV3
 
 instance ToProto Updates.RootUpdate where
     type Output Updates.RootUpdate = Proto.RootUpdate
@@ -1247,6 +1252,7 @@ instance ToProto Updates.RootUpdate where
         Updates.Level2KeysRootUpdate{..} -> Proto.make $ ProtoFields.level2KeysUpdateV0 .= toProto l2kruAuthorizations
         Updates.Level2KeysRootUpdateV1{..} -> Proto.make $ ProtoFields.level2KeysUpdateV1 .= toProto l2kruAuthorizationsV1
         Updates.Level2KeysRootUpdateV2{..} -> Proto.make $ ProtoFields.level2KeysUpdateV1 .= toProto l2kruAuthorizationsV2
+        Updates.Level2KeysRootUpdateV3{..} -> Proto.make $ ProtoFields.level2KeysUpdateV1 .= toProto l2kruAuthorizationsV3
 
 instance ToProto (Updates.HigherLevelKeys kind) where
     type Output (Updates.HigherLevelKeys kind) = Proto.HigherLevelKeys
@@ -1285,12 +1291,19 @@ instance (IsAuthorizationsVersion auv) => ToProto (Updates.Authorizations auv) w
                     ProtoFields.parameterCooldown .= toProto (Updates.asCooldownParameters auth ^. Parameters.unconditionally)
                     ProtoFields.parameterTime .= toProto (Updates.asTimeParameters auth ^. Parameters.unconditionally)
                     ProtoFields.createPlt .= toProto (Updates.asCreatePLT auth ^. Parameters.unconditionally)
+                SAuthorizationsVersion3 -> Proto.make $ do
+                    ProtoFields.v0 .= v0
+                    ProtoFields.parameterCooldown .= toProto (Updates.asCooldownParameters auth ^. Parameters.unconditionally)
+                    ProtoFields.parameterTime .= toProto (Updates.asTimeParameters auth ^. Parameters.unconditionally)
+                    ProtoFields.createPlt .= toProto (Updates.asCreatePLT auth ^. Parameters.unconditionally)
+                    ProtoFields.tokenParameters .= toProto (Updates.asTokenParameters auth ^. Parameters.unconditionally)
 
 -- | Defines a type family that is used in the ToProto instance for Updates.Authorizations.
 type family AuthorizationsFamily auv where
     AuthorizationsFamily 'AuthorizationsVersion0 = Proto.AuthorizationsV0
     AuthorizationsFamily 'AuthorizationsVersion1 = Proto.AuthorizationsV1
     AuthorizationsFamily 'AuthorizationsVersion2 = Proto.AuthorizationsV1
+    AuthorizationsFamily 'AuthorizationsVersion3 = Proto.AuthorizationsV1
 
 instance ToProto Updates.AccessStructure where
     type Output Updates.AccessStructure = Proto.AccessStructure
@@ -1850,6 +1863,7 @@ instance ToProto Updates.UpdateType where
     toProto Updates.UpdateFinalizationCommitteeParameters = Proto.UPDATE_FINALIZATION_COMMITTEE_PARAMETERS
     toProto Updates.UpdateValidatorScoreParameters = Proto.UPDATE_VALIDATOR_SCORE_PARAMETERS
     toProto Updates.UpdateCreatePLT = Proto.UPDATE_CREATE_PLT
+    toProto Updates.UpdateMaxLockDuration = Proto.UPDATE_MAX_LOCK_DURATION
 
 instance ToProto TransactionType where
     type Output TransactionType = Proto.TransactionType
@@ -2295,6 +2309,7 @@ instance ToProto (TransactionTime, QueryTypes.PendingUpdateEffect) where
             QueryTypes.PUELevel2KeysV0 auth -> ProtoFields.level2KeysCpv0 .= toProto auth
             QueryTypes.PUELevel2KeysV1 auth -> ProtoFields.level2KeysCpv1 .= toProto auth
             QueryTypes.PUELevel2KeysV2 auth -> ProtoFields.level2KeysCpv1 .= toProto auth
+            QueryTypes.PUELevel2KeysV3 auth -> ProtoFields.level2KeysCpv1 .= toProto auth
             QueryTypes.PUEProtocol protocolUpdate -> ProtoFields.protocol .= toProto protocolUpdate
             QueryTypes.PUEElectionDifficulty electionDifficulty -> ProtoFields.electionDifficulty .= toProto electionDifficulty
             QueryTypes.PUEEuroPerEnergy euroPerEnergy -> ProtoFields.euroPerEnergy .= toProto euroPerEnergy
@@ -2316,6 +2331,7 @@ instance ToProto (TransactionTime, QueryTypes.PendingUpdateEffect) where
             QueryTypes.PUEBlockEnergyLimit blockEnergyLimit -> ProtoFields.blockEnergyLimit .= toProto blockEnergyLimit
             QueryTypes.PUEFinalizationCommitteeParameters finalizationCommitteeParameters -> ProtoFields.finalizationCommitteeParameters .= toProto finalizationCommitteeParameters
             QueryTypes.PUEValidatorScoreParameters validatorScoreParameters -> ProtoFields.validatorScoreParameters .= toProto validatorScoreParameters
+            QueryTypes.PUEMaxLockDuration maxLockDuration -> ProtoFields.maxLockDuration .= toProto maxLockDuration
 
 instance ToProto QueryTypes.NextUpdateSequenceNumbers where
     type Output QueryTypes.NextUpdateSequenceNumbers = Proto.NextUpdateSequenceNumbers
@@ -2342,6 +2358,7 @@ instance ToProto QueryTypes.NextUpdateSequenceNumbers where
         ProtoFields.finalizationCommitteeParameters .= toProto _nusnFinalizationCommitteeParameters
         ProtoFields.validatorScoreParameters .= toProto _nusnValidatorScoreParameters
         ProtoFields.protocolLevelTokens .= toProto _nusnProtocolLevelTokensParameters
+        ProtoFields.maxLockDuration .= toProto _nusnMaxLockDuration
 
 instance ToProto Epoch where
     type Output Epoch = Proto.Epoch
@@ -2449,6 +2466,7 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
                                     ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
                                     ProtoFields.validatorScoreParameters .= toProto (Parameters.unOParam _cpValidatorScoreParameters)
+                                    ProtoFields.maybe'maxLockDuration .= fmap toProto (Parameters.unOParam _cpMaxLockDuration)
                                 )
             (SChainParametersV3, SAuthorizationsVersion2) ->
                 let Parameters.ChainParameters{..} = params
@@ -2472,6 +2490,31 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
                                     ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
                                     ProtoFields.validatorScoreParameters .= toProto (Parameters.unOParam _cpValidatorScoreParameters)
+                                    ProtoFields.maybe'maxLockDuration .= fmap toProto (Parameters.unOParam _cpMaxLockDuration)
+                                )
+            (SChainParametersV3, SAuthorizationsVersion3) ->
+                let Parameters.ChainParameters{..} = params
+                in  Proto.make $
+                        ProtoFields.v3
+                            .= Proto.make
+                                ( do
+                                    ProtoFields.consensusParameters .= toProto _cpConsensusParameters
+                                    ProtoFields.euroPerEnergy .= toProto (Parameters._erEuroPerEnergy _cpExchangeRates)
+                                    ProtoFields.microCcdPerEuro .= toProto (Parameters._erMicroGTUPerEuro _cpExchangeRates)
+                                    ProtoFields.cooldownParameters .= toProto _cpCooldownParameters
+                                    ProtoFields.timeParameters .= toProto (Parameters.unOParam _cpTimeParameters)
+                                    ProtoFields.accountCreationLimit .= toProto _cpAccountCreationLimit
+                                    ProtoFields.mintDistribution .= toProto (Parameters._rpMintDistribution _cpRewardParameters)
+                                    ProtoFields.transactionFeeDistribution .= toProto (Parameters._rpTransactionFeeDistribution _cpRewardParameters)
+                                    ProtoFields.gasRewards .= toProto (Parameters._rpGASRewards _cpRewardParameters)
+                                    ProtoFields.foundationAccount .= toProto foundationAddr
+                                    ProtoFields.poolParameters .= toProto _cpPoolParameters
+                                    ProtoFields.rootKeys .= toProto (Updates.rootKeys keys)
+                                    ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
+                                    ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
+                                    ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
+                                    ProtoFields.validatorScoreParameters .= toProto (Parameters.unOParam _cpValidatorScoreParameters)
+                                    ProtoFields.maybe'maxLockDuration .= fmap toProto (Parameters.unOParam _cpMaxLockDuration)
                                 )
 
 instance ToProto FinalizationIndex where

@@ -2938,6 +2938,8 @@ data RejectReason
       LockTokenNotPermitted !LockTokenRejectReasonDetails
     | -- | The recipient is not permitted to receive funds controlled by the lock.
       LockRecipientNotPermitted !LockAccountRejectReasonDetails
+    | -- | The requested expiry exceeds the maximum permitted lock duration.
+      LockDurationTooLong !LockId
     deriving (Show, Eq, Generic)
 
 -- | Details for lock reject reasons involving an account.
@@ -3049,6 +3051,7 @@ instance S.Serialize RejectReason where
         LockCancelNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 62 <> S.put larrdLockId <> S.put larrdAccount
         LockTokenNotPermitted LockTokenRejectReasonDetails{..} -> S.putWord8 63 <> S.put ltrrdLockId <> S.put ltrrdTokenId
         LockRecipientNotPermitted LockAccountRejectReasonDetails{..} -> S.putWord8 64 <> S.put larrdLockId <> S.put larrdAccount
+        LockDurationTooLong lockId -> S.putWord8 65 <> S.put lockId
     get =
         S.getWord8 >>= \case
             0 -> return ModuleNotWF
@@ -3125,6 +3128,7 @@ instance S.Serialize RejectReason where
             62 -> LockCancelNotAuthorized <$> getLockAccountRejectReasonDetails
             63 -> LockTokenNotPermitted <$> getLockTokenRejectReasonDetails
             64 -> LockRecipientNotPermitted <$> getLockAccountRejectReasonDetails
+            65 -> LockDurationTooLong <$> S.get
             n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 instance AE.ToJSON RejectReason
