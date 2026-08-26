@@ -329,15 +329,38 @@ pub enum UnknownMapKeys {
     Fail,
 }
 
-/// Options applied when serializing and deserializing
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Default)]
+/// Options applied when serializing and deserializing.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct SerializationOptions {
     pub unknown_map_keys: UnknownMapKeys,
+    /// Maximum depth of nested CBOR arrays, maps, and tags.
+    pub max_nesting_depth: usize,
+}
+
+impl Default for SerializationOptions {
+    fn default() -> Self {
+        Self {
+            unknown_map_keys: UnknownMapKeys::default(),
+            max_nesting_depth: 128,
+        }
+    }
 }
 
 impl SerializationOptions {
+    /// Sets how unknown keys in decoded CBOR maps are handled.
     pub fn unknown_map_keys(self, unknown_map_keys: UnknownMapKeys) -> Self {
-        Self { unknown_map_keys }
+        Self {
+            unknown_map_keys,
+            ..self
+        }
+    }
+
+    /// Sets the finite maximum depth of nested CBOR arrays, maps, and tags.
+    pub fn max_nesting_depth(self, max_nesting_depth: usize) -> Self {
+        Self {
+            max_nesting_depth,
+            ..self
+        }
     }
 }
 
@@ -389,6 +412,11 @@ impl CborSerializationError {
         } else {
             anyhow!("expected map size {}, was indefinite", expected).into()
         }
+    }
+
+    /// Returns an error indicating that CBOR nesting exceeded `max_nesting_depth`.
+    pub fn nesting_limit_exceeded(max_nesting_depth: usize) -> Self {
+        anyhow!("maximum nesting depth of {} exceeded", max_nesting_depth).into()
     }
 }
 
@@ -490,6 +518,21 @@ pub trait CborDeserialize {
     fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized;
+
+    /// Deserialize while preserving the current CBOR structural nesting depth.
+    ///
+    /// Container decoders use this to propagate the current depth when recursively
+    /// decoding dynamic values. The default preserves compatibility for types that
+    /// do not track nesting depth.
+    fn deserialize_with_nesting_depth<C: CborDecoder>(
+        decoder: C,
+        _nesting_depth: usize,
+    ) -> CborSerializationResult<Self>
+    where
+        Self: Sized,
+    {
+        Self::deserialize(decoder)
+    }
 
     fn deserialize_maybe_known<C: CborDecoder>(
         decoder: C,
@@ -747,8 +790,30 @@ pub trait CborMapDecoder {
     /// all entries in the map has been deserialized.
     fn deserialize_key<K: CborDeserialize>(&mut self) -> CborSerializationResult<Option<K>>;
 
+    /// Deserialize an entry key while propagating the current structural nesting depth.
+    ///
+    /// Implementations that support depth-aware dynamic values should forward
+    /// `nesting_depth` to [`CborDeserialize::deserialize_with_nesting_depth`].
+    fn deserialize_key_with_nesting_depth<K: CborDeserialize>(
+        &mut self,
+        _nesting_depth: usize,
+    ) -> CborSerializationResult<Option<K>> {
+        self.deserialize_key()
+    }
+
     /// Deserialize an entry value.
     fn deserialize_value<V: CborDeserialize>(&mut self) -> CborSerializationResult<V>;
+
+    /// Deserialize an entry value while propagating the current structural nesting depth.
+    ///
+    /// Implementations that support depth-aware dynamic values should forward
+    /// `nesting_depth` to [`CborDeserialize::deserialize_with_nesting_depth`].
+    fn deserialize_value_with_nesting_depth<V: CborDeserialize>(
+        &mut self,
+        _nesting_depth: usize,
+    ) -> CborSerializationResult<V> {
+        self.deserialize_value()
+    }
 
     /// Skips entry value
     fn skip_value(&mut self) -> CborSerializationResult<()>;
@@ -765,6 +830,17 @@ pub trait CborArrayDecoder {
     /// The total number of elements that can be deserialized is equal
     /// to [`Self::size`].
     fn deserialize_element<T: CborDeserialize>(&mut self) -> CborSerializationResult<Option<T>>;
+
+    /// Deserialize an array element while propagating the current structural nesting depth.
+    ///
+    /// Implementations that support depth-aware dynamic values should forward
+    /// `nesting_depth` to [`CborDeserialize::deserialize_with_nesting_depth`].
+    fn deserialize_element_with_nesting_depth<T: CborDeserialize>(
+        &mut self,
+        _nesting_depth: usize,
+    ) -> CborSerializationResult<Option<T>> {
+        self.deserialize_element()
+    }
 }
 
 impl<T: CborSerialize> CborSerialize for &T {
@@ -940,6 +1016,29 @@ mod test {
 
     use crate::common::cbor::value::Value;
     use std::collections::HashMap;
+
+    #[test]
+    fn serialization_options_default_nesting_depth() {
+        assert_eq!(SerializationOptions::default().max_nesting_depth, 128);
+    }
+
+    #[test]
+    fn serialization_options_custom_nesting_depth() {
+        let options = SerializationOptions::default()
+            .unknown_map_keys(UnknownMapKeys::Fail)
+            .max_nesting_depth(64);
+
+        assert_eq!(options.max_nesting_depth, 64);
+        assert_eq!(options.unknown_map_keys, UnknownMapKeys::Fail);
+    }
+
+    #[test]
+    fn nesting_limit_error_includes_limit() {
+        assert_eq!(
+            CborSerializationError::nesting_limit_exceeded(64).to_string(),
+            "maximum nesting depth of 64 exceeded"
+        );
+    }
 
     /// Struct with named fields encoded as map. Uses field name string literals
     /// as keys.
@@ -1660,8 +1759,7 @@ mod test {
         let err = cbor_decode::<Vec<u64>>(&cbor).unwrap_err();
         assert!(
             err.to_string().contains("failed to fill whole buffer"),
-            "message: {}",
-            err.to_string()
+            "message: {err}"
         );
     }
 
@@ -1683,8 +1781,7 @@ mod test {
         let err = cbor_decode::<HashMap<u64, u64>>(&cbor).unwrap_err();
         assert!(
             err.to_string().contains("failed to fill whole buffer"),
-            "message: {}",
-            err.to_string()
+            "message: {err}"
         );
     }
 

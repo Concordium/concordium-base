@@ -22,6 +22,96 @@ impl<R: Read> Decoder<R> {
     }
 }
 
+impl<R: Read> Decoder<R>
+where
+    R::Error: std::error::Error,
+{
+    fn skip_data_item_at_nesting_depth(
+        mut self: &mut Self,
+        nesting_depth: usize,
+    ) -> CborSerializationResult<()> {
+        match self.peek_data_item_header()?.to_type() {
+            DataItemType::Positive
+            | DataItemType::Negative
+            | DataItemType::Simple
+            | DataItemType::Float => {
+                self.inner.pull()?;
+            }
+            DataItemType::Tag => {
+                let nesting_depth = self.next_nesting_depth(nesting_depth)?;
+                self.inner.pull()?;
+                self.skip_data_item_at_nesting_depth(nesting_depth)?;
+            }
+            DataItemType::Bytes => {
+                self.decode_bytes()?;
+            }
+            DataItemType::Text => {
+                self.decode_text()?;
+            }
+            DataItemType::Array => {
+                let nesting_depth = self.next_nesting_depth(nesting_depth)?;
+                let array_decoder = self.decode_array()?;
+                // Arrays of definite length encodes "size" number of data item elements,
+                // arrays of indefinite length encodes data item elements until a break is
+                // encountered.
+                if let Some(size) = array_decoder.size() {
+                    for _ in 0..size {
+                        array_decoder
+                            .decoder
+                            .skip_data_item_at_nesting_depth(nesting_depth)?;
+                    }
+                } else {
+                    while !array_decoder.decoder.pull_break()? {
+                        array_decoder
+                            .decoder
+                            .skip_data_item_at_nesting_depth(nesting_depth)?;
+                    }
+                }
+            }
+            DataItemType::Map => {
+                let nesting_depth = self.next_nesting_depth(nesting_depth)?;
+                let map_decoder = self.decode_map()?;
+                // Maps of definite length encodes "size" number of data item pairs,
+                // maps of indefinite length encodes data item pairs until a break is
+                // encountered.
+                if let Some(size) = map_decoder.size() {
+                    for _ in 0..size {
+                        map_decoder
+                            .decoder
+                            .skip_data_item_at_nesting_depth(nesting_depth)?;
+                        map_decoder
+                            .decoder
+                            .skip_data_item_at_nesting_depth(nesting_depth)?;
+                    }
+                } else {
+                    while !map_decoder.decoder.pull_break()? {
+                        map_decoder
+                            .decoder
+                            .skip_data_item_at_nesting_depth(nesting_depth)?;
+                        map_decoder
+                            .decoder
+                            .skip_data_item_at_nesting_depth(nesting_depth)?;
+                    }
+                }
+            }
+            DataItemType::Break => {
+                return Err(anyhow!("break is not a valid data item").into());
+            }
+        }
+
+        Ok(())
+    }
+
+    fn next_nesting_depth(&self, nesting_depth: usize) -> CborSerializationResult<usize> {
+        nesting_depth
+            .checked_add(1)
+            .filter(|depth| *depth <= self.options.max_nesting_depth)
+            .ok_or_else(|| {
+                CborSerializationError::nesting_limit_exceeded(self.options.max_nesting_depth)
+            })
+    }
+}
+
 impl<'a, R: Read> CborDecoder for &'a mut Decoder<R>
 where
     <R as Read>::Error: std::error::Error,
@@ -155,62 +245,8 @@ where
         DataItemHeader::try_from_header(self.peek_header()?)
     }
 
-    fn skip_data_item(mut self) -> CborSerializationResult<()> {
-        match self.peek_data_item_header()?.to_type() {
-            DataItemType::Positive
-            | DataItemType::Negative
-            | DataItemType::Simple
-            | DataItemType::Float => {
-                self.inner.pull()?;
-            }
-            DataItemType::Tag => {
-                self.inner.pull()?;
-                self.skip_data_item()?;
-            }
-            DataItemType::Bytes => {
-                self.decode_bytes()?;
-            }
-            DataItemType::Text => {
-                self.decode_text()?;
-            }
-            DataItemType::Array => {
-                let array_decoder = self.decode_array()?;
-                // Arrays of definite length encodes "size" number of data item elements,
-                // arrays of indefinite length encodes data item elements until a break is
-                // encountered.
-                if let Some(size) = array_decoder.size() {
-                    for _ in 0..size {
-                        array_decoder.decoder.skip_data_item()?;
-                    }
-                } else {
-                    while !array_decoder.decoder.pull_break()? {
-                        array_decoder.decoder.skip_data_item()?;
-                    }
-                }
-            }
-            DataItemType::Map => {
-                let map_decoder = self.decode_map()?;
-                // Maps of definite length encodes "size" number of data item pairs,
-                // maps of indefinite length encodes data item pairs until a break is
-                // encountered.
-                if let Some(size) = map_decoder.size() {
-                    for _ in 0..size {
-                        map_decoder.decoder.skip_data_item()?;
-                        map_decoder.decoder.skip_data_item()?;
-                    }
-                } else {
-                    while !map_decoder.decoder.pull_break()? {
-                        map_decoder.decoder.skip_data_item()?;
-                        map_decoder.decoder.skip_data_item()?;
-                    }
-                }
-            }
-            DataItemType::Break => {
-                return Err(anyhow!("break is not a valid data item").into());
-            }
-        }
-
-        Ok(())
+    fn skip_data_item(self) -> CborSerializationResult<()> {
+        self.skip_data_item_at_nesting_depth(0)
     }
 
     fn options(&self) -> SerializationOptions {
@@ -408,6 +444,36 @@ where
         Ok(Some(K::deserialize(&mut *self.decoder)?))
     }
 
+    fn deserialize_key_with_nesting_depth<K: CborDeserialize>(
+        &mut self,
+        nesting_depth: usize,
+    ) -> CborSerializationResult<Option<K>> {
+        self.state = match self.state {
+            MapDecoderStateEnum::ExpectKey => MapDecoderStateEnum::ExpectValue,
+            MapDecoderStateEnum::ExpectValue => {
+                return Err(anyhow!(
+                    "map decoder expected to decode entry value since entry key was decoded last"
+                )
+                .into());
+            }
+        };
+
+        if let Some(declared_size) = self.declared_size {
+            if self.decoded_entries == declared_size {
+                return Ok(None);
+            }
+        } else if self.decoder.pull_break()? {
+            return Ok(None);
+        }
+
+        self.decoded_entries += 1;
+
+        Ok(Some(K::deserialize_with_nesting_depth(
+            &mut *self.decoder,
+            nesting_depth,
+        )?))
+    }
+
     fn deserialize_value<V: CborDeserialize>(&mut self) -> CborSerializationResult<V> {
         self.state = match self.state {
             MapDecoderStateEnum::ExpectKey => {
@@ -420,6 +486,23 @@ where
         };
 
         V::deserialize(&mut *self.decoder)
+    }
+
+    fn deserialize_value_with_nesting_depth<V: CborDeserialize>(
+        &mut self,
+        nesting_depth: usize,
+    ) -> CborSerializationResult<V> {
+        self.state = match self.state {
+            MapDecoderStateEnum::ExpectKey => {
+                return Err(anyhow!(
+                    "map decoder expected to decode entry key since entry value was decoded last"
+                )
+                .into());
+            }
+            MapDecoderStateEnum::ExpectValue => MapDecoderStateEnum::ExpectKey,
+        };
+
+        V::deserialize_with_nesting_depth(&mut *self.decoder, nesting_depth)
     }
 
     fn skip_value(&mut self) -> CborSerializationResult<()> {
@@ -478,6 +561,26 @@ where
         self.decoded_elements += 1;
 
         Ok(Some(T::deserialize(&mut *self.decoder)?))
+    }
+
+    fn deserialize_element_with_nesting_depth<T: CborDeserialize>(
+        &mut self,
+        nesting_depth: usize,
+    ) -> CborSerializationResult<Option<T>> {
+        if let Some(declared_size) = self.declared_size {
+            if self.decoded_elements == declared_size {
+                return Ok(None);
+            }
+        } else if self.decoder.pull_break()? {
+            return Ok(None);
+        }
+
+        self.decoded_elements += 1;
+
+        Ok(Some(T::deserialize_with_nesting_depth(
+            &mut *self.decoder,
+            nesting_depth,
+        )?))
     }
 }
 
@@ -847,6 +950,105 @@ mod test {
             encoder.push(Header::Positive(2)).unwrap();
             encoder.push(Header::Break).unwrap();
         });
+    }
+
+    fn nested_array(depth: usize, indefinite: bool) -> Vec<u8> {
+        let mut cbor = vec![if indefinite { 0x9f } else { 0x81 }; depth];
+        cbor.push(0);
+        if indefinite {
+            cbor.extend(std::iter::repeat_n(0xff, depth));
+        }
+        cbor
+    }
+
+    fn nested_map(depth: usize, indefinite: bool) -> Vec<u8> {
+        let mut cbor = Vec::with_capacity(3 * depth + 1);
+        for _ in 0..depth {
+            cbor.extend([if indefinite { 0xbf } else { 0xa1 }, 0]);
+        }
+        cbor.push(0);
+        if indefinite {
+            cbor.extend(std::iter::repeat_n(0xff, depth));
+        }
+        cbor
+    }
+
+    fn nested_tag(depth: usize) -> Vec<u8> {
+        let mut cbor = vec![0xc0; depth];
+        cbor.push(0);
+        cbor
+    }
+
+    fn mixed_nested_structures(depth: usize) -> Vec<u8> {
+        let mut cbor = Vec::with_capacity(3 * depth + 1);
+        let mut breaks = 0;
+        for index in 0..depth {
+            match index % 5 {
+                0 => cbor.push(0x81),
+                1 => {
+                    cbor.push(0x9f);
+                    breaks += 1;
+                }
+                2 => cbor.extend([0xa1, 0]),
+                3 => {
+                    cbor.extend([0xbf, 0]);
+                    breaks += 1;
+                }
+                _ => cbor.push(0xc0),
+            }
+        }
+        cbor.push(0);
+        cbor.extend(std::iter::repeat_n(0xff, breaks));
+        cbor
+    }
+
+    #[test]
+    fn skip_data_item_nesting_limit_boundary() {
+        for cbor in [
+            nested_array(128, false),
+            nested_array(128, true),
+            nested_map(128, false),
+            nested_map(128, true),
+            nested_tag(128),
+        ] {
+            let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+            decoder.skip_data_item().unwrap();
+        }
+
+        for cbor in [
+            nested_array(129, false),
+            nested_array(129, true),
+            nested_map(129, false),
+            nested_map(129, true),
+            nested_tag(129),
+        ] {
+            let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+            let error = decoder.skip_data_item().unwrap_err();
+            assert_eq!(error.to_string(), "maximum nesting depth of 128 exceeded");
+        }
+    }
+
+    #[test]
+    fn skip_data_item_nesting_limit_mixed_structures() {
+        for depth in [128, 129] {
+            let cbor = mixed_nested_structures(depth);
+            let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+            let result = decoder.skip_data_item();
+            assert_eq!(result.is_ok(), depth <= 128);
+        }
+    }
+
+    #[test]
+    fn skip_data_item_nesting_limit_uses_custom_option() {
+        let options = SerializationOptions::default().max_nesting_depth(3);
+        let cbor = nested_map(3, true);
+        let mut decoder = Decoder::new(cbor.as_slice(), options);
+        decoder.skip_data_item().unwrap();
+
+        let cbor = nested_map(4, true);
+        let mut decoder = Decoder::new(cbor.as_slice(), options);
+        let error = decoder.skip_data_item().unwrap_err();
+        assert_eq!(error.to_string(), "maximum nesting depth of 3 exceeded");
     }
 
     fn test_skip_data_item_impl(encode_data_item: impl FnOnce(&mut Encoder<&mut Vec<u8>>)) {

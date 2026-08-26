@@ -1,6 +1,7 @@
 use crate::common::cbor::{
     self, Bytes, CborArrayDecoder, CborArrayEncoder, CborDecoder, CborDeserialize, CborEncoder,
-    CborMapDecoder, CborMapEncoder, CborSerializationResult, CborSerialize, DataItemHeader,
+    CborMapDecoder, CborMapEncoder, CborSerializationError, CborSerializationResult, CborSerialize,
+    DataItemHeader,
 };
 use anyhow::Context;
 use ciborium_ll::simple;
@@ -76,11 +77,11 @@ impl CborSerialize for Value {
     }
 }
 
-impl CborDeserialize for Value {
-    fn deserialize<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self>
-    where
-        Self: Sized,
-    {
+impl Value {
+    fn deserialize_at_nesting_depth<C: CborDecoder>(
+        mut decoder: C,
+        nesting_depth: usize,
+    ) -> CborSerializationResult<Self> {
         Ok(match decoder.peek_data_item_header()? {
             DataItemHeader::Positive(_) => Value::Positive(decoder.decode_positive()?),
             DataItemHeader::Negative(_) => Value::Negative(decoder.decode_negative()?),
@@ -90,29 +91,37 @@ impl CborDeserialize for Value {
                     .context("text data item not valid UTF8 encoding")?,
             ),
             DataItemHeader::Array(_) => {
+                let nesting_depth = next_nesting_depth(&decoder, nesting_depth)?;
                 let mut array_decoder = decoder.decode_array()?;
                 let mut vec = Vec::with_capacity(cbor::cap_capacity::<Value>(
                     array_decoder.size().unwrap_or_default(),
                 ));
-                while let Some(element) = array_decoder.deserialize_element()? {
+                while let Some(element) =
+                    array_decoder.deserialize_element_with_nesting_depth(nesting_depth)?
+                {
                     vec.push(element);
                 }
                 Value::Array(vec)
             }
             DataItemHeader::Map(_) => {
+                let nesting_depth = next_nesting_depth(&decoder, nesting_depth)?;
                 let mut map_decoder = decoder.decode_map()?;
                 let mut vec = Vec::with_capacity(cbor::cap_capacity::<Value>(
                     map_decoder.size().unwrap_or_default(),
                 ));
 
-                while let Some(entry) = map_decoder.deserialize_entry()? {
-                    vec.push(entry);
+                while let Some(key) =
+                    map_decoder.deserialize_key_with_nesting_depth(nesting_depth)?
+                {
+                    let value = map_decoder.deserialize_value_with_nesting_depth(nesting_depth)?;
+                    vec.push((key, value));
                 }
                 Value::Map(vec)
             }
             DataItemHeader::Tag(_) => {
+                let nesting_depth = next_nesting_depth(&decoder, nesting_depth)?;
                 let tag = decoder.decode_tag()?;
-                let value = Value::deserialize(decoder)?;
+                let value = Self::deserialize_at_nesting_depth(decoder, nesting_depth)?;
                 Value::Tag(tag, Box::new(value))
             }
             DataItemHeader::Simple(_) => match decoder.decode_simple()? {
@@ -123,6 +132,37 @@ impl CborDeserialize for Value {
             },
             DataItemHeader::Float(_) => Value::Float(decoder.decode_float()?),
         })
+    }
+}
+
+fn next_nesting_depth<C: CborDecoder>(
+    decoder: &C,
+    nesting_depth: usize,
+) -> CborSerializationResult<usize> {
+    nesting_depth
+        .checked_add(1)
+        .filter(|depth| *depth <= decoder.options().max_nesting_depth)
+        .ok_or_else(|| {
+            CborSerializationError::nesting_limit_exceeded(decoder.options().max_nesting_depth)
+        })
+}
+
+impl CborDeserialize for Value {
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
+    where
+        Self: Sized,
+    {
+        Self::deserialize_at_nesting_depth(decoder, 0)
+    }
+
+    fn deserialize_with_nesting_depth<C: CborDecoder>(
+        decoder: C,
+        nesting_depth: usize,
+    ) -> CborSerializationResult<Self>
+    where
+        Self: Sized,
+    {
+        Self::deserialize_at_nesting_depth(decoder, nesting_depth)
     }
 
     fn null() -> Option<Self>
@@ -136,7 +176,9 @@ impl CborDeserialize for Value {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::common::cbor::{cbor_decode, cbor_encode};
+    use crate::common::cbor::{
+        cbor_decode, cbor_decode_with_options, cbor_encode, SerializationOptions,
+    };
 
     #[test]
     fn test_positive() {
@@ -309,5 +351,49 @@ mod test {
         let cbor = cbor_encode(&value);
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
+    }
+
+    fn nested_array(depth: usize) -> Vec<u8> {
+        let mut cbor = vec![0x81; depth];
+        cbor.push(0);
+        cbor
+    }
+
+    fn nested_map(depth: usize) -> Vec<u8> {
+        let mut cbor = Vec::with_capacity(depth * 2 + 1);
+        for _ in 0..depth {
+            cbor.extend([0xa1, 0]);
+        }
+        cbor.push(0);
+        cbor
+    }
+
+    fn nested_tag(depth: usize) -> Vec<u8> {
+        let mut cbor = vec![0xc0; depth];
+        cbor.push(0);
+        cbor
+    }
+
+    #[test]
+    fn nesting_limit_accepts_128_structural_items() {
+        for cbor in [nested_array(128), nested_map(128), nested_tag(128)] {
+            assert!(cbor_decode::<Value>(cbor).is_ok());
+        }
+    }
+
+    #[test]
+    fn nesting_limit_rejects_129_structural_items() {
+        for cbor in [nested_array(129), nested_map(129), nested_tag(129)] {
+            let error = cbor_decode::<Value>(cbor).unwrap_err();
+            assert_eq!(error.to_string(), "maximum nesting depth of 128 exceeded");
+        }
+    }
+
+    #[test]
+    fn nesting_limit_uses_custom_option() {
+        let options = SerializationOptions::default().max_nesting_depth(3);
+        assert!(cbor_decode_with_options::<Value>(nested_array(3), options).is_ok());
+        let error = cbor_decode_with_options::<Value>(nested_array(4), options).unwrap_err();
+        assert_eq!(error.to_string(), "maximum nesting depth of 3 exceeded");
     }
 }
