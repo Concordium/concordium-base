@@ -658,58 +658,39 @@ pub trait CborArrayEncoder {
 
 /// Decoder of CBOR. See <https://www.rfc-editor.org/rfc/rfc8949.html#section-3>
 pub trait CborDecoder {
+    /// Associated tag decoder
+    type TagDecoder: CborTagDecoder;
     /// Associated map decoder
     type MapDecoder: CborMapDecoder;
     /// Associated array decoder
     type ArrayDecoder: CborArrayDecoder;
 
-    /// Decode tag data item
+    /// Decode tag data item.
     fn decode_tag(&mut self) -> CborSerializationResult<u64>;
 
-    /// Decode a tag and its tagged value. In general, this should be used over
-    /// `decode_tag`.
-    ///
-    /// Returns an error if the tag, tagged value, or the nesting limit specified in the
-    /// serialzation options is exceeded.
-    ///
-    /// ```ignore
-    /// let (tag, value) = decoder.decode_tagged_value::<Value>()?;
-    /// ```
-    fn decode_tagged_value<T: CborDeserialize>(mut self) -> CborSerializationResult<(u64, T)>
+    /// Decode tag data item. Returns a decoder for the tagged value.
+    fn decode_tagged(self) -> CborSerializationResult<Self::TagDecoder>;
+
+    /// Decode a tag, check it equals `expected_tag`, and return a decoder for its value.
+    fn decode_tagged_expect(self, expected_tag: u64) -> CborSerializationResult<Self::TagDecoder>
     where
         Self: Sized,
     {
-        let tag = self.decode_tag()?;
-        T::deserialize(self).map(|value| (tag, value))
+        let decoder = self.decode_tagged()?;
+        let tag = decoder.tag();
+        if tag != expected_tag {
+            return Err(CborSerializationError::expected_tag(expected_tag, tag));
+        }
+        Ok(decoder)
     }
 
-    /// Decode that and check it equals the given `expected_tag`.
+    /// Decode a tag and check it equals `expected_tag`.
     fn decode_tag_expect(&mut self, expected_tag: u64) -> CborSerializationResult<()> {
         let tag = self.decode_tag()?;
         if tag != expected_tag {
             return Err(CborSerializationError::expected_tag(expected_tag, tag));
         }
         Ok(())
-    }
-
-    /// Decode an expected tag and its tagged value. In general, this should be used over
-    /// `decode_tag_expect`.
-    ///
-    /// Returns an error if the tag differs from `expected_tag`, the tagged value is invalid, or
-    /// the nesting limit specified in the serialzation options is exceeded.
-    ///
-    /// ```ignore
-    /// let value = decoder.decode_tagged_value_expect::<Value>(42)?;
-    /// ```
-    fn decode_tagged_value_expect<T: CborDeserialize>(
-        mut self,
-        expected_tag: u64,
-    ) -> CborSerializationResult<T>
-    where
-        Self: Sized,
-    {
-        self.decode_tag_expect(expected_tag)?;
-        T::deserialize(self)
     }
 
     /// Decode positive integer data item
@@ -787,6 +768,15 @@ pub trait CborDecoder {
 
     /// Serialization options in current context
     fn options(&self) -> SerializationOptions;
+}
+
+/// Decoder of a CBOR tagged value.
+pub trait CborTagDecoder {
+    /// The decoded tag.
+    fn tag(&self) -> u64;
+
+    /// Deserialize the tagged value.
+    fn deserialize<T: CborDeserialize>(self) -> CborSerializationResult<T>;
 }
 
 /// Decoder of CBOR map

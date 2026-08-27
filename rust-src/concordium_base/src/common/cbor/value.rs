@@ -1,6 +1,7 @@
 use crate::common::cbor::{
     self, Bytes, CborArrayDecoder, CborArrayEncoder, CborDecoder, CborDeserialize, CborEncoder,
-    CborMapDecoder, CborMapEncoder, CborSerializationResult, CborSerialize, DataItemHeader,
+    CborMapDecoder, CborMapEncoder, CborSerializationResult, CborSerialize, CborTagDecoder,
+    DataItemHeader,
 };
 use anyhow::Context;
 use ciborium_ll::simple;
@@ -109,7 +110,9 @@ impl Value {
                 Value::Map(vec)
             }
             DataItemHeader::Tag(_) => {
-                let (tag, value) = decoder.decode_tagged_value()?;
+                let tag_decoder = decoder.decode_tagged()?;
+                let tag = tag_decoder.tag();
+                let value = tag_decoder.deserialize()?;
                 Value::Tag(tag, Box::new(value))
             }
             DataItemHeader::Simple(_) => match decoder.decode_simple()? {

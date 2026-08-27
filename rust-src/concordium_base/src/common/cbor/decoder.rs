@@ -1,6 +1,6 @@
 use crate::common::cbor::{
     self, CborArrayDecoder, CborDecoder, CborDeserialize, CborMapDecoder, CborSerializationError,
-    CborSerializationResult, DataItemHeader, DataItemType, SerializationOptions,
+    CborSerializationResult, CborTagDecoder, DataItemHeader, DataItemType, SerializationOptions,
     MAX_PRE_ALLOCATED_SIZE,
 };
 use anyhow::anyhow;
@@ -40,11 +40,8 @@ where
                 self.inner.pull()?;
             }
             DataItemType::Tag => {
-                self.inner.pull()?;
-                self.enter_nesting()?;
-                let result = self.skip_data_item();
-                self.leave_nesting();
-                result?;
+                let tag_decoder = self.decode_tagged()?;
+                tag_decoder.decoder.skip_data_item()?;
             }
             DataItemType::Bytes => {
                 self.decode_bytes()?;
@@ -102,17 +99,13 @@ where
             })?;
         Ok(())
     }
-
-    fn leave_nesting(&mut self) {
-        debug_assert!(self.nesting_depth > 0);
-        self.nesting_depth -= 1;
-    }
 }
 
 impl<'a, R: Read> CborDecoder for &'a mut Decoder<R>
 where
     <R as Read>::Error: std::error::Error,
 {
+    type TagDecoder = TagDecoder<'a, R>;
     type ArrayDecoder = ArrayDecoder<'a, R>;
     type MapDecoder = MapDecoder<'a, R>;
 
@@ -126,23 +119,10 @@ where
         }
     }
 
-    fn decode_tagged_value<T: CborDeserialize>(mut self) -> CborSerializationResult<(u64, T)> {
+    fn decode_tagged(mut self) -> CborSerializationResult<Self::TagDecoder> {
         let tag = self.decode_tag()?;
         self.enter_nesting()?;
-        let result = T::deserialize(&mut *self);
-        self.leave_nesting();
-        result.map(|value| (tag, value))
-    }
-
-    fn decode_tagged_value_expect<T: CborDeserialize>(
-        mut self,
-        expected_tag: u64,
-    ) -> CborSerializationResult<T> {
-        self.decode_tag_expect(expected_tag)?;
-        self.enter_nesting()?;
-        let result = T::deserialize(&mut *self);
-        self.leave_nesting();
-        result
+        Ok(TagDecoder::new(tag, self))
     }
 
     fn decode_positive(self) -> CborSerializationResult<u64> {
@@ -405,6 +385,39 @@ where
     }
 }
 
+/// Decoder of a CBOR tagged value.
+#[must_use]
+pub struct TagDecoder<'a, R: Read> {
+    tag: u64,
+    decoder: &'a mut Decoder<R>,
+}
+
+impl<'a, R: Read> TagDecoder<'a, R> {
+    fn new(tag: u64, decoder: &'a mut Decoder<R>) -> Self {
+        Self { tag, decoder }
+    }
+}
+
+impl<R: Read> Drop for TagDecoder<'_, R> {
+    fn drop(&mut self) {
+        debug_assert!(self.decoder.nesting_depth > 0);
+        self.decoder.nesting_depth -= 1;
+    }
+}
+
+impl<R: Read> CborTagDecoder for TagDecoder<'_, R>
+where
+    R::Error: std::error::Error,
+{
+    fn tag(&self) -> u64 {
+        self.tag
+    }
+
+    fn deserialize<T: CborDeserialize>(self) -> CborSerializationResult<T> {
+        T::deserialize(&mut *self.decoder)
+    }
+}
+
 #[derive(Debug)]
 enum MapDecoderStateEnum {
     ExpectKey,
@@ -562,10 +575,12 @@ mod test {
     use ciborium_ll::simple;
 
     #[test]
-    fn test_decode_tagged_value_expect() {
+    fn test_decode_tagged_value() {
         let bytes = [0xc0, 0x81, 0x00];
         let mut decoder = Decoder::new(bytes.as_slice(), SerializationOptions::default());
-        let value = decoder.decode_tagged_value_expect::<Value>(0).unwrap();
+        let tag_decoder = decoder.decode_tagged_expect(0).unwrap();
+        assert_eq!(tag_decoder.tag(), 0);
+        let value = tag_decoder.deserialize::<Value>().unwrap();
         assert_eq!(value, Value::Array(vec![Value::Positive(0)]));
     }
 
