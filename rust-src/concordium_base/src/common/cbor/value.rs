@@ -1,7 +1,6 @@
 use crate::common::cbor::{
     self, Bytes, CborArrayDecoder, CborArrayEncoder, CborDecoder, CborDeserialize, CborEncoder,
-    CborMapDecoder, CborMapEncoder, CborSerializationError, CborSerializationResult, CborSerialize,
-    DataItemHeader,
+    CborMapDecoder, CborMapEncoder, CborSerializationResult, CborSerialize, DataItemHeader,
 };
 use anyhow::Context;
 use ciborium_ll::simple;
@@ -78,10 +77,7 @@ impl CborSerialize for Value {
 }
 
 impl Value {
-    fn deserialize_at_nesting_depth<C: CborDecoder>(
-        mut decoder: C,
-        nesting_depth: usize,
-    ) -> CborSerializationResult<Self> {
+    fn deserialize_value<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self> {
         Ok(match decoder.peek_data_item_header()? {
             DataItemHeader::Positive(_) => Value::Positive(decoder.decode_positive()?),
             DataItemHeader::Negative(_) => Value::Negative(decoder.decode_negative()?),
@@ -91,37 +87,29 @@ impl Value {
                     .context("text data item not valid UTF8 encoding")?,
             ),
             DataItemHeader::Array(_) => {
-                let nesting_depth = next_nesting_depth(&decoder, nesting_depth)?;
                 let mut array_decoder = decoder.decode_array()?;
                 let mut vec = Vec::with_capacity(cbor::cap_capacity::<Value>(
                     array_decoder.size().unwrap_or_default(),
                 ));
-                while let Some(element) =
-                    array_decoder.deserialize_element_with_nesting_depth(nesting_depth)?
-                {
+                while let Some(element) = array_decoder.deserialize_element()? {
                     vec.push(element);
                 }
                 Value::Array(vec)
             }
             DataItemHeader::Map(_) => {
-                let nesting_depth = next_nesting_depth(&decoder, nesting_depth)?;
                 let mut map_decoder = decoder.decode_map()?;
                 let mut vec = Vec::with_capacity(cbor::cap_capacity::<Value>(
                     map_decoder.size().unwrap_or_default(),
                 ));
 
-                while let Some(key) =
-                    map_decoder.deserialize_key_with_nesting_depth(nesting_depth)?
-                {
-                    let value = map_decoder.deserialize_value_with_nesting_depth(nesting_depth)?;
+                while let Some(key) = map_decoder.deserialize_key()? {
+                    let value = map_decoder.deserialize_value()?;
                     vec.push((key, value));
                 }
                 Value::Map(vec)
             }
             DataItemHeader::Tag(_) => {
-                let nesting_depth = next_nesting_depth(&decoder, nesting_depth)?;
-                let tag = decoder.decode_tag()?;
-                let value = Self::deserialize_at_nesting_depth(decoder, nesting_depth)?;
+                let (tag, value) = decoder.decode_tagged_value()?;
                 Value::Tag(tag, Box::new(value))
             }
             DataItemHeader::Simple(_) => match decoder.decode_simple()? {
@@ -135,34 +123,12 @@ impl Value {
     }
 }
 
-fn next_nesting_depth<C: CborDecoder>(
-    decoder: &C,
-    nesting_depth: usize,
-) -> CborSerializationResult<usize> {
-    nesting_depth
-        .checked_add(1)
-        .filter(|depth| *depth <= decoder.options().max_nesting_depth)
-        .ok_or_else(|| {
-            CborSerializationError::nesting_limit_exceeded(decoder.options().max_nesting_depth)
-        })
-}
-
 impl CborDeserialize for Value {
     fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized,
     {
-        Self::deserialize_at_nesting_depth(decoder, 0)
-    }
-
-    fn deserialize_with_nesting_depth<C: CborDecoder>(
-        decoder: C,
-        nesting_depth: usize,
-    ) -> CborSerializationResult<Self>
-    where
-        Self: Sized,
-    {
-        Self::deserialize_at_nesting_depth(decoder, nesting_depth)
+        Self::deserialize_value(decoder)
     }
 
     fn null() -> Option<Self>
@@ -394,6 +360,15 @@ mod test {
         let options = SerializationOptions::default().max_nesting_depth(3);
         assert!(cbor_decode_with_options::<Value>(nested_array(3), options).is_ok());
         let error = cbor_decode_with_options::<Value>(nested_array(4), options).unwrap_err();
+        assert_eq!(error.to_string(), "maximum nesting depth of 3 exceeded");
+    }
+
+    #[test]
+    fn nesting_limit_counts_mixed_structures() {
+        let options = SerializationOptions::default().max_nesting_depth(3);
+        assert!(cbor_decode_with_options::<Value>([0x81, 0xc0, 0x81, 0], options).is_ok());
+        let error =
+            cbor_decode_with_options::<Value>([0x81, 0xc0, 0x81, 0xc0, 0], options).unwrap_err();
         assert_eq!(error.to_string(), "maximum nesting depth of 3 exceeded");
     }
 }

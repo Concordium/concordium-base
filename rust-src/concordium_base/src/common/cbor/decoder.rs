@@ -12,13 +12,18 @@ use std::{io::Cursor, iter};
 pub struct Decoder<R: Read> {
     inner: ciborium_ll::Decoder<R>,
     options: SerializationOptions,
+    nesting_depth: usize,
 }
 
 impl<R: Read> Decoder<R> {
     pub fn new(read: R, options: SerializationOptions) -> Self {
         let inner = ciborium_ll::Decoder::from(read);
 
-        Self { inner, options }
+        Self {
+            inner,
+            options,
+            nesting_depth: 0,
+        }
     }
 }
 
@@ -26,10 +31,7 @@ impl<R: Read> Decoder<R>
 where
     R::Error: std::error::Error,
 {
-    fn skip_data_item_at_nesting_depth(
-        mut self: &mut Self,
-        nesting_depth: usize,
-    ) -> CborSerializationResult<()> {
+    fn skip_data_item(mut self: &mut Self) -> CborSerializationResult<()> {
         match self.peek_data_item_header()?.to_type() {
             DataItemType::Positive
             | DataItemType::Negative
@@ -38,9 +40,11 @@ where
                 self.inner.pull()?;
             }
             DataItemType::Tag => {
-                let nesting_depth = self.next_nesting_depth(nesting_depth)?;
                 self.inner.pull()?;
-                self.skip_data_item_at_nesting_depth(nesting_depth)?;
+                self.enter_nesting()?;
+                let result = self.skip_data_item();
+                self.leave_nesting();
+                result?;
             }
             DataItemType::Bytes => {
                 self.decode_bytes()?;
@@ -49,48 +53,34 @@ where
                 self.decode_text()?;
             }
             DataItemType::Array => {
-                let nesting_depth = self.next_nesting_depth(nesting_depth)?;
                 let array_decoder = self.decode_array()?;
                 // Arrays of definite length encodes "size" number of data item elements,
                 // arrays of indefinite length encodes data item elements until a break is
                 // encountered.
                 if let Some(size) = array_decoder.size() {
                     for _ in 0..size {
-                        array_decoder
-                            .decoder
-                            .skip_data_item_at_nesting_depth(nesting_depth)?;
+                        array_decoder.decoder.skip_data_item()?;
                     }
                 } else {
                     while !array_decoder.decoder.pull_break()? {
-                        array_decoder
-                            .decoder
-                            .skip_data_item_at_nesting_depth(nesting_depth)?;
+                        array_decoder.decoder.skip_data_item()?;
                     }
                 }
             }
             DataItemType::Map => {
-                let nesting_depth = self.next_nesting_depth(nesting_depth)?;
                 let map_decoder = self.decode_map()?;
                 // Maps of definite length encodes "size" number of data item pairs,
                 // maps of indefinite length encodes data item pairs until a break is
                 // encountered.
                 if let Some(size) = map_decoder.size() {
                     for _ in 0..size {
-                        map_decoder
-                            .decoder
-                            .skip_data_item_at_nesting_depth(nesting_depth)?;
-                        map_decoder
-                            .decoder
-                            .skip_data_item_at_nesting_depth(nesting_depth)?;
+                        map_decoder.decoder.skip_data_item()?;
+                        map_decoder.decoder.skip_data_item()?;
                     }
                 } else {
                     while !map_decoder.decoder.pull_break()? {
-                        map_decoder
-                            .decoder
-                            .skip_data_item_at_nesting_depth(nesting_depth)?;
-                        map_decoder
-                            .decoder
-                            .skip_data_item_at_nesting_depth(nesting_depth)?;
+                        map_decoder.decoder.skip_data_item()?;
+                        map_decoder.decoder.skip_data_item()?;
                     }
                 }
             }
@@ -102,13 +92,20 @@ where
         Ok(())
     }
 
-    fn next_nesting_depth(&self, nesting_depth: usize) -> CborSerializationResult<usize> {
-        nesting_depth
+    fn enter_nesting(&mut self) -> CborSerializationResult<()> {
+        self.nesting_depth = self
+            .nesting_depth
             .checked_add(1)
             .filter(|depth| *depth <= self.options.max_nesting_depth)
             .ok_or_else(|| {
                 CborSerializationError::nesting_limit_exceeded(self.options.max_nesting_depth)
-            })
+            })?;
+        Ok(())
+    }
+
+    fn leave_nesting(&mut self) {
+        debug_assert!(self.nesting_depth > 0);
+        self.nesting_depth -= 1;
     }
 }
 
@@ -127,6 +124,25 @@ where
                 DataItemType::from_header(header),
             )),
         }
+    }
+
+    fn decode_tagged_value<T: CborDeserialize>(mut self) -> CborSerializationResult<(u64, T)> {
+        let tag = self.decode_tag()?;
+        self.enter_nesting()?;
+        let result = T::deserialize(&mut *self);
+        self.leave_nesting();
+        result.map(|value| (tag, value))
+    }
+
+    fn decode_tagged_value_expect<T: CborDeserialize>(
+        mut self,
+        expected_tag: u64,
+    ) -> CborSerializationResult<T> {
+        self.decode_tag_expect(expected_tag)?;
+        self.enter_nesting()?;
+        let result = T::deserialize(&mut *self);
+        self.leave_nesting();
+        result
     }
 
     fn decode_positive(self) -> CborSerializationResult<u64> {
@@ -151,7 +167,10 @@ where
 
     fn decode_map(self) -> CborSerializationResult<Self::MapDecoder> {
         match self.inner.pull()? {
-            Header::Map(size) => Ok(MapDecoder::new(size, self)),
+            Header::Map(size) => {
+                self.enter_nesting()?;
+                Ok(MapDecoder::new(size, self))
+            }
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Map,
                 DataItemType::from_header(header),
@@ -161,7 +180,10 @@ where
 
     fn decode_array(self) -> CborSerializationResult<Self::ArrayDecoder> {
         match self.inner.pull()? {
-            Header::Array(size) => Ok(ArrayDecoder::new(size, self)),
+            Header::Array(size) => {
+                self.enter_nesting()?;
+                Ok(ArrayDecoder::new(size, self))
+            }
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Array,
                 DataItemType::from_header(header),
@@ -246,7 +268,7 @@ where
     }
 
     fn skip_data_item(self) -> CborSerializationResult<()> {
-        self.skip_data_item_at_nesting_depth(0)
+        Decoder::skip_data_item(self)
     }
 
     fn options(&self) -> SerializationOptions {
@@ -409,6 +431,13 @@ impl<'a, R: Read> MapDecoder<'a, R> {
     }
 }
 
+impl<R: Read> Drop for MapDecoder<'_, R> {
+    fn drop(&mut self) {
+        debug_assert!(self.decoder.nesting_depth > 0);
+        self.decoder.nesting_depth -= 1;
+    }
+}
+
 impl<R: Read> CborMapDecoder for MapDecoder<'_, R>
 where
     <R as Read>::Error: std::error::Error,
@@ -444,36 +473,6 @@ where
         Ok(Some(K::deserialize(&mut *self.decoder)?))
     }
 
-    fn deserialize_key_with_nesting_depth<K: CborDeserialize>(
-        &mut self,
-        nesting_depth: usize,
-    ) -> CborSerializationResult<Option<K>> {
-        self.state = match self.state {
-            MapDecoderStateEnum::ExpectKey => MapDecoderStateEnum::ExpectValue,
-            MapDecoderStateEnum::ExpectValue => {
-                return Err(anyhow!(
-                    "map decoder expected to decode entry value since entry key was decoded last"
-                )
-                .into());
-            }
-        };
-
-        if let Some(declared_size) = self.declared_size {
-            if self.decoded_entries == declared_size {
-                return Ok(None);
-            }
-        } else if self.decoder.pull_break()? {
-            return Ok(None);
-        }
-
-        self.decoded_entries += 1;
-
-        Ok(Some(K::deserialize_with_nesting_depth(
-            &mut *self.decoder,
-            nesting_depth,
-        )?))
-    }
-
     fn deserialize_value<V: CborDeserialize>(&mut self) -> CborSerializationResult<V> {
         self.state = match self.state {
             MapDecoderStateEnum::ExpectKey => {
@@ -486,23 +485,6 @@ where
         };
 
         V::deserialize(&mut *self.decoder)
-    }
-
-    fn deserialize_value_with_nesting_depth<V: CborDeserialize>(
-        &mut self,
-        nesting_depth: usize,
-    ) -> CborSerializationResult<V> {
-        self.state = match self.state {
-            MapDecoderStateEnum::ExpectKey => {
-                return Err(anyhow!(
-                    "map decoder expected to decode entry key since entry value was decoded last"
-                )
-                .into());
-            }
-            MapDecoderStateEnum::ExpectValue => MapDecoderStateEnum::ExpectKey,
-        };
-
-        V::deserialize_with_nesting_depth(&mut *self.decoder, nesting_depth)
     }
 
     fn skip_value(&mut self) -> CborSerializationResult<()> {
@@ -538,6 +520,13 @@ impl<'a, R: Read> ArrayDecoder<'a, R> {
     }
 }
 
+impl<R: Read> Drop for ArrayDecoder<'_, R> {
+    fn drop(&mut self) {
+        debug_assert!(self.decoder.nesting_depth > 0);
+        self.decoder.nesting_depth -= 1;
+    }
+}
+
 impl<R: Read> CborArrayDecoder for ArrayDecoder<'_, R>
 where
     <R as Read>::Error: std::error::Error,
@@ -562,35 +551,23 @@ where
 
         Ok(Some(T::deserialize(&mut *self.decoder)?))
     }
-
-    fn deserialize_element_with_nesting_depth<T: CborDeserialize>(
-        &mut self,
-        nesting_depth: usize,
-    ) -> CborSerializationResult<Option<T>> {
-        if let Some(declared_size) = self.declared_size {
-            if self.decoded_elements == declared_size {
-                return Ok(None);
-            }
-        } else if self.decoder.pull_break()? {
-            return Ok(None);
-        }
-
-        self.decoded_elements += 1;
-
-        Ok(Some(T::deserialize_with_nesting_depth(
-            &mut *self.decoder,
-            nesting_depth,
-        )?))
-    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::common::cbor::{
-        CborArrayEncoder, CborDecoder, CborEncoder, CborMapEncoder, Encoder,
+        value::Value, CborArrayEncoder, CborDecoder, CborEncoder, CborMapEncoder, Encoder,
     };
     use ciborium_ll::simple;
+
+    #[test]
+    fn test_decode_tagged_value_expect() {
+        let bytes = [0xc0, 0x81, 0x00];
+        let mut decoder = Decoder::new(bytes.as_slice(), SerializationOptions::default());
+        let value = decoder.decode_tagged_value_expect::<Value>(0).unwrap();
+        assert_eq!(value, Value::Array(vec![Value::Positive(0)]));
+    }
 
     #[test]
     fn test_array_definite_length() {
@@ -605,6 +582,7 @@ mod test {
         let elm3: Option<u32> = array_decoder.deserialize_element().unwrap();
         assert_eq!(elm3, None);
         assert_eq!(array_decoder.size(), Some(2));
+        drop(array_decoder);
         assert_eq!(decoder.inner.offset(), bytes.len());
     }
 
@@ -620,6 +598,7 @@ mod test {
         assert_eq!(elm2, 2);
         let elm3: Option<u32> = array_decoder.deserialize_element().unwrap();
         assert_eq!(elm3, None);
+        drop(array_decoder);
         assert_eq!(decoder.inner.offset(), bytes.len());
     }
 
@@ -636,6 +615,7 @@ mod test {
         let entry3: Option<(u32, u32)> = map_decoder.deserialize_entry().unwrap();
         assert_eq!(entry3, None);
         assert_eq!(map_decoder.size(), Some(2));
+        drop(map_decoder);
         assert_eq!(decoder.inner.offset(), bytes.len());
     }
 
@@ -652,6 +632,7 @@ mod test {
         let entry3: Option<(u32, u32)> = map_decoder.deserialize_entry().unwrap();
         assert_eq!(entry3, None);
         assert_eq!(map_decoder.size(), None);
+        drop(map_decoder);
         assert_eq!(decoder.inner.offset(), bytes.len());
     }
 
