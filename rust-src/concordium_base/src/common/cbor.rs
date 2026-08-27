@@ -772,8 +772,18 @@ pub trait CborDecoder {
 
 /// Decoder of a CBOR tagged value.
 pub trait CborTagDecoder {
+    /// Decoder type used for the tagged value.
+    type Decoder<'a>: CborDecoder
+    where
+        Self: 'a;
+
     /// The decoded tag.
     fn tag(&self) -> u64;
+
+    /// Borrow the tagged value decoder. In general, this should not be used manually:
+    /// use [`Self::deserialize`] instead.
+    // NOTE: This is needed by derived tagged types that decode their own untagged representation.
+    fn decoder(&mut self) -> Self::Decoder<'_>;
 
     /// Deserialize the tagged value.
     fn deserialize<T: CborDeserialize>(self) -> CborSerializationResult<T>;
@@ -1299,6 +1309,21 @@ mod test {
     }
 
     #[test]
+    fn test_derived_tag_counts_towards_nesting_limit() {
+        #[derive(Debug, PartialEq, CborDeserialize)]
+        #[cbor(transparent, tag = 42)]
+        struct TaggedValue(Value);
+
+        let cbor = [0xd8, 42, 0xc0, 0]; // 42(0(0))
+        let options = SerializationOptions::default().max_nesting_depth(2);
+        assert!(cbor_decode_with_options::<TaggedValue>(cbor, options).is_ok());
+
+        let options = SerializationOptions::default().max_nesting_depth(1);
+        let error = cbor_decode_with_options::<TaggedValue>(cbor, options).unwrap_err();
+        assert_eq!(error.to_string(), "maximum nesting depth of 1 exceeded");
+    }
+
+    #[test]
     fn test_struct_tag_derived_transparent() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         #[cbor(transparent, tag = 39999)]
@@ -1502,6 +1527,24 @@ mod test {
         assert_eq!(hex::encode(&cbor), "d99c386461626364");
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_derived_tagged_enum_counts_towards_nesting_limit() {
+        #[derive(Debug, PartialEq, CborDeserialize)]
+        #[cbor(tagged)]
+        enum TaggedValue {
+            #[cbor(tag = 42)]
+            Value(Value),
+        }
+
+        let cbor = [0xd8, 42, 0xc0, 0]; // 42(0(0))
+        let options = SerializationOptions::default().max_nesting_depth(2);
+        assert!(cbor_decode_with_options::<TaggedValue>(cbor, options).is_ok());
+
+        let options = SerializationOptions::default().max_nesting_depth(1);
+        let error = cbor_decode_with_options::<TaggedValue>(cbor, options).unwrap_err();
+        assert_eq!(error.to_string(), "maximum nesting depth of 1 exceeded");
     }
 
     #[test]

@@ -603,7 +603,8 @@ fn cbor_deserialize_enum_body(
                 let tag = tag.into_iter();
                 quote! {
                     #(
-                        #cbor_module::CborDecoder::decode_tag_expect(&mut decoder, #tag)?;
+                        let mut tag_decoder = #cbor_module::CborDecoder::decode_tagged_expect(decoder, #tag)?;
+                        let decoder = #cbor_module::CborTagDecoder::decoder(&mut tag_decoder);
                     )*
                 }
             })
@@ -654,7 +655,8 @@ fn cbor_deserialize_enum_body(
                             }
                         )*
                         #cbor_module::DataItemHeader::Tag(tag) => {
-                            #cbor_module::CborDecoder::decode_tag_expect(&mut decoder, tag)?;
+                            let mut tag_decoder = #cbor_module::CborDecoder::decode_tagged_expect(decoder, tag)?;
+                            let decoder = #cbor_module::CborTagDecoder::decoder(&mut tag_decoder);
                             #deserialize_unknown
                         }
                         _ => {
@@ -696,7 +698,8 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
 
     let decode_tag = if let Some(tag) = opts.tag {
         quote!(
-            #cbor_module::CborDecoder::decode_tag_expect(&mut decoder, #tag)?;
+            let mut tag_decoder = #cbor_module::CborDecoder::decode_tagged_expect(decoder, #tag)?;
+            let mut decoder = #cbor_module::CborTagDecoder::decoder(&mut tag_decoder);
         )
     } else {
         quote!()

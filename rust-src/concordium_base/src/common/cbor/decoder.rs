@@ -409,8 +409,17 @@ impl<R: Read> CborTagDecoder for TagDecoder<'_, R>
 where
     R::Error: std::error::Error,
 {
+    type Decoder<'a>
+        = &'a mut Decoder<R>
+    where
+        Self: 'a;
+
     fn tag(&self) -> u64 {
         self.tag
+    }
+
+    fn decoder(&mut self) -> Self::Decoder<'_> {
+        &mut *self.decoder
     }
 
     fn deserialize<T: CborDeserialize>(self) -> CborSerializationResult<T> {
