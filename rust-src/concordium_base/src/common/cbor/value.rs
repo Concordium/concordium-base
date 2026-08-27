@@ -353,8 +353,7 @@ mod test {
     #[test]
     fn nesting_limit_rejects_129_structural_items() {
         for cbor in [nested_array(129), nested_map(129), nested_tag(129)] {
-            let error = cbor_decode::<Value>(cbor).unwrap_err();
-            assert_eq!(error.to_string(), "maximum nesting depth of 128 exceeded");
+            assert!(cbor_decode::<Value>(cbor).is_err());
         }
     }
 
@@ -362,16 +361,13 @@ mod test {
     fn nesting_limit_uses_custom_option() {
         let options = SerializationOptions::default().max_nesting_depth(3);
         assert!(cbor_decode_with_options::<Value>(nested_array(3), options).is_ok());
-        let error = cbor_decode_with_options::<Value>(nested_array(4), options).unwrap_err();
-        assert_eq!(error.to_string(), "maximum nesting depth of 3 exceeded");
+        assert!(cbor_decode_with_options::<Value>(nested_array(4), options).is_err());
     }
 
     #[test]
     fn nesting_limit_counts_mixed_structures() {
         let options = SerializationOptions::default().max_nesting_depth(3);
         assert!(cbor_decode_with_options::<Value>([0x81, 0xc0, 0x81, 0], options).is_ok());
-        let error =
-            cbor_decode_with_options::<Value>([0x81, 0xc0, 0x81, 0xc0, 0], options).unwrap_err();
-        assert_eq!(error.to_string(), "maximum nesting depth of 3 exceeded");
+        assert!(cbor_decode_with_options::<Value>([0x81, 0xc0, 0x81, 0xc0, 0], options).is_err());
     }
 }

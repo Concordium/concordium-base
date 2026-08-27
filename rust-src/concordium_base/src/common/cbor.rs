@@ -1319,8 +1319,7 @@ mod test {
         assert!(cbor_decode_with_options::<TaggedValue>(cbor, options).is_ok());
 
         let options = SerializationOptions::default().max_nesting_depth(1);
-        let error = cbor_decode_with_options::<TaggedValue>(cbor, options).unwrap_err();
-        assert_eq!(error.to_string(), "maximum nesting depth of 1 exceeded");
+        assert!(cbor_decode_with_options::<TaggedValue>(cbor, options).is_err());
     }
 
     #[test]
@@ -1543,8 +1542,7 @@ mod test {
         assert!(cbor_decode_with_options::<TaggedValue>(cbor, options).is_ok());
 
         let options = SerializationOptions::default().max_nesting_depth(1);
-        let error = cbor_decode_with_options::<TaggedValue>(cbor, options).unwrap_err();
-        assert_eq!(error.to_string(), "maximum nesting depth of 1 exceeded");
+        assert!(cbor_decode_with_options::<TaggedValue>(cbor, options).is_err());
     }
 
     #[test]

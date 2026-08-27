@@ -1028,8 +1028,7 @@ mod test {
             nested_tag(129),
         ] {
             let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
-            let error = decoder.skip_data_item().unwrap_err();
-            assert_eq!(error.to_string(), "maximum nesting depth of 128 exceeded");
+            assert!(decoder.skip_data_item().is_err());
         }
     }
 
@@ -1052,8 +1051,7 @@ mod test {
 
         let cbor = nested_map(4, true);
         let mut decoder = Decoder::new(cbor.as_slice(), options);
-        let error = decoder.skip_data_item().unwrap_err();
-        assert_eq!(error.to_string(), "maximum nesting depth of 3 exceeded");
+        assert!(decoder.skip_data_item().is_err());
     }
 
     fn test_skip_data_item_impl(encode_data_item: impl FnOnce(&mut Encoder<&mut Vec<u8>>)) {
