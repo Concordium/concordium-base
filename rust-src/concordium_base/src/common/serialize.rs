@@ -1233,6 +1233,100 @@ mod test {
         assert_eq!(decoded, value);
     }
 
+    #[test]
+    #[should_panic(expected = "container length exceeds its serialized length prefix")]
+    fn test_named_struct_derived_serialization_size_length_overflow() {
+        #[derive(Serialize)]
+        struct TestStruct {
+            #[size_length = 1]
+            value: Vec<u8>,
+        }
+
+        to_bytes(&TestStruct {
+            value: vec![0; 256],
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "container length exceeds its serialized length prefix")]
+    fn test_named_struct_derived_serialization_map_size_length_overflow() {
+        #[derive(Serialize)]
+        struct TestStruct {
+            #[map_size_length = 1]
+            value: BTreeMap<u8, u8>,
+        }
+
+        to_bytes(&TestStruct {
+            value: (0..=u8::MAX).map(|value| (value, value)).collect(),
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "container length exceeds its serialized length prefix")]
+    fn test_named_struct_derived_serialization_set_size_length_overflow() {
+        #[derive(Serialize)]
+        struct TestStruct {
+            #[set_size_length = 1]
+            value: BTreeSet<u8>,
+        }
+
+        to_bytes(&TestStruct {
+            value: (0..=u8::MAX).collect(),
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "container length exceeds its serialized length prefix")]
+    fn test_named_struct_derived_serialization_string_size_length_overflow() {
+        #[derive(Serialize)]
+        struct TestStruct {
+            #[string_size_length = 1]
+            value: String,
+        }
+
+        to_bytes(&TestStruct {
+            value: "a".repeat(256),
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "container length exceeds its serialized length prefix")]
+    fn test_tuple_struct_derived_serialization_size_length_overflow() {
+        #[derive(Serialize)]
+        struct TestStruct(#[size_length = 1] Vec<u8>);
+
+        to_bytes(&TestStruct(vec![0; 256]));
+    }
+
+    #[test]
+    #[should_panic(expected = "container length exceeds its serialized length prefix")]
+    fn test_tuple_struct_derived_serialization_map_size_length_overflow() {
+        #[derive(Serialize)]
+        struct TestStruct(#[map_size_length = 1] BTreeMap<u8, u8>);
+
+        to_bytes(&TestStruct(
+            (0..=u8::MAX).map(|value| (value, value)).collect(),
+        ));
+    }
+
+    #[test]
+    #[should_panic(expected = "container length exceeds its serialized length prefix")]
+    fn test_tuple_struct_derived_serialization_set_size_length_overflow() {
+        #[derive(Serialize)]
+        struct TestStruct(#[set_size_length = 1] BTreeSet<u8>);
+
+        to_bytes(&TestStruct((0..=u8::MAX).collect()));
+    }
+
+    #[test]
+    #[should_panic(expected = "container length exceeds its serialized length prefix")]
+    fn test_tuple_struct_derived_serialization_string_size_length_overflow() {
+        #[derive(Serialize)]
+        struct TestStruct(#[string_size_length = 1] String);
+
+        to_bytes(&TestStruct("a".repeat(256)));
+    }
+
     /// Tests serializing enum with unit variants with derived implementation
     #[test]
     fn test_unit_enum_derived_serialization() {
