@@ -41,76 +41,6 @@ where
             })?;
         Ok(Self { decoder, depth })
     }
-
-    fn skip(mut self) -> CborSerializationResult<()> {
-        match self.peek_data_item_header()?.to_type() {
-            DataItemType::Positive
-            | DataItemType::Negative
-            | DataItemType::Simple
-            | DataItemType::Float => {
-                self.decoder.inner.pull()?;
-            }
-            DataItemType::Tag => self.decode_tagged()?.decoder().skip_data_item()?,
-            DataItemType::Bytes => {
-                self.decode_bytes()?;
-            }
-            DataItemType::Text => {
-                self.decode_text()?;
-            }
-            DataItemType::Array => {
-                let array = self.decode_array()?;
-                if let Some(size) = array.declared_size {
-                    for _ in 0..size {
-                        DecoderContext {
-                            decoder: &mut *array.decoder,
-                            depth: array.depth,
-                        }
-                        .skip()?;
-                    }
-                } else {
-                    while !array.decoder.pull_break()? {
-                        DecoderContext {
-                            decoder: &mut *array.decoder,
-                            depth: array.depth,
-                        }
-                        .skip()?;
-                    }
-                }
-            }
-            DataItemType::Map => {
-                let map = self.decode_map()?;
-                if let Some(size) = map.declared_size {
-                    for _ in 0..size {
-                        DecoderContext {
-                            decoder: &mut *map.decoder,
-                            depth: map.depth,
-                        }
-                        .skip()?;
-                        DecoderContext {
-                            decoder: &mut *map.decoder,
-                            depth: map.depth,
-                        }
-                        .skip()?;
-                    }
-                } else {
-                    while !map.decoder.pull_break()? {
-                        DecoderContext {
-                            decoder: &mut *map.decoder,
-                            depth: map.depth,
-                        }
-                        .skip()?;
-                        DecoderContext {
-                            decoder: &mut *map.decoder,
-                            depth: map.depth,
-                        }
-                        .skip()?;
-                    }
-                }
-            }
-            DataItemType::Break => return Err(anyhow!("break is not a valid data item").into()),
-        }
-        Ok(())
-    }
 }
 
 impl<'a, R: Read> CborDecoder for DecoderContext<'a, R>
@@ -130,11 +60,13 @@ where
             )),
         }
     }
+
     fn decode_tagged(mut self) -> CborSerializationResult<Self::TagDecoder> {
         let tag = self.decode_tag()?;
         let context = DecoderContext::nested(self.decoder, self.depth)?;
         Ok(TagDecoder::new(tag, context.decoder, context.depth))
     }
+
     fn decode_positive(self) -> CborSerializationResult<u64> {
         match self.decoder.inner.pull()? {
             Header::Positive(value) => Ok(value),
@@ -144,6 +76,7 @@ where
             )),
         }
     }
+
     fn decode_negative(self) -> CborSerializationResult<u64> {
         match self.decoder.inner.pull()? {
             Header::Negative(value) => Ok(value),
@@ -153,6 +86,7 @@ where
             )),
         }
     }
+
     fn decode_map(self) -> CborSerializationResult<Self::MapDecoder> {
         match self.decoder.inner.pull()? {
             Header::Map(size) => {
@@ -165,6 +99,7 @@ where
             )),
         }
     }
+
     fn decode_array(self) -> CborSerializationResult<Self::ArrayDecoder> {
         match self.decoder.inner.pull()? {
             Header::Array(size) => {
@@ -177,6 +112,7 @@ where
             )),
         }
     }
+
     fn decode_bytes_exact(self, dest: &mut [u8]) -> CborSerializationResult<()> {
         let size = match self.decoder.inner.pull()? {
             Header::Bytes(size) => size,
@@ -194,6 +130,7 @@ where
         }
         Ok(())
     }
+
     fn decode_bytes(self) -> CborSerializationResult<Vec<u8>> {
         let size = match self.decoder.inner.pull()? {
             Header::Bytes(size) => size,
@@ -204,12 +141,12 @@ where
                 ))
             }
         };
-        let mut cursor = Cursor::new(Vec::with_capacity(cbor::cap_capacity::<u8>(
-            size.unwrap_or_default(),
-        )));
+        let bytes = Vec::with_capacity(cbor::cap_capacity::<u8>(size.unwrap_or_default()));
+        let mut cursor = Cursor::new(bytes);
         self.decoder.decode_bytes_impl(&mut cursor, size)?;
         Ok(cursor.into_inner())
     }
+
     fn decode_text(self) -> CborSerializationResult<Vec<u8>> {
         let size = match self.decoder.inner.pull()? {
             Header::Text(size) => size,
@@ -224,6 +161,7 @@ where
         self.decoder.decode_text_impl(&mut bytes, size)?;
         Ok(bytes)
     }
+
     fn decode_simple(self) -> CborSerializationResult<u8> {
         match self.decoder.inner.pull()? {
             Header::Simple(value) => Ok(value),
@@ -233,6 +171,7 @@ where
             )),
         }
     }
+
     fn decode_float(self) -> CborSerializationResult<f64> {
         match self.decoder.inner.pull()? {
             Header::Float(value) => Ok(value),
@@ -242,11 +181,85 @@ where
             )),
         }
     }
+
     fn peek_data_item_header(&mut self) -> CborSerializationResult<DataItemHeader> {
         DataItemHeader::try_from_header(self.decoder.peek_header()?)
     }
-    fn skip_data_item(self) -> CborSerializationResult<()> {
-        self.skip()
+
+    fn skip_data_item(mut self) -> CborSerializationResult<()> {
+        match self.peek_data_item_header()?.to_type() {
+            DataItemType::Positive
+            | DataItemType::Negative
+            | DataItemType::Simple
+            | DataItemType::Float => {
+                self.decoder.inner.pull()?;
+            }
+            DataItemType::Tag => self.decode_tagged()?.decoder().skip_data_item()?,
+            DataItemType::Bytes => {
+                self.decode_bytes()?;
+            }
+            DataItemType::Text => {
+                self.decode_text()?;
+            }
+            DataItemType::Array => {
+                let array_decoder = self.decode_array()?;
+                // Arrays of definite length encodes "size" number of data item elements,
+                // arrays of indefinite length encodes data item elements until a break is
+                // encountered.
+                if let Some(size) = array_decoder.size() {
+                    for _ in 0..size {
+                        DecoderContext {
+                            decoder: &mut *array_decoder.decoder,
+                            depth: array_decoder.depth,
+                        }
+                        .skip_data_item()?;
+                    }
+                } else {
+                    while !array_decoder.decoder.pull_break()? {
+                        DecoderContext {
+                            decoder: &mut *array_decoder.decoder,
+                            depth: array_decoder.depth,
+                        }
+                        .skip_data_item()?;
+                    }
+                }
+            }
+            DataItemType::Map => {
+                let map_decoder = self.decode_map()?;
+                // Maps of definite length encodes "size" number of data item pairs,
+                // maps of indefinite length encodes data item pairs until a break is
+                // encountered.
+                if let Some(size) = map_decoder.size() {
+                    for _ in 0..size {
+                        DecoderContext {
+                            decoder: &mut *map_decoder.decoder,
+                            depth: map_decoder.depth,
+                        }
+                        .skip_data_item()?;
+                        DecoderContext {
+                            decoder: &mut *map_decoder.decoder,
+                            depth: map_decoder.depth,
+                        }
+                        .skip_data_item()?;
+                    }
+                } else {
+                    while !map_decoder.decoder.pull_break()? {
+                        DecoderContext {
+                            decoder: &mut *map_decoder.decoder,
+                            depth: map_decoder.depth,
+                        }
+                        .skip_data_item()?;
+                        DecoderContext {
+                            decoder: &mut *map_decoder.decoder,
+                            depth: map_decoder.depth,
+                        }
+                        .skip_data_item()?;
+                    }
+                }
+            }
+            DataItemType::Break => return Err(anyhow!("break is not a valid data item").into()),
+        }
+        Ok(())
     }
     fn options(&self) -> SerializationOptions {
         self.decoder.options
@@ -267,6 +280,7 @@ where
         }
         .decode_tag()
     }
+
     fn decode_tagged(self) -> CborSerializationResult<Self::TagDecoder> {
         DecoderContext {
             decoder: self,
@@ -274,6 +288,7 @@ where
         }
         .decode_tagged()
     }
+
     fn decode_positive(self) -> CborSerializationResult<u64> {
         DecoderContext {
             decoder: self,
@@ -281,6 +296,7 @@ where
         }
         .decode_positive()
     }
+
     fn decode_negative(self) -> CborSerializationResult<u64> {
         DecoderContext {
             decoder: self,
@@ -288,6 +304,7 @@ where
         }
         .decode_negative()
     }
+
     fn decode_map(self) -> CborSerializationResult<Self::MapDecoder> {
         DecoderContext {
             decoder: self,
@@ -295,6 +312,7 @@ where
         }
         .decode_map()
     }
+
     fn decode_array(self) -> CborSerializationResult<Self::ArrayDecoder> {
         DecoderContext {
             decoder: self,
@@ -302,6 +320,7 @@ where
         }
         .decode_array()
     }
+
     fn decode_bytes_exact(self, dest: &mut [u8]) -> CborSerializationResult<()> {
         DecoderContext {
             decoder: self,
@@ -309,6 +328,7 @@ where
         }
         .decode_bytes_exact(dest)
     }
+
     fn decode_bytes(self) -> CborSerializationResult<Vec<u8>> {
         DecoderContext {
             decoder: self,
@@ -316,6 +336,7 @@ where
         }
         .decode_bytes()
     }
+
     fn decode_text(self) -> CborSerializationResult<Vec<u8>> {
         DecoderContext {
             decoder: self,
@@ -323,6 +344,7 @@ where
         }
         .decode_text()
     }
+
     fn decode_simple(self) -> CborSerializationResult<u8> {
         DecoderContext {
             decoder: self,
@@ -330,6 +352,7 @@ where
         }
         .decode_simple()
     }
+
     fn decode_float(self) -> CborSerializationResult<f64> {
         DecoderContext {
             decoder: self,
@@ -337,6 +360,7 @@ where
         }
         .decode_float()
     }
+
     fn peek_data_item_header(&mut self) -> CborSerializationResult<DataItemHeader> {
         DecoderContext {
             decoder: *self,
@@ -344,6 +368,7 @@ where
         }
         .peek_data_item_header()
     }
+
     fn skip_data_item(self) -> CborSerializationResult<()> {
         DecoderContext {
             decoder: self,
@@ -351,6 +376,7 @@ where
         }
         .skip_data_item()
     }
+
     fn options(&self) -> SerializationOptions {
         self.options
     }
@@ -838,8 +864,7 @@ mod test {
             error
                 .to_string()
                 .contains("fixed size deserialization type too short"),
-            "message: {}",
-            error.to_string()
+            "message: {error}"
         );
     }
 
@@ -854,8 +879,7 @@ mod test {
             error
                 .to_string()
                 .contains("byte string destination too long"),
-            "message: {}",
-            error.to_string()
+            "message: {error}"
         );
     }
 
@@ -910,8 +934,7 @@ mod test {
         let error = decoder.decode_bytes().unwrap_err();
         assert!(
             error.to_string().contains("failed to fill whole buffer"),
-            "message: {}",
-            error.to_string()
+            "message: {error}"
         );
     }
 
@@ -924,8 +947,7 @@ mod test {
         let err = decoder.decode_bytes().unwrap_err();
         assert!(
             err.to_string().contains("failed to fill whole buffer"),
-            "message: {}",
-            err.to_string()
+            "message: {err}"
         );
     }
 
@@ -947,8 +969,7 @@ mod test {
         let error = decoder.decode_text().unwrap_err();
         assert!(
             error.to_string().contains("failed to fill whole buffer"),
-            "message: {}",
-            error.to_string()
+            "message: {error}"
         );
     }
 
@@ -961,8 +982,7 @@ mod test {
         let err = decoder.decode_text().unwrap_err();
         assert!(
             err.to_string().contains("failed to fill whole buffer"),
-            "message: {}",
-            err.to_string()
+            "message: {err}"
         );
     }
 
@@ -993,8 +1013,7 @@ mod test {
         let error = decoder.decode_text().unwrap_err();
         assert!(
             error.to_string().contains("CBOR syntax error"),
-            "message: {}",
-            error.to_string()
+            "message: {error}"
         );
     }
 
@@ -1006,8 +1025,7 @@ mod test {
         let error = decoder.decode_text().unwrap_err();
         assert!(
             error.to_string().contains("CBOR syntax error"),
-            "message: {}",
-            error.to_string()
+            "message: {error}"
         );
     }
 

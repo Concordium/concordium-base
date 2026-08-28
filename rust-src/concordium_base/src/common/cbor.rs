@@ -7,6 +7,9 @@
 //! serialization of primitive Rust types like integers, strings and byte
 //! arrays.
 //!
+//! Deserialization rejects CBOR arrays, maps, and tags nested deeper than
+//! [`SerializationOptions::max_nesting_depth`]. The default limit is 128.
+//!
 //! ## Deriving `CborSerialize` and `CborDeserialize`
 //!
 //! ### Structs
@@ -457,14 +460,18 @@ fn into_ok<T>(res: Result<T, Infallible>) -> T {
     }
 }
 
-/// Decodes value from the given CBOR. If all input is not parsed,
-/// an error is returned.
+/// Decodes a value using the default options.
+///
+/// Returns an error if the input is invalid, contains remaining data, or exceeds the default
+/// nesting limit.
 pub fn cbor_decode<T: CborDeserialize>(cbor: impl AsRef<[u8]>) -> CborSerializationResult<T> {
     cbor_decode_with_options(cbor, SerializationOptions::default())
 }
 
-/// Decodes value from the given CBOR. If all input is not parsed,
-/// an error is returned.
+/// Decodes a value using `options`.
+///
+/// Returns an error if the input is invalid, contains remaining data, or exceeds the configured
+/// nesting limit.
 pub fn cbor_decode_with_options<T: CborDeserialize>(
     cbor: impl AsRef<[u8]>,
     options: SerializationOptions,
@@ -665,10 +672,11 @@ pub trait CborDecoder {
     /// Associated array decoder
     type ArrayDecoder: CborArrayDecoder;
 
-    /// Decode tag data item.
+    /// Decode a tag header. Generally, [`Self::decode_tagged`] should be used instead due
+    /// to counting nesting_depth.
     fn decode_tag(&mut self) -> CborSerializationResult<u64>;
 
-    /// Decode tag data item. Returns a decoder for the tagged value.
+    /// Decode a tag and return a nesting-scoped decoder for its value.
     fn decode_tagged(self) -> CborSerializationResult<Self::TagDecoder>;
 
     /// Decode a tag, check it equals `expected_tag`, and return a decoder for its value.
@@ -684,7 +692,8 @@ pub trait CborDecoder {
         Ok(decoder)
     }
 
-    /// Decode a tag and check it equals `expected_tag`.
+    /// Decode and validate a tag header. Generally, [`Self::decode_tagged`] should be used
+    /// instead due to counting nesting_depth.
     fn decode_tag_expect(&mut self, expected_tag: u64) -> CborSerializationResult<()> {
         let tag = self.decode_tag()?;
         if tag != expected_tag {
@@ -780,9 +789,10 @@ pub trait CborTagDecoder {
     /// The decoded tag.
     fn tag(&self) -> u64;
 
-    /// Borrow the tagged value decoder. In general, this should not be used manually:
-    /// use [`Self::deserialize`] instead.
-    // NOTE: This is needed by derived tagged types that decode their own untagged representation.
+    /// Borrow the tagged value decoder while preserving its nesting scope.
+    ///
+    /// Derived tagged types use this to decode their untagged representation. Other callers should
+    /// normally use [`Self::deserialize`].
     fn decoder(&mut self) -> Self::Decoder<'_>;
 
     /// Deserialize the tagged value.

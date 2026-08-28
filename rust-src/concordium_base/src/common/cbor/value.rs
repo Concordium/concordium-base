@@ -271,8 +271,7 @@ mod test {
         let err = cbor_decode::<Value>(&cbor).unwrap_err();
         assert!(
             err.to_string().contains("failed to fill whole buffer"),
-            "message: {}",
-            err.to_string()
+            "message: {err}"
         );
     }
 
@@ -307,8 +306,7 @@ mod test {
         let err = cbor_decode::<Value>(&cbor).unwrap_err();
         assert!(
             err.to_string().contains("failed to fill whole buffer"),
-            "message: {}",
-            err.to_string()
+            "message: {err}"
         );
     }
 
@@ -337,6 +335,23 @@ mod test {
         cbor
     }
 
+    fn nested_indefinite_array(depth: usize) -> Vec<u8> {
+        let mut cbor = vec![0x9f; depth];
+        cbor.push(0);
+        cbor.extend(std::iter::repeat(0xff).take(depth));
+        cbor
+    }
+
+    fn nested_indefinite_map(depth: usize) -> Vec<u8> {
+        let mut cbor = Vec::with_capacity(depth * 3 + 1);
+        for _ in 0..depth {
+            cbor.extend([0xbf, 0]);
+        }
+        cbor.push(0);
+        cbor.extend(std::iter::repeat(0xff).take(depth));
+        cbor
+    }
+
     fn nested_tag(depth: usize) -> Vec<u8> {
         let mut cbor = vec![0xc0; depth];
         cbor.push(0);
@@ -345,14 +360,26 @@ mod test {
 
     #[test]
     fn nesting_limit_accepts_128_structural_items() {
-        for cbor in [nested_array(128), nested_map(128), nested_tag(128)] {
+        for cbor in [
+            nested_array(128),
+            nested_indefinite_array(128),
+            nested_map(128),
+            nested_indefinite_map(128),
+            nested_tag(128),
+        ] {
             assert!(cbor_decode::<Value>(cbor).is_ok());
         }
     }
 
     #[test]
     fn nesting_limit_rejects_129_structural_items() {
-        for cbor in [nested_array(129), nested_map(129), nested_tag(129)] {
+        for cbor in [
+            nested_array(129),
+            nested_indefinite_array(129),
+            nested_map(129),
+            nested_indefinite_map(129),
+            nested_tag(129),
+        ] {
             assert!(cbor_decode::<Value>(cbor).is_err());
         }
     }
