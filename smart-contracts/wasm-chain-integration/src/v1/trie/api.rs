@@ -41,33 +41,65 @@ pub type Value = Vec<u8>;
 /// The persistent contract state.
 /// Clone on this structure is designed to be cheap, and it is a shallow copy.
 #[derive(Debug, Clone)]
-pub enum PersistentState {
+pub struct PersistentState {
+    pub blob_ref: Option<Reference>,
+    pub inner: PersistentStateImpl,
+}
+
+#[derive(Debug, Clone)]
+pub enum PersistentStateImpl {
     Empty,
     Root(CachedRef<Hashed<Node>>),
 }
 
 impl From<CachedRef<Hashed<Node>>> for PersistentState {
     fn from(root: CachedRef<Hashed<Node>>) -> Self {
-        Self::Root(root)
+        Self {
+            blob_ref: None,
+            inner: PersistentStateImpl::Root(root),
+        }
     }
 }
 
 /// Load the persistent state. This only loads the root of the tree. In order to
 /// cache the entire tree into memory use [PersistentState::cache] afterwards.
 impl Loadable for PersistentState {
-    fn load<S: std::io::Read, F: BackingStoreLoad>(
+    fn load_from_location<F: BackingStoreLoad>(
         loader: &mut F,
-        source: &mut S,
+        location: Reference,
     ) -> LoadResult<Self> {
-        match source.read_u8()? {
-            0 => Ok(Self::Empty),
-            1 => Ok(Self::Root(CachedRef::load(loader, source)?)),
+        let mut source = std::io::Cursor::new(loader.load_raw(location)?);
+        let inner = match source.read_u8()? {
+            0 => Ok(PersistentStateImpl::Empty),
+            1 => Ok(PersistentStateImpl::Root(CachedRef::load(
+                loader,
+                &mut source,
+            )?)),
             tag => Err(LoadError::IncorrectTag { tag }),
-        }
+        }?;
+
+        Ok(Self {
+            blob_ref: Some(location),
+            inner,
+        })
+    }
+
+    fn load<S: std::io::Read, F: BackingStoreLoad>(
+        _loader: &mut F,
+        _source: &mut S,
+    ) -> LoadResult<Self> {
+        unimplemented!()
     }
 }
 
 impl PersistentState {
+    pub fn empty() -> Self {
+        Self {
+            blob_ref: None,
+            inner: PersistentStateImpl::Empty,
+        }
+    }
+
     /// Store the tree into the backing store, and modify the tree so that it
     /// records where parts of it are stored. The root of the tree is written
     /// into the provided buffer.
@@ -76,12 +108,12 @@ impl PersistentState {
         backing_store: &mut S,
         buf: &mut W,
     ) -> StoreResult<()> {
-        match self {
-            PersistentState::Empty => {
+        match &mut self.inner {
+            PersistentStateImpl::Empty => {
                 buf.write_u8(0)?;
                 Ok(())
             }
-            PersistentState::Root(node) => {
+            PersistentStateImpl::Root(node) => {
                 buf.write_u8(1)?;
                 node.store_update_buf(backing_store, buf)
             }
@@ -92,9 +124,11 @@ impl PersistentState {
     /// The return value is a map mapping branching factor to the number of
     /// nodes with that branching factor.
     pub fn branch_statistics<S: BackingStoreLoad>(&self, loader: &mut S) -> BTreeMap<u8, usize> {
-        match self {
-            PersistentState::Empty => BTreeMap::new(),
-            PersistentState::Root(node) => node.get(loader).to_owned().branch_statistics(loader),
+        match &self.inner {
+            PersistentStateImpl::Empty => BTreeMap::new(),
+            PersistentStateImpl::Root(node) => {
+                node.get(loader).to_owned().branch_statistics(loader)
+            }
         }
     }
 
@@ -115,13 +149,17 @@ impl PersistentState {
         backing_store: &mut S,
         loader: &mut L,
     ) -> LoadStoreResult<Self> {
-        match self {
-            PersistentState::Empty => Ok(PersistentState::Empty),
-            PersistentState::Root(node) => {
+        let inner = match &mut self.inner {
+            PersistentStateImpl::Empty => PersistentStateImpl::Empty,
+            PersistentStateImpl::Root(node) => {
                 let new_node = node.migrate(backing_store, loader)?;
-                Ok(PersistentState::Root(new_node))
+                PersistentStateImpl::Root(new_node)
             }
-        }
+        };
+        Ok(Self {
+            blob_ref: None,
+            inner,
+        })
     }
 
     /// Serialize the tree into the provided buffer. Note that this is very
@@ -136,9 +174,9 @@ impl PersistentState {
         loader: &mut impl BackingStoreLoad,
         out: &mut impl std::io::Write,
     ) -> anyhow::Result<()> {
-        match self {
-            PersistentState::Empty => out.write_u8(0)?,
-            PersistentState::Root(ht) => {
+        match &self.inner {
+            PersistentStateImpl::Empty => out.write_u8(0)?,
+            PersistentStateImpl::Root(ht) => {
                 out.write_u8(1)?;
                 let node = ht.get(loader);
                 node.serialize(loader, out)?;
@@ -149,21 +187,26 @@ impl PersistentState {
 
     /// Dual to [Self::serialize].
     pub fn deserialize(source: &mut impl std::io::Read) -> anyhow::Result<Self> {
-        match source.read_u8()? {
-            0 => Ok(Self::Empty),
+        let inner = match source.read_u8()? {
+            0 => PersistentStateImpl::Empty,
             1 => {
                 let node = Hashed::<Node>::deserialize(source)?;
-                Ok(PersistentState::Root(CachedRef::Memory { value: node }))
+                PersistentStateImpl::Root(CachedRef::Memory { value: node })
             }
             tag => anyhow::bail!("Invalid persistent tree tag: {}", tag),
-        }
+        };
+
+        Ok(Self {
+            blob_ref: None,
+            inner,
+        })
     }
 
     /// Lookup a key in the tree and return a copy of the value stored.
     pub fn lookup(&self, loader: &mut impl BackingStoreLoad, key: &[u8]) -> Option<Value> {
-        match self {
-            PersistentState::Empty => None,
-            PersistentState::Root(root_node) => {
+        match &self.inner {
+            PersistentStateImpl::Empty => None,
+            PersistentStateImpl::Root(root_node) => {
                 // we do lookups in the mutable trie to improve performance, and to
                 // avoid issues with stack overflow.
                 let mut trie = root_node.make_mutable(0, loader);
@@ -186,9 +229,9 @@ impl PersistentState {
     /// [`lookup`](Self::lookup) if multiple lookups will be performed on
     /// the resulting [`MutableTrie`].
     pub fn into_trie(self, loader: &mut impl BackingStoreLoad) -> MutableTrie {
-        match self {
-            PersistentState::Empty => MutableTrie::empty(),
-            PersistentState::Root(root_node) => root_node.make_mutable(0, loader),
+        match self.inner {
+            PersistentStateImpl::Empty => MutableTrie::empty(),
+            PersistentStateImpl::Root(root_node) => root_node.make_mutable(0, loader),
         }
     }
 
@@ -220,9 +263,14 @@ impl PersistentState {
             trie.insert(&mut loader, k, v)
                 .expect("Tree is fresh, so insert cannot fail.");
         }
-        match trie.freeze(&mut loader, &mut EmptyCollector) {
-            Some(root) => Self::Root(root),
-            None => Self::Empty,
+        let inner = match trie.freeze(&mut loader, &mut EmptyCollector) {
+            Some(root) => PersistentStateImpl::Root(root),
+            None => PersistentStateImpl::Empty,
+        };
+
+        Self {
+            blob_ref: None,
+            inner,
         }
     }
 
@@ -248,9 +296,13 @@ impl PersistentState {
             trie.insert(&mut loader, &k, v)
                 .expect("Tree is fresh, so insert cannot fail.");
         }
-        Ok(match trie.freeze(&mut loader, &mut EmptyCollector) {
-            Some(root) => Self::Root(root),
-            None => Self::Empty,
+        let inner = match trie.freeze(&mut loader, &mut EmptyCollector) {
+            Some(root) => PersistentStateImpl::Root(root),
+            None => PersistentStateImpl::Empty,
+        };
+        Ok(Self {
+            blob_ref: None,
+            inner,
         })
     }
 
@@ -287,31 +339,31 @@ impl PersistentState {
     /// loaded into memory then the hash will have to be retrieved from the
     /// backing store using the provided loader.
     pub fn hash(&self, loader: &mut impl BackingStoreLoad) -> super::Hash {
-        match self {
-            PersistentState::Empty => {
+        match &self.inner {
+            PersistentStateImpl::Empty => {
                 // hash of the node starts with either a 0 or 1 byte. This makes it distinct,
                 // but is otherwise an arbitrary choice.
                 super::Hash::from(<[u8; 32]>::from(sha2::Sha256::digest(
                     b"empty contract state",
                 )))
             }
-            PersistentState::Root(root) => root.hash(loader),
+            PersistentStateImpl::Root(root) => root.hash(loader),
         }
     }
 
     /// Cache the state, that is, load the entire state into memory from the
     /// backing store. References to the backing store are retained.
     pub fn cache<F: BackingStoreLoad>(&mut self, loader: &mut F) {
-        if let PersistentState::Root(node) = self {
+        if let PersistentStateImpl::Root(node) = &mut self.inner {
             node.load_and_cache(loader).data.cache(loader);
         }
     }
 
     #[cfg(feature = "display-state")]
     pub fn display_tree(&self, builder: &mut TreeBuilder, loader: &mut impl BackingStoreLoad) {
-        match self {
-            Self::Empty => {}
-            Self::Root(node) => {
+        match &self.inner {
+            PersistentStateImpl::Empty => {}
+            PersistentStateImpl::Root(node) => {
                 let tree = node.get(loader);
                 tree.data.display_tree(builder, loader)
             }
@@ -418,7 +470,10 @@ impl MutableState {
     pub fn initial_state() -> Self {
         Self {
             inner: None,
-            persistent: PersistentState::Empty,
+            persistent: PersistentState {
+                blob_ref: None,
+                inner: PersistentStateImpl::Empty,
+            },
         }
     }
 
@@ -432,12 +487,12 @@ impl MutableState {
             inner.lock().normalize(inner.root);
         } else {
             let root = 0;
-            match &self.persistent {
-                PersistentState::Empty => {
+            match &self.persistent.inner {
+                PersistentStateImpl::Empty => {
                     let state = Arc::new(Mutex::new(MutableTrie::empty()));
                     self.inner = Some(MutableStateInner { root, state });
                 }
-                PersistentState::Root(root_node) => {
+                PersistentStateImpl::Root(root_node) => {
                     let state = Arc::new(Mutex::new(root_node.make_mutable(0, loader)));
                     self.inner = Some(MutableStateInner { root, state });
                 }
@@ -469,12 +524,12 @@ impl MutableState {
             }
         } else {
             let root = 0;
-            match &self.persistent {
-                PersistentState::Empty => {
+            match &self.persistent.inner {
+                PersistentStateImpl::Empty => {
                     let state = Arc::new(Mutex::new(MutableTrie::empty()));
                     self.inner = Some(MutableStateInner { root, state });
                 }
-                PersistentState::Root(root_node) => {
+                PersistentStateImpl::Root(root_node) => {
                     let state = Arc::new(Mutex::new(root_node.make_mutable(0, loader)));
                     self.inner = Some(MutableStateInner { root, state });
                 }
@@ -500,9 +555,13 @@ impl MutableState {
             Some(inner) => {
                 let mut trie = std::mem::replace(&mut *inner.lock(), MutableTrie::empty());
                 trie.normalize(inner.root);
-                self.persistent = match trie.freeze(loader, collector) {
-                    Some(node) => PersistentState::Root(node),
-                    None => PersistentState::Empty,
+                let inner = match trie.freeze(loader, collector) {
+                    Some(node) => PersistentStateImpl::Root(node),
+                    None => PersistentStateImpl::Empty,
+                };
+                self.persistent = PersistentState {
+                    blob_ref: None,
+                    inner,
                 };
                 self.persistent.clone()
             }
