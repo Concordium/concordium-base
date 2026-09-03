@@ -1020,6 +1020,22 @@ mod test {
         cbor
     }
 
+    /// Create CBOR with `count` empty arrays in series.
+    fn series_array(count: usize) -> Vec<u8> {
+        let mut cbor = Vec::with_capacity(count + 1);
+        cbor.push(0x80 | (count as u8));
+        cbor.extend(iter::repeat_n(0x80, count));
+        cbor
+    }
+
+    /// Create CBOR with `count` empty maps in series.
+    fn series_map(count: usize) -> Vec<u8> {
+        let mut cbor = Vec::with_capacity(count + 1);
+        cbor.push(0x80 | (count as u8));
+        cbor.extend(iter::repeat_n(0xa0, count));
+        cbor
+    }
+
     /// Tests that deserializing an array has a nesting limit.
     #[test]
     fn test_deserialize_array_nesting_limit() {
@@ -1029,9 +1045,18 @@ mod test {
         let mut decoder = Decoder::new(cbor.as_slice(), options);
         Value::deserialize(&mut decoder).expect("should not hit nesting limit");
 
+        let cbor = series_array(20);
+        let mut decoder = Decoder::new(cbor.as_slice(), options);
+        Value::deserialize(&mut decoder).expect("should not hit nesting limit");
+
         let cbor = nested_array(11);
         let mut decoder = Decoder::new(cbor.as_slice(), options);
-        Value::deserialize(&mut decoder).expect_err("should hit nesting limit");
+        let error = Value::deserialize(&mut decoder).expect_err("should hit nesting limit");
+        assert!(
+            error.to_string().contains("nesting depth"),
+            "message: {}",
+            error.to_string()
+        );
     }
 
     /// Tests that deserializing a map has a nesting limit.
@@ -1043,9 +1068,18 @@ mod test {
         let mut decoder = Decoder::new(cbor.as_slice(), options);
         Value::deserialize(&mut decoder).expect("should not hit nesting limit");
 
+        let cbor = series_map(20);
+        let mut decoder = Decoder::new(cbor.as_slice(), options);
+        Value::deserialize(&mut decoder).expect("should not hit nesting limit");
+
         let cbor = nested_map(11);
         let mut decoder = Decoder::new(cbor.as_slice(), options);
-        Value::deserialize(&mut decoder).expect_err("should hit nesting limit");
+        let error = Value::deserialize(&mut decoder).expect_err("should hit nesting limit");
+        assert!(
+            error.to_string().contains("nesting depth"),
+            "message: {}",
+            error.to_string()
+        );
     }
 
     /// Tests that deserializing an array has a nesting limit, also when just skipping the array.
@@ -1061,9 +1095,14 @@ mod test {
 
         let cbor = nested_array(11);
         let mut decoder = Decoder::new(cbor.as_slice(), options);
-        decoder
+        let error = decoder
             .skip_data_item()
             .expect_err("should hit nesting limit");
+        assert!(
+            error.to_string().contains("nesting depth"),
+            "message: {}",
+            error.to_string()
+        );
     }
 
     /// Tests that deserializing a map has a nesting limit, also when just skipping the map.
@@ -1079,8 +1118,13 @@ mod test {
 
         let cbor = nested_map(11);
         let mut decoder = Decoder::new(cbor.as_slice(), options);
-        decoder
+        let error = decoder
             .skip_data_item()
             .expect_err("should hit nesting limit");
+        assert!(
+            error.to_string().contains("nesting depth"),
+            "message: {}",
+            error.to_string()
+        );
     }
 }
