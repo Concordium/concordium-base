@@ -12,13 +12,37 @@ use std::{io::Cursor, iter};
 pub struct Decoder<R: Read> {
     inner: ciborium_ll::Decoder<R>,
     options: SerializationOptions,
+    /// Current serialization depth
+    depth: usize,
 }
 
 impl<R: Read> Decoder<R> {
     pub fn new(read: R, options: SerializationOptions) -> Self {
         let inner = ciborium_ll::Decoder::from(read);
 
-        Self { inner, options }
+        Self {
+            inner,
+            options,
+            depth: 0,
+        }
+    }
+
+    fn increment_nesting_depth(&mut self) -> CborSerializationResult<()> {
+        self.depth = self
+            .depth
+            .checked_add(1)
+            .filter(|depth| *depth <= self.options.max_nesting_depth)
+            .ok_or_else(|| {
+                CborSerializationError::nesting_limit_exceeded(self.options.max_nesting_depth)
+            })?;
+
+        Ok(())
+    }
+
+    fn decrement_nesting_depth(&mut self) {
+        self.depth
+            .checked_sub(1)
+            .expect("non-negative depth invariant broken");
     }
 }
 
@@ -61,7 +85,7 @@ where
 
     fn decode_map(self) -> CborSerializationResult<Self::MapDecoder> {
         match self.inner.pull()? {
-            Header::Map(size) => Ok(MapDecoder::new(size, self)),
+            Header::Map(size) => MapDecoder::try_new(size, self),
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Map,
                 DataItemType::from_header(header),
@@ -71,7 +95,7 @@ where
 
     fn decode_array(self) -> CborSerializationResult<Self::ArrayDecoder> {
         match self.inner.pull()? {
-            Header::Array(size) => Ok(ArrayDecoder::new(size, self)),
+            Header::Array(size) => ArrayDecoder::try_new(size, self),
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Array,
                 DataItemType::from_header(header),
@@ -363,13 +387,21 @@ pub struct MapDecoder<'a, R: Read> {
 }
 
 impl<'a, R: Read> MapDecoder<'a, R> {
-    fn new(size: Option<usize>, decoder: &'a mut Decoder<R>) -> Self {
-        Self {
+    fn try_new(size: Option<usize>, decoder: &'a mut Decoder<R>) -> CborSerializationResult<Self> {
+        decoder.increment_nesting_depth()?;
+
+        Ok(Self {
             declared_size: size,
             decoded_entries: 0,
             decoder,
             state: MapDecoderStateEnum::ExpectKey,
-        }
+        })
+    }
+}
+
+impl<'a, R: Read> Drop for MapDecoder<'a, R> {
+    fn drop(&mut self) {
+        self.decoder.decrement_nesting_depth();
     }
 }
 
@@ -446,12 +478,20 @@ pub struct ArrayDecoder<'a, R: Read> {
 }
 
 impl<'a, R: Read> ArrayDecoder<'a, R> {
-    fn new(size: Option<usize>, decoder: &'a mut Decoder<R>) -> Self {
-        Self {
+    fn try_new(size: Option<usize>, decoder: &'a mut Decoder<R>) -> CborSerializationResult<Self> {
+        decoder.increment_nesting_depth()?; // todo ar
+
+        Ok(Self {
             declared_size: size,
             decoded_elements: 0,
             decoder,
-        }
+        })
+    }
+}
+
+impl<'a, R: Read> Drop for ArrayDecoder<'a, R> {
+    fn drop(&mut self) {
+        self.decoder.decrement_nesting_depth();
     }
 }
 
@@ -502,6 +542,7 @@ mod test {
         let elm3: Option<u32> = array_decoder.deserialize_element().unwrap();
         assert_eq!(elm3, None);
         assert_eq!(array_decoder.size(), Some(2));
+        drop(array_decoder);
         assert_eq!(decoder.inner.offset(), bytes.len());
     }
 
@@ -517,6 +558,7 @@ mod test {
         assert_eq!(elm2, 2);
         let elm3: Option<u32> = array_decoder.deserialize_element().unwrap();
         assert_eq!(elm3, None);
+        drop(array_decoder);
         assert_eq!(decoder.inner.offset(), bytes.len());
     }
 
@@ -533,6 +575,7 @@ mod test {
         let entry3: Option<(u32, u32)> = map_decoder.deserialize_entry().unwrap();
         assert_eq!(entry3, None);
         assert_eq!(map_decoder.size(), Some(2));
+        drop(map_decoder);
         assert_eq!(decoder.inner.offset(), bytes.len());
     }
 
@@ -549,6 +592,7 @@ mod test {
         let entry3: Option<(u32, u32)> = map_decoder.deserialize_entry().unwrap();
         assert_eq!(entry3, None);
         assert_eq!(map_decoder.size(), None);
+        drop(map_decoder);
         assert_eq!(decoder.inner.offset(), bytes.len());
     }
 

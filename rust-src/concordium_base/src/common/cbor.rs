@@ -329,15 +329,38 @@ pub enum UnknownMapKeys {
     Fail,
 }
 
-/// Options applied when serializing and deserializing
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Default)]
+/// Options applied when serializing and deserializing.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct SerializationOptions {
     pub unknown_map_keys: UnknownMapKeys,
+    /// Maximum depth of nested CBOR arrays, maps, and tags.
+    pub max_nesting_depth: usize,
+}
+
+impl Default for SerializationOptions {
+    fn default() -> Self {
+        Self {
+            unknown_map_keys: UnknownMapKeys::default(),
+            max_nesting_depth: 128,
+        }
+    }
 }
 
 impl SerializationOptions {
+    /// Sets how unknown keys in decoded CBOR maps are handled.
     pub fn unknown_map_keys(self, unknown_map_keys: UnknownMapKeys) -> Self {
-        Self { unknown_map_keys }
+        Self {
+            unknown_map_keys,
+            ..self
+        }
+    }
+
+    /// Sets the finite maximum depth of nested CBOR arrays, maps, and tags.
+    pub fn max_nesting_depth(self, max_nesting_depth: usize) -> Self {
+        Self {
+            max_nesting_depth,
+            ..self
+        }
     }
 }
 
@@ -389,6 +412,12 @@ impl CborSerializationError {
         } else {
             anyhow!("expected map size {}, was indefinite", expected).into()
         }
+    }
+
+
+    /// Returns an error indicating that CBOR nesting exceeded `max_nesting_depth`.
+    pub fn nesting_limit_exceeded(max_nesting_depth: usize) -> Self {
+        anyhow!("maximum nesting depth of {} exceeded", max_nesting_depth).into()
     }
 }
 
