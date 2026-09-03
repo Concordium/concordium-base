@@ -40,7 +40,8 @@ impl<R: Read> Decoder<R> {
     }
 
     fn decrement_nesting_depth(&mut self) {
-        self.depth
+        self.depth = self
+            .depth
             .checked_sub(1)
             .expect("non-negative depth invariant broken");
     }
@@ -479,7 +480,7 @@ pub struct ArrayDecoder<'a, R: Read> {
 
 impl<'a, R: Read> ArrayDecoder<'a, R> {
     fn try_new(size: Option<usize>, decoder: &'a mut Decoder<R>) -> CborSerializationResult<Self> {
-        decoder.increment_nesting_depth()?; // todo ar
+        decoder.increment_nesting_depth()?;
 
         Ok(Self {
             declared_size: size,
