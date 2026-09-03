@@ -414,7 +414,6 @@ impl CborSerializationError {
         }
     }
 
-
     /// Returns an error indicating that CBOR nesting exceeded `max_nesting_depth`.
     pub fn nesting_limit_exceeded(max_nesting_depth: usize) -> Self {
         anyhow!("maximum nesting depth of {} exceeded", max_nesting_depth).into()
