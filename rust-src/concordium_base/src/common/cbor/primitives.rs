@@ -1,6 +1,6 @@
 use crate::common::cbor::{
     CborDecoder, CborDeserialize, CborEncoder, CborSerializationError, CborSerializationResult,
-    CborSerialize, DataItemHeader, DataItemType,
+    CborSerialize, CborTagDecoder, DataItemHeader, DataItemType,
 };
 use anyhow::{anyhow, Context};
 use ciborium_ll::simple;
@@ -324,14 +324,14 @@ impl CborSerialize for MapKey {
     }
 }
 
-fn decode_unsigned_bignum_to_u64<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<u64> {
-    decoder.decode_tag_expect(UNSIGNED_BIGNUM_TAG)?;
-    decode_ne_bytes_to_u64(&decoder.decode_bytes()?)
+fn decode_unsigned_bignum_to_u64<C: CborDecoder>(decoder: C) -> CborSerializationResult<u64> {
+    let mut tag_decoder = decoder.decode_tagged_expect(UNSIGNED_BIGNUM_TAG)?;
+    decode_ne_bytes_to_u64(&tag_decoder.decoder().decode_bytes()?)
 }
 
-fn decode_negative_bignum_to_u64<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<u64> {
-    decoder.decode_tag_expect(NEGATIVE_BIGNUM_TAG)?;
-    decode_ne_bytes_to_u64(&decoder.decode_bytes()?)
+fn decode_negative_bignum_to_u64<C: CborDecoder>(decoder: C) -> CborSerializationResult<u64> {
+    let mut tag_decoder = decoder.decode_tagged_expect(NEGATIVE_BIGNUM_TAG)?;
+    decode_ne_bytes_to_u64(&tag_decoder.decoder().decode_bytes()?)
 }
 
 /// Decode the given bytes as a bignum represented in network byte order
@@ -358,7 +358,9 @@ fn decode_ne_bytes_to_u64(bytes: &[u8]) -> CborSerializationResult<u64> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::common::cbor::{cbor_decode, cbor_encode};
+    use crate::common::cbor::{
+        cbor_decode, cbor_decode_with_options, cbor_encode, SerializationOptions,
+    };
 
     #[test]
     fn test_u64() {
@@ -406,6 +408,17 @@ mod test {
         assert_eq!(hex::encode(&cbor), "18ff");
         let value_decoded: u8 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_bignum_tags_count_towards_nesting_limit() {
+        let options = SerializationOptions::default().max_nesting_depth(2);
+        assert!(cbor_decode_with_options::<Vec<u64>>([0x81, 0xc2, 0x41, 0], options).is_ok());
+        assert!(cbor_decode_with_options::<Vec<i64>>([0x81, 0xc3, 0x41, 0], options).is_ok());
+
+        let options = SerializationOptions::default().max_nesting_depth(1);
+        assert!(cbor_decode_with_options::<Vec<u64>>([0x81, 0xc2, 0x41, 0], options).is_err());
+        assert!(cbor_decode_with_options::<Vec<i64>>([0x81, 0xc3, 0x41, 0], options).is_err());
     }
 
     /// Tests decoding tag 2 bignums into u64
