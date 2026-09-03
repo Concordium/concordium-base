@@ -347,28 +347,28 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                     if let Some(l) = find_length_attribute(&f.attrs, "size_length") {
                         let id = format_ident!("u{}", 8 * l);
                         body.extend(quote! {
-                            let len: #id = self.#ident.len() as #id;
+                            let len: #id = <#id as ::std::convert::TryFrom<usize>>::try_from(self.#ident.len()).expect("container length exceeds its serialized length prefix");
                             len.serial(#out);
                             #root::common::serial_vector_no_length(&self.#ident, #out);
                         });
                     } else if let Some(l) = find_length_attribute(&f.attrs, "map_size_length") {
                         let id = format_ident!("u{}", 8 * l);
                         body.extend(quote! {
-                            let len: #id = self.#ident.len() as #id;
+                            let len: #id = <#id as ::std::convert::TryFrom<usize>>::try_from(self.#ident.len()).expect("container length exceeds its serialized length prefix");
                             len.serial(#out);
                             #root::common::serial_map_no_length(&self.#ident, #out);
                         })
                     } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
                         let id = format_ident!("u{}", 8 * l);
                         body.extend(quote! {
-                            let len: #id = self.#ident.len() as #id;
+                            let len: #id = <#id as ::std::convert::TryFrom<usize>>::try_from(self.#ident.len()).expect("container length exceeds its serialized length prefix");
                             len.serial(#out);
                             #root::common::serial_set_no_length(&self.#ident, #out);
                         })
                     } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
                         let id = format_ident!("u{}", 8 * l);
                         body.extend(quote! {
-                            let len: #id = self.#ident.len() as #id;
+                            let len: #id = <#id as ::std::convert::TryFrom<usize>>::try_from(self.#ident.len()).expect("container length exceeds its serialized length prefix");
                             len.serial(#out);
                             #root::common::serial_string(self.#ident.as_str(), #out);
                         })
@@ -400,7 +400,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         let id = format_ident!("u{}", 8 * l);
                         let len_ident = format_ident!("len_{}", i);
                         body.extend(quote! {
-                            let #len_ident: #id = #ident.len() as #id;
+                            let #len_ident: #id = <#id as ::std::convert::TryFrom<usize>>::try_from(#ident.len()).expect("container length exceeds its serialized length prefix");
                             #len_ident.serial(#out);
                             serial_vector_no_length(#ident, #out);
                         });
@@ -408,7 +408,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         let id = format_ident!("u{}", 8 * l);
                         let len_ident = format_ident!("len_{}", i);
                         body.extend(quote! {
-                            let #len_ident: #id = #ident.len() as #id;
+                            let #len_ident: #id = <#id as ::std::convert::TryFrom<usize>>::try_from(#ident.len()).expect("container length exceeds its serialized length prefix");
                             #len_ident.serial(#out);
                             serial_map_no_length(#ident, #out);
                         })
@@ -416,7 +416,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         let id = format_ident!("u{}", 8 * l);
                         let len_ident = format_ident!("len_{}", i);
                         body.extend(quote! {
-                            let #len_ident: #id = #ident.len() as #id;
+                            let #len_ident: #id = <#id as ::std::convert::TryFrom<usize>>::try_from(#ident.len()).expect("container length exceeds its serialized length prefix");
                             #len_ident.serial(#out);
                             serial_set_no_length(#ident, #out);
                         })
@@ -424,7 +424,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         let id = format_ident!("u{}", 8 * l);
                         let len_ident = format_ident!("len_{}", i);
                         body.extend(quote! {
-                            let #len_ident: #id = #ident.len() as #id;
+                            let #len_ident: #id = <#id as ::std::convert::TryFrom<usize>>::try_from(#ident.len()).expect("container length exceeds its serialized length prefix");
                             #len_ident.serial(#out);
                             serial_string(#ident.as_str(), #out);
                         })
