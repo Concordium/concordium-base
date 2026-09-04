@@ -317,6 +317,9 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
 
 /// Derive the [`Serial`](https://docs.rs/concordium-std/latest/concordium_base/common/trait.Serial.html)
 /// trait. At present this only applies to `struct`'s.
+///
+/// If the size of the structure serialized exceeds the size declared (or u64 if not declared
+/// explicitly), serialization will panic.
 #[proc_macro_derive(
     Serial,
     attributes(size_length, map_size_length, set_size_length, string_size_length)
@@ -523,6 +526,9 @@ fn check_no_length_size_attribute(f: &Field) {
 /// Derive both [`Serial`](https://docs.rs/concordium-std/latest/concordium_base/common/trait.Serial.html)
 /// and [`Deserial`](https://docs.rs/concordium-std/latest/concordium_base/common/trait.Deserial.html) traits.
 /// At present this only applies to `struct`'s.
+///
+/// If the size of the structure serialized exceeds the size declared (or u64 if not declared
+/// explicitly), serialization will panic.
 #[proc_macro_derive(
     Serialize,
     attributes(size_length, map_size_length, set_size_length, string_size_length)
