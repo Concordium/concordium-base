@@ -1,6 +1,6 @@
 use crate::common::cbor::{
     self, CborArrayDecoder, CborDecoder, CborDeserialize, CborMapDecoder, CborSerializationError,
-    CborSerializationResult, DataItemHeader, DataItemType, SerializationOptions,
+    CborSerializationResult, CborTagDecoder, DataItemHeader, DataItemType, SerializationOptions,
     MAX_PRE_ALLOCATED_SIZE,
 };
 use anyhow::anyhow;
@@ -12,13 +12,29 @@ use std::{io::Cursor, iter};
 pub struct Decoder<R: Read> {
     inner: ciborium_ll::Decoder<R>,
     options: SerializationOptions,
+    nesting_depth: usize,
 }
 
 impl<R: Read> Decoder<R> {
     pub fn new(read: R, options: SerializationOptions) -> Self {
         let inner = ciborium_ll::Decoder::from(read);
 
-        Self { inner, options }
+        Self {
+            inner,
+            options,
+            nesting_depth: 0,
+        }
+    }
+
+    fn enter_nesting(&mut self) -> CborSerializationResult<()> {
+        self.nesting_depth = self
+            .nesting_depth
+            .checked_add(1)
+            .filter(|depth| *depth <= self.options.max_nesting_depth)
+            .ok_or_else(|| {
+                CborSerializationError::nesting_limit_exceeded(self.options.max_nesting_depth)
+            })?;
+        Ok(())
     }
 }
 
@@ -26,6 +42,7 @@ impl<'a, R: Read> CborDecoder for &'a mut Decoder<R>
 where
     <R as Read>::Error: std::error::Error,
 {
+    type TagDecoder = TagDecoder<'a, R>;
     type ArrayDecoder = ArrayDecoder<'a, R>;
     type MapDecoder = MapDecoder<'a, R>;
 
@@ -37,6 +54,12 @@ where
                 DataItemType::from_header(header),
             )),
         }
+    }
+
+    fn decode_tagged(mut self) -> CborSerializationResult<Self::TagDecoder> {
+        let tag = self.decode_tag()?;
+        self.enter_nesting()?;
+        Ok(TagDecoder::new(tag, self))
     }
 
     fn decode_positive(self) -> CborSerializationResult<u64> {
@@ -61,7 +84,10 @@ where
 
     fn decode_map(self) -> CborSerializationResult<Self::MapDecoder> {
         match self.inner.pull()? {
-            Header::Map(size) => Ok(MapDecoder::new(size, self)),
+            Header::Map(size) => {
+                self.enter_nesting()?;
+                Ok(MapDecoder::new(size, self))
+            }
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Map,
                 DataItemType::from_header(header),
@@ -71,7 +97,10 @@ where
 
     fn decode_array(self) -> CborSerializationResult<Self::ArrayDecoder> {
         match self.inner.pull()? {
-            Header::Array(size) => Ok(ArrayDecoder::new(size, self)),
+            Header::Array(size) => {
+                self.enter_nesting()?;
+                Ok(ArrayDecoder::new(size, self))
+            }
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Array,
                 DataItemType::from_header(header),
@@ -164,8 +193,8 @@ where
                 self.inner.pull()?;
             }
             DataItemType::Tag => {
-                self.inner.pull()?;
-                self.skip_data_item()?;
+                let tag_decoder = self.decode_tagged()?;
+                tag_decoder.decoder.skip_data_item()?;
             }
             DataItemType::Bytes => {
                 self.decode_bytes()?;
@@ -347,6 +376,47 @@ where
     }
 }
 
+/// Decoder of a CBOR tagged value.
+#[must_use]
+pub struct TagDecoder<'a, R: Read> {
+    tag: u64,
+    decoder: &'a mut Decoder<R>,
+}
+
+impl<'a, R: Read> TagDecoder<'a, R> {
+    fn new(tag: u64, decoder: &'a mut Decoder<R>) -> Self {
+        Self { tag, decoder }
+    }
+}
+
+impl<R: Read> Drop for TagDecoder<'_, R> {
+    fn drop(&mut self) {
+        self.decoder.nesting_depth -= 1;
+    }
+}
+
+impl<R: Read> CborTagDecoder for TagDecoder<'_, R>
+where
+    R::Error: std::error::Error,
+{
+    type Decoder<'a>
+        = &'a mut Decoder<R>
+    where
+        Self: 'a;
+
+    fn tag(&self) -> u64 {
+        self.tag
+    }
+
+    fn decoder(&mut self) -> Self::Decoder<'_> {
+        &mut *self.decoder
+    }
+
+    fn deserialize<T: CborDeserialize>(self) -> CborSerializationResult<T> {
+        T::deserialize(&mut *self.decoder)
+    }
+}
+
 #[derive(Debug)]
 enum MapDecoderStateEnum {
     ExpectKey,
@@ -370,6 +440,12 @@ impl<'a, R: Read> MapDecoder<'a, R> {
             decoder,
             state: MapDecoderStateEnum::ExpectKey,
         }
+    }
+}
+
+impl<R: Read> Drop for MapDecoder<'_, R> {
+    fn drop(&mut self) {
+        self.decoder.nesting_depth -= 1;
     }
 }
 
@@ -455,6 +531,12 @@ impl<'a, R: Read> ArrayDecoder<'a, R> {
     }
 }
 
+impl<R: Read> Drop for ArrayDecoder<'_, R> {
+    fn drop(&mut self) {
+        self.decoder.nesting_depth -= 1;
+    }
+}
+
 impl<R: Read> CborArrayDecoder for ArrayDecoder<'_, R>
 where
     <R as Read>::Error: std::error::Error,
@@ -485,9 +567,19 @@ where
 mod test {
     use super::*;
     use crate::common::cbor::{
-        CborArrayEncoder, CborDecoder, CborEncoder, CborMapEncoder, Encoder,
+        value::Value, CborArrayEncoder, CborDecoder, CborEncoder, CborMapEncoder, Encoder,
     };
     use ciborium_ll::simple;
+
+    #[test]
+    fn test_decode_tagged_value() {
+        let bytes = [0xc0, 0x81, 0x00];
+        let mut decoder = Decoder::new(bytes.as_slice(), SerializationOptions::default());
+        let tag_decoder = decoder.decode_tagged_expect(0).unwrap();
+        assert_eq!(tag_decoder.tag(), 0);
+        let value = tag_decoder.deserialize::<Value>().unwrap();
+        assert_eq!(value, Value::Array(vec![Value::Positive(0)]));
+    }
 
     #[test]
     fn test_array_definite_length() {
@@ -502,6 +594,7 @@ mod test {
         let elm3: Option<u32> = array_decoder.deserialize_element().unwrap();
         assert_eq!(elm3, None);
         assert_eq!(array_decoder.size(), Some(2));
+        drop(array_decoder);
         assert_eq!(decoder.inner.offset(), bytes.len());
     }
 
@@ -517,6 +610,7 @@ mod test {
         assert_eq!(elm2, 2);
         let elm3: Option<u32> = array_decoder.deserialize_element().unwrap();
         assert_eq!(elm3, None);
+        drop(array_decoder);
         assert_eq!(decoder.inner.offset(), bytes.len());
     }
 
@@ -533,6 +627,7 @@ mod test {
         let entry3: Option<(u32, u32)> = map_decoder.deserialize_entry().unwrap();
         assert_eq!(entry3, None);
         assert_eq!(map_decoder.size(), Some(2));
+        drop(map_decoder);
         assert_eq!(decoder.inner.offset(), bytes.len());
     }
 
@@ -549,6 +644,7 @@ mod test {
         let entry3: Option<(u32, u32)> = map_decoder.deserialize_entry().unwrap();
         assert_eq!(entry3, None);
         assert_eq!(map_decoder.size(), None);
+        drop(map_decoder);
         assert_eq!(decoder.inner.offset(), bytes.len());
     }
 
@@ -847,6 +943,103 @@ mod test {
             encoder.push(Header::Positive(2)).unwrap();
             encoder.push(Header::Break).unwrap();
         });
+    }
+
+    fn nested_array(depth: usize, indefinite: bool) -> Vec<u8> {
+        let mut cbor = vec![if indefinite { 0x9f } else { 0x81 }; depth];
+        cbor.push(0);
+        if indefinite {
+            cbor.extend(std::iter::repeat_n(0xff, depth));
+        }
+        cbor
+    }
+
+    fn nested_map(depth: usize, indefinite: bool) -> Vec<u8> {
+        let mut cbor = Vec::with_capacity(3 * depth + 1);
+        for _ in 0..depth {
+            cbor.extend([if indefinite { 0xbf } else { 0xa1 }, 0]);
+        }
+        cbor.push(0);
+        if indefinite {
+            cbor.extend(std::iter::repeat_n(0xff, depth));
+        }
+        cbor
+    }
+
+    fn nested_tag(depth: usize) -> Vec<u8> {
+        let mut cbor = vec![0xc0; depth];
+        cbor.push(0);
+        cbor
+    }
+
+    fn mixed_nested_structures(depth: usize) -> Vec<u8> {
+        let mut cbor = Vec::with_capacity(3 * depth + 1);
+        let mut breaks = 0;
+        for index in 0..depth {
+            match index % 5 {
+                0 => cbor.push(0x81),
+                1 => {
+                    cbor.push(0x9f);
+                    breaks += 1;
+                }
+                2 => cbor.extend([0xa1, 0]),
+                3 => {
+                    cbor.extend([0xbf, 0]);
+                    breaks += 1;
+                }
+                _ => cbor.push(0xc0),
+            }
+        }
+        cbor.push(0);
+        cbor.extend(std::iter::repeat_n(0xff, breaks));
+        cbor
+    }
+
+    #[test]
+    fn skip_data_item_nesting_limit_boundary() {
+        for cbor in [
+            nested_array(128, false),
+            nested_array(128, true),
+            nested_map(128, false),
+            nested_map(128, true),
+            nested_tag(128),
+        ] {
+            let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+            decoder.skip_data_item().unwrap();
+        }
+
+        for cbor in [
+            nested_array(129, false),
+            nested_array(129, true),
+            nested_map(129, false),
+            nested_map(129, true),
+            nested_tag(129),
+        ] {
+            let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+            assert!(decoder.skip_data_item().is_err());
+        }
+    }
+
+    #[test]
+    fn skip_data_item_nesting_limit_mixed_structures() {
+        for depth in [128, 129] {
+            let cbor = mixed_nested_structures(depth);
+            let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+            let result = decoder.skip_data_item();
+            assert_eq!(result.is_ok(), depth <= 128);
+        }
+    }
+
+    #[test]
+    fn skip_data_item_nesting_limit_uses_custom_option() {
+        let options = SerializationOptions::default().max_nesting_depth(3);
+        let cbor = nested_map(3, true);
+        let mut decoder = Decoder::new(cbor.as_slice(), options);
+        decoder.skip_data_item().unwrap();
+
+        let cbor = nested_map(4, true);
+        let mut decoder = Decoder::new(cbor.as_slice(), options);
+        assert!(decoder.skip_data_item().is_err());
     }
 
     fn test_skip_data_item_impl(encode_data_item: impl FnOnce(&mut Encoder<&mut Vec<u8>>)) {

@@ -329,15 +329,38 @@ pub enum UnknownMapKeys {
     Fail,
 }
 
-/// Options applied when serializing and deserializing
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Default)]
+/// Options applied when serializing and deserializing.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct SerializationOptions {
     pub unknown_map_keys: UnknownMapKeys,
+    /// Maximum depth of nested CBOR arrays, maps, and tags.
+    pub max_nesting_depth: usize,
+}
+
+impl Default for SerializationOptions {
+    fn default() -> Self {
+        Self {
+            unknown_map_keys: UnknownMapKeys::default(),
+            max_nesting_depth: 128,
+        }
+    }
 }
 
 impl SerializationOptions {
+    /// Sets how unknown keys in decoded CBOR maps are handled.
     pub fn unknown_map_keys(self, unknown_map_keys: UnknownMapKeys) -> Self {
-        Self { unknown_map_keys }
+        Self {
+            unknown_map_keys,
+            ..self
+        }
+    }
+
+    /// Sets the finite maximum depth of nested CBOR arrays, maps, and tags.
+    pub fn max_nesting_depth(self, max_nesting_depth: usize) -> Self {
+        Self {
+            max_nesting_depth,
+            ..self
+        }
     }
 }
 
@@ -389,6 +412,11 @@ impl CborSerializationError {
         } else {
             anyhow!("expected map size {}, was indefinite", expected).into()
         }
+    }
+
+    /// Returns an error indicating that CBOR nesting exceeded `max_nesting_depth`.
+    pub fn nesting_limit_exceeded(max_nesting_depth: usize) -> Self {
+        anyhow!("maximum nesting depth of {} exceeded", max_nesting_depth).into()
     }
 }
 
@@ -630,15 +658,33 @@ pub trait CborArrayEncoder {
 
 /// Decoder of CBOR. See <https://www.rfc-editor.org/rfc/rfc8949.html#section-3>
 pub trait CborDecoder {
+    /// Associated tag decoder
+    type TagDecoder: CborTagDecoder;
     /// Associated map decoder
     type MapDecoder: CborMapDecoder;
     /// Associated array decoder
     type ArrayDecoder: CborArrayDecoder;
 
-    /// Decode tag data item
+    /// Decode tag data item.
     fn decode_tag(&mut self) -> CborSerializationResult<u64>;
 
-    /// Decode that and check it equals the given `expected_tag`
+    /// Decode tag data item. Returns a decoder for the tagged value.
+    fn decode_tagged(self) -> CborSerializationResult<Self::TagDecoder>;
+
+    /// Decode a tag, check it equals `expected_tag`, and return a decoder for its value.
+    fn decode_tagged_expect(self, expected_tag: u64) -> CborSerializationResult<Self::TagDecoder>
+    where
+        Self: Sized,
+    {
+        let decoder = self.decode_tagged()?;
+        let tag = decoder.tag();
+        if tag != expected_tag {
+            return Err(CborSerializationError::expected_tag(expected_tag, tag));
+        }
+        Ok(decoder)
+    }
+
+    /// Decode a tag and check it equals `expected_tag`.
     fn decode_tag_expect(&mut self, expected_tag: u64) -> CborSerializationResult<()> {
         let tag = self.decode_tag()?;
         if tag != expected_tag {
@@ -722,6 +768,25 @@ pub trait CborDecoder {
 
     /// Serialization options in current context
     fn options(&self) -> SerializationOptions;
+}
+
+/// Decoder of a CBOR tagged value.
+pub trait CborTagDecoder {
+    /// Decoder type used for the tagged value.
+    type Decoder<'a>: CborDecoder
+    where
+        Self: 'a;
+
+    /// The decoded tag.
+    fn tag(&self) -> u64;
+
+    /// Borrow the tagged value decoder. In general, this should not be used manually:
+    /// use [`Self::deserialize`] instead.
+    // NOTE: This is needed by derived tagged types that decode their own untagged representation.
+    fn decoder(&mut self) -> Self::Decoder<'_>;
+
+    /// Deserialize the tagged value.
+    fn deserialize<T: CborDeserialize>(self) -> CborSerializationResult<T>;
 }
 
 /// Decoder of CBOR map
@@ -1244,6 +1309,20 @@ mod test {
     }
 
     #[test]
+    fn test_derived_tag_counts_towards_nesting_limit() {
+        #[derive(Debug, PartialEq, CborDeserialize)]
+        #[cbor(transparent, tag = 42)]
+        struct TaggedValue(Value);
+
+        let cbor = [0xd8, 42, 0xc0, 0]; // 42(0(0))
+        let options = SerializationOptions::default().max_nesting_depth(2);
+        assert!(cbor_decode_with_options::<TaggedValue>(cbor, options).is_ok());
+
+        let options = SerializationOptions::default().max_nesting_depth(1);
+        assert!(cbor_decode_with_options::<TaggedValue>(cbor, options).is_err());
+    }
+
+    #[test]
     fn test_struct_tag_derived_transparent() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         #[cbor(transparent, tag = 39999)]
@@ -1447,6 +1526,23 @@ mod test {
         assert_eq!(hex::encode(&cbor), "d99c386461626364");
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_derived_tagged_enum_counts_towards_nesting_limit() {
+        #[derive(Debug, PartialEq, CborDeserialize)]
+        #[cbor(tagged)]
+        enum TaggedValue {
+            #[cbor(tag = 42)]
+            Value(Value),
+        }
+
+        let cbor = [0xd8, 42, 0xc0, 0]; // 42(0(0))
+        let options = SerializationOptions::default().max_nesting_depth(2);
+        assert!(cbor_decode_with_options::<TaggedValue>(cbor, options).is_ok());
+
+        let options = SerializationOptions::default().max_nesting_depth(1);
+        assert!(cbor_decode_with_options::<TaggedValue>(cbor, options).is_err());
     }
 
     #[test]
@@ -1660,8 +1756,7 @@ mod test {
         let err = cbor_decode::<Vec<u64>>(&cbor).unwrap_err();
         assert!(
             err.to_string().contains("failed to fill whole buffer"),
-            "message: {}",
-            err.to_string()
+            "message: {err}"
         );
     }
 
@@ -1683,8 +1778,7 @@ mod test {
         let err = cbor_decode::<HashMap<u64, u64>>(&cbor).unwrap_err();
         assert!(
             err.to_string().contains("failed to fill whole buffer"),
-            "message: {}",
-            err.to_string()
+            "message: {err}"
         );
     }
 

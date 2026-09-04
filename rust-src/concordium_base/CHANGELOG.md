@@ -14,6 +14,8 @@
   - `LockAccountFunds`
   - `LockedTokenAmount`
 - Added CBOR serialization for `TransactionTime` and `TokenId`.
+- Dynamic CBOR `Value` decoding and skipped-item traversal now default to a maximum nesting depth of 128;
+  the finite limit is configurable through `SerializationOptions`, and exceeding it returns an error.
 
 - Introduce `TokenAuthorizations` representing the CBOR encoding of the `getTokenAuthorizations` query.
 - Introduce lock query boundary types representing the CBOR encoding of the `getLockInfo` query.
