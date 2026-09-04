@@ -8,10 +8,12 @@
 module ConcordiumTests.MerkleProofs where
 
 import qualified Data.HashMap.Strict as HM
+import Data.Serialize
 import Test.Hspec
 
 import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.MerkleProofs
+import Concordium.Types
 
 -- | Block hash of testing block.
 testingBlockHash :: Hash.Hash
@@ -19,9 +21,9 @@ testingBlockHash = read "e64ad0763bc2f54129b69f4633f23f2dff05ca553472c3410a30237
 
 -- | A Merkle proof against the testing block.
 --  This proof should follow the block schema, and parse into 'testingBlockTree'.
-testingBlockProof :: MerkleProof
-testingBlockProof =
-    [ RawData "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\BEL",
+testingBlockProof :: ProtocolVersion -> MerkleProof
+testingBlockProof pv =
+    [ RawData (encode pv),
       SubProof
         [ SubProof
             [RawData "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\STX\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\228\167\238\197\135\145D:\197{\224\211\200\199\ACK\FS\225\184+\RS\185\SUBn$\185\DELVg\130\&9\160^"],
@@ -132,10 +134,10 @@ tests :: Spec
 tests = describe "Concordium.MerkleProofs" $ do
     it "toRootHash on testing block" $ do
         -- Test that the 'testingBlockProof' hashes to the 'testingBlockHash'.
-        toRootHash testingBlockProof
+        toRootHash (testingBlockProof P7)
             `shouldBe` testingBlockHash
     it "parseMerkleProof on testing block" $ do
         -- This simply tests that 'parseMerkleProof' with the 'blockSchema' gives a known outcome
         -- on the 'testingBlockProof'. This is subject to change if the schema changes.
-        uncurry parseMerkleProof blockSchema testingBlockProof
+        uncurry parseMerkleProof (blockSchema P7) (testingBlockProof P7)
             `shouldBe` Right (testingBlockTree, testingBlockHash)

@@ -7,6 +7,7 @@ pub mod cis4_types;
 pub mod constants;
 pub mod hashes;
 mod internal;
+pub mod protocol_level_locks;
 pub mod protocol_level_tokens;
 pub mod smart_contracts;
 pub mod transactions;

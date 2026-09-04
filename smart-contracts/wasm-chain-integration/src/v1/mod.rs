@@ -1425,7 +1425,7 @@ pub trait HasReceiveContext: v0::HasReceiveContext {
     /// Get the name of the entrypoint that was actually invoked.
     /// This may differ from the name of the entrypoint that is actually invoked
     /// in case the entrypoint that is invoked is the fallback one.
-    fn entrypoint(&self) -> ExecResult<EntrypointName>;
+    fn entrypoint(&self) -> ExecResult<EntrypointName<'_>>;
 }
 
 impl<X: AsRef<[u8]>> v0::HasReceiveContext for ReceiveContext<X> {
@@ -1462,14 +1462,14 @@ impl<X: AsRef<[u8]>> v0::HasReceiveContext for ReceiveContext<X> {
 
 impl<X: AsRef<[u8]>> HasReceiveContext for ReceiveContext<X> {
     #[inline(always)]
-    fn entrypoint(&self) -> ExecResult<EntrypointName> {
+    fn entrypoint(&self) -> ExecResult<EntrypointName<'_>> {
         Ok(self.entrypoint.as_entrypoint_name())
     }
 }
 
 impl<X: HasReceiveContext> HasReceiveContext for &X {
     #[inline(always)]
-    fn entrypoint(&self) -> ExecResult<EntrypointName> {
+    fn entrypoint(&self) -> ExecResult<EntrypointName<'_>> {
         (*self).entrypoint()
     }
 }

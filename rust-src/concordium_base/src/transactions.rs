@@ -26,7 +26,7 @@ use crate::{
         AccountAddress, AccountCredentialMessage, AccountKeys, CredentialDeploymentInfo,
         CredentialPublicKeys, VerifyKey,
     },
-    protocol_level_tokens::TokenOperationsPayload,
+    protocol_level_tokens::{meta_operations::MetaUpdatePayload, TokenOperationsPayload},
     random_oracle::RandomOracle,
     smart_contracts, updates,
 };
@@ -48,7 +48,7 @@ pub struct Memo {
 }
 
 impl CborSerialize for Memo {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         encoder.encode_bytes(&self.bytes)
     }
 }
@@ -185,6 +185,8 @@ pub enum TransactionType {
     ConfigureDelegation,
     /// Token update transaction. Introduced in Concordium protocol version 9.
     TokenUpdate,
+    /// Meta update transaction. Introduced in Concordium protocol version 11.
+    MetaUpdate,
 }
 
 /// An error that occurs when trying to convert
@@ -220,6 +222,7 @@ impl TryFrom<i32> for TransactionType {
             19 => Self::ConfigureBaker,
             20 => Self::ConfigureDelegation,
             21 => Self::TokenUpdate,
+            22 => Self::MetaUpdate,
             n => return Err(TransactionTypeConversionError(n)),
         })
     }
@@ -1147,6 +1150,11 @@ pub enum Payload {
         #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
         payload: TokenOperationsPayload,
     },
+    /// Meta-update operations
+    MetaUpdate {
+        #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
+        payload: MetaUpdatePayload,
+    },
 }
 
 impl Payload {
@@ -1182,6 +1190,7 @@ impl Payload {
             Payload::ConfigureBaker { .. } => TransactionType::ConfigureBaker,
             Payload::ConfigureDelegation { .. } => TransactionType::ConfigureDelegation,
             Payload::TokenUpdate { .. } => TransactionType::TokenUpdate,
+            Payload::MetaUpdate { .. } => TransactionType::MetaUpdate,
         }
     }
 }
@@ -1364,6 +1373,10 @@ impl Serial for Payload {
             Payload::TokenUpdate { payload } => {
                 out.put(&27u8);
                 out.put(&payload.token_id);
+                out.put(&payload.operations);
+            }
+            Payload::MetaUpdate { payload } => {
+                out.put(&28u8);
                 out.put(&payload.operations);
             }
         }
@@ -1574,6 +1587,11 @@ impl Deserial for Payload {
                 };
                 Ok(Payload::TokenUpdate { payload })
             }
+            28 => {
+                let operations = source.get()?;
+                let payload = MetaUpdatePayload { operations };
+                Ok(Payload::MetaUpdate { payload })
+            }
             _ => {
                 anyhow::bail!("Unsupported transaction payload tag {}", tag)
             }
@@ -1607,7 +1625,7 @@ pub fn compute_transaction_sign_hash(
     let mut hasher = sha2::Sha256::new();
     hasher.put(header);
     payload.encode_to_buffer(&mut hasher);
-    hashes::HashBytes::new(hasher.result())
+    hashes::HashBytes::new(hasher.finalize().into())
 }
 
 // The transaction header prefix for v1.
@@ -1623,7 +1641,7 @@ pub fn compute_transaction_sign_hash_v1(
     hasher.put(&TRANSACTION_HEADER_PREFIX_V1);
     hasher.put(header);
     payload.encode_to_buffer(&mut hasher);
-    hashes::HashBytes::new(hasher.result())
+    hashes::HashBytes::new(hasher.finalize().into())
 }
 
 /// Abstraction of private keys.
@@ -2034,7 +2052,7 @@ impl<PayloadType> BlockItem<PayloadType> {
     {
         let mut hasher = sha2::Sha256::new();
         hasher.put(&self);
-        hashes::HashBytes::new(hasher.result())
+        hashes::HashBytes::new(hasher.finalize().into())
     }
 }
 
@@ -2210,6 +2228,9 @@ pub mod cost {
     /// operations
     pub const PLT_OPERATIONS_TRANSACTIONS: Energy = Energy { energy: 300 };
 
+    /// Additional cost of a transaction consisting of meta-update operations.
+    pub const META_UPDATE_TRANSACTIONS: Energy = Energy { energy: 300 };
+
     /// Additional cost of a PLT transfer
     pub const PLT_TRANSFER: Energy = Energy { energy: 100 };
 
@@ -2224,6 +2245,34 @@ pub mod cost {
 
     /// Additional cost of a PLT pause
     pub const PLT_PAUSE: Energy = Energy { energy: 50 };
+
+    /// TODO - this is a placeholder value for now - RBC-26 will investigate the correct energy to use.
+    /// Additional cost of assigning/revoking roles for a PLT
+    pub const PLT_ASSIGN_REVOKE_ROLES: Energy = Energy { energy: 50 };
+
+    /// TODO - this is a placeholder value for now - RBC-26 will investigate the correct energy to use.
+    /// Additional cost of update token metadata for a PLT
+    pub const PLT_UPDATE_TOKEN_METADATA: Energy = Energy { energy: 50 };
+
+    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
+    /// Additional cost of a lock creation
+    pub const PLT_LOCK_CREATE: Energy = Energy { energy: 50 };
+
+    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
+    /// Additional cost of a lock fund operation
+    pub const PLT_LOCK_FUND: Energy = Energy { energy: 100 };
+
+    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
+    /// Additional cost of a lock send operation
+    pub const PLT_LOCK_SEND: Energy = Energy { energy: 100 };
+
+    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
+    /// Additional cost of a lock return operation
+    pub const PLT_LOCK_RETURN: Energy = Energy { energy: 100 };
+
+    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
+    /// Additional cost of a lock cancel operation
+    pub const PLT_LOCK_CANCEL: Energy = Energy { energy: 50 };
 
     /// Additional cost of an encrypted transfer.
     #[deprecated(
@@ -2339,10 +2388,12 @@ pub mod cost {
 /// See also the [send] module above which combines construction with signing.
 pub mod construct {
     use super::*;
-    use crate::common::upward::Upward;
     use crate::{
         common::cbor,
-        protocol_level_tokens::{RawCbor, TokenId, TokenOperation, TokenOperations},
+        protocol_level_tokens::{
+            meta_operations::{MetaUpdateOperation, MetaUpdateOperations},
+            RawCbor, TokenId, TokenOperation, TokenOperations,
+        },
     };
 
     /// A transaction that is prepared to be signed.
@@ -2617,16 +2668,18 @@ pub mod construct {
                 .operations
                 .iter()
                 .map(|op| match op {
-                    Upward::Known(TokenOperation::Transfer(_)) => cost::PLT_TRANSFER,
-                    Upward::Known(TokenOperation::Mint(_)) => cost::PLT_MINT,
-                    Upward::Known(TokenOperation::Burn(_)) => cost::PLT_BURN,
-                    Upward::Known(TokenOperation::AddAllowList(_))
-                    | Upward::Known(TokenOperation::RemoveAllowList(_))
-                    | Upward::Known(TokenOperation::AddDenyList(_))
-                    | Upward::Known(TokenOperation::RemoveDenyList(_)) => cost::PLT_LIST_UPDATE,
-                    Upward::Known(TokenOperation::Pause(_))
-                    | Upward::Known(TokenOperation::Unpause(_)) => cost::PLT_PAUSE,
-                    Upward::Unknown(_) => Default::default(),
+                    TokenOperation::Transfer(_) => cost::PLT_TRANSFER,
+                    TokenOperation::Mint(_) => cost::PLT_MINT,
+                    TokenOperation::Burn(_) => cost::PLT_BURN,
+                    TokenOperation::AddAllowList(_)
+                    | TokenOperation::RemoveAllowList(_)
+                    | TokenOperation::AddDenyList(_)
+                    | TokenOperation::RemoveDenyList(_) => cost::PLT_LIST_UPDATE,
+                    TokenOperation::Pause(_) | TokenOperation::Unpause(_) => cost::PLT_PAUSE,
+                    TokenOperation::AssignAdminRoles(_) | TokenOperation::RevokeAdminRoles(_) => {
+                        cost::PLT_ASSIGN_REVOKE_ROLES
+                    }
+                    TokenOperation::UpdateMetadata(_) => cost::PLT_UPDATE_TOKEN_METADATA,
                 })
                 .sum()
     }
@@ -2643,9 +2696,9 @@ pub mod construct {
         expiry: TransactionTime,
         token_id: TokenId,
         operations: TokenOperations,
-    ) -> CborSerializationResult<PreAccountTransaction> {
+    ) -> PreAccountTransaction {
         let energy = token_operations_txn_energy(&operations);
-        let operations = RawCbor::from(cbor::cbor_encode(&operations)?);
+        let operations = RawCbor::from(cbor::cbor_encode(&operations));
 
         let payload = Payload::TokenUpdate {
             payload: TokenOperationsPayload {
@@ -2653,13 +2706,69 @@ pub mod construct {
                 operations,
             },
         };
-        Ok(make_transaction(
+        make_transaction(
             sender,
             nonce,
             expiry,
             GivenEnergy::Add { num_sigs, energy },
             payload,
-        ))
+        )
+    }
+
+    /// Additional cost of meta update operations transaction
+    fn meta_update_operations_txn_energy(operations: &MetaUpdateOperations) -> Energy {
+        cost::META_UPDATE_TRANSACTIONS
+            + operations
+                .operations
+                .iter()
+                .map(|op| match op {
+                    MetaUpdateOperation::Transfer(_) => cost::PLT_TRANSFER,
+                    MetaUpdateOperation::Mint(_) => cost::PLT_MINT,
+                    MetaUpdateOperation::Burn(_) => cost::PLT_BURN,
+                    MetaUpdateOperation::AddAllowList(_)
+                    | MetaUpdateOperation::RemoveAllowList(_)
+                    | MetaUpdateOperation::AddDenyList(_)
+                    | MetaUpdateOperation::RemoveDenyList(_) => cost::PLT_LIST_UPDATE,
+                    MetaUpdateOperation::Pause(_) | MetaUpdateOperation::Unpause(_) => {
+                        cost::PLT_PAUSE
+                    }
+                    MetaUpdateOperation::AssignAdminRoles(_)
+                    | MetaUpdateOperation::RevokeAdminRoles(_) => cost::PLT_ASSIGN_REVOKE_ROLES,
+                    MetaUpdateOperation::UpdateMetadata(_) => cost::PLT_UPDATE_TOKEN_METADATA,
+                    MetaUpdateOperation::LockFund(_) => cost::PLT_LOCK_FUND,
+                    MetaUpdateOperation::LockSend(_) => cost::PLT_LOCK_SEND,
+                    MetaUpdateOperation::LockReturn(_) => cost::PLT_LOCK_RETURN,
+                    MetaUpdateOperation::LockCreate(_) => cost::PLT_LOCK_CREATE,
+                    MetaUpdateOperation::LockCancel(_) => cost::PLT_LOCK_CANCEL,
+                })
+                .sum()
+    }
+
+    /// Construct a meta update transaction consisting of the given meta update
+    /// operations encoded in CBOR.
+    ///
+    /// Update operations can be created using the functions in
+    /// [`meta_operations`](crate::protocol_level_tokens::meta_operations).
+    pub fn meta_update_operations(
+        num_sigs: u32,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        operations: &MetaUpdateOperations,
+    ) -> PreAccountTransaction {
+        let energy = meta_update_operations_txn_energy(operations);
+        let operations = RawCbor::from(cbor::cbor_encode(operations));
+
+        let payload = Payload::MetaUpdate {
+            payload: MetaUpdatePayload { operations },
+        };
+        make_transaction(
+            sender,
+            nonce,
+            expiry,
+            GivenEnergy::Add { num_sigs, energy },
+            payload,
+        )
     }
 
     /// Make an encrypted transfer. The payload can be constructed using
@@ -3305,16 +3414,16 @@ pub mod send {
         expiry: TransactionTime,
         token_id: TokenId,
         operations: TokenOperations,
-    ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
-        Ok(construct::token_update_operations(
+    ) -> AccountTransaction<EncodedPayload> {
+        construct::token_update_operations(
             signer.num_keys(),
             sender,
             nonce,
             expiry,
             token_id,
             operations,
-        )?
-        .sign(signer))
+        )
+        .sign(signer)
     }
 
     /// Make an encrypted transfer. The payload can be constructed using

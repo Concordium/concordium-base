@@ -26,6 +26,9 @@ import Foreign.Marshal
 
 newtype ByteStringHex = ByteStringHex {hex :: BS.ByteString}
 
+instance Show ByteStringHex where
+    show = byteStringToHex . hex
+
 instance AE.ToJSON ByteStringHex where
     toJSON (ByteStringHex bs) =
         AE.String (Text.decodeUtf8 (BS16.encode bs))

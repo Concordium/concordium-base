@@ -437,7 +437,7 @@ impl<V: Loadable> CachedRef<V> {
     /// Get a reference to the contained value. In case the value is only on
     /// disk this will load it.
     #[inline]
-    pub fn get<L: BackingStoreLoad>(&self, loader: &mut L) -> MaybeOwned<V> {
+    pub fn get<L: BackingStoreLoad>(&self, loader: &mut L) -> MaybeOwned<'_, V> {
         match self {
             CachedRef::Disk { reference } => {
                 let loaded = V::load_from_location(loader, *reference).unwrap();
@@ -707,7 +707,7 @@ impl Stem {
     }
 
     /// Return an iterator over the chunks of the stem.
-    pub fn iter(&self) -> StemIter {
+    pub fn iter(&self) -> StemIter<'_> {
         StemIter {
             data: &self.data,
             pos: 0,
@@ -969,7 +969,7 @@ impl InlineOrHashed {
     #[inline(always)]
     /// Get a reference to the contained value. In case the value is only on
     /// disk it is loaded using the provided loader.
-    pub(crate) fn get(&self, loader: &mut impl BackingStoreLoad) -> ByteSlice {
+    pub(crate) fn get(&self, loader: &mut impl BackingStoreLoad) -> ByteSlice<'_> {
         match self {
             InlineOrHashed::Inline { len, data } => {
                 MaybeOwned::Borrowed(&data[0..usize::from(*len)])
@@ -991,7 +991,7 @@ impl InlineOrHashed {
     pub(crate) fn get_ref_and_hash(
         &self,
         loader: &mut impl BackingStoreLoad,
-    ) -> (Option<&Hash>, ByteSlice) {
+    ) -> (Option<&Hash>, ByteSlice<'_>) {
         match self {
             InlineOrHashed::Inline { len, data } => {
                 (None, MaybeOwned::Borrowed(&data[0..usize::from(*len)]))
@@ -1908,7 +1908,7 @@ type Position = u8;
 
 #[derive(Debug)]
 /// An iterator over a portion of the [`MutableTrie`].
-pub(crate) struct Iterator {
+pub struct Iterator {
     /// The root of the iterator. This is stored to allow removal of the
     /// iterator.
     root: Box<[u8]>,
@@ -2205,7 +2205,7 @@ impl MutableTrie {
     /// The return value is an `Err` if the resource counter signals resource
     /// exhaustion. Otherwise it is `None` if there is no further value to
     /// be given out, and a pointer to an entry in case there is.
-    pub(crate) fn next<L: BackingStoreLoad, C: TraversalCounter>(
+    pub fn next<L: BackingStoreLoad, C: TraversalCounter>(
         &mut self,
         loader: &mut L,
         iterator: &mut Iterator,
@@ -2261,7 +2261,7 @@ impl MutableTrie {
 
     /// Deletes an iterator.
     /// If an iterator was deleted then return `true` otherwise `false`.
-    pub(crate) fn delete_iter(&mut self, iterator: &Iterator) -> bool {
+    pub fn delete_iter(&mut self, iterator: &Iterator) -> bool {
         let generations = &mut self.generations;
         if let Some(generation) = generations.last_mut() {
             generation.iterator_roots.delete(iterator.get_root())
@@ -2270,7 +2270,9 @@ impl MutableTrie {
         }
     }
 
-    pub(crate) fn iter(
+    /// Create iterator of the entries in the trie with prefix `key`.
+    /// Returning `None` is equivalent to an iterator with no items.
+    pub fn iter(
         &mut self,
         loader: &mut impl BackingStoreLoad,
         key: &[u8],

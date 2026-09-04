@@ -103,7 +103,7 @@ pub fn prove_dlog_ed25519<R: Rng + CryptoRng>(
     let randomised_point = &rand_scalar * constants::ED25519_BASEPOINT_TABLE;
 
     ro.append_message(b"randomised_point", &randomised_point.compress().to_bytes());
-    let challenge_bytes = ro.split().result();
+    let challenge_bytes = ro.split().extract_raw_challenge();
     // FIXME: Do the same as in other proofs in sigma_protocols in id.
     let mut array = [0u8; 32];
     array.copy_from_slice(challenge_bytes.as_ref());
@@ -128,7 +128,7 @@ pub fn verify_dlog_ed25519(
             ro.append_message(b"randomised_point", &randomised_point.compress().to_bytes());
 
             // FIXME: Should do the same as for normal dlog.
-            let challenge_bytes = ro.split().result();
+            let challenge_bytes = ro.split().extract_raw_challenge();
             // FIXME: Do the same as in other proofs in sigma_protocols in id.
             let mut array = [0u8; 32];
             array.copy_from_slice(challenge_bytes.as_ref());
