@@ -135,6 +135,9 @@
   can be used both in set membership and range proofs, and at the same time being revealed. It was already possible
   for account credentials.
 
+- Serialization derive macros `common::Serial` and consequently `common::Serialize` now panic when trying to serialize
+  containers with a size exceeding their max bound.
+
 ## 10.0.0 (2026-01-09)
 
 - Introduce protocol version 10 variant `ProtocolVersion::P10`.
