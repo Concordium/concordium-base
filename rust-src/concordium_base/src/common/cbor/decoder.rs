@@ -25,69 +25,6 @@ impl<R: Read> Decoder<R> {
             nesting_depth: 0,
         }
     }
-}
-
-impl<R: Read> Decoder<R>
-where
-    R::Error: std::error::Error,
-{
-    fn skip_data_item(mut self: &mut Self) -> CborSerializationResult<()> {
-        match self.peek_data_item_header()?.to_type() {
-            DataItemType::Positive
-            | DataItemType::Negative
-            | DataItemType::Simple
-            | DataItemType::Float => {
-                self.inner.pull()?;
-            }
-            DataItemType::Tag => {
-                let tag_decoder = self.decode_tagged()?;
-                tag_decoder.decoder.skip_data_item()?;
-            }
-            DataItemType::Bytes => {
-                self.decode_bytes()?;
-            }
-            DataItemType::Text => {
-                self.decode_text()?;
-            }
-            DataItemType::Array => {
-                let array_decoder = self.decode_array()?;
-                // Arrays of definite length encodes "size" number of data item elements,
-                // arrays of indefinite length encodes data item elements until a break is
-                // encountered.
-                if let Some(size) = array_decoder.size() {
-                    for _ in 0..size {
-                        array_decoder.decoder.skip_data_item()?;
-                    }
-                } else {
-                    while !array_decoder.decoder.pull_break()? {
-                        array_decoder.decoder.skip_data_item()?;
-                    }
-                }
-            }
-            DataItemType::Map => {
-                let map_decoder = self.decode_map()?;
-                // Maps of definite length encodes "size" number of data item pairs,
-                // maps of indefinite length encodes data item pairs until a break is
-                // encountered.
-                if let Some(size) = map_decoder.size() {
-                    for _ in 0..size {
-                        map_decoder.decoder.skip_data_item()?;
-                        map_decoder.decoder.skip_data_item()?;
-                    }
-                } else {
-                    while !map_decoder.decoder.pull_break()? {
-                        map_decoder.decoder.skip_data_item()?;
-                        map_decoder.decoder.skip_data_item()?;
-                    }
-                }
-            }
-            DataItemType::Break => {
-                return Err(anyhow!("break is not a valid data item").into());
-            }
-        }
-
-        Ok(())
-    }
 
     fn enter_nesting(&mut self) -> CborSerializationResult<()> {
         self.nesting_depth = self
@@ -247,8 +184,62 @@ where
         DataItemHeader::try_from_header(self.peek_header()?)
     }
 
-    fn skip_data_item(self) -> CborSerializationResult<()> {
-        Decoder::skip_data_item(self)
+    fn skip_data_item(mut self) -> CborSerializationResult<()> {
+        match self.peek_data_item_header()?.to_type() {
+            DataItemType::Positive
+            | DataItemType::Negative
+            | DataItemType::Simple
+            | DataItemType::Float => {
+                self.inner.pull()?;
+            }
+            DataItemType::Tag => {
+                let tag_decoder = self.decode_tagged()?;
+                tag_decoder.decoder.skip_data_item()?;
+            }
+            DataItemType::Bytes => {
+                self.decode_bytes()?;
+            }
+            DataItemType::Text => {
+                self.decode_text()?;
+            }
+            DataItemType::Array => {
+                let array_decoder = self.decode_array()?;
+                // Arrays of definite length encodes "size" number of data item elements,
+                // arrays of indefinite length encodes data item elements until a break is
+                // encountered.
+                if let Some(size) = array_decoder.size() {
+                    for _ in 0..size {
+                        array_decoder.decoder.skip_data_item()?;
+                    }
+                } else {
+                    while !array_decoder.decoder.pull_break()? {
+                        array_decoder.decoder.skip_data_item()?;
+                    }
+                }
+            }
+            DataItemType::Map => {
+                let map_decoder = self.decode_map()?;
+                // Maps of definite length encodes "size" number of data item pairs,
+                // maps of indefinite length encodes data item pairs until a break is
+                // encountered.
+                if let Some(size) = map_decoder.size() {
+                    for _ in 0..size {
+                        map_decoder.decoder.skip_data_item()?;
+                        map_decoder.decoder.skip_data_item()?;
+                    }
+                } else {
+                    while !map_decoder.decoder.pull_break()? {
+                        map_decoder.decoder.skip_data_item()?;
+                        map_decoder.decoder.skip_data_item()?;
+                    }
+                }
+            }
+            DataItemType::Break => {
+                return Err(anyhow!("break is not a valid data item").into());
+            }
+        }
+
+        Ok(())
     }
 
     fn options(&self) -> SerializationOptions {
@@ -400,7 +391,6 @@ impl<'a, R: Read> TagDecoder<'a, R> {
 
 impl<R: Read> Drop for TagDecoder<'_, R> {
     fn drop(&mut self) {
-        debug_assert!(self.decoder.nesting_depth > 0);
         self.decoder.nesting_depth -= 1;
     }
 }
@@ -455,7 +445,6 @@ impl<'a, R: Read> MapDecoder<'a, R> {
 
 impl<R: Read> Drop for MapDecoder<'_, R> {
     fn drop(&mut self) {
-        debug_assert!(self.decoder.nesting_depth > 0);
         self.decoder.nesting_depth -= 1;
     }
 }
@@ -544,7 +533,6 @@ impl<'a, R: Read> ArrayDecoder<'a, R> {
 
 impl<R: Read> Drop for ArrayDecoder<'_, R> {
     fn drop(&mut self) {
-        debug_assert!(self.decoder.nesting_depth > 0);
         self.decoder.nesting_depth -= 1;
     }
 }
