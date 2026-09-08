@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Added the function `prove_id_credential` for creating a *proof of ID credential*: a proof that
+  the user owns a valid credential issued by a given identity provider, without proving or
+  revealing anything about the attribute values. The proof can be derived either from the user's
+  identity object or from one of the account credentials deployed from it.
+
 ## 0.25.4
 
 - The library is now built with 16 KB alignment for 64-bit Android architectures

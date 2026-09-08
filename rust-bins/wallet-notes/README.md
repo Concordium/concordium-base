@@ -184,6 +184,73 @@ The output of this function is a JSON object with the following field
 An example of input is in the file [prove-id-statement-input.json](files/prove-id-statement-input.json).
 An example of output is in the file [prove-id-statement-output.json](files/prove-id-statement-output.json).
 
+## prove_id_credential
+
+Semantics: Generates a *proof of ID credential*, i.e. a proof that the user owns a valid
+credential issued by the given identity provider. Nothing is proven or revealed about the
+attribute values. The proof is derived either from the user's identity object, or from one of the
+account credentials deployed from it, as selected by the request.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"ipInfo"` ... is a JSON object that describes the identity provider. This
+  data is the one obtained from the server by making a GET request to /ip_info.
+- `"global"` ... is a JSON object that describes global cryptographic parameters.
+   This data is obtained from the server by making a GET request to /global.
+- `"seed"` ... is a hex encoded seed phrase from which the credential secrets are generated.
+- `"net"` ... either the string `"Mainnet"` or `"Testnet"`.
+- `"identityIndex"` ... an integer indicating the index of identity.
+- `"identityObject"` ... the identity object the proof is derived from.
+- `"request"` ... the request from the verifier, see below.
+- `"accountNumber"` ... an integer indicating the index of the account credential. Only required
+  when the request is for an account credential.
+- `"revealedAttributes"` ... the list of attribute tags that are revealed in the policy of that
+  account credential, and hence not committed to on chain. Optional, defaults to the empty list.
+  Only used when the request is for an account credential.
+
+The request is of the form
+```json
+{
+  "type": "ConcordiumIdCredentialProofRequestV1",
+  "context": {
+    "type": "ConcordiumContextInformationV1",
+    "given": [{ "label": "nonce", "context": "..." }],
+    "requested": []
+  },
+  "subject": { ... }
+}
+```
+where `"context"` must contain enough verifier-chosen entropy that a proof cannot be replayed,
+and `"subject"` selects the credential to derive the proof from. For the user's identity object it
+is
+```json
+{
+  "type": [
+    "ConcordiumIdCredentialSubjectV1",
+    "ConcordiumIdBasedIdCredentialSubject"
+  ],
+  "issuer": "did:ccd:testnet:idp:0"
+}
+```
+and for one of the account credentials deployed from it, it is
+```json
+{
+  "type": [
+    "ConcordiumIdCredentialSubjectV1",
+    "ConcordiumAccountBasedIdCredentialSubject"
+  ],
+  "id": "did:ccd:testnet:cred:<account credential registration id>",
+  "issuer": "did:ccd:testnet:idp:0"
+}
+```
+The `"issuer"` must be the identity provider given in `"ipInfo"`.
+
+The output of this function is a JSON object with the following field
+- `"proof"` - this is the proof that should be sent to the verifier. It is a verifiable
+  presentation, so a verifier may check it either with the dedicated proof of ID credential API or
+  with the general presentation API.
+
 ## check_account_address
 
 This function takes as input a NUL-terminated in utf8 encoding string and

@@ -34,6 +34,12 @@ path = "../rust-src/concordium_base"
 [build-dependencies.concordium_base]
 path = "../rust-src/concordium_base"
 
+# The test helpers are used by the end-to-end test of `prove_id_credential`, which needs an
+# identity object actually signed by an identity provider.
+[dev-dependencies.concordium_base]
+path = "../rust-src/concordium_base"
+features = ["internal-test-helpers"]
+
 # this dependency is only needed for Android.
 [target.'cfg(target_os = "android")'.dependencies]
 jni = { version = "0.14.0", default-features = false }

@@ -34,6 +34,11 @@ use concordium_base::{
         ExactSizeTransactionSigner, InitContractPayload, Memo, TransactionSigner,
         UpdateContractPayload,
     },
+    web3id::v1::{
+        id_credential_proof::{IdCredentialProofRequest, IdCredentialSubject},
+        AccountCredentialProofPrivateInputs, CredentialProofPrivateInputs,
+        IdentityCredentialProofPrivateInputs,
+    },
 };
 use either::Either::{Left, Right};
 use key_derivation::{ConcordiumHdWallet, CredentialContext, Net};
@@ -908,22 +913,8 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
     let identity_index: u32 = try_get(&v, "identityIndex")?;
     let acc_num: u8 = try_get(&v, "accountNumber")?;
 
-    let sig_retrievel_randomness: ps_sig::SigRetrievalRandomness<Bls12> =
-        wallet.get_blinding_randomness(identity_provider_index, identity_index)?;
-    let id_cred_sec: PedersenValue<ArCurve> =
-        PedersenValue::new(wallet.get_id_cred_sec(identity_provider_index, identity_index)?);
-    let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
-    let chi = CredentialHolderInfo::<ArCurve> { id_cred };
-    let prf_key: prf::SecretKey<ArCurve> =
-        wallet.get_prf_key(identity_provider_index, identity_index)?;
-    let aci = AccCredentialInfo {
-        cred_holder_info: chi,
-        prf_key,
-    };
-    let id_use_data = IdObjectUseData {
-        aci,
-        randomness: sig_retrievel_randomness,
-    };
+    let id_use_data =
+        id_object_use_data_from_wallet(&wallet, identity_provider_index, identity_index)?;
 
     // The mobile wallet for now only creates new accounts and does not support
     // adding credentials onto existing ones. Once that is supported the address
@@ -1038,6 +1029,112 @@ fn generate_recovery_request_aux(input: &str) -> anyhow::Result<String> {
 
     let response = serde_json::json!({
         "idRecoveryRequest": common::Versioned::new(common::VERSION_0, request),
+    });
+    Ok(to_string(&response)?)
+}
+
+/// Derive the identity credential secrets, i.e. the parts of the identity credentials that are
+/// created locally rather than by the identity provider, deterministically from the hd wallet
+/// seed.
+fn id_object_use_data_from_wallet(
+    wallet: &ConcordiumHdWallet,
+    identity_provider_index: u32,
+    identity_index: u32,
+) -> anyhow::Result<IdObjectUseData<Bls12, ArCurve>> {
+    let sig_retrievel_randomness: ps_sig::SigRetrievalRandomness<Bls12> =
+        wallet.get_blinding_randomness(identity_provider_index, identity_index)?;
+    let id_cred_sec: PedersenValue<ArCurve> =
+        PedersenValue::new(wallet.get_id_cred_sec(identity_provider_index, identity_index)?);
+    let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
+    let chi = CredentialHolderInfo::<ArCurve> { id_cred };
+    let prf_key: prf::SecretKey<ArCurve> =
+        wallet.get_prf_key(identity_provider_index, identity_index)?;
+    let aci = AccCredentialInfo {
+        cred_holder_info: chi,
+        prf_key,
+    };
+    Ok(IdObjectUseData {
+        aci,
+        randomness: sig_retrievel_randomness,
+    })
+}
+
+/// For proving ownership of an ID credential, without proving or revealing anything about the
+/// attributes. The proof is derived either from the user's identity object, or from one of the
+/// account credentials deployed from it, as selected by the `subject` of the request. All secrets
+/// are derived deterministically from the hd wallet seed. Upon success it outputs a proof of ID
+/// credential.
+fn prove_id_credential_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+    let global: GlobalContext<ArCurve> = try_get(&v, "global")?;
+    let ip_info: IpInfo<Bls12> = try_get(&v, "ipInfo")?;
+    let request: IdCredentialProofRequest = try_get(&v, "request")?;
+
+    let wallet = parse_wallet_input(&v)?;
+    let identity_provider_index = ip_info.ip_identity.0;
+    let identity_index: u32 = try_get(&v, "identityIndex")?;
+    let id_object: IdentityObjectV1<Bls12, ArCurve, AttributeKind> = try_get(&v, "identityObject")?;
+
+    ensure!(
+        request.subject.issuer() == ip_info.ip_identity,
+        "The issuer in the request does not match the given identity provider."
+    );
+
+    let proof = match request.subject {
+        IdCredentialSubject::Identity { .. } => {
+            let ars_infos: BTreeMap<ArIdentity, ArInfo<ArCurve>> = try_get(&v, "arsInfos")?;
+            let id_use_data =
+                id_object_use_data_from_wallet(&wallet, identity_provider_index, identity_index)?;
+            request.prove(
+                &global,
+                CredentialProofPrivateInputs::Identity(IdentityCredentialProofPrivateInputs {
+                    ip_context: IpContextOnly {
+                        ip_info: &ip_info,
+                        ars_infos: &ars_infos,
+                    },
+                    id_object: &id_object,
+                    id_object_use_data: &id_use_data,
+                }),
+            )
+        }
+        IdCredentialSubject::Account { .. } => {
+            let acc_num: u8 = try_get(&v, "accountNumber")?;
+            let credential_context = CredentialContext {
+                wallet,
+                identity_provider_index: identity_provider_index.into(),
+                identity_index,
+                credential_index: acc_num,
+            };
+            // Attributes revealed in the credential's policy are not committed to on chain, so
+            // there is no opening to prove knowledge of for those.
+            let revealed: Vec<AttributeTag> =
+                maybe_get(&v, "revealedAttributes")?.unwrap_or_default();
+            // The commitment randomness is derived from the seed, so it is recomputed here rather
+            // than being part of the input.
+            let mut attribute_randomness = BTreeMap::new();
+            for tag in id_object.alist.alist.keys() {
+                if revealed.contains(tag) {
+                    continue;
+                }
+                attribute_randomness.insert(
+                    *tag,
+                    credential_context.get_attribute_commitment_randomness(tag)?,
+                );
+            }
+            request.prove(
+                &global,
+                CredentialProofPrivateInputs::Account(AccountCredentialProofPrivateInputs {
+                    issuer: ip_info.ip_identity,
+                    attribute_values: &id_object.alist.alist,
+                    attribute_randomness: &attribute_randomness,
+                }),
+            )
+        }
+    }
+    .context("Could not produce proof of ID credential.")?;
+
+    let response = serde_json::json!({
+        "proof": common::Versioned::new(common::VERSION_0, proof),
     });
     Ok(to_string(&response)?)
 }
@@ -1488,6 +1585,20 @@ make_wrapper!(
     /// returns an error message as the response, and sets the 'success' flag to 0.
     ///
     /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => prove_id_credential -> prove_id_credential_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
     /// formats for encrypted transfers.
     ///
     /// # Safety
@@ -1717,3 +1828,202 @@ pub unsafe fn free_response_string(ptr: *mut c_char) {
 
 #[cfg(target_os = "android")]
 mod android;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use concordium_base::base::CredentialRegistrationID;
+    use concordium_base::id::identity_provider::verify_credentials_v1;
+    use concordium_base::id::test::{
+        test_create_ars, test_create_attributes, test_create_ip_info, test_create_pio_v1,
+    };
+    use concordium_base::web3id::did::Network;
+    use concordium_base::web3id::v1::id_credential_proof::{
+        IdCredentialProof, IdCredentialSubject,
+    };
+    use concordium_base::web3id::v1::{
+        AccountCredentialVerificationMaterial, CredentialVerificationMaterial,
+        IdentityCredentialVerificationMaterial,
+    };
+
+    /// An arbitrary 64 byte wallet seed, as the mobile wallet would pass it in.
+    const TEST_SEED: &str = "efa5e27326f8fa0902e647b52449bf335b7b0298263c4b74d38ffa6f34e5a5fe\
+                             3e1c4c6a04b30ce2f66e2c46a7dc7b21f42ad9f27b8e93c1c4b0a5f1d2e3f4a1";
+
+    /// Build the JSON input for `prove_id_credential_aux`, together with the verification
+    /// material needed to check the resulting proof. The identity object is signed by a test
+    /// identity provider, and the credential holder secrets are derived from the wallet seed
+    /// exactly as the mobile wallet derives them.
+    fn setup(
+        subject: impl Fn(IpIdentity, CredentialRegistrationID) -> IdCredentialSubject,
+    ) -> (
+        Value,
+        GlobalContext<ArCurve>,
+        CredentialVerificationMaterial<Bls12, ArCurve>,
+    ) {
+        let mut csprng = thread_rng();
+        let (max_attrs, num_ars) = (10, 5);
+        let ip_data = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let ip_info = ip_data.public_ip_info;
+        let global = GlobalContext::generate(String::from("genesis_string"));
+        let (ars_infos, _) =
+            test_create_ars(&global.on_chain_commitment_key.g, num_ars, &mut csprng);
+
+        let wallet = ConcordiumHdWallet {
+            seed: hex::decode(TEST_SEED).unwrap().try_into().unwrap(),
+            net: Net::Testnet,
+        };
+        let identity_provider_index = ip_info.ip_identity.0;
+        let identity_index = 0u32;
+        let acc_num = 0u8;
+        let id_use_data =
+            id_object_use_data_from_wallet(&wallet, identity_provider_index, identity_index)
+                .expect("derive identity credential secrets");
+
+        let (context, pio, _) = test_create_pio_v1(
+            &id_use_data,
+            &ip_info,
+            &ars_infos,
+            &global,
+            num_ars,
+            &mut csprng,
+        );
+        let alist = test_create_attributes();
+        let attributes = alist.alist.clone();
+        let signature = verify_credentials_v1(&pio, context, &alist, &ip_data.ip_secret_key)
+            .expect("the identity provider signs the identity object");
+        let id_object = IdentityObjectV1 {
+            pre_identity_object: pio,
+            alist,
+            signature,
+        };
+
+        let cred_id = CredentialRegistrationID::from_exponent(
+            &global,
+            id_use_data.aci.prf_key.prf_exponent(acc_num).unwrap(),
+        );
+
+        let input = serde_json::json!({
+            "seed": TEST_SEED,
+            "net": "Testnet",
+            "global": global,
+            "ipInfo": ip_info,
+            "arsInfos": ars_infos,
+            "identityObject": id_object,
+            "identityIndex": identity_index,
+            "accountNumber": acc_num,
+            "request": IdCredentialProofRequest {
+                context: concordium_base::web3id::v1::ContextInformation {
+                    given: vec![concordium_base::web3id::v1::ContextProperty {
+                        label: "nonce".to_string(),
+                        context: "aa".repeat(32),
+                    }],
+                    requested: vec![],
+                },
+                subject: subject(ip_info.ip_identity, cred_id),
+            },
+        });
+
+        // The verification material a verifier would look up, for whichever credential kind the
+        // caller asked about.
+        let material = match subject(ip_info.ip_identity, cred_id) {
+            IdCredentialSubject::Identity { .. } => {
+                CredentialVerificationMaterial::Identity(IdentityCredentialVerificationMaterial {
+                    ip_info: ip_info.clone(),
+                    ars_infos: ArInfos {
+                        anonymity_revokers: ars_infos.clone(),
+                    },
+                })
+            }
+            IdCredentialSubject::Account { .. } => {
+                let credential_context = CredentialContext {
+                    wallet,
+                    identity_provider_index: identity_provider_index.into(),
+                    identity_index,
+                    credential_index: acc_num,
+                };
+                let mut commitments = BTreeMap::new();
+                for (tag, attribute) in &attributes {
+                    let randomness = credential_context
+                        .get_attribute_commitment_randomness(tag)
+                        .unwrap();
+                    commitments.insert(
+                        *tag,
+                        global
+                            .on_chain_commitment_key
+                            .hide_worker(&attribute.to_field_element(), &randomness),
+                    );
+                }
+                CredentialVerificationMaterial::Account(AccountCredentialVerificationMaterial {
+                    issuer: ip_info.ip_identity,
+                    attribute_commitments: commitments,
+                })
+            }
+        };
+
+        (input, global, material)
+    }
+
+    fn proof_from_response(response: &str) -> IdCredentialProof<Bls12, ArCurve, AttributeKind> {
+        let v: Value = from_str(response).expect("the response is JSON");
+        let versioned: common::Versioned<IdCredentialProof<Bls12, ArCurve, AttributeKind>> =
+            from_value(v.get("proof").expect("the response has a proof").clone())
+                .expect("the proof deserializes");
+        versioned.value
+    }
+
+    /// End-to-end: the FFI produces a proof of ID credential from an identity credential, and it
+    /// verifies against the identity provider and privacy guardian keys.
+    #[test]
+    fn prove_id_credential_identity() {
+        let (input, global, material) = setup(|issuer, _| IdCredentialSubject::Identity {
+            network: Network::Testnet,
+            issuer,
+        });
+
+        let response = prove_id_credential_aux(&input.to_string()).expect("prove");
+        let request = proof_from_response(&response)
+            .verify(&global, &material)
+            .expect("the proof must verify");
+
+        assert!(matches!(
+            request.subject,
+            IdCredentialSubject::Identity { .. }
+        ));
+    }
+
+    /// End-to-end: the FFI produces a proof of ID credential from an account credential. This
+    /// exercises the recomputation of the commitment randomness from the wallet seed: the
+    /// openings must match the commitments a verifier reads from the chain.
+    #[test]
+    fn prove_id_credential_account() {
+        let (input, global, material) = setup(|issuer, cred_id| IdCredentialSubject::Account {
+            network: Network::Testnet,
+            issuer,
+            cred_id,
+        });
+
+        let response = prove_id_credential_aux(&input.to_string()).expect("prove");
+        let request = proof_from_response(&response)
+            .verify(&global, &material)
+            .expect("the proof must verify");
+
+        assert!(matches!(
+            request.subject,
+            IdCredentialSubject::Account { .. }
+        ));
+    }
+
+    /// A request naming an issuer other than the given identity provider is rejected.
+    #[test]
+    fn prove_id_credential_issuer_mismatch() {
+        let (mut input, _, _) = setup(|issuer, _| IdCredentialSubject::Identity {
+            network: Network::Testnet,
+            issuer: IpIdentity::from(issuer.0 + 1),
+        });
+        // `setup` builds the request from the mismatching issuer, so the input is already wrong.
+        input["identityIndex"] = serde_json::json!(0);
+        prove_id_credential_aux(&input.to_string())
+            .expect_err("a mismatching issuer must be rejected");
+    }
+}
