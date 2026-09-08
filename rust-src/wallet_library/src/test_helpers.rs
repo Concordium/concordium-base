@@ -1,4 +1,4 @@
-use crate::proofs::Web3IdProofInput;
+use crate::proofs::{IdCredentialProofInput, Web3IdProofInput};
 use concordium_base::{
     common::Versioned,
     id::{
@@ -59,4 +59,11 @@ pub fn read_web3_id_request() -> Web3IdProofInput {
     let request_contents = fs::read_to_string(base_path.join("web3_id_request.json"))
         .expect("Should have been able to read the file");
     serde_json::from_str(&request_contents).unwrap()
+}
+
+pub fn read_id_credential_proof_input() -> IdCredentialProofInput {
+    let base_path = base_path();
+    let input_contents = fs::read_to_string(base_path.join("id_credential_proof_input.json"))
+        .expect("Should have been able to read the file");
+    serde_json::from_str(&input_contents).unwrap()
 }

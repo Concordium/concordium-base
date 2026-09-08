@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added `IdCredentialProofInput` with method `prove` for creating a *proof of ID credential*: a
+  proof, derived from an ID credential, that attests only that the holder owns a valid credential,
+  without proving or revealing anything about the attributes. Both identity credentials and account
+  credentials are supported.
+
 ## [0.4.0]
 
 ### Added

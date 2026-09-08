@@ -10,6 +10,7 @@ use concordium_base::{
     web3id::{
         v1::{
             anchor::{RequestedSubjectClaims, UnfilledContextInformation},
+            id_credential_proof::{IdCredentialProof, IdCredentialProofRequest},
             OwnedCredentialProofPrivateInputs, PresentationV1, ProveError, RequestV1,
         },
         OwnedCommitmentInputs, Presentation, ProofError, Request, Web3IdAttribute, Web3IdSigner,
@@ -48,6 +49,26 @@ impl PresentationV1Input {
         let borrowed_credential_proof_inputs = self.inputs.iter().map(|owned| owned.borrow());
         self.request
             .prove(&self.global, borrowed_credential_proof_inputs)
+    }
+}
+
+/// The input used for creating a proof of ID credential through its implemented prove function
+/// below. A proof of ID credential attests only that the holder owns a valid credential; see
+/// [`concordium_base::web3id::v1::id_credential_proof`].
+#[derive(SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IdCredentialProofInput {
+    request: IdCredentialProofRequest,
+    input: OwnedCredentialProofPrivateInputs<IpPairing, ArCurve, Web3IdAttribute>,
+    global: GlobalContext<ArCurve>,
+}
+
+/// Creates a proof of ID credential by calling prove on the IdCredentialProofRequest
+impl IdCredentialProofInput {
+    pub fn prove(
+        self,
+    ) -> Result<IdCredentialProof<IpPairing, ArCurve, Web3IdAttribute>, ProveError> {
+        self.request.prove(&self.global, self.input.borrow())
     }
 }
 
@@ -121,7 +142,8 @@ impl AcceptableRequest<constants::ArCurve, Web3IdAttribute> for Web3IdProofInput
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::read_web3_id_request;
+    use crate::test_helpers::{read_id_credential_proof_input, read_web3_id_request};
+    use concordium_base::web3id::v1::PresentationV1;
     use concordium_base::web3id::Presentation;
 
     #[test]
@@ -134,6 +156,20 @@ mod tests {
                 .is_ok(),
             "Cannot deserialize proof correctly."
         );
+        Ok(())
+    }
+
+    /// A proof of ID credential can be created from the JSON input, and the resulting proof
+    /// deserializes as the verifiable presentation it is.
+    #[test]
+    pub fn create_id_credential_proof_test() -> anyhow::Result<()> {
+        let input = read_id_credential_proof_input();
+        let proof = input.prove()?;
+        let data = serde_json::to_string_pretty(&proof)?;
+        serde_json::from_str::<IdCredentialProof<IpPairing, ArCurve, Web3IdAttribute>>(&data)
+            .expect("Cannot deserialize proof of ID credential correctly.");
+        serde_json::from_str::<PresentationV1<IpPairing, ArCurve, Web3IdAttribute>>(&data)
+            .expect("Cannot deserialize proof as a presentation.");
         Ok(())
     }
 }
