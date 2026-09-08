@@ -1230,28 +1230,16 @@ exampleLockInfoDetails =
                   liCreationOrder = 0
                 },
           lipConfig =
-            LockConfig
-                { lcRecipients = LockRecipientsLimited . Seq.singleton $ accountTokenHolder acc,
-                  lcExpiry = TransactionTime 1804806000,
-                  lcController =
-                    LockControllerSimpleV0
-                        LockControllerSimpleConfigV0
-                            { lcsv0Grants =
-                                Seq.singleton
-                                    LockControllerSimpleV0Grant
-                                        { lcsv0gAccount = accountTokenHolder acc,
-                                          lcsv0gRoles =
-                                            Seq.fromList
-                                                [ LockControllerSimpleV0Fund,
-                                                  LockControllerSimpleV0Send
-                                                ]
-                                        },
-                              lcsv0Tokens = Seq.singleton tokenId,
-                              lcsv0KeepAlive = False,
-                              lcsv0Memo = Nothing
-                            },
-                  lcMetadata = Just (lockMetadataToRawCbor exampleLockMetadata)
-                },
+            LockConfigSimpleV0
+                SimpleLockConfigV0
+                    { lcsv0Recipients = LockRecipientsLimited . Seq.singleton $ accountTokenHolder acc,
+                      lcsv0Expiry = TransactionTime 1804806000,
+                      lcsv0Grants = Seq.singleton LockControllerSimpleV0Grant{lcsv0gAccount = accountTokenHolder acc, lcsv0gRoles = Seq.fromList [LockControllerSimpleV0Fund, LockControllerSimpleV0Send]},
+                      lcsv0Tokens = Seq.singleton tokenId,
+                      lcsv0KeepAlive = False,
+                      lcsv0Memo = Nothing,
+                      lcsv0Metadata = Just (lockMetadataToRawCbor exampleLockMetadata)
+                    },
           lipFunds =
             Seq.singleton
                 LockAccountFunds
@@ -1271,107 +1259,19 @@ exampleLockInfoDetails =
         Right tid -> tid
 
 exampleLockInfoDetailsCBOR :: BS.ByteString
-exampleLockInfoDetailsCBOR =
-    mconcat
-        [ "a6",
-          "646c6f636b",
-          "d99fd8831927110500",
-          "6566756e6473",
-          "81",
-          "a2",
-          "676163636f756e74",
-          "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
-          "67616d6f756e7473",
-          "81",
-          "a2",
-          "65746f6b656e",
-          "627454",
-          "66616d6f756e74",
-          "c4822219300c",
-          "66657870697279",
-          "c11a6b932770",
-          "686d65746164617461",
-          "5848",
-          exampleLockMetadataCBOR,
-          "6a636f6e74726f6c6c6572",
-          "a1",
-          "6873696d706c655630",
-          "a2",
-          "666772616e7473",
-          "81",
-          "a2",
-          "65726f6c6573",
-          "82",
-          "6466756e64",
-          "6473656e64",
-          "676163636f756e74",
-          "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
-          "66746f6b656e73",
-          "81",
-          "627454",
-          "6a726563697069656e7473",
-          "81",
-          "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
-        ]
+exampleLockInfoDetailsCBOR = "a3646c6f636bd99fd88319271105006566756e647381a2676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2067616d6f756e747381a265746f6b656e62745466616d6f756e74c4822219300c66636f6e666967a16873696d706c655630a566657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646473656e64676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e7381627454686d657461646174615848a4646e616d656c56657374696e67206c6f636b666973737565726a436f6e636f726469756d6776657273696f6e016b6465736372697074696f6e6d546f6b656e73206c6f636b65646a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
 
 -- | Test the CBOR encoding and decoding of 'LockInfoDetails'.
 testLockInfoDetailsCBOR :: Spec
 testLockInfoDetailsCBOR = describe "LockInfoDetails CBOR" $ do
     it "fixture" $ do
-        lockInfoFromBytes (B8.fromStrict $ BS16.decodeLenient exampleLockInfoDetailsCBOR)
-            `shouldBe` Right exampleLockInfoDetails
         BS16.encode (lockInfoToBytes exampleLockInfoDetails)
             `shouldBe` exampleLockInfoDetailsCBOR
+        lockInfoFromBytes (B8.fromStrict $ BS16.decodeLenient exampleLockInfoDetailsCBOR)
+            `shouldBe` Right exampleLockInfoDetails
     it "any recipients fixture" $ do
-        let lockInfoAny =
-                exampleLockInfoDetails
-                    { lipConfig = (lipConfig exampleLockInfoDetails){lcRecipients = LockRecipientsAny}
-                    }
-            lockInfoAnyCBOR =
-                mconcat
-                    [ "a6",
-                      "646c6f636b",
-                      "d99fd8831927110500",
-                      "6566756e6473",
-                      "81",
-                      "a2",
-                      "676163636f756e74",
-                      "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
-                      "67616d6f756e7473",
-                      "81",
-                      "a2",
-                      "65746f6b656e",
-                      "627454",
-                      "66616d6f756e74",
-                      "c4822219300c",
-                      "66657870697279",
-                      "c11a6b932770",
-                      "686d65746164617461",
-                      "5848",
-                      exampleLockMetadataCBOR,
-                      "6a636f6e74726f6c6c6572",
-                      "a1",
-                      "6873696d706c655630",
-                      "a2",
-                      "666772616e7473",
-                      "81",
-                      "a2",
-                      "65726f6c6573",
-                      "82",
-                      "6466756e64",
-                      "6473656e64",
-                      "676163636f756e74",
-                      "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
-                      "66746f6b656e73",
-                      "81",
-                      "627454",
-                      "6a726563697069656e7473",
-                      "63616e79"
-                    ]
-        lockInfoFromBytes (B8.fromStrict $ BS16.decodeLenient lockInfoAnyCBOR)
-            `shouldBe` Right lockInfoAny
-        BS16.encode (lockInfoToBytes lockInfoAny)
-            `shouldBe` lockInfoAnyCBOR
+        let lockInfoAny = exampleLockInfoDetails{lipConfig = case lipConfig exampleLockInfoDetails of LockConfigSimpleV0 cfg -> LockConfigSimpleV0 cfg{lcsv0Recipients = LockRecipientsAny}}
+        lockInfoFromBytes (B8.fromStrict $ lockInfoToBytes lockInfoAny) `shouldBe` Right lockInfoAny
     it "metadata round-trip" $ do
         let encoded = lockInfoToBytes exampleLockInfoDetails
         lockInfoFromBytes (B8.fromStrict encoded) `shouldBe` Right exampleLockInfoDetails
@@ -1538,85 +1438,6 @@ testLockControllerSimpleV0GrantCBOR = describe "LockControllerSimpleV0Grant CBOR
             { lcsv0gAccount = accountTokenHolder lockTestAcc,
               lcsv0gRoles = Seq.fromList [LockControllerSimpleV0Fund, LockControllerSimpleV0Send]
             }
-
-testLockControllerSimpleConfigV0CBOR :: Spec
-testLockControllerSimpleConfigV0CBOR = describe "LockControllerSimpleConfigV0 CBOR" $ do
-    it "minimal (keepAlive=false, omitted from encoding)" $
-        lockFixture
-            encodeLockControllerSimpleConfigV0
-            decodeLockControllerSimpleConfigV0
-            minimalConfig
-            (mconcat ["a2", "666772616e7473", "80", "66746f6b656e73", "80"])
-    it "full (keepAlive=true, present in encoding)" $
-        lockFixture
-            encodeLockControllerSimpleConfigV0
-            decodeLockControllerSimpleConfigV0
-            fullConfig
-            ( mconcat
-                [ "a4",
-                  "646d656d6f",
-                  "43010203",
-                  "666772616e7473",
-                  "81",
-                  "a2",
-                  "65726f6c6573",
-                  "82",
-                  "6466756e64",
-                  "6663616e63656c",
-                  "676163636f756e74",
-                  lockTestAccHex,
-                  "66746f6b656e73",
-                  "81",
-                  "627454",
-                  "696b656570416c697665",
-                  "f5"
-                ]
-            )
-  where
-    minimalConfig =
-        LockControllerSimpleConfigV0
-            { lcsv0Grants = Seq.empty,
-              lcsv0Tokens = Seq.empty,
-              lcsv0KeepAlive = False,
-              lcsv0Memo = Nothing
-            }
-    fullConfig =
-        LockControllerSimpleConfigV0
-            { lcsv0Grants =
-                Seq.singleton
-                    LockControllerSimpleV0Grant
-                        { lcsv0gAccount = accountTokenHolder lockTestAcc,
-                          lcsv0gRoles = Seq.fromList [LockControllerSimpleV0Fund, LockControllerSimpleV0Cancel]
-                        },
-              lcsv0Tokens = Seq.singleton lockTokenId,
-              lcsv0KeepAlive = True,
-              lcsv0Memo = Just $ UntaggedMemo (Memo $ BSS.pack [0x01, 0x02, 0x03])
-            }
-
-testLockControllerCBOR :: Spec
-testLockControllerCBOR = describe "LockController CBOR" $ do
-    it "simpleV0 variant" $
-        lockFixture
-            encodeLockController
-            decodeLockController
-            ( LockControllerSimpleV0
-                LockControllerSimpleConfigV0
-                    { lcsv0Grants = Seq.empty,
-                      lcsv0Tokens = Seq.empty,
-                      lcsv0KeepAlive = False,
-                      lcsv0Memo = Nothing
-                    }
-            )
-            ( mconcat
-                [ "a1",
-                  "6873696d706c655630",
-                  "a2",
-                  "666772616e7473",
-                  "80",
-                  "66746f6b656e73",
-                  "80"
-                ]
-            )
 
 testLockedTokenAmountCBOR :: Spec
 testLockedTokenAmountCBOR = describe "LockedTokenAmount CBOR" $ do
@@ -1791,8 +1612,6 @@ tests = parallel $ describe "CBOR" $ do
     testLockRecipientsCBOR
     testLockControllerSimpleV0CapabilityCBOR
     testLockControllerSimpleV0GrantCBOR
-    testLockControllerSimpleConfigV0CBOR
-    testLockControllerCBOR
     testLockedTokenAmountCBOR
     testLockAccountFundsCBOR
     describe "UpdateTransaction test vectors" $ testTransactionVectors

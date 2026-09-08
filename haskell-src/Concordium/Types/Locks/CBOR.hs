@@ -10,12 +10,10 @@ module Concordium.Types.Locks.CBOR (
     LockControllerSimpleV0Grant (..),
     encodeLockControllerSimpleV0Grant,
     decodeLockControllerSimpleV0Grant,
-    LockControllerSimpleConfigV0 (..),
-    encodeLockControllerSimpleConfigV0,
-    decodeLockControllerSimpleConfigV0,
-    LockController (..),
-    encodeLockController,
-    decodeLockController,
+    SimpleLockConfigV0 (..),
+    LockConfig (..),
+    encodeLockConfig,
+    decodeLockConfig,
     LockRecipients (..),
     encodeLockRecipients,
     decodeLockRecipients,
@@ -24,7 +22,6 @@ module Concordium.Types.Locks.CBOR (
     decodeLockMetadata,
     lockMetadataToRawCbor,
     lockMetadataFromRawCbor,
-    LockConfig (..),
     LockedTokenAmount (..),
     encodeLockAccountFunds,
     decodeLockAccountFunds,
@@ -162,73 +159,6 @@ decodeLockControllerSimpleV0Grant =
     valDecoder k@"roles" = Just $ mapValueDecoder k (decodeSequence decodeLockControllerSimpleV0Capability) lcsvgbRoles
     valDecoder _ = Nothing
 
--- | Simple lock controller configuration.
-data LockControllerSimpleConfigV0 = LockControllerSimpleConfigV0
-    { lcsv0Grants :: !(Seq.Seq LockControllerSimpleV0Grant),
-      lcsv0Tokens :: !(Seq.Seq TokenId),
-      lcsv0KeepAlive :: !Bool,
-      lcsv0Memo :: !(Maybe TaggableMemo)
-    }
-    deriving (Eq, Show)
-
-encodeLockControllerSimpleConfigV0 :: LockControllerSimpleConfigV0 -> Encoding
-encodeLockControllerSimpleConfigV0 LockControllerSimpleConfigV0{..} =
-    encodeMapDeterministic $
-        Map.empty
-            & k "grants" ?~ encodeSequence encodeLockControllerSimpleV0Grant lcsv0Grants
-            & k "tokens" ?~ encodeSequence CBOR.encodeTokenId lcsv0Tokens
-            & k "keepAlive" .~ (if lcsv0KeepAlive then Just (encodeBool True) else Nothing)
-            & k "memo" .~ (encodeTaggableMemo <$> lcsv0Memo)
-  where
-    k = at . makeMapKeyEncoding . encodeString
-
-data LockControllerSimpleV0Builder = LockControllerSimpleV0Builder
-    { _lcsv0bGrants :: !(Maybe (Seq.Seq LockControllerSimpleV0Grant)),
-      _lcsv0bTokens :: !(Maybe (Seq.Seq TokenId)),
-      _lcsv0bKeepAlive :: !(Maybe Bool),
-      _lcsv0bMemo :: !(Maybe TaggableMemo)
-    }
-
-makeLenses ''LockControllerSimpleV0Builder
-
-emptyLockControllerSimpleV0Builder :: LockControllerSimpleV0Builder
-emptyLockControllerSimpleV0Builder = LockControllerSimpleV0Builder Nothing Nothing Nothing Nothing
-
-decodeLockControllerSimpleConfigV0 :: Decoder s LockControllerSimpleConfigV0
-decodeLockControllerSimpleConfigV0 =
-    decodeMap valDecoder build emptyLockControllerSimpleV0Builder
-  where
-    build LockControllerSimpleV0Builder{..} = do
-        lcsv0Grants <- _lcsv0bGrants `CBOR.orFail` "Missing \"grants\""
-        lcsv0Tokens <- _lcsv0bTokens `CBOR.orFail` "Missing \"tokens\""
-        let lcsv0KeepAlive = maybe False id _lcsv0bKeepAlive
-        let lcsv0Memo = _lcsv0bMemo
-        return LockControllerSimpleConfigV0{..}
-    valDecoder k@"grants" = Just $ mapValueDecoder k (decodeSequence decodeLockControllerSimpleV0Grant) lcsv0bGrants
-    valDecoder k@"tokens" = Just $ mapValueDecoder k (decodeSequence CBOR.decodeTokenId) lcsv0bTokens
-    valDecoder k@"keepAlive" = Just $ mapValueDecoder k decodeBool lcsv0bKeepAlive
-    valDecoder k@"memo" = Just $ mapValueDecoder k decodeTaggableMemo lcsv0bMemo
-    valDecoder _ = Nothing
-
--- | Lock controller configuration.
-data LockController
-    = LockControllerSimpleV0 !LockControllerSimpleConfigV0
-    deriving (Eq, Show)
-
-encodeLockController :: LockController -> Encoding
-encodeLockController = \case
-    LockControllerSimpleV0 cfg ->
-        encodeMapDeterministic $ Map.singleton (makeMapKeyEncoding (encodeString "simpleV0")) (encodeLockControllerSimpleConfigV0 cfg)
-
-decodeLockController :: Decoder s LockController
-decodeLockController =
-    decodeMap valDecoder build Nothing
-  where
-    valDecoder k@"simpleV0" = Just $ mapValueDecoder k decodeLockControllerSimpleConfigV0 id
-    valDecoder _ = Nothing
-    build (Just cfg) = Right $ LockControllerSimpleV0 cfg
-    build Nothing = Left "Missing \"simpleV0\""
-
 -- | Accounts that can receive funds controlled by a lock.
 data LockRecipients
     = LockRecipientsAny
@@ -260,6 +190,95 @@ decodeLockRecipientsHelper = \case
   where
     unsupportedText :: Text -> Either String LockRecipients
     unsupportedText value = Left $ "Unsupported lock recipients text value: " ++ show value
+
+encodeEpochTime :: TransactionTime -> Encoding
+encodeEpochTime (TransactionTime t) = encodeTag 1 <> encodeWord64 t
+
+decodeEpochTime :: Decoder s TransactionTime
+decodeEpochTime = do
+    tag <- decodeTag
+    unless (tag == 1) $ fail $ "epoch-time: Expected tag 1 but found " ++ show tag
+    TransactionTime <$> decodeWord64
+
+encodeLockMetadataBytes :: RawCbor -> Encoding
+encodeLockMetadataBytes = encodeBytes . cborBytes
+
+decodeLockMetadataBytes :: Decoder s RawCbor
+decodeLockMetadataBytes = rawCborFromBytes <$> decodeBytes
+
+-- | Complete configuration for a simple V0 lock.
+data SimpleLockConfigV0 = SimpleLockConfigV0
+    { -- | Accounts eligible to receive funds from the lock.
+      lcsv0Recipients :: !LockRecipients,
+      -- | Time at which the lock expires.
+      lcsv0Expiry :: !TransactionTime,
+      -- | Capability grants authorizing accounts to operate the lock.
+      lcsv0Grants :: !(Seq.Seq LockControllerSimpleV0Grant),
+      -- | Tokens that may be funded into the lock.
+      lcsv0Tokens :: !(Seq.Seq TokenId),
+      -- | Whether to retain the lock after all funds are returned.
+      lcsv0KeepAlive :: !Bool,
+      -- | Optional memo attached to the lock.
+      lcsv0Memo :: !(Maybe TaggableMemo),
+      -- | Optional opaque raw CBOR user-facing metadata.
+      lcsv0Metadata :: !(Maybe RawCbor)
+    }
+    deriving (Eq, Show)
+
+-- | Complete tagged lock configuration.
+data LockConfig = LockConfigSimpleV0 !SimpleLockConfigV0 deriving (Eq, Show)
+
+encodeLockConfig :: LockConfig -> Encoding
+encodeLockConfig (LockConfigSimpleV0 cfg) =
+    encodeMapDeterministic $ Map.singleton (makeMapKeyEncoding (encodeString "simpleV0")) (encodeSimple cfg)
+  where
+    encodeSimple SimpleLockConfigV0{..} =
+        encodeMapDeterministic $
+            Map.empty
+                & k "expiry" ?~ encodeEpochTime lcsv0Expiry
+                & k "grants" ?~ encodeSequence encodeLockControllerSimpleV0Grant lcsv0Grants
+                & k "metadata" .~ (encodeLockMetadataBytes <$> lcsv0Metadata)
+                & k "recipients" ?~ encodeLockRecipients lcsv0Recipients
+                & k "tokens" ?~ encodeSequence CBOR.encodeTokenId lcsv0Tokens
+                & k "keepAlive" .~ (if lcsv0KeepAlive then Just (encodeBool True) else Nothing)
+                & k "memo" .~ (encodeTaggableMemo <$> lcsv0Memo)
+      where
+        k = at . makeMapKeyEncoding . encodeString
+
+data SimpleLockConfigV0Builder = SimpleLockConfigV0Builder
+    { _lcbRecipients :: !(Maybe LockRecipients),
+      _lcbExpiry :: !(Maybe TransactionTime),
+      _lcbGrants :: !(Maybe (Seq.Seq LockControllerSimpleV0Grant)),
+      _lcbTokens :: !(Maybe (Seq.Seq TokenId)),
+      _lcbKeepAlive :: !(Maybe Bool),
+      _lcbMemo :: !(Maybe TaggableMemo),
+      _lcbMetadata :: !(Maybe RawCbor)
+    }
+makeLenses ''SimpleLockConfigV0Builder
+
+decodeLockConfig :: Decoder s LockConfig
+decodeLockConfig = decodeMap valDecoder build Nothing
+  where
+    valDecoder k@"simpleV0" = Just $ mapValueDecoder k decodeSimple id
+    valDecoder _ = Nothing
+    build (Just cfg) = Right $ LockConfigSimpleV0 cfg
+    build Nothing = Left "Missing \"simpleV0\""
+    decodeSimple = decodeMap simpleVal buildSimple (SimpleLockConfigV0Builder Nothing Nothing Nothing Nothing Nothing Nothing Nothing)
+    buildSimple SimpleLockConfigV0Builder{..} = do
+        lcsv0Recipients <- _lcbRecipients `CBOR.orFail` "Missing \"recipients\""
+        lcsv0Expiry <- _lcbExpiry `CBOR.orFail` "Missing \"expiry\""
+        lcsv0Grants <- _lcbGrants `CBOR.orFail` "Missing \"grants\""
+        lcsv0Tokens <- _lcbTokens `CBOR.orFail` "Missing \"tokens\""
+        let lcsv0KeepAlive = maybe False id _lcbKeepAlive
+        return SimpleLockConfigV0{lcsv0Memo = _lcbMemo, lcsv0Metadata = _lcbMetadata, ..}
+    simpleVal k@"recipients" = Just $ mapValueDecoder k decodeLockRecipients lcbRecipients
+    simpleVal k@"expiry" = Just $ mapValueDecoder k decodeEpochTime lcbExpiry
+    simpleVal k@"grants" = Just $ mapValueDecoder k (decodeSequence decodeLockControllerSimpleV0Grant) lcbGrants
+    simpleVal k@"tokens" = Just $ mapValueDecoder k (decodeSequence CBOR.decodeTokenId) lcbTokens
+    simpleVal k@"keepAlive" = Just $ mapValueDecoder k decodeBool lcbKeepAlive
+    simpleVal k@"memo" = Just $ mapValueDecoder k decodeTaggableMemo lcbMemo
+    simpleVal k@"metadata" = Just $ mapValueDecoder k decodeLockMetadataBytes lcbMetadata
+    simpleVal _ = Nothing
 
 -- | User-facing metadata attached to a lock at creation time.
 data LockMetadata = LockMetadata
@@ -313,32 +332,6 @@ lockMetadataToRawCbor = rawCborFromBytes . CBOR.encodeToBytes . encodeLockMetada
 -- | Decode typed lock metadata from raw CBOR bytes.
 lockMetadataFromRawCbor :: RawCbor -> Either String LockMetadata
 lockMetadataFromRawCbor = decodeFromBytes decodeLockMetadata "lock metadata" . rawCborToLazyBytes
-
--- | Static configuration of a lock.
-data LockConfig = LockConfig
-    { lcRecipients :: !LockRecipients,
-      lcExpiry :: !TransactionTime,
-      lcController :: !LockController,
-      lcMetadata :: !(Maybe RawCbor)
-    }
-    deriving (Eq, Show)
-
-encodeEpochTime :: TransactionTime -> Encoding
-encodeEpochTime (TransactionTime t) = encodeTag 1 <> encodeWord64 t
-
-decodeEpochTime :: Decoder s TransactionTime
-decodeEpochTime = do
-    tag <- decodeTag
-    unless (tag == 1) $ fail $ "epoch-time: Expected tag 1 but found " ++ show tag
-    TransactionTime <$> decodeWord64
-
--- | Encode raw lock metadata bytes.
-encodeLockMetadataBytes :: RawCbor -> Encoding
-encodeLockMetadataBytes = encodeBytes . cborBytes
-
--- | Decode raw lock metadata bytes.
-decodeLockMetadataBytes :: Decoder s RawCbor
-decodeLockMetadataBytes = rawCborFromBytes <$> decodeBytes
 
 -- | Locked amount for a token.
 data LockedTokenAmount = LockedTokenAmount
@@ -426,35 +419,24 @@ data LockInfoDetails = LockInfoDetails
 
 data LockInfoDetailsBuilder = LockInfoDetailsBuilder
     { _lidbLock :: !(Maybe LockId),
-      _lidbRecipients :: !(Maybe LockRecipients),
-      _lidbExpiry :: !(Maybe TransactionTime),
-      _lidbController :: !(Maybe LockController),
-      _lidbMetadata :: !(Maybe RawCbor),
+      _lidbConfig :: !(Maybe LockConfig),
       _lidbFunds :: !(Maybe (Seq.Seq LockAccountFunds))
     }
-
 makeLenses ''LockInfoDetailsBuilder
 
 emptyLockInfoDetailsBuilder :: LockInfoDetailsBuilder
-emptyLockInfoDetailsBuilder = LockInfoDetailsBuilder Nothing Nothing Nothing Nothing Nothing Nothing
+emptyLockInfoDetailsBuilder = LockInfoDetailsBuilder Nothing Nothing Nothing
 
 decodeLockInfoDetails :: Decoder s LockInfoDetails
-decodeLockInfoDetails =
-    decodeMap valDecoder build emptyLockInfoDetailsBuilder
+decodeLockInfoDetails = decodeMap valDecoder build emptyLockInfoDetailsBuilder
   where
     build LockInfoDetailsBuilder{..} = do
         lipLock <- _lidbLock `CBOR.orFail` "Missing \"lock\""
-        lcRecipients <- _lidbRecipients `CBOR.orFail` "Missing \"recipients\""
-        lcExpiry <- _lidbExpiry `CBOR.orFail` "Missing \"expiry\""
-        lcController <- _lidbController `CBOR.orFail` "Missing \"controller\""
-        let lcMetadata = _lidbMetadata
+        lipConfig <- _lidbConfig `CBOR.orFail` "Missing \"config\""
         lipFunds <- _lidbFunds `CBOR.orFail` "Missing \"funds\""
-        return LockInfoDetails{lipConfig = LockConfig{..}, ..}
+        return LockInfoDetails{..}
     valDecoder k@"lock" = Just $ mapValueDecoder k decodeLockId lidbLock
-    valDecoder k@"recipients" = Just $ mapValueDecoder k decodeLockRecipients lidbRecipients
-    valDecoder k@"expiry" = Just $ mapValueDecoder k decodeEpochTime lidbExpiry
-    valDecoder k@"controller" = Just $ mapValueDecoder k decodeLockController lidbController
-    valDecoder k@"metadata" = Just $ mapValueDecoder k decodeLockMetadataBytes lidbMetadata
+    valDecoder k@"config" = Just $ mapValueDecoder k decodeLockConfig lidbConfig
     valDecoder k@"funds" = Just $ mapValueDecoder k (decodeSequence decodeLockAccountFunds) lidbFunds
     valDecoder _ = Nothing
 
@@ -463,10 +445,7 @@ encodeLockInfoDetails LockInfoDetails{..} =
     encodeMapDeterministic $
         Map.empty
             & k "lock" ?~ encodeLockId lipLock
-            & k "recipients" ?~ encodeLockRecipients (lcRecipients lipConfig)
-            & k "expiry" ?~ encodeEpochTime (lcExpiry lipConfig)
-            & k "controller" ?~ encodeLockController (lcController lipConfig)
-            & k "metadata" .~ (encodeLockMetadataBytes <$> lcMetadata lipConfig)
+            & k "config" ?~ encodeLockConfig lipConfig
             & k "funds" ?~ encodeSequence encodeLockAccountFunds lipFunds
   where
     k = at . makeMapKeyEncoding . encodeString

@@ -560,7 +560,7 @@ mod tests {
     use crate::common::cbor;
     use crate::common::types::TransactionTime;
     use crate::protocol_level_locks::{
-        LockController, LockControllerSimpleV0, LockControllerSimpleV0Capability,
+        LockConfig, LockConfigSimpleV0, LockControllerSimpleV0Capability,
         LockControllerSimpleV0Grant, LockRecipients,
     };
     use crate::protocol_level_tokens::{test_fixtures::ADDRESS, MetadataUrl, TokenAdminRole};
@@ -830,34 +830,32 @@ mod tests {
     #[test]
     fn test_meta_operation_cbor_lock_create() {
         let operation = MetaUpdateOperation::LockCreate(MetaLockCreateDetails {
-            config: LockConfig {
+            config: LockConfig::SimpleV0(LockConfigSimpleV0 {
                 recipients: LockRecipients::Limited(vec![CborHolderAccount::from(ADDRESS)]),
                 expiry: TransactionTime::from_seconds(1_000_000),
-                controller: LockController::SimpleV0(LockControllerSimpleV0 {
-                    grants: vec![
-                        LockControllerSimpleV0Grant {
-                            account: CborHolderAccount::from(ADDRESS),
-                            roles: vec![
-                                LockControllerSimpleV0Capability::Fund,
-                                LockControllerSimpleV0Capability::Cancel,
-                            ],
-                        },
-                        LockControllerSimpleV0Grant {
-                            account: CborHolderAccount::from(AccountAddress([0x11; 32])),
-                            roles: vec![LockControllerSimpleV0Capability::Send],
-                        },
-                    ],
-                    tokens: vec!["testPLT".parse().unwrap(), "TKN".parse().unwrap()],
-                    keep_alive: false,
-                    memo: None,
-                }),
+                grants: vec![
+                    LockControllerSimpleV0Grant {
+                        account: CborHolderAccount::from(ADDRESS),
+                        roles: vec![
+                            LockControllerSimpleV0Capability::Fund,
+                            LockControllerSimpleV0Capability::Cancel,
+                        ],
+                    },
+                    LockControllerSimpleV0Grant {
+                        account: CborHolderAccount::from(AccountAddress([0x11; 32])),
+                        roles: vec![LockControllerSimpleV0Capability::Send],
+                    },
+                ],
+                tokens: vec!["testPLT".parse().unwrap(), "TKN".parse().unwrap()],
+                keep_alive: false,
+                memo: None,
                 metadata: None,
-            },
+            }),
         });
         let cbor = cbor::cbor_encode(&operation);
         assert_eq!(
             hex::encode(&cbor),
-            "a16a6c6f636b437265617465a366657870697279c11a000f42406a636f6e74726f6c6c6572a16873696d706c655630a2666772616e747382a265726f6c6573826466756e646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20a265726f6c6573816473656e64676163636f756e74d99d73a201d99d71a101190397035820111111111111111111111111111111111111111111111111111111111111111166746f6b656e73826774657374504c5463544b4e6a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+            "a16a6c6f636b437265617465a16873696d706c655630a466657870697279c11a000f4240666772616e747382a265726f6c6573826466756e646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20a265726f6c6573816473656e64676163636f756e74d99d73a201d99d71a101190397035820111111111111111111111111111111111111111111111111111111111111111166746f6b656e73826774657374504c5463544b4e6a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
         );
         let operation_decoded: MetaUpdateOperation =
             cbor::cbor_decode(&cbor).expect("CBOR deserialize");
