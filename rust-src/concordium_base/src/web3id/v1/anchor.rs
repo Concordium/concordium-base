@@ -15,6 +15,7 @@ use crate::id::{
 };
 use std::borrow::Cow;
 
+use crate::web3id::v1::id_credential_proof::AttributeOpeningKnownStatement;
 use crate::web3id::v1::ContextProperty;
 use crate::web3id::{did, v1, Web3IdAttribute};
 use crate::{common, hashes, id};
@@ -732,6 +733,10 @@ pub enum RequestedStatement<TagType: Serialize> {
     AttributeInSet(AttributeInSetStatement<ArCurve, TagType, Web3IdAttribute>),
     /// The atomic statement stating that an attribute is not in a set.
     AttributeNotInSet(AttributeNotInSetStatement<ArCurve, TagType, Web3IdAttribute>),
+    /// The atomic statement stating that the prover knows the opening of the commitment to an
+    /// attribute. This is the statement used by a
+    /// [proof of ID credential](v1::id_credential_proof) derived from an account credential.
+    AttributeOpeningKnown(AttributeOpeningKnownStatement<TagType>),
 }
 
 #[cfg(test)]
@@ -1572,6 +1577,9 @@ mod fixtures {
             }
             RequestedStatement::AttributeNotInSet(stmt) => {
                 AtomicStatementV1::AttributeNotInSet(stmt.clone())
+            }
+            RequestedStatement::AttributeOpeningKnown(stmt) => {
+                AtomicStatementV1::AttributeOpeningKnown(stmt.clone())
             }
         }
     }

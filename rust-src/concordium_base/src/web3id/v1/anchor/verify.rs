@@ -420,6 +420,9 @@ fn statement_to_requested_statement(
         AtomicStatementV1::AttributeNotInSet(stmt) => {
             RequestedStatement::AttributeNotInSet(stmt.clone())
         }
+        AtomicStatementV1::AttributeOpeningKnown(stmt) => {
+            RequestedStatement::AttributeOpeningKnown(stmt.clone())
+        }
     }
 }
 

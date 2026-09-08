@@ -22,7 +22,7 @@ pub struct AggregateDlog<C: Curve> {
 }
 
 /// Aggregate dlog response. We deliberately make it opaque.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone, Eq, PartialEq)]
 pub struct Response<C: Curve> {
     #[size_length = 4]
     response: Vec<C::Scalar>,

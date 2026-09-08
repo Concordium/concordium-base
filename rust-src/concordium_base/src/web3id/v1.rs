@@ -11,6 +11,7 @@
 //! "17 Web3 Verifiable Credentials"
 
 pub mod anchor;
+pub mod id_credential_proof;
 mod proofs;
 
 use crate::base::CredentialRegistrationID;
@@ -31,6 +32,9 @@ use crate::id::types::{
 };
 use crate::web3id::did;
 use crate::web3id::did::Network;
+use crate::web3id::v1::id_credential_proof::{
+    AttributeOpeningKnownProof, AttributeOpeningKnownStatement,
+};
 use crate::{common, pedersen_commitment};
 use anyhow::{bail, ensure, Context};
 use itertools::Itertools;
@@ -1229,6 +1233,8 @@ pub enum ProveError {
     PrivateInputsMismatch,
     #[error("cannot prove identity attribute credentials: {0}")]
     IdentityAttributeCredentials(String),
+    #[error("cannot construct a proof of ID credential: {0}")]
+    IdCredentialProof(&'static str),
 }
 
 /// Error verifying presentation
@@ -1239,6 +1245,11 @@ pub enum VerifyError {
     VerificationMaterialMismatch,
     #[error("the credential was not valid (index {0})")]
     InvalidCredential(usize),
+    /// The presentation is cryptographically valid, but does not have the shape of a proof of ID
+    /// credential. Only returned by
+    /// [`IdCredentialProof::verify`](id_credential_proof::IdCredentialProof::verify).
+    #[error("the presentation is not a proof of ID credential: {0}")]
+    NotAnIdCredentialProof(&'static str),
 }
 
 /// The types of statements that can be used in subject claims
@@ -1263,6 +1274,10 @@ pub enum AtomicStatementV1<
     AttributeInSet(AttributeInSetStatement<C, TagType, AttributeType>),
     /// The atomic statement stating that an attribute is not in a set.
     AttributeNotInSet(AttributeNotInSetStatement<C, TagType, AttributeType>),
+    /// The atomic statement stating that the prover knows the opening of the commitment to an
+    /// attribute, without revealing anything about the value. New variants must be appended, see
+    /// the note on [`AtomicProofV1`].
+    AttributeOpeningKnown(AttributeOpeningKnownStatement<TagType>),
 }
 
 impl<C: Curve, TagType: common::Serialize + Copy, AttributeType: Attribute<C::Scalar>>
@@ -1275,11 +1290,16 @@ impl<C: Curve, TagType: common::Serialize + Copy, AttributeType: Attribute<C::Sc
             Self::AttributeInRange(statement) => statement.attribute_tag,
             Self::AttributeInSet(statement) => statement.attribute_tag,
             Self::AttributeNotInSet(statement) => statement.attribute_tag,
+            Self::AttributeOpeningKnown(statement) => statement.attribute_tag,
         }
     }
 }
 
 /// Proof of a [`AtomicStatementV1`].
+///
+/// Notice: the binary serialization derived here tags variants by their position, and the
+/// serialized statements and proofs are part of the Fiat-Shamir transcript. New variants must
+/// therefore be *appended*; inserting one anywhere else invalidates all existing proofs.
 #[derive(Debug, Clone, Eq, PartialEq, common::Serialize)]
 pub enum AtomicProofV1<C: Curve> {
     /// A proof that an attribute is equal to a public value
@@ -1293,6 +1313,8 @@ pub enum AtomicProofV1<C: Curve> {
     AttributeInSet(SetMembershipProof<C>),
     /// A proof that an attribute is not in a set
     AttributeNotInSet(SetNonMembershipProof<C>),
+    /// A proof of knowledge of the opening of the commitment to an attribute
+    AttributeOpeningKnown(AttributeOpeningKnownProof<C>),
 }
 
 #[cfg(test)]

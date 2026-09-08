@@ -665,6 +665,18 @@ impl<
                 let proof = AtomicProofV1::AttributeInRange(proof);
                 Some(proof)
             }
+            AtomicStatementV1::AttributeOpeningKnown(statement) => {
+                let proof = statement.prove(
+                    version,
+                    global,
+                    transcript,
+                    csprng,
+                    attribute_values,
+                    attribute_randomness,
+                )?;
+                let proof = AtomicProofV1::AttributeOpeningKnown(proof);
+                Some(proof)
+            }
         }
     }
 }
@@ -704,6 +716,10 @@ impl<
             (
                 AtomicStatementV1::AttributeNotInSet(statement),
                 AtomicProofV1::AttributeNotInSet(proof),
+            ) => statement.verify(version, global, transcript, cmm_attributes, proof),
+            (
+                AtomicStatementV1::AttributeOpeningKnown(statement),
+                AtomicProofV1::AttributeOpeningKnown(proof),
             ) => statement.verify(version, global, transcript, cmm_attributes, proof),
             _ => false,
         }

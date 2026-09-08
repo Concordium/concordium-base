@@ -1,5 +1,19 @@
 ## Unreleased
 
+- Added the module `web3id::v1::id_credential_proof`, a separate API for *proofs of ID credential*:
+  a proof, derived from an ID credential, that attests only that the holder owns a valid
+  credential, without proving or revealing anything about the attributes. The entrypoints are
+  `IdCredentialProofRequest::prove` and `IdCredentialProof::verify`, and both identity credentials
+  and account credentials are supported. A proof serializes as an ordinary
+  `web3id::v1::PresentationV1`, so it can also be verified through the general presentation API.
+- Added the atomic statement `AttributeOpeningKnown`, asserting knowledge of the opening of the
+  commitment to an attribute without revealing anything about the value. It is used by proofs of ID
+  credential derived from account credentials, where an empty statement list would prove nothing.
+  This adds a variant to each of `web3id::v1::AtomicStatementV1`, `web3id::v1::AtomicProofV1` and
+  `web3id::v1::anchor::RequestedStatement`, and a variant to each of `web3id::v1::ProveError` and
+  `web3id::v1::VerifyError`. All are appended, so existing proofs are unaffected.
+- `sigma_protocols::aggregate_dlog::Response` now implements `Clone`, `PartialEq` and `Eq`.
+
 - The flag `serde_deprecated` now guards `serde::Serialize` and `serde::Deserialize` implemetations on the following types. The implementations will eventually be removed.
   - `protocol_level_tokens::token_metadata_url::MetadataUrl`
   - `protocol_level_tokens::token_amount::TokenAmount`
