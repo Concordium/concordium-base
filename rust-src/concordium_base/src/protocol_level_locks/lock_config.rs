@@ -110,7 +110,7 @@ impl LockMetadata {
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
 #[cbor(map)]
 pub enum LockConfig {
-    /// SimpleV0 lock controller configuration.
+    /// V0 simple lock configuration.
     SimpleV0(LockConfigSimpleV0),
 }
 

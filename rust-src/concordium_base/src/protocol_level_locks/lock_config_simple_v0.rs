@@ -86,10 +86,7 @@ pub struct LockControllerSimpleV0Grant {
     pub roles: Vec<LockControllerSimpleV0Capability>,
 }
 
-/// Configuration for a SimpleV0 lock controller.
-///
-/// Contains the list of capability grants, which tokens are affected,
-/// a keep-alive flag, and an optional memo.
+/// Configuration for a SimpleV0 lock.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
 pub struct LockConfigSimpleV0 {
     /// Accounts that can receive funds from this lock.
@@ -98,7 +95,7 @@ pub struct LockConfigSimpleV0 {
     pub expiry: TransactionTime,
     /// Capability grants to accounts.
     pub grants: Vec<LockControllerSimpleV0Grant>,
-    /// Tokens affected by this lock controller.
+    /// Tokens that may be funded into this lock.
     pub tokens: Vec<TokenId>,
     /// Whether the lock should be kept alive after all funds are
     /// returned. Interpreted as `false` when omitted from the serialization.

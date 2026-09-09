@@ -228,6 +228,7 @@ data SimpleLockConfigV0 = SimpleLockConfigV0
 -- | Complete tagged lock configuration.
 data LockConfig = LockConfigSimpleV0 !SimpleLockConfigV0 deriving (Eq, Show)
 
+-- | Encode a lock configuration.
 encodeLockConfig :: LockConfig -> Encoding
 encodeLockConfig (LockConfigSimpleV0 cfg) =
     encodeMapDeterministic $ Map.singleton (makeMapKeyEncoding (encodeString "simpleV0")) (encodeSimpleLockConfig cfg)
@@ -256,6 +257,7 @@ data SimpleLockConfigV0Builder = SimpleLockConfigV0Builder
     }
 makeLenses ''SimpleLockConfigV0Builder
 
+-- | Decode a lock configuration.
 decodeLockConfig :: Decoder s LockConfig
 decodeLockConfig = decodeMap valDecoder build Nothing
   where
