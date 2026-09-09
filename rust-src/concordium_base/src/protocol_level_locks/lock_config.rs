@@ -65,11 +65,40 @@ pub struct LockMetadata {
 
 impl LockMetadata {
     /// Decode typed lock metadata from raw CBOR bytes.
+    ///
+    /// # Arguments
+    ///
+    /// * `raw_cbor` - Raw bytes expected to contain a CBOR-encoded lock metadata map.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the bytes are not valid CBOR for [`LockMetadata`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use concordium_base::common::cbor;
+    /// use concordium_base::protocol_level_locks::LockMetadata;
+    /// use concordium_base::protocol_level_tokens::RawCbor;
+    ///
+    /// let raw = RawCbor::from(cbor::cbor_encode(&LockMetadata::default()));
+    /// let metadata = LockMetadata::decode_raw_cbor(&raw)?;
+    /// # Ok::<(), concordium_base::common::cbor::CborSerializationError>(())
+    /// ```
     pub fn decode_raw_cbor(raw_cbor: &RawCbor) -> CborSerializationResult<Self> {
         cbor::cbor_decode(raw_cbor.as_ref())
     }
 
     /// Encode typed lock metadata to raw CBOR bytes.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use concordium_base::protocol_level_locks::LockMetadata;
+    ///
+    /// let raw = LockMetadata::default().encode_raw_cbor();
+    /// assert!(!raw.as_ref().is_empty());
+    /// ```
     pub fn encode_raw_cbor(&self) -> RawCbor {
         RawCbor::from(cbor::cbor_encode(self))
     }
