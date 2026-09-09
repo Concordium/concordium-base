@@ -230,9 +230,9 @@ data LockConfig = LockConfigSimpleV0 !SimpleLockConfigV0 deriving (Eq, Show)
 
 encodeLockConfig :: LockConfig -> Encoding
 encodeLockConfig (LockConfigSimpleV0 cfg) =
-    encodeMapDeterministic $ Map.singleton (makeMapKeyEncoding (encodeString "simpleV0")) (encodeSimple cfg)
+    encodeMapDeterministic $ Map.singleton (makeMapKeyEncoding (encodeString "simpleV0")) (encodeSimpleLockConfig cfg)
   where
-    encodeSimple SimpleLockConfigV0{..} =
+    encodeSimpleLockConfig SimpleLockConfigV0{..} =
         encodeMapDeterministic $
             Map.empty
                 & k "expiry" ?~ encodeEpochTime lcsv0Expiry
@@ -259,11 +259,11 @@ makeLenses ''SimpleLockConfigV0Builder
 decodeLockConfig :: Decoder s LockConfig
 decodeLockConfig = decodeMap valDecoder build Nothing
   where
-    valDecoder k@"simpleV0" = Just $ mapValueDecoder k decodeSimple id
+    valDecoder k@"simpleV0" = Just $ mapValueDecoder k decodeSimpleLockConfig id
     valDecoder _ = Nothing
     build (Just cfg) = Right $ LockConfigSimpleV0 cfg
     build Nothing = Left "Missing \"simpleV0\""
-    decodeSimple = decodeMap simpleVal buildSimple (SimpleLockConfigV0Builder Nothing Nothing Nothing Nothing Nothing Nothing Nothing)
+    decodeSimpleLockConfig = decodeMap simpleVal buildSimple (SimpleLockConfigV0Builder Nothing Nothing Nothing Nothing Nothing Nothing Nothing)
     buildSimple SimpleLockConfigV0Builder{..} = do
         lcsv0Recipients <- _lcbRecipients `CBOR.orFail` "Missing \"recipients\""
         lcsv0Expiry <- _lcbExpiry `CBOR.orFail` "Missing \"expiry\""
