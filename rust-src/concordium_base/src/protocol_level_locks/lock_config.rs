@@ -179,6 +179,39 @@ mod tests {
     }
 
     #[test]
+    fn lock_config_round_trips_recipient_and_metadata_variants() {
+        let multiple = config(
+            LockRecipients::Limited(vec![
+                CborHolderAccount::from(ADDRESS),
+                CborHolderAccount::from(ADDRESS),
+            ]),
+            None,
+        );
+        let empty = config(LockRecipients::Limited(vec![]), None);
+        let any = config(LockRecipients::Any, None);
+        let with_metadata = config(
+            LockRecipients::Limited(vec![CborHolderAccount::from(ADDRESS)]),
+            Some(metadata().encode_raw_cbor()),
+        );
+        for config in [multiple, empty, any, with_metadata] {
+            assert_eq!(
+                cbor::cbor_decode::<LockConfig>(&cbor::cbor_encode(&config)).unwrap(),
+                config
+            );
+        }
+    }
+
+    #[test]
+    fn metadata_matches_fixed_fixture() {
+        let expected = "a4646e616d656c56657374696e67206c6f636b666973737565726a436f6e636f726469756d6776657273696f6e016b6465736372697074696f6e7821546f6b656e73206c6f636b65642062792076657374696e67207363686564756c65";
+        assert_eq!(hex::encode(cbor::cbor_encode(&metadata())), expected);
+        assert_eq!(
+            LockMetadata::decode_raw_cbor(&RawCbor::from(hex::decode(expected).unwrap())).unwrap(),
+            metadata()
+        );
+    }
+
+    #[test]
     fn metadata_raw_decode_rejects_invalid_and_noncanonical_input() {
         assert!(LockMetadata::decode_raw_cbor(&RawCbor::from(vec![1])).is_err());
         assert!(LockMetadata::decode_raw_cbor(&RawCbor::from(
@@ -189,6 +222,12 @@ mod tests {
 
     #[test]
     fn recipients_reject_unknown_text() {
-        assert!(cbor::cbor_decode::<LockRecipients>(&hex::decode("63616c6c").unwrap()).is_err());
+        let err = cbor::cbor_decode::<LockRecipients>(&hex::decode("63616c6c").unwrap())
+            .expect_err("unknown recipient text must fail");
+        assert!(
+            err.to_string()
+                .contains("unsupported lock recipients text value"),
+            "unexpected error: {err}"
+        );
     }
 }

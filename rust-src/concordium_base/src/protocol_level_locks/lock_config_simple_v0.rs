@@ -109,3 +109,144 @@ pub struct LockConfigSimpleV0 {
     /// Optional opaque CBOR-encoded user-facing metadata.
     pub metadata: Option<RawCbor>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        common::{cbor, serialize_deserialize, to_bytes},
+        protocol_level_tokens::test_fixtures::ADDRESS,
+        transactions::Memo,
+    };
+
+    fn full_config() -> LockConfigSimpleV0 {
+        LockConfigSimpleV0 {
+            recipients: LockRecipients::Limited(vec![CborHolderAccount::from(ADDRESS)]),
+            expiry: TransactionTime::from_seconds(1804806000),
+            grants: vec![LockControllerSimpleV0Grant {
+                account: CborHolderAccount::from(ADDRESS),
+                roles: vec![
+                    LockControllerSimpleV0Capability::Fund,
+                    LockControllerSimpleV0Capability::Cancel,
+                ],
+            }],
+            tokens: vec!["CCD".parse().unwrap()],
+            keep_alive: true,
+            memo: Some(CborMemo::Raw(Memo::try_from(vec![1, 2, 3]).unwrap())),
+            metadata: None,
+        }
+    }
+
+    #[test]
+    fn capability_cbor_round_trips_and_matches_fixtures() {
+        let fixtures = [
+            (LockControllerSimpleV0Capability::Fund, "6466756e64"),
+            (LockControllerSimpleV0Capability::Return, "6672657475726e"),
+            (LockControllerSimpleV0Capability::Send, "6473656e64"),
+            (LockControllerSimpleV0Capability::Cancel, "6663616e63656c"),
+        ];
+        for (capability, fixture) in fixtures {
+            assert_eq!(hex::encode(cbor::cbor_encode(&capability)), fixture);
+            assert_eq!(
+                cbor::cbor_decode::<LockControllerSimpleV0Capability>(
+                    &hex::decode(fixture).unwrap()
+                )
+                .unwrap(),
+                capability
+            );
+        }
+    }
+
+    #[test]
+    fn grant_cbor_round_trips_and_matches_fixture() {
+        let grant = LockControllerSimpleV0Grant {
+            account: CborHolderAccount::from(ADDRESS),
+            roles: vec![
+                LockControllerSimpleV0Capability::Fund,
+                LockControllerSimpleV0Capability::Cancel,
+            ],
+        };
+        let fixture = "a265726f6c6573826466756e646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
+        assert_eq!(
+            cbor::cbor_decode::<LockControllerSimpleV0Grant>(&cbor::cbor_encode(&grant)).unwrap(),
+            grant
+        );
+        assert_eq!(hex::encode(cbor::cbor_encode(&grant)), fixture);
+        assert_eq!(
+            cbor::cbor_decode::<LockControllerSimpleV0Grant>(&hex::decode(fixture).unwrap())
+                .unwrap(),
+            grant
+        );
+    }
+
+    #[test]
+    fn config_cbor_round_trips_full_and_minimal() {
+        let minimal = LockConfigSimpleV0 {
+            recipients: LockRecipients::Limited(vec![]),
+            expiry: TransactionTime::from_seconds(1804806000),
+            grants: vec![],
+            tokens: vec![],
+            keep_alive: false,
+            memo: None,
+            metadata: None,
+        };
+        for config in [full_config(), minimal] {
+            assert_eq!(
+                cbor::cbor_decode::<LockConfigSimpleV0>(&cbor::cbor_encode(&config)).unwrap(),
+                config
+            );
+        }
+    }
+
+    #[test]
+    fn config_cbor_matches_full_and_minimal_fixtures() {
+        let full = "a6646d656d6f4301020366657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e738163434344696b656570416c697665f56a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
+        let minimal =
+            "a466657870697279c11a6b932770666772616e74738066746f6b656e73806a726563697069656e747380";
+        let minimal_config = LockConfigSimpleV0 {
+            recipients: LockRecipients::Limited(vec![]),
+            expiry: TransactionTime::from_seconds(1804806000),
+            grants: vec![],
+            tokens: vec![],
+            keep_alive: false,
+            memo: None,
+            metadata: None,
+        };
+        for (config, fixture) in [(full_config(), full), (minimal_config, minimal)] {
+            assert_eq!(hex::encode(cbor::cbor_encode(&config)), fixture);
+            assert_eq!(
+                cbor::cbor_decode::<LockConfigSimpleV0>(&hex::decode(fixture).unwrap()).unwrap(),
+                config
+            );
+        }
+    }
+
+    #[test]
+    fn config_cbor_decodes_noncanonical_fixture() {
+        let fixture = "a56a726563697069656e74738066746f6b656e738163434344696b656570416c697665f4666772616e747381a2676163636f756e74d99d73a201d99d71a1011a000003970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2065726f6c6573826466756e646663616e63656c66657870697279c11a6b932770";
+        let expected = LockConfigSimpleV0 {
+            recipients: LockRecipients::Limited(vec![]),
+            keep_alive: false,
+            memo: None,
+            ..full_config()
+        };
+        assert_eq!(
+            cbor::cbor_decode::<LockConfigSimpleV0>(&hex::decode(fixture).unwrap()).unwrap(),
+            expected
+        );
+    }
+
+    #[test]
+    fn capability_serial_round_trips_and_matches_tag_fixtures() {
+        let fixtures = [
+            (LockControllerSimpleV0Capability::Fund, "00"),
+            (LockControllerSimpleV0Capability::Return, "01"),
+            (LockControllerSimpleV0Capability::Send, "02"),
+            (LockControllerSimpleV0Capability::Cancel, "03"),
+        ];
+        for (capability, fixture) in fixtures {
+            assert_eq!(serialize_deserialize(&capability).unwrap(), capability);
+            assert_eq!(hex::encode(to_bytes(&capability)), fixture);
+        }
+    }
+}
