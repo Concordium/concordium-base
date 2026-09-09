@@ -445,37 +445,39 @@ meta-lock-create = {
     "lockCreate": { lock-config }
 }
 
-lock-config = (
+lock-config = {
+    "simpleV0": simple-lock-config-v0
+}
+
+; The complete simple lock configuration.
+simple-lock-config-v0 = (
     ; The set of accounts that are permitted to receive funds controlled
     ; by the lock.
     "recipients": lock-recipients,
     ; The expiry time for the lock.
     "expiry": epoch-time,
-    ; The initialization parameters for the lock.
-    "controller": lock-controller,
+    ; The set of capability grants for the simple lock.
+    ; At least one account must be granted the "fund" capability.
+    "grants": [ + lock-controller-simple-grant ],
+    ; Only the specified token types may be held by the lock.
+    ; These token IDs must be valid when the lock is created.
+    "tokens": [ + token-id ],
+    ; If set, then the lock will not be destroyed before expiry except
+    ; by a cancel operation.
+    ? "keepAlive": bool .default false,
+    ; An optional description attached to the lock.
+    ; This is handled as a memo (i.e. it may be CBOR or bytes).
+    ? "memo": memo,
+    ; Opaque nested-CBOR lock metadata.
+    ? "metadata": bytes .cbor lock-metadata
 )
 
 lock-recipients = "any" / [ * tagged-account-address ]
 
-lock-controller =
-    lock-controller-simple
-
-; The simple lock controller initialization parameters.
-lock-controller-simple = {
-    "simpleV0": {
-        ; The set of capability grants for the simple lock.
-        ; At least one account must be granted the "fund" capability.
-        "grants": [ + lock-controller-simple-grant ],
-        ; Only the specified token types may be held by the lock.
-        ; These token IDs must be valid when the lock is created.
-        "tokens": [ + token-id ],
-        ; If set, then the lock will not be destroyed before expiry except
-        ; by a cancel operation.
-        ? "keepAlive": bool .default false,
-        ; An optional description attached to the lock.
-        ; This is handled as a memo (i.e. it may be CBOR or bytes).
-        ? "memo": memo
-    }
+lock-metadata = {
+    ? "name": text,
+    ? "description": text,
+    * text => any
 }
 
 ; A capability to perform a certain operation on a lock.
@@ -488,7 +490,7 @@ lock-controller-simple-capability =
 ; Grant capabilities to an account.
 lock-controller-simple-grant = {
     ; The account that is to be granted the capability.
-    "accounts": tagged-account-address,
+    "account": tagged-account-address,
     ; The capabilities that are granted to the given account.
     "roles": [ + lock-controller-simple-capability]
 }
@@ -678,7 +680,7 @@ lock-info = {
     ; The lock identifier
     "lock": lock-id,
     ; The lock configuration.
-    lock-config,
+    "config": lock-config,
     ; The state of funds of the lock.
     "funds": [ * lock-account-fund ]
 }

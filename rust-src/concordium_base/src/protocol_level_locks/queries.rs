@@ -1,6 +1,5 @@
-use super::{LockController, LockId, LockRecipients};
-use crate::common::types::TransactionTime;
-use crate::protocol_level_tokens::{CborHolderAccount, RawCbor, TokenAmount, TokenId};
+use super::{LockConfig, LockId};
+use crate::protocol_level_tokens::{CborHolderAccount, TokenAmount, TokenId};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 
 /// CBOR-encoded result of the `GetLockInfo` query.
@@ -8,15 +7,8 @@ use concordium_base_derive::{CborDeserialize, CborSerialize};
 pub struct LockInfo {
     /// The lock identifier.
     pub lock: LockId,
-    /// Accounts that can receive funds from this lock, or `Any` for any
-    /// eligible recipient.
-    pub recipients: LockRecipients,
-    /// Expiry time of the lock (seconds since epoch).
-    pub expiry: TransactionTime,
-    /// Controller configuration for the lock.
-    pub controller: LockController,
-    /// Optional raw CBOR-encoded user-facing metadata.
-    pub metadata: Option<RawCbor>,
+    /// Configuration of the lock.
+    pub config: LockConfig,
     /// The locked balances currently controlled by the lock.
     pub funds: Vec<LockAccountFunds>,
 }
@@ -40,38 +32,28 @@ pub struct LockedTokenAmount {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
-    use crate::common::cbor;
-    use crate::common::cbor::value::Value;
-    use crate::common::types::TransactionTime;
-    use crate::protocol_level_locks::{
-        LockController, LockControllerSimpleV0, LockControllerSimpleV0Capability,
-        LockControllerSimpleV0Grant, LockMetadata,
+    use crate::{
+        common::{cbor, cbor::value::Value, types::TransactionTime},
+        protocol_level_locks::{
+            LockConfigSimpleV0, LockControllerSimpleV0Capability, LockControllerSimpleV0Grant,
+            LockMetadata, LockRecipients,
+        },
+        protocol_level_tokens::{test_fixtures::ADDRESS, RawCbor},
     };
-    use crate::protocol_level_tokens::test_fixtures::ADDRESS;
     use std::collections::HashMap;
 
-    fn example_lock_id() -> LockId {
-        LockId {
-            account_index: 10001,
-            sequence_number: 5,
-            creation_order: 0,
-        }
-    }
-
-    fn example_lock_info() -> LockInfo {
-        example_lock_info_with_recipients(LockRecipients::Limited(vec![CborHolderAccount::from(
-            ADDRESS,
-        )]))
-    }
-
-    fn example_lock_info_with_recipients(recipients: LockRecipients) -> LockInfo {
+    fn info(recipients: LockRecipients, metadata: Option<RawCbor>) -> LockInfo {
         LockInfo {
-            lock: example_lock_id(),
-            recipients,
-            expiry: TransactionTime::from_seconds(1804806000),
-            controller: LockController::SimpleV0(LockControllerSimpleV0 {
+            lock: LockId {
+                account_index: 10001,
+                sequence_number: 5,
+                creation_order: 0,
+            },
+            config: LockConfig::SimpleV0(LockConfigSimpleV0 {
+                recipients,
+                expiry: TransactionTime::from_seconds(1804806000),
                 grants: vec![LockControllerSimpleV0Grant {
                     account: CborHolderAccount::from(ADDRESS),
                     roles: vec![
@@ -79,15 +61,15 @@ mod test {
                         LockControllerSimpleV0Capability::Send,
                     ],
                 }],
-                tokens: vec!["CCD".parse().unwrap()],
+                tokens: vec!["tT".parse().unwrap()],
                 keep_alive: false,
                 memo: None,
+                metadata,
             }),
-            metadata: None,
             funds: vec![LockAccountFunds {
                 account: CborHolderAccount::from(ADDRESS),
                 amounts: vec![LockedTokenAmount {
-                    token: "CCD".parse().unwrap(),
+                    token: "tT".parse().unwrap(),
                     amount: TokenAmount::from_raw(12300, 3),
                 }],
             }],
@@ -95,147 +77,62 @@ mod test {
     }
 
     #[test]
-    fn test_lock_info_cbor_round_trip() {
-        let lock_info = example_lock_info();
-        let encoded = cbor::cbor_encode(&lock_info);
-        let decoded: LockInfo = cbor::cbor_decode(&encoded).expect("CBOR decode failed");
-        assert_eq!(decoded, lock_info);
+    fn lock_info_fixture_limited_metadata_round_trips() {
+        let value = info(
+            LockRecipients::Limited(vec![CborHolderAccount::from(ADDRESS)]),
+            Some(metadata()),
+        );
+        let expected = "a3646c6f636bd99fd88319271105006566756e647381a2676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2067616d6f756e747381a265746f6b656e62745466616d6f756e74c4822219300c66636f6e666967a16873696d706c655630a566657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646473656e64676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e7381627454686d657461646174615848a4646e616d656c56657374696e67206c6f636b666973737565726a436f6e636f726469756d6776657273696f6e016b6465736372697074696f6e6d546f6b656e73206c6f636b65646a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
+        assert_eq!(hex::encode(cbor::cbor_encode(&value)), expected);
+        assert_eq!(
+            cbor::cbor_decode::<LockInfo>(&hex::decode(expected).unwrap()).unwrap(),
+            value
+        );
     }
 
     #[test]
-    fn test_lock_info_cbor_fixture_with_metadata() {
-        let mut lock_info = example_lock_info();
-        lock_info.metadata = Some(example_lock_metadata().encode_raw_cbor());
-        let encoded = cbor::cbor_encode(&lock_info);
-        let expected = concat!(
-            "a6",
-            "646c6f636b",
-            "d99fd8831927110500",
-            "6566756e6473",
-            "81",
-            "a2",
-            "676163636f756e74",
-            "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
-            "67616d6f756e7473",
-            "81",
-            "a2",
-            "65746f6b656e",
-            "63434344",
-            "66616d6f756e74",
-            "c4822219300c",
-            "66657870697279",
-            "c11a6b932770",
-            "686d65746164617461",
-            "585d",
-            "a4",
-            "646e616d65",
-            "6c56657374696e67206c6f636b",
-            "66697373756572",
-            "6a436f6e636f726469756d",
-            "6776657273696f6e",
-            "01",
-            "6b6465736372697074696f6e",
-            "7821546f6b656e73206c6f636b65642062792076657374696e67207363686564756c65",
-            "6a636f6e74726f6c6c6572",
-            "a1",
-            "6873696d706c655630",
-            "a2",
-            "666772616e7473",
-            "81",
-            "a2",
-            "65726f6c6573",
-            "82",
-            "6466756e64",
-            "6473656e64",
-            "676163636f756e74",
-            "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
-            "66746f6b656e73",
-            "81",
-            "63434344",
-            "6a726563697069656e7473",
-            "81",
-            "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+    fn lock_info_fixture_any_recipients_round_trips() {
+        let value = info(LockRecipients::Any, Some(metadata()));
+        let encoded = cbor::cbor_encode(&value);
+        let expected = "a3646c6f636bd99fd88319271105006566756e647381a2676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2067616d6f756e747381a265746f6b656e62745466616d6f756e74c4822219300c66636f6e666967a16873696d706c655630a566657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646473656e64676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e7381627454686d657461646174615848a4646e616d656c56657374696e67206c6f636b666973737565726a436f6e636f726469756d6776657273696f6e016b6465736372697074696f6e6d546f6b656e73206c6f636b65646a726563697069656e747363616e79";
+        assert_eq!(hex::encode(encoded), expected);
+        assert_eq!(
+            cbor::cbor_decode::<LockInfo>(&hex::decode(expected).unwrap()).unwrap(),
+            value
         );
-        assert_eq!(hex::encode(&encoded), expected);
     }
 
-    fn example_lock_metadata() -> LockMetadata {
-        let mut additional = HashMap::new();
-        additional.insert("issuer".to_string(), Value::Text("Concordium".to_string()));
-        additional.insert("version".to_string(), Value::Positive(1));
+    fn metadata() -> RawCbor {
         LockMetadata {
-            name: Some("Vesting lock".to_string()),
-            description: Some("Tokens locked by vesting schedule".to_string()),
-            additional,
+            name: Some("Vesting lock".into()),
+            description: Some("Tokens locked".into()),
+            additional: HashMap::from([
+                ("issuer".into(), Value::Text("Concordium".into())),
+                ("version".into(), Value::Positive(1)),
+            ]),
         }
+        .encode_raw_cbor()
     }
 
     #[test]
-    fn test_lock_info_cbor_round_trip_with_metadata() {
-        let mut lock_info = example_lock_info();
-        lock_info.metadata = Some(example_lock_metadata().encode_raw_cbor());
-        let encoded = cbor::cbor_encode(&lock_info);
-        let decoded: LockInfo = cbor::cbor_decode(&encoded).expect("CBOR decode failed");
-        assert_eq!(decoded, lock_info);
-    }
-
-    #[test]
-    fn test_lock_info_cbor_round_trip_any_recipients() {
-        let lock_info = example_lock_info_with_recipients(LockRecipients::Any);
-        let encoded = cbor::cbor_encode(&lock_info);
-        let decoded: LockInfo = cbor::cbor_decode(&encoded).expect("CBOR decode failed");
-        assert_eq!(decoded, lock_info);
-    }
-
-    #[test]
-    fn test_lock_info_cbor_round_trip_empty_limited_recipients() {
-        let lock_info = example_lock_info_with_recipients(LockRecipients::Limited(vec![]));
-        let encoded = cbor::cbor_encode(&lock_info);
-        let decoded: LockInfo = cbor::cbor_decode(&encoded).expect("CBOR decode failed");
-        assert_eq!(decoded, lock_info);
-    }
-
-    #[test]
-    fn test_lock_info_cbor_fixture_any_recipients() {
-        let lock_info = example_lock_info_with_recipients(LockRecipients::Any);
-        let encoded = cbor::cbor_encode(&lock_info);
-        let expected = concat!(
-            "a5",
-            "646c6f636b",
-            "d99fd8831927110500",
-            "6566756e6473",
-            "81",
-            "a2",
-            "676163636f756e74",
-            "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
-            "67616d6f756e7473",
-            "81",
-            "a2",
-            "65746f6b656e",
-            "63434344",
-            "66616d6f756e74",
-            "c4822219300c",
-            "66657870697279",
-            "c11a6b932770",
-            "6a636f6e74726f6c6c6572",
-            "a1",
-            "6873696d706c655630",
-            "a2",
-            "666772616e7473",
-            "81",
-            "a2",
-            "65726f6c6573",
-            "82",
-            "6466756e64",
-            "6473656e64",
-            "676163636f756e74",
-            "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
-            "66746f6b656e73",
-            "81",
-            "63434344",
-            "6a726563697069656e7473",
-            "63616e79"
-        );
-        assert_eq!(hex::encode(&encoded), expected);
+    fn lock_info_round_trips_config_variants() {
+        let variants = [
+            info(
+                LockRecipients::Limited(vec![CborHolderAccount::from(ADDRESS)]),
+                None,
+            ),
+            info(
+                LockRecipients::Limited(vec![CborHolderAccount::from(ADDRESS)]),
+                Some(metadata()),
+            ),
+            info(LockRecipients::Any, None),
+            info(LockRecipients::Limited(vec![]), None),
+        ];
+        for value in variants {
+            assert_eq!(
+                cbor::cbor_decode::<LockInfo>(&cbor::cbor_encode(&value)).unwrap(),
+                value
+            );
+        }
     }
 }

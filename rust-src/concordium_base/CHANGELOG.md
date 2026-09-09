@@ -6,8 +6,7 @@
 - Added `protocol_level_locks` module with types for PLT locks:
   - `LockId`
   - `LockConfig`
-  - `LockController`
-  - `LockControllerSimpleV0`
+  - `LockConfigSimpleV0`
   - `LockControllerSimpleV0Grant`
   - `LockControllerSimpleV0Capability`
   - `LockInfo`
