@@ -1271,7 +1271,9 @@ testLockInfoDetailsCBOR = describe "LockInfoDetails CBOR" $ do
             `shouldBe` Right exampleLockInfoDetails
     it "any recipients fixture" $ do
         let lockInfoAny = exampleLockInfoDetails{lipConfig = case lipConfig exampleLockInfoDetails of LockConfigSimpleV0 cfg -> LockConfigSimpleV0 cfg{lcsv0Recipients = LockRecipientsAny}}
-        lockInfoFromBytes (B8.fromStrict $ lockInfoToBytes lockInfoAny) `shouldBe` Right lockInfoAny
+            lockInfoAnyCBOR = "a3646c6f636bd99fd88319271105006566756e647381a2676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2067616d6f756e747381a265746f6b656e62745466616d6f756e74c4822219300c66636f6e666967a16873696d706c655630a566657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646473656e64676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e7381627454686d657461646174615848a4646e616d656c56657374696e67206c6f636b666973737565726a436f6e636f726469756d6776657273696f6e016b6465736372697074696f6e6d546f6b656e73206c6f636b65646a726563697069656e747363616e79"
+        lockInfoFromBytes (B8.fromStrict $ BS16.decodeLenient lockInfoAnyCBOR) `shouldBe` Right lockInfoAny
+        BS16.encode (lockInfoToBytes lockInfoAny) `shouldBe` lockInfoAnyCBOR
     it "metadata round-trip" $ do
         let encoded = lockInfoToBytes exampleLockInfoDetails
         lockInfoFromBytes (B8.fromStrict encoded) `shouldBe` Right exampleLockInfoDetails
