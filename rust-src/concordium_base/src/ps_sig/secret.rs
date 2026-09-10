@@ -86,7 +86,10 @@ impl<C: Pairing> SecretKey<C> {
                     acc
                 });
         z.add_assign(&self.x);
-        let h = self.g.mul_by_scalar(&C::generate_scalar(csprng));
+        // The scalar must be non-zero, since the first component of a signature must not
+        // be the identity of G1, see `Signature::try_new`. This relies on `g` being a
+        // generator, which holds for any key from `SecretKey::generate`.
+        let h = self.g.mul_by_scalar(&C::generate_non_zero_scalar(csprng));
 
         Ok(Signature(h, h.mul_by_scalar(&z)))
     }
@@ -102,6 +105,10 @@ impl<C: Pairing> SecretKey<C> {
         T: Rng,
     {
         let sk = self.g.mul_by_scalar(&self.x);
+        // The scalar is non-zero, so that the first component of the signature is not the
+        // identity of G1, see `Signature::try_new`. As in `sign_known_message`, this
+        // relies on `g` being a generator, which holds for any key from
+        // `SecretKey::generate`.
         let r = C::generate_non_zero_scalar(csprng);
         let a = self.g.mul_by_scalar(&r);
         let xmr = sk.plus_point(message).mul_by_scalar(&r);

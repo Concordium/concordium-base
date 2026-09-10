@@ -46,6 +46,8 @@ pub enum LoadError {
     },
     #[error("Out of bounds read.")]
     OutOfBoundsRead,
+    #[error("Backing-store callback failed.")]
+    CallbackFailure,
 }
 
 /// Result of loading data from persistent storage.
@@ -209,6 +211,18 @@ pub trait BackingStoreLoad {
     /// Load the provided value from the given location. The implementatation of
     /// this should match [BackingStoreStore::store_raw].
     fn load_raw(&mut self, location: Reference) -> LoadResult<Self::R>;
+
+    /// Load only the metadata that contains the stored payload length.
+    fn load_raw_length(&mut self, location: Reference) -> LoadResult<u64>;
+
+    /// Load at most `length` payload bytes, starting at `offset`. Clamp the
+    /// result to the stored payload end.
+    fn load_raw_range(
+        &mut self,
+        location: Reference,
+        offset: u64,
+        length: usize,
+    ) -> LoadResult<Self::R>;
 }
 
 impl BackingStoreStore for Vec<u8> {
@@ -268,6 +282,45 @@ impl<A: AsRef<[u8]>> BackingStoreLoad for Loader<A> {
         } else {
             Err(LoadError::OutOfBoundsRead)
         }
+    }
+
+    fn load_raw_length(&mut self, location: Reference) -> LoadResult<u64> {
+        let slice = self.inner.as_ref();
+        let mut c = std::io::Cursor::new(slice);
+        let pos = c.seek(SeekFrom::Start(location.into()))?;
+        let len = c.read_u64::<BigEndian>()?;
+        let payload_end = pos
+            .checked_add(8)
+            .and_then(|payload_start| payload_start.checked_add(len))
+            .ok_or(LoadError::OutOfBoundsRead)?;
+        if payload_end <= slice.len() as u64 {
+            Ok(len)
+        } else {
+            Err(LoadError::OutOfBoundsRead)
+        }
+    }
+
+    fn load_raw_range(
+        &mut self,
+        location: Reference,
+        offset: u64,
+        length: usize,
+    ) -> LoadResult<Self::R> {
+        let payload_length = usize::try_from(self.load_raw_length(location)?)
+            .map_err(|_| LoadError::OutOfBoundsRead)?;
+        let slice = self.inner.as_ref();
+        let start = usize::try_from(u64::from(location)).map_err(|_| LoadError::OutOfBoundsRead)?;
+        let payload_start = start.checked_add(8).ok_or(LoadError::OutOfBoundsRead)?;
+        let offset = usize::try_from(offset)
+            .unwrap_or(usize::MAX)
+            .min(payload_length);
+        let range_start = payload_start
+            .checked_add(offset)
+            .ok_or(LoadError::OutOfBoundsRead)?;
+        let range_end = range_start
+            .checked_add(length.min(payload_length - offset))
+            .ok_or(LoadError::OutOfBoundsRead)?;
+        Ok(slice[range_start..range_end].into())
     }
 }
 
