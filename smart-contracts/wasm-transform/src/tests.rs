@@ -118,5 +118,4 @@ fn test_copy_instruction_limit() {
         .run(&mut TestHost, "loop_copy_10", &[])
         .map(|_| ())
         .expect_err("too many copy operations");
-
 }
