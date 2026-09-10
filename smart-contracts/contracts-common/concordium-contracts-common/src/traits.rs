@@ -1,5 +1,4 @@
 use crate::types::*;
-#[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 use core::{default::Default, mem::MaybeUninit, slice};
 

@@ -1,30 +1,19 @@
 use crate as concordium_std;
 pub use crate::hashes::ModuleReference;
 use crate::{constants, to_bytes, Serial};
-#[cfg(all(not(feature = "std"), feature = "concordium-quickcheck"))]
-use alloc::boxed::Box;
-#[cfg(not(feature = "std"))]
 use alloc::collections::BTreeMap;
-#[cfg(not(feature = "std"))]
 use alloc::{borrow::ToOwned, string::String, string::ToString, vec::Vec};
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
 use cmp::Ordering;
 use concordium_contracts_common_derive::SchemaType;
-#[cfg(not(feature = "std"))]
 use core::{cmp, convert, fmt, hash, iter, ops, str};
 use core::{marker::PhantomData, str::FromStr};
 use hash::Hash;
-#[cfg(feature = "concordium-quickcheck")]
-use quickcheck::Gen;
 #[cfg(feature = "derive-serde")]
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 #[cfg(feature = "derive-serde")]
 pub use serde_impl::*;
-#[cfg(feature = "std")]
-use std::collections::BTreeMap;
-#[cfg(feature = "std")]
-use std::{cmp, convert, fmt, hash, iter, ops, str};
 
 /// Reexport of the `HashMap` from `hashbrown` with the default hasher set to
 /// the `fnv` hash function.
@@ -54,17 +43,6 @@ const CANONICAL_ACCOUNT_ADDRESS_SIZE: usize = 29;
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 pub struct Amount {
     pub micro_ccd: u64,
-}
-
-#[cfg(feature = "concordium-quickcheck")]
-impl quickcheck::Arbitrary for Amount {
-    fn arbitrary(g: &mut Gen) -> Amount {
-        Amount::from_micro_ccd(quickcheck::Arbitrary::arbitrary(g))
-    }
-
-    fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
-        Box::new(quickcheck::Arbitrary::shrink(&self.micro_ccd).map(Amount::from_micro_ccd))
-    }
 }
 
 #[cfg(feature = "derive-serde")]
@@ -655,21 +633,6 @@ impl FromStr for SignatureEcdsaSecp256k1 {
     }
 }
 
-#[cfg(feature = "concordium-quickcheck")]
-/// Arbitrary public keys.
-/// Note that this is a simple generator that might produce an array of bytes
-/// that is not a valid public key.
-impl quickcheck::Arbitrary for PublicKeyEd25519 {
-    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
-        let lower: u128 = quickcheck::Arbitrary::arbitrary(g);
-        let upper: u128 = quickcheck::Arbitrary::arbitrary(g);
-        let mut out = [0u8; 32];
-        out[..16].copy_from_slice(&lower.to_le_bytes());
-        out[16..].copy_from_slice(&upper.to_le_bytes());
-        PublicKeyEd25519(out)
-    }
-}
-
 pub(crate) type KeyIndex = u8;
 
 #[derive(crate::Serialize, Debug, SchemaType, PartialEq, Eq)]
@@ -744,17 +707,6 @@ pub struct Timestamp {
 impl From<u64> for Timestamp {
     fn from(millis: u64) -> Self {
         Self { millis }
-    }
-}
-
-#[cfg(feature = "concordium-quickcheck")]
-impl quickcheck::Arbitrary for Timestamp {
-    fn arbitrary(g: &mut Gen) -> Timestamp {
-        Timestamp::from_timestamp_millis(quickcheck::Arbitrary::arbitrary(g))
-    }
-
-    fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
-        Box::new(quickcheck::Arbitrary::shrink(&self.millis).map(Timestamp::from_timestamp_millis))
     }
 }
 
@@ -1135,13 +1087,6 @@ pub struct CanonicalAccountAddress(pub [u8; CANONICAL_ACCOUNT_ADDRESS_SIZE]);
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 pub struct AccountAddress(pub [u8; ACCOUNT_ADDRESS_SIZE]);
 
-#[cfg(feature = "concordium-quickcheck")]
-impl quickcheck::Arbitrary for AccountAddress {
-    fn arbitrary(g: &mut Gen) -> AccountAddress {
-        AccountAddress([0u8; ACCOUNT_ADDRESS_SIZE].map(|_| quickcheck::Arbitrary::arbitrary(g)))
-    }
-}
-
 impl convert::AsRef<[u8; 32]> for AccountAddress {
     fn as_ref(&self) -> &[u8; 32] {
         &self.0
@@ -1221,28 +1166,6 @@ impl ContractAddress {
     }
 }
 
-#[cfg(feature = "concordium-quickcheck")]
-impl quickcheck::Arbitrary for ContractAddress {
-    fn arbitrary(g: &mut Gen) -> ContractAddress {
-        ContractAddress {
-            index: quickcheck::Arbitrary::arbitrary(g),
-            subindex: quickcheck::Arbitrary::arbitrary(g),
-        }
-    }
-
-    fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
-        let index = self.index;
-        let subindex = self.subindex;
-        let iter = index.shrink().flat_map(move |i| {
-            subindex.shrink().map(move |si| ContractAddress {
-                index: i,
-                subindex: si,
-            })
-        });
-        Box::new(iter)
-    }
-}
-
 /// Either an address of an account, or contract.
 #[cfg_attr(
     feature = "derive-serde",
@@ -1256,29 +1179,6 @@ pub enum Address {
     Account(AccountAddress),
     #[cfg_attr(feature = "derive-serde", serde(rename = "AddressContract"))]
     Contract(ContractAddress),
-}
-
-#[cfg(feature = "concordium-quickcheck")]
-impl quickcheck::Arbitrary for Address {
-    fn arbitrary(g: &mut Gen) -> Address {
-        //Randomly pick account or contract address.
-        if quickcheck::Arbitrary::arbitrary(g) {
-            Address::Account(quickcheck::Arbitrary::arbitrary(g))
-        } else {
-            Address::Contract(quickcheck::Arbitrary::arbitrary(g))
-        }
-    }
-
-    fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
-        // Note that shrinking an address does not change its type: account addresses
-        // remain account addresses, the same for contract addresses.
-        match self {
-            Address::Account(a) => Box::new(quickcheck::Arbitrary::shrink(a).map(Address::Account)),
-            Address::Contract(a) => {
-                Box::new(quickcheck::Arbitrary::shrink(a).map(Address::Contract))
-            }
-        }
-    }
 }
 
 impl From<AccountAddress> for Address {
@@ -2178,22 +2078,6 @@ pub struct ChainMetadata {
     pub slot_time: SlotTime,
 }
 
-#[cfg(feature = "concordium-quickcheck")]
-impl quickcheck::Arbitrary for ChainMetadata {
-    fn arbitrary(g: &mut Gen) -> ChainMetadata {
-        ChainMetadata {
-            slot_time: quickcheck::Arbitrary::arbitrary(g),
-        }
-    }
-
-    fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
-        Box::new(
-            quickcheck::Arbitrary::shrink(&self.slot_time)
-                .map(|slot_time| ChainMetadata { slot_time }),
-        )
-    }
-}
-
 /// Add offset tracking inside a data structure.
 #[derive(Debug)]
 pub struct Cursor<T> {
@@ -2248,22 +2132,6 @@ impl fmt::Display for NewAttributeValueError {
 #[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct AttributeTag(pub u8);
 
-#[cfg(feature = "concordium-quickcheck")]
-impl quickcheck::Arbitrary for AttributeTag {
-    // We choose not to constrain the generated attributes to those currently
-    // defined in `concordium-base/rust-src/id/src/types.rs`. The protocol
-    // supports more attributes and it is reasonable to generate all values
-    // supported by the protocol to ensure that the tested code is robust with
-    // respect to future additions.
-    fn arbitrary(g: &mut Gen) -> AttributeTag {
-        AttributeTag(quickcheck::Arbitrary::arbitrary(g))
-    }
-
-    fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
-        Box::new(quickcheck::Arbitrary::shrink(&self.0).map(AttributeTag))
-    }
-}
-
 /// An attribute value.
 /// The meaning of the bytes is dependent on the type of the attribute.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2311,37 +2179,6 @@ impl AttributeValue {
     /// Whether the attribute value has zero length.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
-    }
-}
-
-#[cfg(feature = "concordium-quickcheck")]
-fn gen_sized_vec<A: quickcheck::Arbitrary>(g: &mut Gen, size: usize) -> Vec<A> {
-    (0..size)
-        .map(|_| quickcheck::Arbitrary::arbitrary(g))
-        .collect()
-}
-
-#[cfg(feature = "concordium-quickcheck")]
-impl quickcheck::Arbitrary for AttributeValue {
-    fn arbitrary(g: &mut Gen) -> AttributeValue {
-        let size = gen_range_u8(g, 0..32);
-        let mut inner: [u8; 32] = [0u8; 32];
-        let random_data = gen_sized_vec(g, size as usize);
-        inner[1..=size as usize].copy_from_slice(&random_data);
-        inner[0] = size;
-        AttributeValue { inner }
-    }
-
-    fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
-        let size = self.inner[0];
-        let data: &[u8] = &self.inner[1..=size as usize];
-        let vs = data.to_vec().shrink();
-        Box::new(vs.map(|v| {
-            let mut inner = [0u8; 32];
-            inner[1..=v.len()].copy_from_slice(&v);
-            inner[0] = v.len() as u8;
-            AttributeValue { inner }
-        }))
     }
 }
 
@@ -2492,93 +2329,6 @@ pub struct Policy<Attributes> {
     pub valid_to: Timestamp,
     /// List of attributes, in ascending order of the tag.
     pub items: Attributes,
-}
-
-/// Generate a vector of random key-value pairs with no duplication
-/// The length of the resulting vector is <= `size`
-#[cfg(feature = "concordium-quickcheck")]
-fn gen_no_dup_kv_vec<A: quickcheck::Arbitrary + Ord, B: quickcheck::Arbitrary>(
-    g: &mut Gen,
-    size: usize,
-) -> Vec<(A, B)> {
-    let mut m: BTreeMap<A, B> = BTreeMap::new();
-    for _ in 0..size {
-        let k = A::arbitrary(g);
-        let v = B::arbitrary(g);
-        m.insert(k, v);
-    }
-    m.into_iter().collect()
-}
-
-/// Generate a random `u64` value in the given range by shifting a random `u64`
-/// value using the `%` operator. The reason for doing it this way is that the
-/// range generation method is not exposed by QuickCheck's `Gen`.
-#[cfg(feature = "concordium-quickcheck")]
-fn gen_range_u64(g: &mut Gen, range: core::ops::Range<u64>) -> u64 {
-    let i: u64 = quickcheck::Arbitrary::arbitrary(g);
-    i % (range.end - range.start) + range.start
-}
-
-/// Generate a random `u8` value in the given range by shifting a random `u8`
-/// value using the `%` operator. The reason for doing it this way is that the
-/// range generation method is not exposed by QuickCheck's `Gen`.
-#[cfg(feature = "concordium-quickcheck")]
-fn gen_range_u8(g: &mut Gen, range: core::ops::Range<u8>) -> u8 {
-    let i: u8 = quickcheck::Arbitrary::arbitrary(g);
-    i % (range.end - range.start) + range.start
-}
-
-/// Check that the creation date `created_at` is less then or equal to the
-/// validity date `valid_to`.
-#[cfg(feature = "concordium-quickcheck")]
-fn valid_owned_policy(op: &OwnedPolicy) -> bool {
-    let OwnedPolicy {
-        created_at,
-        valid_to,
-        ..
-    } = op;
-    created_at <= valid_to
-}
-
-#[cfg(feature = "concordium-quickcheck")]
-impl quickcheck::Arbitrary for OwnedPolicy {
-    fn arbitrary(g: &mut Gen) -> OwnedPolicy {
-        let size: u8 = quickcheck::Arbitrary::arbitrary(g);
-        let created_at: Timestamp = quickcheck::Arbitrary::arbitrary(g);
-        // generate `created_at` date so it's <= `valid_to`
-        let valid_to_millis = gen_range_u64(g, created_at.timestamp_millis()..u64::MAX);
-        OwnedPolicy {
-            identity_provider: quickcheck::Arbitrary::arbitrary(g),
-            created_at,
-            valid_to: Timestamp::from_timestamp_millis(valid_to_millis),
-            items: gen_no_dup_kv_vec(g, size as usize),
-        }
-    }
-
-    fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
-        let identity_provider = self.identity_provider;
-        let created_at = self.created_at;
-        let valid_to = self.valid_to;
-        let items = self.items.clone();
-        let iter = identity_provider
-            .shrink()
-            .flat_map(move |ip| {
-                let items = items.clone();
-                created_at.shrink().flat_map(move |ca| {
-                    let items = items.clone();
-                    valid_to.shrink().flat_map(move |vt| {
-                        items.shrink().map(move |it| OwnedPolicy {
-                            identity_provider: ip,
-                            created_at: ca,
-                            valid_to: vt,
-                            items: it,
-                        })
-                    })
-                })
-            })
-            .filter(valid_owned_policy);
-        Box::new(iter)
-    }
 }
 
 /// This implementation of deserialize is only useful when used
@@ -3296,10 +3046,10 @@ mod test {
     fn test_json_serialization_and_deserialization_of_signature_ed25519() {
         let hex_string = "FC87CE9497CBD9DDDFB6CED31914D4FB93DD158EEFE7AF927AB31BB47178E61A33BEA52568475C161EC5B7A5E86B9F5F0274274192665D83197C4CE9A24C7C06";
 
-        let signature = SignatureEd25519::from_str(&hex_string.to_string()).unwrap();
+        let signature = SignatureEd25519::from_str(hex_string).unwrap();
 
         // Serialize to JSON
-        let serialized = serde_json::to_value(&signature).unwrap();
+        let serialized = serde_json::to_value(signature).unwrap();
 
         // Deserialize from JSON
         let deserialized: SignatureEd25519 = serde_json::from_value(serialized).unwrap();
@@ -3315,10 +3065,10 @@ mod test {
     fn test_json_serialization_and_deserialization_of_signature_ecdsa_secp256k1() {
         let hex_string = "FC87CE9497CBD9DDDFB6CED31914D4FB93DD158EEFE7AF927AB31BB47178E61A33BEA52568475C161EC5B7A5E86B9F5F0274274192665D83197C4CE9A24C7C06";
 
-        let signature = SignatureEcdsaSecp256k1::from_str(&hex_string.to_string()).unwrap();
+        let signature = SignatureEcdsaSecp256k1::from_str(hex_string).unwrap();
 
         // Serialize to JSON
-        let serialized = serde_json::to_value(&signature).unwrap();
+        let serialized = serde_json::to_value(signature).unwrap();
 
         // Deserialize from JSON
         let deserialized: SignatureEcdsaSecp256k1 = serde_json::from_value(serialized).unwrap();
@@ -3334,8 +3084,7 @@ mod test {
     fn test_json_serialization_and_deserialization_of_signature() {
         let hex_string = "FC87CE9497CBD9DDDFB6CED31914D4FB93DD158EEFE7AF927AB31BB47178E61A33BEA52568475C161EC5B7A5E86B9F5F0274274192665D83197C4CE9A24C7C06";
 
-        let signature =
-            Signature::Ed25519(SignatureEd25519::from_str(&hex_string.to_string()).unwrap());
+        let signature = Signature::Ed25519(SignatureEd25519::from_str(hex_string).unwrap());
 
         // Serialize to JSON
         let serialized = serde_json::to_value(&signature).unwrap();
@@ -3354,8 +3103,7 @@ mod test {
     fn test_json_serialization_and_deserialization_of_credential_signature() {
         let hex_string = "FC87CE9497CBD9DDDFB6CED31914D4FB93DD158EEFE7AF927AB31BB47178E61A33BEA52568475C161EC5B7A5E86B9F5F0274274192665D83197C4CE9A24C7C06";
 
-        let signature =
-            Signature::Ed25519(SignatureEd25519::from_str(&hex_string.to_string()).unwrap());
+        let signature = Signature::Ed25519(SignatureEd25519::from_str(hex_string).unwrap());
 
         let mut sig_map = BTreeMap::new();
         sig_map.insert(0u8, signature);
@@ -3379,8 +3127,7 @@ mod test {
     fn test_json_serialization_and_deserialization_of_account_signature() {
         let hex_string = "FC87CE9497CBD9DDDFB6CED31914D4FB93DD158EEFE7AF927AB31BB47178E61A33BEA52568475C161EC5B7A5E86B9F5F0274274192665D83197C4CE9A24C7C06";
 
-        let signature =
-            Signature::Ed25519(SignatureEd25519::from_str(&hex_string.to_string()).unwrap());
+        let signature = Signature::Ed25519(SignatureEd25519::from_str(hex_string).unwrap());
 
         let mut sig_map = BTreeMap::new();
         sig_map.insert(0u8, signature);
@@ -3413,7 +3160,7 @@ mod test {
         if let Ok(timestamp) = Timestamp::from_str(&millis.to_string()) {
             assert_eq!(timestamp.millis, millis);
         } else {
-            assert!(false)
+            panic!()
         };
     }
 
@@ -3424,7 +3171,7 @@ mod test {
         if let Ok(timestamp) = Timestamp::from_str(datetime) {
             assert_eq!(timestamp.millis, 42);
         } else {
-            assert!(false)
+            panic!()
         };
     }
 

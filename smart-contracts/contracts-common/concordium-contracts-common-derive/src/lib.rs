@@ -231,9 +231,23 @@ fn serialize_derive_worker(input: TokenStream) -> syn::Result<TokenStream> {
 /// [`StateSet`](../concordium_std/struct.StateSet.html), or
 /// [`StateMap`](../concordium_std/struct.StateMap.html).
 ///
+/// # Example
+/// ``` ignore
+/// #[derive(DeserialWithState)]
+/// struct Foo<T> {
+///     a: StateMap<u8, u8>,
+///     #[concordium(size_length = 1)]
+///     b: String,
+///     c: Vec<T>,
+/// }
+///```
+///
+/// # Together with generic parameter for low-level state type:
+///
 /// Please note that it is necessary to specify the generic parameter name for
 /// the [`HasStateApi`](../concordium_std/trait.HasStateApi.html) generic
-/// parameter. To do so, use the `#[concordium(state_parameter =
+/// parameter if your type has such a parameter.
+/// To do so, use the `#[concordium(state_parameter =
 /// "NameOfGenericParameter")]` attribute on the type you are deriving
 /// `DeserialWithState` for.
 ///
@@ -447,9 +461,19 @@ pub fn reject_derive(input: TokenStream) -> TokenStream {
 /// [`StateSet`](../concordium_std/struct.StateSet.html), or
 /// [`StateMap`](../concordium_std/struct.StateMap.html).
 ///
-/// Please note that it is
-/// necessary to specify the generic parameter name for the
-/// [`HasStateApi`](../concordium_std/trait.HasStateApi.html) generic parameter.
+/// # Example
+/// ``` ignore
+/// #[derive(Serial, DeserialWithState, Deletable)]
+/// struct MyState {
+///    my_state_map: StateMap<SomeType, SomeOtherType>,
+/// }
+/// ```
+///
+/// # Together with generic parameter for low-level state type:
+///
+/// Please note that it is necessary to specify the generic parameter name for
+/// the [`HasStateApi`](../concordium_std/trait.HasStateApi.html) generic
+/// parameter if your type has such a parameter.
 /// To do so, use the `#[concordium(state_parameter =
 /// "NameOfGenericParameter")]` attribute on the type you are deriving
 /// `Deletable` for.
@@ -824,42 +848,4 @@ pub fn concordium_cfg_not_test(_attr: TokenStream, _item: TokenStream) -> TokenS
 #[proc_macro_attribute]
 pub fn concordium_cfg_not_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
     item
-}
-
-// Supported attributes for `concordium-quickcheck`
-
-#[cfg(feature = "concordium-quickcheck")]
-#[proc_macro_attribute]
-/// Derive the appropriate export for an annotated QuickCheck function by
-/// exposing it as `#[concordium_test]`. The macro is similar to `#[quickcheck]`
-/// but uses a customized test runner
-/// instead of the standard  `QuickCheck`'s `quickcheck`
-///
-/// The macro optionally takes a `num_tests` attribute that specifies how many
-/// tests to run: `#[concordium_quickcheck(tests = 1000)]`. If no `tests` is
-/// provided, 100 is used.
-///
-/// Note that the maximum number of tests is limited to 1_000_000.
-//  QUICKCHECK_MAX_PASSED_TESTS defines the limit.
-pub fn concordium_quickcheck(attr: TokenStream, input: TokenStream) -> TokenStream {
-    use syn::{
-        parse::{Parse, Parser},
-        spanned::Spanned,
-    };
-
-    let input = proc_macro2::TokenStream::from(input);
-    let span = input.span();
-    syn::Item::parse
-        .parse2(input)
-        .and_then(|item| match item {
-            syn::Item::Fn(mut item_fn) => {
-                attribute::quickcheck::wrap_quickcheck_test(attr, &mut item_fn)
-            }
-            _ => Err(syn::Error::new(
-                span,
-                "#[concordium_quickcheck] can only be applied to functions.",
-            )),
-        })
-        .unwrap_or_else(|e| e.to_compile_error())
-        .into()
 }
