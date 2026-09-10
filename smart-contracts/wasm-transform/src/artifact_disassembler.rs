@@ -454,10 +454,7 @@ where
 /// Resolve the [`FunctionType`] of a function referenced by a `Call`, given its
 /// combined function index (imports occupy the lowest indices, followed by the
 /// defined functions in `code`).
-fn resolve_func_type<'a, I, C>(
-    artifact: &'a Artifact<I, C>,
-    idx: FuncIndex,
-) -> Option<&'a FunctionType>
+fn resolve_func_type<I, C>(artifact: &Artifact<I, C>, idx: FuncIndex) -> Option<&FunctionType>
 where
     I: TryFromImport,
     C: RunnableCode,
