@@ -1398,12 +1398,12 @@ testLockControllerSimpleV0CapabilityCBOR = describe "LockControllerSimpleV0Capab
             decodeLockControllerSimpleV0Capability
             LockControllerSimpleV0Fund
             "6466756e64"
-    it "return" $
+    it "release" $
         lockFixture
             encodeLockControllerSimpleV0Capability
             decodeLockControllerSimpleV0Capability
-            LockControllerSimpleV0Return
-            "6672657475726e"
+            LockControllerSimpleV0Release
+            "6772656c65617365"
     it "send" $
         lockFixture
             encodeLockControllerSimpleV0Capability

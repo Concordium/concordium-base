@@ -150,8 +150,8 @@ testLockRejectReasonJSONRepresentation = do
             (LockSendNotAuthorized accountDetails)
             (AE.object ["tag" AE..= ("LockSendNotAuthorized" :: String), "contents" AE..= accountDetails])
         assertJSON
-            (LockReturnNotAuthorized accountDetails)
-            (AE.object ["tag" AE..= ("LockReturnNotAuthorized" :: String), "contents" AE..= accountDetails])
+            (LockReleaseNotAuthorized accountDetails)
+            (AE.object ["tag" AE..= ("LockReleaseNotAuthorized" :: String), "contents" AE..= accountDetails])
         assertJSON
             (LockCancelNotAuthorized accountDetails)
             (AE.object ["tag" AE..= ("LockCancelNotAuthorized" :: String), "contents" AE..= accountDetails])

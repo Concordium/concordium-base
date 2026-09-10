@@ -377,7 +377,7 @@ meta-token-unpause = {
 meta-token-lock-operation =
     meta-lock-fund
     / meta-lock-send
-    / meta-lock-return
+    / meta-lock-release
 
 ; Fund a lock by locking the specified amount on the sender account (implicit)
 ; under the control of a specified lock.
@@ -419,17 +419,17 @@ lock-send-body = (
     ? "memo": memo
 )
 
-; Return funds under the control of a lock to the owner account.
+; Release funds under the control of a lock to the owner account.
 ; The funds are moved from the locked balance to the available balance of the
 ; owner.
-meta-lock-return = {
-    "lockReturn": {
+meta-lock-release = {
+    "lockRelease": {
         "token": token-id,
-        lock-return-body
+        lock-release-body
     }
 }
 
-lock-return-body = (
+lock-release-body = (
     ; The lock controlling the funds.
     "lock": lock-ref,
     ; The account holding the funds.
@@ -483,7 +483,7 @@ lock-metadata = {
 ; A capability to perform a certain operation on a lock.
 lock-controller-simple-capability =
     "fund"      ; Capability to perform "lockFund"
-    / "return"  ; Capability to perform "lockReturn"
+    / "release" ; Capability to perform "lockRelease"
     / "send"    ; Capability to perform "lockSend"
     / "cancel"  ; Capability to perform "lockCancel" (before expiry)
 

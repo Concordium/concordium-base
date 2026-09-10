@@ -132,15 +132,15 @@ pub fn lock_send(
     })
 }
 
-/// Construct an operation to return funds controlled by a lock to the owner.
-pub fn lock_return(
+/// Construct an operation to release funds controlled by a lock to the owner.
+pub fn lock_release(
     token_id: TokenId,
     lock_id: LockId,
     source: AccountAddress,
     amount: TokenAmount,
     memo: Option<CborMemo>,
 ) -> MetaUpdateOperation {
-    MetaUpdateOperation::LockReturn(MetaLockReturnDetails {
+    MetaUpdateOperation::LockRelease(MetaLockReleaseDetails {
         token: token_id,
         lock: lock_id,
         source: CborHolderAccount::from(source),
@@ -251,8 +251,8 @@ pub enum MetaUpdateOperation {
     LockFund(MetaLockFundDetails),
     /// Operation to send funds controlled by a lock.
     LockSend(MetaLockSendDetails),
-    /// Operation to return funds controlled by a lock to the owner.
-    LockReturn(MetaLockReturnDetails),
+    /// Operation to release funds controlled by a lock to the owner.
+    LockRelease(MetaLockReleaseDetails),
     /// Operation to create a lock.
     LockCreate(MetaLockCreateDetails),
     /// Operation to cancel a lock.
@@ -305,8 +305,8 @@ pub enum LockOperation {
     Fund(MetaLockFundDetails),
     /// Operation to send funds controlled by a lock.
     Send(MetaLockSendDetails),
-    /// Operation to return funds controlled by a lock to the owner.
-    Return(MetaLockReturnDetails),
+    /// Operation to release funds controlled by a lock to the owner.
+    Release(MetaLockReleaseDetails),
     /// Operation to create a lock.
     Create(MetaLockCreateDetails),
     /// Operation to cancel a lock.
@@ -520,18 +520,18 @@ pub struct MetaLockSendDetails {
     pub memo: Option<CborMemo>,
 }
 
-/// Return funds under the control of a lock to the owner account.
+/// Release funds under the control of a lock to the owner account.
 /// The funds are moved from the locked balance to the available balance
 /// of the owner.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-pub struct MetaLockReturnDetails {
+pub struct MetaLockReleaseDetails {
     /// The token the operation applies to.
     pub token: TokenId,
     /// The lock controlling the funds.
     pub lock: LockId,
     /// The account holding the funds.
     pub source: CborHolderAccount,
-    /// The amount of tokens to return.
+    /// The amount of tokens to release.
     pub amount: TokenAmount,
     /// An optional memo.
     pub memo: Option<CborMemo>,
@@ -809,8 +809,8 @@ mod tests {
     }
 
     #[test]
-    fn test_meta_operation_cbor_lock_return() {
-        let operation = MetaUpdateOperation::LockReturn(MetaLockReturnDetails {
+    fn test_meta_operation_cbor_lock_release() {
+        let operation = MetaUpdateOperation::LockRelease(MetaLockReleaseDetails {
             token: "testPLT".parse().unwrap(),
             lock: LockId::new(20, 7, 0),
             source: CborHolderAccount::from(ADDRESS),
@@ -820,7 +820,7 @@ mod tests {
         let cbor = cbor::cbor_encode(&operation);
         assert_eq!(
             hex::encode(&cbor),
-            "a16a6c6f636b52657475726ea4646c6f636bd99fd88314070065746f6b656e6774657374504c5466616d6f756e74c4820019138866736f75726365d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+            "a16b6c6f636b52656c65617365a4646c6f636bd99fd88314070065746f6b656e6774657374504c5466616d6f756e74c4820019138866736f75726365d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
         );
         let operation_decoded: MetaUpdateOperation =
             cbor::cbor_decode(&cbor).expect("CBOR deserialize");
