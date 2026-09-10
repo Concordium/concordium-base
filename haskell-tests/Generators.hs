@@ -905,7 +905,7 @@ instance Arbitrary RejectReason where
               LockExpired <$> genLockId,
               LockFundNotAuthorized <$> genLockAccountRejectReasonDetails,
               LockSendNotAuthorized <$> genLockAccountRejectReasonDetails,
-              LockReturnNotAuthorized <$> genLockAccountRejectReasonDetails,
+              LockReleaseNotAuthorized <$> genLockAccountRejectReasonDetails,
               LockCancelNotAuthorized <$> genLockAccountRejectReasonDetails,
               LockTokenNotPermitted <$> genLockTokenRejectReasonDetails,
               LockRecipientNotPermitted <$> genLockAccountRejectReasonDetails,

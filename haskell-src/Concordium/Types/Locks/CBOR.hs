@@ -98,7 +98,7 @@ decodeLockId = do
 -- | Capabilities supported by the simple lock controller.
 data LockControllerSimpleV0Capability
     = LockControllerSimpleV0Fund
-    | LockControllerSimpleV0Return
+    | LockControllerSimpleV0Release
     | LockControllerSimpleV0Send
     | LockControllerSimpleV0Cancel
     deriving (Eq, Show)
@@ -107,7 +107,7 @@ encodeLockControllerSimpleV0Capability :: LockControllerSimpleV0Capability -> En
 encodeLockControllerSimpleV0Capability =
     encodeString . \case
         LockControllerSimpleV0Fund -> "fund"
-        LockControllerSimpleV0Return -> "return"
+        LockControllerSimpleV0Release -> "release"
         LockControllerSimpleV0Send -> "send"
         LockControllerSimpleV0Cancel -> "cancel"
 
@@ -116,7 +116,7 @@ decodeLockControllerSimpleV0Capability = do
     role <- decodeString
     case role of
         "fund" -> return LockControllerSimpleV0Fund
-        "return" -> return LockControllerSimpleV0Return
+        "release" -> return LockControllerSimpleV0Release
         "send" -> return LockControllerSimpleV0Send
         "cancel" -> return LockControllerSimpleV0Cancel
         _ -> fail $ "Unsupported lock controller capability: " ++ show role
@@ -216,7 +216,7 @@ data SimpleLockConfigV0 = SimpleLockConfigV0
       lcsv0Grants :: !(Seq.Seq LockControllerSimpleV0Grant),
       -- | Tokens that may be funded into the lock.
       lcsv0Tokens :: !(Seq.Seq TokenId),
-      -- | Whether to retain the lock after all funds are returned.
+      -- | Whether to retain the lock after all funds are released.
       lcsv0KeepAlive :: !Bool,
       -- | Optional memo attached to the lock.
       lcsv0Memo :: !(Maybe TaggableMemo),
