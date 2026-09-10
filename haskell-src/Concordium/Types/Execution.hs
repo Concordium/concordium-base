@@ -383,7 +383,12 @@ data Payload
         { -- | Identifier of the token type to which the transaction refers.
           tuTokenId :: !TokenId,
           -- | The CBOR-encoded operations to perform.
-          tuOperations :: !TokenParameter
+          tuOperations :: !RawCbor
+        }
+    | -- | A meta-update transaction, which may perform PLT and lock operations.
+      MetaUpdate
+        { -- | The CBOR-encoded operations to perform.
+          muOperations :: !RawCbor
         }
     deriving (Eq, Show)
 
@@ -422,6 +427,7 @@ instance S.Serialize TransactionType where
         TTConfigureBaker -> S.putWord8 19
         TTConfigureDelegation -> S.putWord8 20
         TTTokenUpdate -> S.putWord8 21
+        TTMetaUpdate -> S.putWord8 22
 
     get =
         S.getWord8 >>= \case
@@ -447,6 +453,7 @@ instance S.Serialize TransactionType where
             19 -> return TTConfigureBaker
             20 -> return TTConfigureDelegation
             21 -> return TTTokenUpdate
+            22 -> return TTMetaUpdate
             n -> fail $ "Unrecognized TransactionType tag: " ++ show n
 
 instance AE.ToJSON Payload where
@@ -575,6 +582,9 @@ instance AE.ToJSON Payload where
               "operations" AE..= EncodedTokenOperations tuOperations,
               "transactionType" AE..= AE.String "tokenUpdate"
             ]
+    toJSON MetaUpdate{..} =
+        AE.object
+            ["operations" AE..= EncodedMetaUpdateOperations muOperations]
 
 instance AE.FromJSON Payload where
     parseJSON = AE.withObject "payload" $ \obj -> do
@@ -830,6 +840,9 @@ putPayload TokenUpdate{..} = do
     S.putWord8 27
     S.put tuTokenId
     S.put tuOperations
+putPayload MetaUpdate{..} = do
+    S.putWord8 28
+    S.put muOperations
 
 -- | Set the given bit if the value is a 'Just'.
 bitFor :: (Bits b) => Int -> Maybe a -> b
@@ -999,6 +1012,9 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 tuTokenId <- S.get
                 tuOperations <- S.get
                 return TokenUpdate{..}
+            28 | supportMetaUpdate -> S.label "MetaUpdate" $ do
+                muOperations <- S.get
+                return MetaUpdate{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
     supportMemo = supportsMemo spv
     supportDelegation = protocolSupportsDelegation spv
@@ -1009,6 +1025,7 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
         | otherwise = 0b0000000011111111
     configureDelegationBitMask = 0b0000000000000111
     supportProtocolLevelTokens = protocolSupportsPLT spv
+    supportMetaUpdate = supportsMetaUpdate spv
 
 -- | Builds a set from a list of ascending elements.
 --  Fails if the elements are not ordered or a duplicate is encountered.
@@ -1398,7 +1415,16 @@ data Event' (supplemented :: Bool)
           -- | The amount transferred.
           ettAmount :: !TokenAmount,
           -- | An optional memo for the transfer.
-          ettMemo :: !(Maybe Memo)
+          ettMemo :: !(Maybe Memo),
+          -- | When the funds originate on the locked balance of an account, the
+          --  identity of the lock controlling the funds. Absent when the funds
+          --  are not on the locked balance of the originating account.
+          ettFromLock :: !(Maybe LockId),
+          -- | When the funds are transferred into the control of a lock, the
+          --  identity of the lock assuming control of the funds. Absent when
+          --  the funds are sent to the available balance of the receiving
+          --  account.
+          ettToLock :: !(Maybe LockId)
         }
     | -- | A token mint event.
       -- The serialization uses a bitmap to indicate which fields are present.
@@ -1428,6 +1454,18 @@ data Event' (supplemented :: Bool)
       TokenCreated
         { -- | The update payload used to create the token.
           etcPayload :: !CreatePLT
+        }
+    | -- | A protocol-level lock was created.
+      LockCreated
+        { -- | Lock ID of the newly-created lock.
+          elcLockId :: !LockId,
+          -- | CBOR-encoded lock configuration.
+          elcLockConfig :: !RawCbor
+        }
+    | -- | A protocol-level lock was destroyed.
+      LockDestroyed
+        { -- | Lock ID of the destroyed lock.
+          eldLockId :: !LockId
         }
     deriving (Show, Generic, Eq)
 
@@ -1492,6 +1530,8 @@ addInitializeParameter _ TokenTransfer{..} = pure TokenTransfer{..}
 addInitializeParameter _ TokenMint{..} = pure TokenMint{..}
 addInitializeParameter _ TokenBurn{..} = pure TokenBurn{..}
 addInitializeParameter _ TokenCreated{..} = pure TokenCreated{..}
+addInitializeParameter _ LockCreated{..} = pure LockCreated{..}
+addInitializeParameter _ LockDestroyed{..} = pure LockDestroyed{..}
 
 putEvent :: S.Putter Event
 putEvent = \case
@@ -1697,9 +1737,13 @@ putEvent = \case
             <> S.put ettTo
             <> S.put ettAmount
             <> mapM_ S.put ettMemo
+            <> mapM_ S.put ettFromLock
+            <> mapM_ S.put ettToLock
       where
         bitmap =
             bitFor 0 ettMemo
+                .|. bitFor 1 ettFromLock
+                .|. bitFor 2 ettToLock
     TokenMint{..} ->
         S.putWord8 40
             -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
@@ -1719,6 +1763,13 @@ putEvent = \case
     TokenCreated{..} ->
         S.putWord8 42
             <> S.put etcPayload
+    LockCreated{..} ->
+        S.putWord8 43
+            <> S.put elcLockId
+            <> S.put elcLockConfig
+    LockDestroyed{..} ->
+        S.putWord8 44
+            <> S.put eldLockId
 
 getEvent :: SProtocolVersion pv -> S.Get Event
 getEvent spv =
@@ -1929,6 +1980,8 @@ getEvent spv =
                     | testBit bitmap b = Just <$> S.get
                     | otherwise = return Nothing
             ettMemo <- maybeGet 0
+            ettFromLock <- maybeGet 1
+            ettToLock <- maybeGet 2
             return TokenTransfer{..}
         40 | supportPlt -> do
             -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
@@ -1953,6 +2006,13 @@ getEvent spv =
         42 | supportPlt -> do
             etcPayload <- S.get
             return TokenCreated{..}
+        43 | supportLocks -> do
+            elcLockId <- S.get
+            elcLockConfig <- S.get
+            return LockCreated{..}
+        44 | supportLocks -> do
+            eldLockId <- S.get
+            return LockDestroyed{..}
         n -> fail $ "Unrecognized event tag: " ++ show n
   where
     supportMemo = supportsMemo spv
@@ -1960,7 +2020,10 @@ getEvent spv =
     supportDelegation = protocolSupportsDelegation spv
     supportSuspend = protocolSupportsSuspend spv
     supportPlt = protocolSupportsPLT spv
-    configureTokenTransferBitMask = 0b0000000000000001
+    supportLocks = supportsPLTLocks spv
+    configureTokenTransferBitMask
+        | supportLocks = 0b0000000000000111
+        | otherwise = 0b0000000000000001
     configureTokenMintBitMask = 0b0000000000000000
     configureTokenBurnBitMask = 0b0000000000000000
 
@@ -2244,6 +2307,8 @@ instance AE.ToJSON (Event' supplemented) where
                   "amount" .= ettAmount
                 ]
                     ++ foldMap (\memo -> ["memo" .= memo]) ettMemo
+                    ++ foldMap (\fromLock -> ["fromLock" .= fromLock]) ettFromLock
+                    ++ foldMap (\toLock -> ["toLock" .= toLock]) ettToLock
         TokenMint{..} ->
             AE.object
                 [ "tag" .= AE.String "TokenMint",
@@ -2262,6 +2327,17 @@ instance AE.ToJSON (Event' supplemented) where
             AE.object
                 [ "tag" .= AE.String "TokenCreated",
                   "payload" .= etcPayload
+                ]
+        LockCreated{..} ->
+            AE.object
+                [ "tag" .= AE.String "LockCreated",
+                  "lockId" .= elcLockId,
+                  "lockConfig" .= elcLockConfig
+                ]
+        LockDestroyed{..} ->
+            AE.object
+                [ "tag" .= AE.String "LockDestroyed",
+                  "lockId" .= eldLockId
                 ]
 
 instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
@@ -2464,6 +2540,8 @@ instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
                 ettTo <- obj .: "to"
                 ettAmount <- obj .: "amount"
                 ettMemo <- obj AE..:? "memo"
+                ettFromLock <- obj AE..:? "fromLock"
+                ettToLock <- obj AE..:? "toLock"
                 return TokenTransfer{..}
             "TokenMint" -> do
                 etmTokenId <- obj .: "tokenId"
@@ -2478,6 +2556,13 @@ instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
             "TokenCreated" -> do
                 etcPayload <- obj .: "payload"
                 return TokenCreated{..}
+            "LockCreated" -> do
+                elcLockId <- obj .: "lockId"
+                elcLockConfig <- obj .: "lockConfig"
+                return LockCreated{..}
+            "LockDestroyed" -> do
+                eldLockId <- obj .: "lockId"
+                return LockDestroyed{..}
             tag -> fail $ "Unrecognized 'Event' tag " ++ Text.unpack tag
 
 -- | 'SupplementEvents' provides a traversal that can be used to replace 'Event's with
@@ -2837,7 +2922,55 @@ data RejectReason
       NonExistentTokenId !TokenId
     | -- | The token update transaction was rejected.
       TokenUpdateTransactionFailed !TokenModuleRejectReason
+    | -- | Lock ID does not exist.
+      NonExistentLockId !LockId
+    | -- | The lock is expired.
+      LockExpired !LockId
+    | -- | The account is not authorized to fund the lock.
+      LockFundNotAuthorized !LockAccountRejectReasonDetails
+    | -- | The account is not authorized to send funds controlled by the lock.
+      LockSendNotAuthorized !LockAccountRejectReasonDetails
+    | -- | The account is not authorized to return funds controlled by the lock.
+      LockReturnNotAuthorized !LockAccountRejectReasonDetails
+    | -- | The account is not authorized to cancel the lock.
+      LockCancelNotAuthorized !LockAccountRejectReasonDetails
+    | -- | The lock does not allow funding with the particular token.
+      LockTokenNotPermitted !LockTokenRejectReasonDetails
+    | -- | The recipient is not permitted to receive funds controlled by the lock.
+      LockRecipientNotPermitted !LockAccountRejectReasonDetails
+    | -- | The requested expiry exceeds the maximum permitted lock duration.
+      LockDurationTooLong !LockId
     deriving (Show, Eq, Generic)
+
+-- | Details for lock reject reasons involving an account.
+data LockAccountRejectReasonDetails = LockAccountRejectReasonDetails
+    { -- | The lock involved in the rejected operation.
+      larrdLockId :: !LockId,
+      -- | The account involved in the rejected operation.
+      larrdAccount :: !AccountAddress
+    }
+    deriving (Show, Eq, Generic)
+
+instance AE.ToJSON LockAccountRejectReasonDetails
+instance AE.FromJSON LockAccountRejectReasonDetails
+
+-- | Details for lock reject reasons involving a token.
+data LockTokenRejectReasonDetails = LockTokenRejectReasonDetails
+    { -- | The lock involved in the rejected operation.
+      ltrrdLockId :: !LockId,
+      -- | The token involved in the rejected operation.
+      ltrrdTokenId :: !TokenId
+    }
+    deriving (Show, Eq, Generic)
+
+instance AE.ToJSON LockTokenRejectReasonDetails
+instance AE.FromJSON LockTokenRejectReasonDetails
+
+getLockAccountRejectReasonDetails :: S.Get LockAccountRejectReasonDetails
+getLockAccountRejectReasonDetails = LockAccountRejectReasonDetails <$> S.get <*> S.get
+
+getLockTokenRejectReasonDetails :: S.Get LockTokenRejectReasonDetails
+getLockTokenRejectReasonDetails = LockTokenRejectReasonDetails <$> S.get <*> S.get
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
 wasmRejectToRejectReasonInit (Wasm.ContractReject reason) = RejectedInit reason
@@ -2910,6 +3043,15 @@ instance S.Serialize RejectReason where
         PoolClosed -> S.putWord8 54
         NonExistentTokenId tokenId -> S.putWord8 55 <> S.put tokenId
         TokenUpdateTransactionFailed reason -> S.putWord8 56 <> S.put reason
+        NonExistentLockId lockId -> S.putWord8 57 <> S.put lockId
+        LockExpired lockId -> S.putWord8 58 <> S.put lockId
+        LockFundNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 59 <> S.put larrdLockId <> S.put larrdAccount
+        LockSendNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 60 <> S.put larrdLockId <> S.put larrdAccount
+        LockReturnNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 61 <> S.put larrdLockId <> S.put larrdAccount
+        LockCancelNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 62 <> S.put larrdLockId <> S.put larrdAccount
+        LockTokenNotPermitted LockTokenRejectReasonDetails{..} -> S.putWord8 63 <> S.put ltrrdLockId <> S.put ltrrdTokenId
+        LockRecipientNotPermitted LockAccountRejectReasonDetails{..} -> S.putWord8 64 <> S.put larrdLockId <> S.put larrdAccount
+        LockDurationTooLong lockId -> S.putWord8 65 <> S.put lockId
     get =
         S.getWord8 >>= \case
             0 -> return ModuleNotWF
@@ -2978,6 +3120,15 @@ instance S.Serialize RejectReason where
             54 -> return PoolClosed
             55 -> NonExistentTokenId <$> S.get
             56 -> TokenUpdateTransactionFailed <$> S.get
+            57 -> NonExistentLockId <$> S.get
+            58 -> LockExpired <$> S.get
+            59 -> LockFundNotAuthorized <$> getLockAccountRejectReasonDetails
+            60 -> LockSendNotAuthorized <$> getLockAccountRejectReasonDetails
+            61 -> LockReturnNotAuthorized <$> getLockAccountRejectReasonDetails
+            62 -> LockCancelNotAuthorized <$> getLockAccountRejectReasonDetails
+            63 -> LockTokenNotPermitted <$> getLockTokenRejectReasonDetails
+            64 -> LockRecipientNotPermitted <$> getLockAccountRejectReasonDetails
+            65 -> LockDurationTooLong <$> S.get
             n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 instance AE.ToJSON RejectReason
@@ -3036,6 +3187,58 @@ data FailureKind
     | -- | The transaction has a sponsor account, but no sponsor signature.
       MissingSponsorSignature
     deriving (Eq, Show)
+
+instance S.Serialize FailureKind where
+    put = \case
+        InsufficientFunds -> S.putWord8 0
+        IncorrectSignature -> S.putWord8 1
+        NonSequentialNonce nonce -> S.putWord8 2 <> S.put nonce
+        SuccessorOfInvalidTransaction -> S.putWord8 3
+        UnknownAccount address -> S.putWord8 4 <> S.put address
+        DepositInsufficient -> S.putWord8 5
+        ExpiredTransaction -> S.putWord8 6
+        ExceedsMaxBlockEnergy -> S.putWord8 7
+        ExceedsMaxBlockSize -> S.putWord8 8
+        NonExistentIdentityProvider ipi -> S.putWord8 9 <> S.put ipi
+        UnsupportedAnonymityRevokers -> S.putWord8 10
+        NonExistentAccount ip -> S.putWord8 11 <> S.put ip
+        AccountCredentialInvalid -> S.putWord8 12
+        DuplicateAccountRegistrationID credID -> S.putWord8 13 <> S.put credID
+        InvalidUpdateTime -> S.putWord8 14
+        ExceedsMaxCredentialDeployments -> S.putWord8 15
+        InvalidPayloadSize -> S.putWord8 16
+        NotSupportedAtCurrentProtocolVersion -> S.putWord8 17
+        DuplicateTokenId tokenId -> S.putWord8 18 <> S.put tokenId
+        TokenInitializeFailure failure -> S.putWord8 19 <> S.put failure
+        InvalidTokenModuleRef moduleRef -> S.putWord8 20 <> S.put moduleRef
+        MissingSponsorAccount -> S.putWord8 21
+        MissingSponsorSignature -> S.putWord8 22
+    get =
+        S.getWord8 >>= \case
+            0 -> return InsufficientFunds
+            1 -> return IncorrectSignature
+            2 -> NonSequentialNonce <$> S.get
+            3 -> return SuccessorOfInvalidTransaction
+            4 -> UnknownAccount <$> S.get
+            5 -> return DepositInsufficient
+            6 -> return ExpiredTransaction
+            7 -> return ExceedsMaxBlockEnergy
+            8 -> return ExceedsMaxBlockSize
+            9 -> NonExistentIdentityProvider <$> S.get
+            10 -> return UnsupportedAnonymityRevokers
+            11 -> NonExistentAccount <$> S.get
+            12 -> return AccountCredentialInvalid
+            13 -> DuplicateAccountRegistrationID <$> S.get
+            14 -> return InvalidUpdateTime
+            15 -> return ExceedsMaxCredentialDeployments
+            16 -> return InvalidPayloadSize
+            17 -> return NotSupportedAtCurrentProtocolVersion
+            18 -> DuplicateTokenId <$> S.get
+            19 -> TokenInitializeFailure <$> S.get
+            20 -> InvalidTokenModuleRef <$> S.get
+            21 -> return MissingSponsorAccount
+            22 -> return MissingSponsorSignature
+            n -> fail $ "Unrecognized FailureKind tag: " ++ show n
 
 data TxResult (tov :: TransactionOutcomesVersion) = TxValid !(TransactionSummary tov) | TxInvalid !FailureKind
 

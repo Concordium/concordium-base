@@ -12,6 +12,7 @@ import qualified ConcordiumTests.Crypto.FFIVerify
 import qualified ConcordiumTests.Crypto.SHA256
 import qualified ConcordiumTests.Crypto.VRF
 import qualified ConcordiumTests.Data.Base58Encoding
+import qualified ConcordiumTests.Data.ULEB128
 import qualified ConcordiumTests.ID.Types
 import qualified ConcordiumTests.MerkleProofs
 import qualified ConcordiumTests.Utils.Encryption
@@ -41,6 +42,7 @@ main = hspec $ parallel $ do
     ConcordiumTests.Crypto.VRF.tests
     ConcordiumTests.Crypto.BlsSignature.tests
     ConcordiumTests.Data.Base58Encoding.tests
+    ConcordiumTests.Data.ULEB128.tests
     ConcordiumTests.ID.Types.tests
     ConcordiumTests.Crypto.Ed25519DlogProofs.tests
     ConcordiumTests.Crypto.EncryptedTransfers.tests

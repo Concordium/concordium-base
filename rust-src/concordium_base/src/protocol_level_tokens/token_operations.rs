@@ -1,10 +1,13 @@
-use crate::common::upward::CborUpward;
+use crate::common::cbor::{
+    CborDecoder, CborDeserialize, CborEncoder, CborMaybeKnown, CborSerialize,
+};
+use crate::protocol_level_tokens::MetadataUrl;
 use crate::{
     common::cbor::{self, CborSerializationResult},
     protocol_level_tokens::{CborHolderAccount, CoinInfo, RawCbor, TokenAmount, TokenId},
     transactions::Memo,
 };
-use concordium_base_derive::{CborDeserialize, CborSerialize};
+use concordium_base_derive::{CborDeserialize, CborSerialize, Serialize};
 use concordium_contracts_common::AccountAddress;
 
 /// Module that implements easy construction of protocol level token operations.
@@ -104,6 +107,42 @@ pub mod operations {
     pub fn unpause() -> TokenOperation {
         TokenOperation::Unpause(TokenPauseDetails {})
     }
+
+    /// Construct operation to assign admin roles to an Address
+    /// for a protocol level token.
+    pub fn assign_admin_roles(
+        account: AccountAddress,
+        roles: Vec<TokenAdminRole>,
+    ) -> TokenOperation {
+        TokenOperation::AssignAdminRoles(TokenUpdateAdminRolesDetails {
+            account: CborHolderAccount {
+                coin_info: Some(CoinInfo::CCD),
+                address: account,
+            },
+            roles,
+        })
+    }
+
+    /// Construct operation to revoke admin roles from an Address
+    /// for a protocol level token.
+    pub fn revoke_admin_roles(
+        account: AccountAddress,
+        roles: Vec<TokenAdminRole>,
+    ) -> TokenOperation {
+        TokenOperation::RevokeAdminRoles(TokenUpdateAdminRolesDetails {
+            account: CborHolderAccount {
+                coin_info: Some(CoinInfo::CCD),
+                address: account,
+            },
+            roles,
+        })
+    }
+
+    /// Construct operation to update token metadata for a protocol
+    /// level token.
+    pub fn update_metadata(metadata_url: MetadataUrl) -> TokenOperation {
+        TokenOperation::UpdateMetadata(metadata_url)
+    }
 }
 
 /// Embedded CBOR, see <https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml>
@@ -122,13 +161,25 @@ const CBOR_TAG: u64 = 24;
 pub struct TokenOperationsPayload {
     /// Id of the token
     pub token_id: TokenId,
-    /// Token operations in the transaction
+    /// Token operations in the transaction. CBOR encoding of [`TokenOperations`]
     pub operations: RawCbor,
 }
 
 impl TokenOperationsPayload {
     /// Decode token operations from CBOR
     pub fn decode_operations(&self) -> CborSerializationResult<TokenOperations> {
+        cbor::cbor_decode(&self.operations)
+    }
+
+    /// Decode token operations from CBOR. Unknown operations are wrapped
+    /// in [`CborMaybeKnown::Unknown`].
+    ///
+    /// Handling [`CborMaybeKnown::Unknown`] can be used to implement forwards compatability
+    /// with future token operations. Unknown token operations can e.g. be ignored, if the handler is only interested
+    /// in specific and known token operations.
+    pub fn decode_operations_maybe_known(
+        &self,
+    ) -> CborSerializationResult<Vec<CborMaybeKnown<TokenOperation>>> {
         cbor::cbor_decode(&self.operations)
     }
 }
@@ -140,19 +191,19 @@ impl TokenOperationsPayload {
 #[cbor(transparent)]
 pub struct TokenOperations {
     /// List of protocol level token operations
-    pub operations: Vec<CborUpward<TokenOperation>>,
+    pub operations: Vec<TokenOperation>,
 }
 
 impl FromIterator<TokenOperation> for TokenOperations {
     fn from_iter<T: IntoIterator<Item = TokenOperation>>(iter: T) -> Self {
         Self {
-            operations: iter.into_iter().map(CborUpward::Known).collect(),
+            operations: iter.into_iter().collect(),
         }
     }
 }
 
 impl TokenOperations {
-    pub fn new(operations: Vec<CborUpward<TokenOperation>>) -> Self {
+    pub fn new(operations: Vec<TokenOperation>) -> Self {
         Self { operations }
     }
 }
@@ -188,6 +239,12 @@ pub enum TokenOperation {
     /// Operation that unpauses execution of any balance changing operations for
     /// a protocol level token
     Unpause(TokenPauseDetails),
+    /// Operation to assign roles to an account for a protocol level token.
+    AssignAdminRoles(TokenUpdateAdminRolesDetails),
+    /// Operation to revoke roles for an account for a protocol level token.
+    RevokeAdminRoles(TokenUpdateAdminRolesDetails),
+    /// Operation to update token metadata
+    UpdateMetadata(MetadataUrl),
 }
 
 /// Details of an operation that changes a protocol level token supply.
@@ -226,6 +283,21 @@ pub struct TokenListUpdateDetails {
     pub target: CborHolderAccount,
 }
 
+/// Details of an operation to assign or revoke roles for an account
+/// for a protocol level token.
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+pub struct TokenUpdateAdminRolesDetails {
+    /// roles to be assigned or revoked
+    pub roles: Vec<TokenAdminRole>,
+    /// Account that that will be assigned or revoked roles.
+    pub account: CborHolderAccount,
+}
+
 /// Protocol level token transfer
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
 #[cfg_attr(
@@ -247,7 +319,7 @@ pub struct TokenTransfer {
 }
 
 /// Memo attached to a protocol level token transfer
-#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize, Serialize)]
 #[cfg_attr(
     feature = "serde_deprecated",
     derive(serde::Serialize, serde::Deserialize)
@@ -262,11 +334,93 @@ pub enum CborMemo {
     Cbor(Memo),
 }
 
+impl From<CborMemo> for Memo {
+    fn from(value: CborMemo) -> Self {
+        match value {
+            CborMemo::Raw(memo) => memo,
+            CborMemo::Cbor(memo) => memo,
+        }
+    }
+}
+
+/// Defines roles that can be assigned or revoked for an account, for a protocol
+/// level token.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[cfg_attr(
+    feature = "serde_deprecated",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+pub enum TokenAdminRole {
+    UpdateAdminRoles,
+    Mint,
+    Burn,
+    UpdateAllowList,
+    UpdateDenyList,
+    Pause,
+    UpdateMetadata,
+}
+
+/// Admin Role names
+const UPDATE_ADMIN_ROLES_ROLE_NAME: &str = "updateAdminRoles";
+const MINT_ROLE_NAME: &str = "mint";
+const BURN_ROLE_NAME: &str = "burn";
+const UPDATE_ALLOW_LIST_ROLE_NAME: &str = "updateAllowList";
+const UPDATE_DENY_LIST_ROLE_NAME: &str = "updateDenyList";
+const PAUSE_ROLE_NAME: &str = "pause";
+const UPDATE_METADATA_ROLE_NAME: &str = "updateMetadata";
+
+/// Encoding the `TokenAdminRole` to string for Cbor
+impl CborSerialize for TokenAdminRole {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
+        let s = match self {
+            TokenAdminRole::UpdateAdminRoles => UPDATE_ADMIN_ROLES_ROLE_NAME,
+            TokenAdminRole::Mint => MINT_ROLE_NAME,
+            TokenAdminRole::Burn => BURN_ROLE_NAME,
+            TokenAdminRole::UpdateAllowList => UPDATE_ALLOW_LIST_ROLE_NAME,
+            TokenAdminRole::UpdateDenyList => UPDATE_DENY_LIST_ROLE_NAME,
+            TokenAdminRole::Pause => PAUSE_ROLE_NAME,
+            TokenAdminRole::UpdateMetadata => UPDATE_METADATA_ROLE_NAME,
+        };
+        encoder.encode_text(s)
+    }
+}
+
+/// Decoding the Cbor for a `TokenAdminRole`. Decoding gives text as bytes which can be
+/// mapped back to the Admin Role constant names.
+impl CborDeserialize for TokenAdminRole {
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
+    where
+        Self: Sized,
+    {
+        let bytes = decoder.decode_text()?;
+        let s = String::from_utf8(bytes)
+            .map_err(crate::common::cbor::CborSerializationError::invalid_data)?;
+        match s.as_str() {
+            UPDATE_ADMIN_ROLES_ROLE_NAME => Ok(Self::UpdateAdminRoles),
+            MINT_ROLE_NAME => Ok(Self::Mint),
+            BURN_ROLE_NAME => Ok(Self::Burn),
+            UPDATE_ALLOW_LIST_ROLE_NAME => Ok(Self::UpdateAllowList),
+            UPDATE_DENY_LIST_ROLE_NAME => Ok(Self::UpdateDenyList),
+            PAUSE_ROLE_NAME => Ok(Self::Pause),
+            UPDATE_METADATA_ROLE_NAME => Ok(Self::UpdateMetadata),
+            _ => Err(crate::common::cbor::CborSerializationError::invalid_data(
+                format!("unknown token admin role: {s}"),
+            )),
+        }
+    }
+}
+
 #[cfg(test)]
 pub mod test {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::{
-        common::cbor::{self, value},
+        common::{
+            cbor::{self, value},
+            serialize_deserialize, to_bytes,
+        },
         protocol_level_tokens::{token_holder::test_fixtures::ADDRESS, CborHolderAccount},
     };
     use assert_matches::assert_matches;
@@ -275,14 +429,14 @@ pub mod test {
     fn test_cbor_memo_cbor() {
         let memo = CborMemo::Raw(Memo::try_from(vec![0x01, 0x02, 0x03, 0x04]).unwrap());
 
-        let cbor = cbor::cbor_encode(&memo).unwrap();
+        let cbor = cbor::cbor_encode(&memo);
         assert_eq!(hex::encode(&cbor), "4401020304");
         let memo_decoded: CborMemo = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(memo_decoded, memo);
 
         let memo = CborMemo::Cbor(Memo::try_from(vec![0x01, 0x02, 0x03, 0x04]).unwrap());
 
-        let cbor = cbor::cbor_encode(&memo).unwrap();
+        let cbor = cbor::cbor_encode(&memo);
         assert_eq!(hex::encode(&cbor), "d8184401020304");
         let memo_decoded: CborMemo = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(memo_decoded, memo);
@@ -291,17 +445,17 @@ pub mod test {
     #[test]
     fn test_token_operations_cbor() {
         let operations = TokenOperations {
-            operations: vec![CborUpward::Known(TokenOperation::Transfer(TokenTransfer {
+            operations: vec![TokenOperation::Transfer(TokenTransfer {
                 amount: TokenAmount::from_raw(12300, 3),
                 recipient: CborHolderAccount {
                     address: ADDRESS,
                     coin_info: None,
                 },
                 memo: None,
-            }))],
+            })],
         };
 
-        let cbor = cbor::cbor_encode(&operations).unwrap();
+        let cbor = cbor::cbor_encode(&operations);
         assert_eq!(hex::encode(&cbor), "81a1687472616e73666572a266616d6f756e74c4822219300c69726563697069656e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let operations_decoded: TokenOperations = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operations_decoded, operations);
@@ -318,7 +472,7 @@ pub mod test {
             memo: None,
         });
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(hex::encode(&cbor), "a1687472616e73666572a266616d6f756e74c4822219300c69726563697069656e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
@@ -330,7 +484,7 @@ pub mod test {
             amount: TokenAmount::from_raw(12300, 3),
         });
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(
             hex::encode(&cbor),
             "a1646d696e74a166616d6f756e74c4822219300c"
@@ -345,7 +499,7 @@ pub mod test {
             amount: TokenAmount::from_raw(12300, 3),
         });
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(
             hex::encode(&cbor),
             "a1646275726ea166616d6f756e74c4822219300c"
@@ -363,7 +517,7 @@ pub mod test {
             },
         });
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(hex::encode(&cbor), "a16c616464416c6c6f774c697374a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
@@ -378,7 +532,7 @@ pub mod test {
             },
         });
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(hex::encode(&cbor), "a16f72656d6f7665416c6c6f774c697374a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
@@ -393,7 +547,7 @@ pub mod test {
             },
         });
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(hex::encode(&cbor), "a16b61646444656e794c697374a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
@@ -408,7 +562,7 @@ pub mod test {
             },
         });
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(hex::encode(&cbor), "a16e72656d6f766544656e794c697374a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
@@ -418,7 +572,7 @@ pub mod test {
     fn test_token_operation_cbor_pause() {
         let operation = TokenOperation::Pause(TokenPauseDetails {});
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(hex::encode(&cbor), "a1657061757365a0");
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
@@ -428,7 +582,7 @@ pub mod test {
     fn test_token_operation_cbor_unpause() {
         let operation = TokenOperation::Unpause(TokenPauseDetails {});
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
+        let cbor = cbor::cbor_encode(&operation);
         assert_eq!(hex::encode(&cbor), "a167756e7061757365a0");
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
@@ -437,13 +591,152 @@ pub mod test {
     #[test]
     fn test_token_operation_cbor_unknown_variant() {
         let cbor = hex::decode("a172736f6d65556e6b6e6f776e56617269616e74a266616d6f756e74c4822219300c69726563697069656e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20").unwrap();
-        let operation_decoded: CborUpward<TokenOperation> = cbor::cbor_decode(&cbor).unwrap();
+        let operation_decoded: CborMaybeKnown<TokenOperation> = cbor::cbor_decode(&cbor).unwrap();
         assert_matches!(
             operation_decoded,
-            CborUpward::Unknown(value::Value::Map(v)) if matches!(
+            CborMaybeKnown::Unknown(value::Value::Map(v)) if matches!(
                 v.as_slice(),
                 [(value::Value::Text(s), _), ..] if s == "someUnknownVariant"
             )
         );
+    }
+
+    #[test]
+    fn test_token_operation_cbor_assign_admin_roles() {
+        let operation = TokenOperation::AssignAdminRoles(TokenUpdateAdminRolesDetails {
+            account: CborHolderAccount {
+                address: ADDRESS,
+                coin_info: None,
+            },
+            roles: vec![
+                TokenAdminRole::UpdateAdminRoles,
+                TokenAdminRole::Mint,
+                TokenAdminRole::Burn,
+                TokenAdminRole::UpdateAllowList,
+                TokenAdminRole::UpdateDenyList,
+                TokenAdminRole::Pause,
+                TokenAdminRole::UpdateMetadata,
+            ],
+        });
+
+        let cbor = cbor::cbor_encode(&operation);
+        assert_eq!(hex::encode(&cbor), "a17061737369676e41646d696e526f6c6573a265726f6c6573877075706461746541646d696e526f6c6573646d696e74646275726e6f757064617465416c6c6f774c6973746e75706461746544656e794c6973746570617573656e7570646174654d65746164617461676163636f756e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_token_operation_cbor_revoke_admin_roles() {
+        let operation = TokenOperation::RevokeAdminRoles(TokenUpdateAdminRolesDetails {
+            account: CborHolderAccount {
+                address: ADDRESS,
+                coin_info: None,
+            },
+            roles: vec![
+                TokenAdminRole::UpdateAdminRoles,
+                TokenAdminRole::Mint,
+                TokenAdminRole::Burn,
+                TokenAdminRole::UpdateAllowList,
+                TokenAdminRole::UpdateDenyList,
+                TokenAdminRole::Pause,
+                TokenAdminRole::UpdateMetadata,
+            ],
+        });
+
+        let cbor = cbor::cbor_encode(&operation);
+        assert_eq!(hex::encode(&cbor), "a1707265766f6b6541646d696e526f6c6573a265726f6c6573877075706461746541646d696e526f6c6573646d696e74646275726e6f757064617465416c6c6f774c6973746e75706461746544656e794c6973746570617573656e7570646174654d65746164617461676163636f756e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_token_operation_update_metadata() {
+        let operation = TokenOperation::UpdateMetadata(MetadataUrl {
+            url: "SomeUrl".to_string(),
+            checksum_sha_256: None,
+            additional: HashMap::new(),
+        });
+
+        let cbor = cbor::cbor_encode(&operation);
+        assert_eq!(
+            hex::encode(&cbor),
+            "a16e7570646174654d65746164617461a16375726c67536f6d6555726c"
+        );
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_token_operations_payload() {
+        let operations = TokenOperations {
+            operations: vec![TokenOperation::Transfer(TokenTransfer {
+                amount: TokenAmount::from_raw(12300, 3),
+                recipient: CborHolderAccount {
+                    address: ADDRESS,
+                    coin_info: None,
+                },
+                memo: None,
+            })],
+        };
+        let payload = TokenOperationsPayload {
+            token_id: "tk1".parse().unwrap(),
+            operations: RawCbor::from(cbor::cbor_encode(&operations)),
+        };
+
+        let operations_decoded = payload.decode_operations().unwrap();
+        assert_eq!(operations_decoded, operations);
+
+        let operations_known: Vec<_> = operations
+            .operations
+            .iter()
+            .map(|op| CborMaybeKnown::Known(op.clone()))
+            .collect();
+        let operations_decoded = payload.decode_operations_maybe_known().unwrap();
+        assert_eq!(operations_decoded, operations_known);
+    }
+
+    /// Round-trip test for `CborMemo::Raw` and `CborMemo::Cbor` variants using
+    /// binary (`Serial`/`Deserial`) encoding.
+    #[test]
+    fn test_cbor_memo_serial_round_trip() {
+        let raw = CborMemo::Raw(Memo::try_from(vec![0x01, 0x02, 0x03]).unwrap());
+        let result = serialize_deserialize(&raw).expect("Serial round-trip should succeed");
+        assert_eq!(result, raw);
+
+        let cbor_memo = CborMemo::Cbor(Memo::try_from(vec![0xAA, 0xBB]).unwrap());
+        let result = serialize_deserialize(&cbor_memo).expect("Serial round-trip should succeed");
+        assert_eq!(result, cbor_memo);
+    }
+
+    /// Fixture test: `CborMemo::Raw(Memo([0x01, 0x02, 0x03]))` binary (`Serial`)
+    /// encoding.
+    ///
+    /// Expected encoding:
+    /// - tag: `00` (Raw = variant 0)
+    /// - memo length prefix: `0003` (u16 BE, 3 bytes)
+    /// - memo bytes: `010203`
+    ///
+    /// Full: `000003010203`
+    #[test]
+    fn test_cbor_memo_serial_fixture_raw() {
+        let memo = CborMemo::Raw(Memo::try_from(vec![0x01, 0x02, 0x03]).unwrap());
+        let bytes = to_bytes(&memo);
+        assert_eq!(hex::encode(&bytes), "000003010203");
+    }
+
+    /// Fixture test: `CborMemo::Cbor(Memo([0xAA, 0xBB]))` binary (`Serial`)
+    /// encoding.
+    ///
+    /// Expected encoding:
+    /// - tag: `01` (Cbor = variant 1)
+    /// - memo length prefix: `0002` (u16 BE, 2 bytes)
+    /// - memo bytes: `aabb`
+    ///
+    /// Full: `010002aabb`
+    #[test]
+    fn test_cbor_memo_serial_fixture_cbor() {
+        let memo = CborMemo::Cbor(Memo::try_from(vec![0xAA, 0xBB]).unwrap());
+        let bytes = to_bytes(&memo);
+        assert_eq!(hex::encode(&bytes), "010002aabb");
     }
 }

@@ -1,18 +1,23 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Types.CBOR where
 
+import Codec.CBOR.Decoding (Decoder)
+import Codec.CBOR.Encoding (Encoding)
 import Codec.CBOR.Read
 import qualified Codec.CBOR.Term as CBOR
 import Codec.CBOR.Write
 import qualified Codec.CBOR.Write as CBOR
 import qualified Concordium.Crypto.SHA256 as SHA256
+import Control.Monad
 import qualified Data.Aeson as AE
 import qualified Data.Aeson.KeyMap as AE
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as BS16
 import qualified Data.ByteString.Lazy.Char8 as B8
 import qualified Data.ByteString.Short as BSS
+import Data.Either (isLeft)
 import qualified Data.FixedByteString as FBS
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
@@ -27,8 +32,10 @@ import Test.QuickCheck
 import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.ID.Types
 import Concordium.Types
+import Concordium.Types.Locks.CBOR
 import Concordium.Types.ProtocolLevelTokens.CBOR
 import Concordium.Types.Queries.Tokens
+import Concordium.Types.Tokens
 
 genText :: Gen Text.Text
 genText = sized $ fmap (Text.decodeUtf8 . BS.pack) . genUtf8String
@@ -99,6 +106,42 @@ genTaggableMemo =
           CBORMemo <$> genMemo
         ]
 
+-- | A list of all 'TokenAdminRole's.
+allTokenAdminRoles :: [TokenAdminRole]
+allTokenAdminRoles =
+    [ RoleUpdateAdminRoles,
+      RoleMint,
+      RoleBurn,
+      RoleUpdateAllowList,
+      RoleUpdateDenyList,
+      RolePause,
+      RoleUpdateMetadata
+    ]
+
+-- | Generator for 'TokenAdminRole'.
+genTokenAdminRole :: Gen TokenAdminRole
+genTokenAdminRole = elements allTokenAdminRoles
+
+-- | Generate a 'TokenAuthorizationsMap' where each role may or may not be present
+--  with an arbitrary list of accounts.
+genTokenAuthorizationsMap :: Gen TokenAuthorizationsMap
+genTokenAuthorizationsMap = TokenAuthorizationsMap <$> foldM f Map.empty allTokenAdminRoles
+  where
+    f m role =
+        oneof
+            [ return m,
+              do
+                accts <- Seq.fromList <$> listOf genCborAccountAddress
+                return $ Map.insert role accts m
+            ]
+
+-- | Generator for 'UpdateAdminRolesDetails'.
+genUpdateAdminRolesDetails :: Gen UpdateAdminRolesDetails
+genUpdateAdminRolesDetails = do
+    uardAccount <- genCborAccountAddress
+    uardRoles <- Seq.fromList <$> listOf genTokenAdminRole
+    return UpdateAdminRolesDetails{..}
+
 -- | Generator for 'TokenGovernanceOperation'.
 genTokenOperation :: Gen TokenOperation
 genTokenOperation =
@@ -111,7 +154,10 @@ genTokenOperation =
           TokenAddDenyList <$> genCborAccountAddress,
           TokenRemoveDenyList <$> genCborAccountAddress,
           pure TokenPause,
-          pure TokenUnpause
+          pure TokenUnpause,
+          TokenAssignAdminRoles <$> genUpdateAdminRolesDetails,
+          TokenRevokeAdminRoles <$> genUpdateAdminRolesDetails,
+          TokenUpdateMetadata <$> genTokenMetadataUrlSimple
         ]
 
 -- | Generator for 'TokenGovernanceOperation'.
@@ -119,6 +165,19 @@ genTokenTransaction :: Gen TokenUpdateTransaction
 genTokenTransaction =
     TokenUpdateTransaction . Seq.fromList
         <$> listOf genTokenOperation
+
+-- | Generator for 'MetaUpdateOperation'.
+genMetaUpdateOperation :: Gen MetaUpdateOperation
+genMetaUpdateOperation =
+    oneof
+        [ MetaTokenUpdate <$> genTokenId <*> genTokenOperation
+        ]
+
+-- | Generator for 'MetaUpdateTransaction'.
+genMetaUpdateTransaction :: Gen MetaUpdateTransaction
+genMetaUpdateTransaction =
+    MetaUpdateTransaction . Seq.fromList
+        <$> listOf genMetaUpdateOperation
 
 genTokenModuleStateSimple :: Gen TokenModuleState
 genTokenModuleStateSimple = do
@@ -178,7 +237,10 @@ genTokenEvent =
           AddDenyListEvent <$> genCborAccountAddress,
           RemoveDenyListEvent <$> genCborAccountAddress,
           pure Pause,
-          pure Unpause
+          pure Unpause,
+          UpdateMetadataEvent <$> genTokenMetadataUrlSimple,
+          AssignAdminRolesEvent <$> genUpdateAdminRolesDetails,
+          RevokeAdminRolesEvent <$> genUpdateAdminRolesDetails
         ]
 
 -- | Generator for 'TokenRejectReason'.
@@ -301,17 +363,16 @@ testInitializationParametersCBOR = describe "TokenInitializationParameters CBOR 
 encTip1 :: EncodedTokenInitializationParameters
 encTip1 =
     EncodedTokenInitializationParameters $
-        TokenParameter $
-            BSS.toShort $
-                CBOR.toStrictByteString $
-                    encodeTokenInitializationParameters tokenInitializationParametersAllValues
+        rawCborFromBytes $
+            CBOR.toStrictByteString $
+                encodeTokenInitializationParameters tokenInitializationParametersAllValues
 
 -- | Encoded 'TokenInitializationParameters' that cannot be successfully CBOR decoded
 invalidEncTip1 :: EncodedTokenInitializationParameters
 invalidEncTip1 =
     EncodedTokenInitializationParameters $
-        TokenParameter $
-            BSS.pack [0x1, 0x2, 0x3, 0x4]
+        rawCborFromBytes $
+            BS.pack [0x1, 0x2, 0x3, 0x4]
 
 testEncodedInitializationParametersJSON :: Spec
 testEncodedInitializationParametersJSON = describe "TokenInitializationParameters JSON serialization" $ do
@@ -409,10 +470,58 @@ tops1ExpectedCbor =
 encTops1 :: EncodedTokenOperations
 encTops1 =
     EncodedTokenOperations $
-        TokenParameter $
-            BSS.toShort $
-                CBOR.toStrictByteString $
-                    encodeTokenUpdateTransaction tops1
+        rawCborFromBytes $
+            CBOR.toStrictByteString $
+                encodeTokenUpdateTransaction tops1
+
+-- | Another example 'TokenUpdateTransaction', which tests new operations introduced in P11.
+tops2 :: TokenUpdateTransaction
+tops2 =
+    TokenUpdateTransaction $
+        Seq.fromList
+            [ TokenAssignAdminRoles
+                UpdateAdminRolesDetails
+                    { uardAccount = cborHolder,
+                      uardRoles = Seq.fromList [RoleUpdateAdminRoles, RoleMint, RoleBurn]
+                    },
+              TokenRevokeAdminRoles
+                UpdateAdminRolesDetails
+                    { uardAccount = cborHolder,
+                      uardRoles = Seq.fromList [RoleUpdateAllowList, RoleUpdateDenyList, RolePause, RoleUpdateMetadata]
+                    },
+              TokenUpdateMetadata
+                TokenMetadataUrl
+                    { tmUrl = "https://example.plt",
+                      tmChecksumSha256 = Nothing,
+                      tmAdditional = Map.empty
+                    },
+              TokenUpdateMetadata
+                TokenMetadataUrl
+                    { tmUrl = "https://example2.plt",
+                      tmChecksumSha256 = Just emptyStringHash,
+                      tmAdditional = Map.empty
+                    }
+            ]
+  where
+    cborHolder =
+        CborAccountAddress
+            { chaAccount =
+                AccountAddress $
+                    FBS.pack (replicate 32 1),
+              chaCoinInfo = Just CoinInfoConcordium
+            }
+
+-- | Expected encoding of 'tops2'.
+tops2ExpectedCbor :: BS.ByteString
+tops2ExpectedCbor = BS16.decodeLenient "84a17061737369676e41646d696e526f6c6573a265726f6c6573837075706461746541646d696e526f6c6573646d696e74646275726e676163636f756e74d99d73a201d99d71a1011903970358200101010101010101010101010101010101010101010101010101010101010101a1707265766f6b6541646d696e526f6c6573a265726f6c6573846f757064617465416c6c6f774c6973746e75706461746544656e794c6973746570617573656e7570646174654d65746164617461676163636f756e74d99d73a201d99d71a1011903970358200101010101010101010101010101010101010101010101010101010101010101a16e7570646174654d65746164617461a16375726c7368747470733a2f2f6578616d706c652e706c74a16e7570646174654d65746164617461a26375726c7468747470733a2f2f6578616d706c65322e706c746e636865636b73756d5368613235365820e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+-- | Actual encoding of 'tops2'.
+encTops2 :: EncodedTokenOperations
+encTops2 =
+    EncodedTokenOperations $
+        rawCborFromBytes $
+            CBOR.toStrictByteString $
+                encodeTokenUpdateTransaction tops1
 
 -- | A dummy 'CborAccountAddress' value.
 dummyCborHolder :: CborAccountAddress
@@ -439,12 +548,37 @@ tevents1 =
       Unpause
     ]
 
+-- | Example 'TokenEvent's introduced in P11.
+tevents2 :: [TokenEvent]
+tevents2 =
+    [ UpdateMetadataEvent $
+        TokenMetadataUrl
+            { tmUrl = "https://example.com/token-metadata",
+              tmChecksumSha256 = Just (SHA256.Hash (FBS.fromByteString "1234567890abcdef1234567890abcdef")),
+              tmAdditional =
+                Map.fromList
+                    [ ("key1", CBOR.TString "extravalue1"),
+                      ("key2", CBOR.TString "extravalue2")
+                    ]
+            },
+      AssignAdminRolesEvent $
+        UpdateAdminRolesDetails
+            { uardAccount = dummyCborHolder,
+              uardRoles = Seq.fromList [RoleMint, RoleBurn]
+            },
+      RevokeAdminRolesEvent $
+        UpdateAdminRolesDetails
+            { uardAccount = dummyCborHolder,
+              uardRoles = Seq.fromList [RoleUpdateAllowList, RoleUpdateDenyList]
+            }
+    ]
+
 -- | Encoded 'TokenHolderTransaction' that cannot be successfully CBOR decoded
 invalidEncTops1 :: EncodedTokenOperations
 invalidEncTops1 =
     EncodedTokenOperations $
-        TokenParameter $
-            BSS.pack [0x1, 0x2, 0x3, 0x4]
+        rawCborFromBytes $
+            BS.pack [0x1, 0x2, 0x3, 0x4]
 
 testEncodedTokenOperationsJSON :: Spec
 testEncodedTokenOperationsJSON = describe "EncodedTokenOperations JSON serialization" $ do
@@ -458,6 +592,21 @@ testEncodedTokenOperationsJSON = describe "EncodedTokenOperations JSON serializa
             )
     it "Serializes to expected JSON object" $
         case AE.toJSON encTops1 of
+            AE.Array v -> case V.head v of
+                AE.Object o -> assertBool "Does not contain field amount" $ AE.member "transfer" o
+                _ -> assertFailure "Does not encode to JSON object"
+            _ -> assertFailure "Does not encode to JSON array"
+
+    it "Serialize/Deserialize roundtrip success (P11 ops)" $
+        assertEqual
+            "Deserialized"
+            (Just encTops2)
+            ( AE.decode $
+                AE.encode
+                    encTops2
+            )
+    it "Serializes to expected JSON object (P11 ops)" $
+        case AE.toJSON encTops2 of
             AE.Array v -> case V.head v of
                 AE.Object o -> assertBool "Does not contain field amount" $ AE.member "transfer" o
                 _ -> assertFailure "Does not encode to JSON object"
@@ -484,6 +633,37 @@ testTokenOperationsCBOR = describe "EncodedTokenOperations CBOR serialization" $
             "CBOR serialized"
             (tokenUpdateTransactionToBytes tops1)
             tops1ExpectedCbor
+    it "Serialize/Deserialize roundtrip (P11 ops)" $
+        assertEqual
+            "Deserialized"
+            (tokenUpdateTransactionFromBytes $ B8.fromStrict $ tokenUpdateTransactionToBytes tops2)
+            (Right tops2)
+    it "Serializes to expected CBOR bytestring (P11 ops)" $
+        assertEqual
+            "CBOR serialized"
+            (tokenUpdateTransactionToBytes tops2)
+            tops2ExpectedCbor
+
+mops1 :: MetaUpdateTransaction
+mops1 = MetaUpdateTransaction $ MetaTokenUpdate tok <$> tokenOperations tops1
+  where
+    tok = TokenId "tTEST"
+
+mops1ExpectedCBOR :: BS.ByteString
+mops1ExpectedCBOR = BS16.decodeLenient "89A1687472616E73666572A4646D656D6F440102030465746F6B656E65745445535466616D6F756E74C4822419303969726563697069656E74D99D73A201D99D71A1011903970358200101010101010101010101010101010101010101010101010101010101010101A1646D696E74A265746F6B656E65745445535466616D6F756E74C48224193039A1646275726EA265746F6B656E65745445535466616D6F756E74C48224193039A16C616464416C6C6F774C697374A265746F6B656E65745445535466746172676574D99D73A201D99D71A1011903970358200101010101010101010101010101010101010101010101010101010101010101A16F72656D6F7665416C6C6F774C697374A265746F6B656E65745445535466746172676574D99D73A201D99D71A1011903970358200101010101010101010101010101010101010101010101010101010101010101A16B61646444656E794C697374A265746F6B656E65745445535466746172676574D99D73A201D99D71A1011903970358200101010101010101010101010101010101010101010101010101010101010101A16E72656D6F766544656E794C697374A265746F6B656E65745445535466746172676574D99D73A201D99D71A1011903970358200101010101010101010101010101010101010101010101010101010101010101A1657061757365A165746F6B656E657454455354A167756E7061757365A165746F6B656E657454455354"
+
+testMetaUpdateOperationsCBOR :: Spec
+testMetaUpdateOperationsCBOR = describe "MetaUpdateTransaction CBOR serialization" $ do
+    it "Serialize/deserialize roundtrip" $
+        assertEqual
+            "Deserialized"
+            (metaUpdateTransactionFromBytes $ B8.fromStrict $ metaUpdateTransactionToBytes mops1)
+            (Right mops1)
+    it "Serializes to expected CBOR bytestring" $
+        assertEqual
+            "CBOR serialized"
+            (metaUpdateTransactionToBytes mops1)
+            mops1ExpectedCBOR
 
 testEncodedTokenEvents :: Spec
 testEncodedTokenEvents = describe "TokenEvents CBOR serialization" $ do
@@ -492,6 +672,11 @@ testEncodedTokenEvents = describe "TokenEvents CBOR serialization" $ do
             "Deserialized"
             (map (decodeTokenEvent . encodeTokenEvent) tevents1)
             (map Right tevents1)
+    it "Serialize/Deserialize roundtrip (P11)" $
+        assertEqual
+            "Deserialized"
+            (map (decodeTokenEvent . encodeTokenEvent) tevents2)
+            (map Right tevents2)
     it "Serializes to expected CBOR bytestring" $ do
         assertEqual
             "Serialized to expected CBOR bytestring"
@@ -521,6 +706,36 @@ testEncodedTokenEvents = describe "TokenEvents CBOR serialization" $ do
                 }
             ]
             (map encodeTokenEvent tevents1)
+    it "Serializes to expected CBOR bytestring (P11)" $ do
+        assertEqual
+            "Serialized to expected CBOR bytestring"
+            [ EncodedTokenEvent
+                { eteType = TokenEventType "updateMetadata",
+                  eteDetails =
+                    TokenEventDetails . BSS.toShort . BS16.decodeLenient $
+                        "a46375726c782268747470733a2f2f6578616d706c652e636f6d2f746f6b656e\
+                        \2d6d65746164617461646b6579316b657874726176616c756531646b6579326b\
+                        \657874726176616c7565326e636865636b73756d536861323536582031323334\
+                        \35363738393061626364656631323334353637383930616263646566"
+                },
+              EncodedTokenEvent
+                { eteType = TokenEventType "assignAdminRoles",
+                  eteDetails =
+                    TokenEventDetails . BSS.toShort . BS16.decodeLenient $
+                        "a265726f6c657382646d696e74646275726e676163636f756e74d99d73a201d9\
+                        \9d71a10119039703582001010101010101010101010101010101010101010101\
+                        \01010101010101010101"
+                },
+              EncodedTokenEvent
+                { eteType = TokenEventType "revokeAdminRoles",
+                  eteDetails =
+                    TokenEventDetails . BSS.toShort . BS16.decodeLenient $
+                        "a265726f6c6573826f757064617465416c6c6f774c6973746e75706461746544\
+                        \656e794c697374676163636f756e74d99d73a201d99d71a10119039703582001\
+                        \01010101010101010101010101010101010101010101010101010101010101"
+                }
+            ]
+            (map encodeTokenEvent tevents2)
 
 emptyStringHash :: Hash.Hash
 emptyStringHash = Hash.hash ""
@@ -940,7 +1155,508 @@ testTokenMetadataUrlCBOR = describe "TokenMetadataUrl CBOR serialization" $ do
                 "\xA4\x63\x75\x72\x6C\x76\x68\x74\x74\x70\x73\x3A\x2F\x2F\x61\x62\x63\x2E\x74\x6F\x6B\x65\x6E\x2F\x6D\x65\x74\x61\x6E\x63\x68\x65\x63\x6B\x73\x75\x6D\x53\x68\x61\x32\x35\x36\x58\x20\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\xAB\x64\x6B\x65\x79\x31\x18\x2A\x64\x6B\x65\x79\x32\x6B\x65\x78\x74\x72\x61\x20\x76\x61\x6C\x75\x65"
             )
 
--- | A set of test vectors for CBOR decoding that use non-canonical representations.
+-- | An example 'TokenAuthorizationsMap'.
+exampleTokenAuthorizationsMap :: TokenAuthorizationsMap
+exampleTokenAuthorizationsMap =
+    TokenAuthorizationsMap $
+        Map.fromList
+            [ (RoleUpdateAdminRoles, Seq.empty),
+              (RolePause, Seq.fromList [accountTokenHolder acc1, accountTokenHolderShort acc2])
+            ]
+  where
+    acc1 = AccountAddress $ FBS.pack $ repeat 0
+    acc2 = AccountAddress $ FBS.pack $ repeat 1
+
+-- | The Base-16 CBOR encoding of 'exampleTokenAuthorizationsMap'.
+exampleTokenAuthorizationsMapCBOR :: BS.ByteString
+exampleTokenAuthorizationsMapCBOR =
+    "a265706175736582d99d73a201d99d71a1011903970358200000000000000000\
+    \000000000000000000000000000000000000000000000000d99d73a103582001\
+    \0101010101010101010101010101010101010101010101010101010101010170\
+    \75706461746541646d696e526f6c657380"
+
+-- | The JSON encoding of 'exampleTokenAuthorizationsMap'.
+exampleTokenAuthorizationsMapJSON :: B8.ByteString
+exampleTokenAuthorizationsMapJSON =
+    "{\"updateAdminRoles\":[],\
+    \\"pause\":[\
+    \{\"address\":\"2wkBET2rRgE8pahuaczxKbmv7ciehqsne57F9gtzf1PVdr2VP3\",\
+    \\"coinInfo\":\"CCD\",\"type\":\"account\"},\
+    \{\"address\":\"2xBpaHottqhwFZURMZW4uZduQvpxNDSy46iXMYs9kceNGaPpZX\",\"type\":\"account\"}]}"
+
+-- | Test the CBOR encoding and decoding of 'TokenAuthorizationsMap'.
+testTokenAuthorizationsMapCBOR :: Spec
+testTokenAuthorizationsMapCBOR = describe "TokenAuthorizationsMap CBOR" $ do
+    it "Encode example" $
+        assertEqual
+            "Encoded"
+            exampleTokenAuthorizationsMapCBOR
+            (BS16.encode $ tokenAuthorizationsMapToBytes exampleTokenAuthorizationsMap)
+    it "Decode example" $
+        assertEqual
+            "Decoded"
+            (Right exampleTokenAuthorizationsMap)
+            ( tokenAuthorizationsMapFromBytes . BS.fromStrict . BS16.decodeLenient $
+                exampleTokenAuthorizationsMapCBOR
+            )
+    it "Random examples" $ withMaxSuccess 1000 $ forAll genTokenAuthorizationsMap $ \tam ->
+        Right tam
+            === tokenAuthorizationsMapFromBytes (BS.fromStrict $ tokenAuthorizationsMapToBytes tam)
+
+-- | Test the JSON encoding and decoding of 'TokenAuthorizationsMap'.
+testTokenAuthorizationsMapJSON :: Spec
+testTokenAuthorizationsMapJSON = describe "TokenAuthorizationsMap JSON" $ do
+    it "Serialize example" $
+        assertEqual
+            "Serialized"
+            exampleTokenAuthorizationsMapJSON
+            (AE.encode exampleTokenAuthorizationsMap)
+    it "Deserialize example" $
+        assertEqual
+            "Deserialized"
+            (Just exampleTokenAuthorizationsMap)
+            (AE.decode exampleTokenAuthorizationsMapJSON)
+    it "Random examples" $ withMaxSuccess 1000 $ forAll genTokenAuthorizationsMap $ \tam ->
+        Just tam
+            === AE.decode (AE.encode tam)
+
+exampleLockInfoDetails :: LockInfoDetails
+exampleLockInfoDetails =
+    LockInfoDetails
+        { lipLock =
+            LockId
+                { liAccountIndex = 10001,
+                  liSequenceNumber = 5,
+                  liCreationOrder = 0
+                },
+          lipConfig =
+            LockConfig
+                { lcRecipients = LockRecipientsLimited . Seq.singleton $ accountTokenHolder acc,
+                  lcExpiry = TransactionTime 1804806000,
+                  lcController =
+                    LockControllerSimpleV0
+                        LockControllerSimpleConfigV0
+                            { lcsv0Grants =
+                                Seq.singleton
+                                    LockControllerSimpleV0Grant
+                                        { lcsv0gAccount = accountTokenHolder acc,
+                                          lcsv0gRoles =
+                                            Seq.fromList
+                                                [ LockControllerSimpleV0Fund,
+                                                  LockControllerSimpleV0Send
+                                                ]
+                                        },
+                              lcsv0Tokens = Seq.singleton tokenId,
+                              lcsv0KeepAlive = False,
+                              lcsv0Memo = Nothing
+                            },
+                  lcMetadata = Just (lockMetadataToRawCbor exampleLockMetadata)
+                },
+          lipFunds =
+            Seq.singleton
+                LockAccountFunds
+                    { lafAccount = accountTokenHolder acc,
+                      lafAmounts =
+                        Seq.singleton
+                            LockedTokenAmount
+                                { ltaToken = tokenId,
+                                  ltaAmount = TokenAmount (TokenRawAmount 12300) 3
+                                }
+                    }
+        }
+  where
+    acc = AccountAddress $ FBS.pack [1 .. 32]
+    tokenId = case makeTokenId (BSS.toShort "tT") of
+        Left err -> error err
+        Right tid -> tid
+
+exampleLockInfoDetailsCBOR :: BS.ByteString
+exampleLockInfoDetailsCBOR =
+    mconcat
+        [ "a6",
+          "646c6f636b",
+          "d99fd8831927110500",
+          "6566756e6473",
+          "81",
+          "a2",
+          "676163636f756e74",
+          "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+          "67616d6f756e7473",
+          "81",
+          "a2",
+          "65746f6b656e",
+          "627454",
+          "66616d6f756e74",
+          "c4822219300c",
+          "66657870697279",
+          "c11a6b932770",
+          "686d65746164617461",
+          "5848",
+          exampleLockMetadataCBOR,
+          "6a636f6e74726f6c6c6572",
+          "a1",
+          "6873696d706c655630",
+          "a2",
+          "666772616e7473",
+          "81",
+          "a2",
+          "65726f6c6573",
+          "82",
+          "6466756e64",
+          "6473656e64",
+          "676163636f756e74",
+          "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+          "66746f6b656e73",
+          "81",
+          "627454",
+          "6a726563697069656e7473",
+          "81",
+          "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+        ]
+
+-- | Test the CBOR encoding and decoding of 'LockInfoDetails'.
+testLockInfoDetailsCBOR :: Spec
+testLockInfoDetailsCBOR = describe "LockInfoDetails CBOR" $ do
+    it "fixture" $ do
+        lockInfoFromBytes (B8.fromStrict $ BS16.decodeLenient exampleLockInfoDetailsCBOR)
+            `shouldBe` Right exampleLockInfoDetails
+        BS16.encode (lockInfoToBytes exampleLockInfoDetails)
+            `shouldBe` exampleLockInfoDetailsCBOR
+    it "any recipients fixture" $ do
+        let lockInfoAny =
+                exampleLockInfoDetails
+                    { lipConfig = (lipConfig exampleLockInfoDetails){lcRecipients = LockRecipientsAny}
+                    }
+            lockInfoAnyCBOR =
+                mconcat
+                    [ "a6",
+                      "646c6f636b",
+                      "d99fd8831927110500",
+                      "6566756e6473",
+                      "81",
+                      "a2",
+                      "676163636f756e74",
+                      "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+                      "67616d6f756e7473",
+                      "81",
+                      "a2",
+                      "65746f6b656e",
+                      "627454",
+                      "66616d6f756e74",
+                      "c4822219300c",
+                      "66657870697279",
+                      "c11a6b932770",
+                      "686d65746164617461",
+                      "5848",
+                      exampleLockMetadataCBOR,
+                      "6a636f6e74726f6c6c6572",
+                      "a1",
+                      "6873696d706c655630",
+                      "a2",
+                      "666772616e7473",
+                      "81",
+                      "a2",
+                      "65726f6c6573",
+                      "82",
+                      "6466756e64",
+                      "6473656e64",
+                      "676163636f756e74",
+                      "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+                      "66746f6b656e73",
+                      "81",
+                      "627454",
+                      "6a726563697069656e7473",
+                      "63616e79"
+                    ]
+        lockInfoFromBytes (B8.fromStrict $ BS16.decodeLenient lockInfoAnyCBOR)
+            `shouldBe` Right lockInfoAny
+        BS16.encode (lockInfoToBytes lockInfoAny)
+            `shouldBe` lockInfoAnyCBOR
+    it "metadata round-trip" $ do
+        let encoded = lockInfoToBytes exampleLockInfoDetails
+        lockInfoFromBytes (B8.fromStrict encoded) `shouldBe` Right exampleLockInfoDetails
+
+-- * Lock CBOR tests
+
+-- Shared test account and token used across lock fixtures.
+lockTestAcc :: AccountAddress
+lockTestAcc = AccountAddress $ FBS.pack [1 .. 32]
+
+lockTestAccHex :: BS.ByteString
+lockTestAccHex = "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+
+lockTokenId :: TokenId
+lockTokenId = case makeTokenId (BSS.toShort "tT") of
+    Left err -> error err
+    Right tid -> tid
+
+-- Helper encode/decode for intermediate lock types.
+lockEncode :: (a -> Encoding) -> a -> BS.ByteString
+lockEncode enc = encodeToBytes . enc
+
+lockDecode :: (forall s. Decoder s a) -> BS.ByteString -> Either String a
+lockDecode dec bs = decodeFromBytes dec "lock type" (B8.fromStrict bs)
+
+-- | Assert that a hex fixture decodes to the expected value, and that
+-- re-encoding that value produces the same hex. This pins both the wire
+-- format and the codec's self-consistency in one shot.
+lockFixture ::
+    (Show a, Eq a) =>
+    (a -> Encoding) ->
+    (forall s. Decoder s a) ->
+    a ->
+    BS.ByteString ->
+    Expectation
+lockFixture enc dec expected hexStr = do
+    lockDecode dec (BS16.decodeLenient hexStr) `shouldBe` Right expected
+    BS16.encode (lockEncode enc expected) `shouldBe` hexStr
+
+testLockIdCBOR :: Spec
+testLockIdCBOR = describe "LockId CBOR" $ do
+    it "fixture" $
+        lockFixture
+            encodeLockId
+            decodeLockId
+            (LockId 10001 5 0)
+            "d99fd8831927110500"
+
+exampleLockMetadata :: LockMetadata
+exampleLockMetadata =
+    LockMetadata
+        { lmName = Just "Vesting lock",
+          lmDescription = Just "Tokens locked",
+          lmAdditional =
+            Map.fromList
+                [ ("issuer", CBOR.TString "Concordium"),
+                  ("version", CBOR.TInt 1)
+                ]
+        }
+
+exampleLockMetadataCBOR :: BS.ByteString
+exampleLockMetadataCBOR =
+    mconcat
+        [ "a4",
+          "646e616d65",
+          "6c56657374696e67206c6f636b",
+          "66697373756572",
+          "6a436f6e636f726469756d",
+          "6776657273696f6e",
+          "01",
+          "6b6465736372697074696f6e",
+          "6d546f6b656e73206c6f636b6564"
+        ]
+
+testLockMetadataCBOR :: Spec
+testLockMetadataCBOR = describe "LockMetadata CBOR" $ do
+    it "known and additional fields fixture" $ do
+        lockFixture
+            encodeLockMetadata
+            decodeLockMetadata
+            exampleLockMetadata
+            exampleLockMetadataCBOR
+        lockMetadataFromRawCbor (lockMetadataToRawCbor exampleLockMetadata) `shouldBe` Right exampleLockMetadata
+    it "only additional fields" $
+        lockFixture
+            encodeLockMetadata
+            decodeLockMetadata
+            LockMetadata{lmName = Nothing, lmDescription = Nothing, lmAdditional = Map.singleton "issuer" (CBOR.TString "Concordium")}
+            (mconcat ["a1", "66697373756572", "6a436f6e636f726469756d"])
+    it "raw helper rejects invalid metadata" $
+        lockMetadataFromRawCbor (rawCborFromBytes "\x01") `shouldSatisfy` isLeft
+
+testLockRecipientsCBOR :: Spec
+testLockRecipientsCBOR = describe "LockRecipients CBOR" $ do
+    it "any" $
+        lockFixture
+            encodeLockRecipients
+            decodeLockRecipients
+            LockRecipientsAny
+            "63616e79"
+    it "limited single account" $
+        lockFixture
+            encodeLockRecipients
+            decodeLockRecipients
+            (LockRecipientsLimited $ Seq.singleton $ accountTokenHolder lockTestAcc)
+            ("81" <> lockTestAccHex)
+    it "limited empty" $
+        lockFixture
+            encodeLockRecipients
+            decodeLockRecipients
+            (LockRecipientsLimited Seq.empty)
+            "80"
+    it "rejects unknown text" $
+        lockDecode decodeLockRecipients (BS16.decodeLenient "63616c6c")
+            `shouldSatisfy` isLeft
+
+testLockControllerSimpleV0CapabilityCBOR :: Spec
+testLockControllerSimpleV0CapabilityCBOR = describe "LockControllerSimpleV0Capability CBOR" $ do
+    it "fund" $
+        lockFixture
+            encodeLockControllerSimpleV0Capability
+            decodeLockControllerSimpleV0Capability
+            LockControllerSimpleV0Fund
+            "6466756e64"
+    it "return" $
+        lockFixture
+            encodeLockControllerSimpleV0Capability
+            decodeLockControllerSimpleV0Capability
+            LockControllerSimpleV0Return
+            "6672657475726e"
+    it "send" $
+        lockFixture
+            encodeLockControllerSimpleV0Capability
+            decodeLockControllerSimpleV0Capability
+            LockControllerSimpleV0Send
+            "6473656e64"
+    it "cancel" $
+        lockFixture
+            encodeLockControllerSimpleV0Capability
+            decodeLockControllerSimpleV0Capability
+            LockControllerSimpleV0Cancel
+            "6663616e63656c"
+
+testLockControllerSimpleV0GrantCBOR :: Spec
+testLockControllerSimpleV0GrantCBOR = describe "LockControllerSimpleV0Grant CBOR" $ do
+    it "fixture" $
+        lockFixture
+            encodeLockControllerSimpleV0Grant
+            decodeLockControllerSimpleV0Grant
+            exampleGrant
+            ( mconcat
+                [ "a2",
+                  "65726f6c6573",
+                  "82",
+                  "6466756e64",
+                  "6473656e64",
+                  "676163636f756e74",
+                  lockTestAccHex
+                ]
+            )
+  where
+    exampleGrant =
+        LockControllerSimpleV0Grant
+            { lcsv0gAccount = accountTokenHolder lockTestAcc,
+              lcsv0gRoles = Seq.fromList [LockControllerSimpleV0Fund, LockControllerSimpleV0Send]
+            }
+
+testLockControllerSimpleConfigV0CBOR :: Spec
+testLockControllerSimpleConfigV0CBOR = describe "LockControllerSimpleConfigV0 CBOR" $ do
+    it "minimal (keepAlive=false, omitted from encoding)" $
+        lockFixture
+            encodeLockControllerSimpleConfigV0
+            decodeLockControllerSimpleConfigV0
+            minimalConfig
+            (mconcat ["a2", "666772616e7473", "80", "66746f6b656e73", "80"])
+    it "full (keepAlive=true, present in encoding)" $
+        lockFixture
+            encodeLockControllerSimpleConfigV0
+            decodeLockControllerSimpleConfigV0
+            fullConfig
+            ( mconcat
+                [ "a4",
+                  "646d656d6f",
+                  "43010203",
+                  "666772616e7473",
+                  "81",
+                  "a2",
+                  "65726f6c6573",
+                  "82",
+                  "6466756e64",
+                  "6663616e63656c",
+                  "676163636f756e74",
+                  lockTestAccHex,
+                  "66746f6b656e73",
+                  "81",
+                  "627454",
+                  "696b656570416c697665",
+                  "f5"
+                ]
+            )
+  where
+    minimalConfig =
+        LockControllerSimpleConfigV0
+            { lcsv0Grants = Seq.empty,
+              lcsv0Tokens = Seq.empty,
+              lcsv0KeepAlive = False,
+              lcsv0Memo = Nothing
+            }
+    fullConfig =
+        LockControllerSimpleConfigV0
+            { lcsv0Grants =
+                Seq.singleton
+                    LockControllerSimpleV0Grant
+                        { lcsv0gAccount = accountTokenHolder lockTestAcc,
+                          lcsv0gRoles = Seq.fromList [LockControllerSimpleV0Fund, LockControllerSimpleV0Cancel]
+                        },
+              lcsv0Tokens = Seq.singleton lockTokenId,
+              lcsv0KeepAlive = True,
+              lcsv0Memo = Just $ UntaggedMemo (Memo $ BSS.pack [0x01, 0x02, 0x03])
+            }
+
+testLockControllerCBOR :: Spec
+testLockControllerCBOR = describe "LockController CBOR" $ do
+    it "simpleV0 variant" $
+        lockFixture
+            encodeLockController
+            decodeLockController
+            ( LockControllerSimpleV0
+                LockControllerSimpleConfigV0
+                    { lcsv0Grants = Seq.empty,
+                      lcsv0Tokens = Seq.empty,
+                      lcsv0KeepAlive = False,
+                      lcsv0Memo = Nothing
+                    }
+            )
+            ( mconcat
+                [ "a1",
+                  "6873696d706c655630",
+                  "a2",
+                  "666772616e7473",
+                  "80",
+                  "66746f6b656e73",
+                  "80"
+                ]
+            )
+
+testLockedTokenAmountCBOR :: Spec
+testLockedTokenAmountCBOR = describe "LockedTokenAmount CBOR" $ do
+    it "fixture" $
+        -- map keys sorted by length: "token" (5) before "amount" (6)
+        lockFixture
+            encodeLockedTokenAmount
+            decodeLockedTokenAmount
+            LockedTokenAmount{ltaToken = lockTokenId, ltaAmount = TokenAmount (TokenRawAmount 12300) 3}
+            (mconcat ["a2", "65746f6b656e", "627454", "66616d6f756e74", "c4822219300c"])
+
+testLockAccountFundsCBOR :: Spec
+testLockAccountFundsCBOR = describe "LockAccountFunds CBOR" $ do
+    it "fixture" $
+        lockFixture
+            encodeLockAccountFunds
+            decodeLockAccountFunds
+            LockAccountFunds
+                { lafAccount = accountTokenHolder lockTestAcc,
+                  lafAmounts =
+                    Seq.singleton
+                        LockedTokenAmount
+                            { ltaToken = lockTokenId,
+                              ltaAmount = TokenAmount (TokenRawAmount 12300) 3
+                            }
+                }
+            ( mconcat
+                [ "a2",
+                  "676163636f756e74",
+                  lockTestAccHex,
+                  "67616d6f756e7473",
+                  "81",
+                  "a2",
+                  "65746f6b656e",
+                  "627454",
+                  "66616d6f756e74",
+                  "c4822219300c"
+                ]
+            )
+
 testTransactionVectors :: Spec
 testTransactionVectors = do
     let emptyTransaction = TokenUpdateTransaction Seq.empty
@@ -1056,6 +1772,7 @@ tests = parallel $ describe "CBOR" $ do
     testInitializationParametersJSON
     testEncodedTokenOperationsJSON
     testTokenOperationsCBOR
+    testMetaUpdateOperationsCBOR
     testEncodedTokenEvents
     testTokenMetadataUrlJSON
     testTokenMetadataUrlCBOR
@@ -1066,6 +1783,18 @@ tests = parallel $ describe "CBOR" $ do
     testTokenModuleAccountStateJSON
     testTokenStateJSON
     testTokenModuleAccountStateCBOR
+    testTokenAuthorizationsMapCBOR
+    testTokenAuthorizationsMapJSON
+    testLockInfoDetailsCBOR
+    testLockIdCBOR
+    testLockMetadataCBOR
+    testLockRecipientsCBOR
+    testLockControllerSimpleV0CapabilityCBOR
+    testLockControllerSimpleV0GrantCBOR
+    testLockControllerSimpleConfigV0CBOR
+    testLockControllerCBOR
+    testLockedTokenAmountCBOR
+    testLockAccountFundsCBOR
     describe "UpdateTransaction test vectors" $ testTransactionVectors
     it "JSON (de-)serialization roundtrip for TokenState (simple)" $ withMaxSuccess 1000 $ forAll genTokenStateSimple $ \tt ->
         assertEqual
@@ -1144,3 +1873,13 @@ tests = parallel $ describe "CBOR" $ do
         Right tt === decodeTokenEvent (encodeTokenEvent tt)
     it "Encode and decode TokenRejectReason" $ withMaxSuccess 1000 $ forAll genTokenRejectReason $ \tt ->
         Right tt === decodeTokenRejectReason (encodeTokenRejectReason tt)
+    it "CBOR encode and decode MetaUpdateTransaction" $
+        withMaxSuccess 1000 $
+            forAll genMetaUpdateTransaction $ \tr ->
+                Right tr
+                    === metaUpdateTransactionFromBytes
+                        (B8.fromStrict $ metaUpdateTransactionToBytes tr)
+    it "JSON encode and decode MetaUpdateTransaction" $
+        withMaxSuccess 1000 $
+            forAll genMetaUpdateTransaction $
+                \tr -> Right tr == AE.eitherDecode (AE.encode tr)

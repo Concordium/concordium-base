@@ -173,6 +173,7 @@ generateKeys guk = do
                     { asCooldownParameters = CFalse,
                       asTimeParameters = CFalse,
                       asCreatePLT = CFalse,
+                      asTokenParameters = CFalse,
                       ..
                     }
         GenerateUpdateKeysCPV1{..} -> do
@@ -182,7 +183,7 @@ generateKeys guk = do
             asTimeParameters <-
                 CTrue
                     <$> makeAS gukCooldownParameters "Add identity provider access structure"
-            doGenerateKeys @'AuthorizationsVersion1 Authorizations{asCreatePLT = CFalse, ..}
+            doGenerateKeys @'AuthorizationsVersion1 Authorizations{asCreatePLT = CFalse, asTokenParameters = CFalse, ..}
   where
     CommonUpdateKeys{..} = gukCommon guk
     doGenerateKeys :: forall auv. (IsAuthorizationsVersion auv) => Authorizations auv -> IO ()

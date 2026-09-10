@@ -637,6 +637,8 @@ data PendingUpdateEffect
       PUELevel2KeysV1 !(U.Authorizations 'AuthorizationsVersion1)
     | -- | Updates to the level 2 keys.
       PUELevel2KeysV2 !(U.Authorizations 'AuthorizationsVersion2)
+    | -- | Updates to the level 2 keys.
+      PUELevel2KeysV3 !(U.Authorizations 'AuthorizationsVersion3)
     | -- | Protocol updates.
       PUEProtocol !U.ProtocolUpdate
     | -- | Updates to the election difficulty parameter for chain parameters versions 1-2.
@@ -678,6 +680,8 @@ data PendingUpdateEffect
       PUEFinalizationCommitteeParameters !FinalizationCommitteeParameters
     | -- | Updates to the validator score parameters for chain parameters version 3
       PUEValidatorScoreParameters !ValidatorScoreParameters
+    | -- | Updates to the maximum relative duration for protocol-level token locks.
+      PUEMaxLockDuration !Duration
 
 -- | Derive a @ToJSON@ instance for @PendingUpdateEffect@. For instance,
 --  @print $ toJSON (PUETimeParameters a)@ will output something like:
@@ -741,7 +745,9 @@ data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers
       -- | Updates to the consensus version 2 validator score parameters
       _nusnValidatorScoreParameters :: !U.UpdateSequenceNumber,
       -- | Updates to protocol level tokens. Introduced in protocol version 9.
-      _nusnProtocolLevelTokensParameters :: !U.UpdateSequenceNumber
+      _nusnProtocolLevelTokensParameters :: !U.UpdateSequenceNumber,
+      -- | Updates to the maximum relative duration for protocol-level token locks.
+      _nusnMaxLockDuration :: !U.UpdateSequenceNumber
     }
     deriving (Show, Eq)
 
