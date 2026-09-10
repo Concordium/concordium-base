@@ -8,6 +8,7 @@
 //! code are defined as methods on the [`Artifact`] type, e.g.,
 //! [`Artifact::run`].
 
+use crate::metering_transformation::Energy;
 use crate::{
     artifact::{StackValue, *},
     constants::{MAX_NUM_PAGES, PAGE_SIZE},
@@ -112,7 +113,20 @@ pub struct RunConfig {
     /// resume. The type of the host function that is being called determines
     /// which case we're in so we do not record the information here.
     return_value_loc: usize,
+    /// Energy ticked by the interpreter by executing `InternalOpcode::TickEnergy`
+    /// instructions in the current invocation (starts when a function is called
+    /// and is preserved when execution is resumed from an interruption). Notice that the
+    /// energy does not include, memory charged from heap memory allocation, host calls (including
+    /// state operations). It does include charges for local variables and parameters. In short, the energy
+    /// accounted for in this variable corresponds to the energy metered in [`super::metering_transformation`].
+    ticked_energy: Energy,
+    /// The amount of copy instructions executed measured in units of energy. The mapping from
+    /// a single copy instruction to a unit of energy decides how many copy instructions you
+    /// are allowed to execute for a given amount of energy ticked.
+    executed_copy: Energy,
 }
+
+const COPY_INSTRUCTION_ENERGY: Energy = 1;
 
 impl RunConfig {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
@@ -615,6 +629,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             globals,
             max_memory,
             return_value_loc: 0, // not used
+            ticked_energy: 0,
+            executed_copy: 0,
         };
         self.run_config(host, config)
     }
@@ -667,6 +683,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             mut globals,
             max_memory,
             return_value_loc: _,
+            mut ticked_energy,
+            mut executed_copy,
         } = config;
 
         // Stack used for host function calls, to pass parameters.
@@ -744,6 +762,15 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     pc = unsafe { instructions.as_ptr().add(target as usize) };
                 }
                 InternalOpcode::Copy => {
+                    executed_copy += COPY_INSTRUCTION_ENERGY;
+                    if executed_copy > ticked_energy {
+                        eprintln!(
+                            "executed_copy = {}, ticked_energy = {}",
+                            executed_copy, ticked_energy
+                        );
+                        bail!("executed too many copy operations");
+                        // todo ar
+                    }
                     let copy_source = get_local(constants, locals, &mut pc);
                     let copy_target = get_local_mut(locals, &mut pc);
                     *copy_target = copy_source;
@@ -779,7 +806,9 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                 }
                 InternalOpcode::TickEnergy => {
                     let v = get_u32(&mut pc);
-                    host.tick_energy(v as u64)?;
+                    let energy = v as u64;
+                    ticked_energy += energy;
+                    host.tick_energy(energy)?;
                 }
                 InternalOpcode::Call => {
                     // if we want synchronous calls we need to either
@@ -828,6 +857,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                     globals,
                                     max_memory,
                                     return_value_loc,
+                                    ticked_energy,
+                                    executed_copy,
                                 },
                             });
                         } else if f.ty().result.is_some() {
@@ -923,6 +954,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                         globals,
                                         max_memory,
                                         return_value_loc,
+                                        ticked_energy,
+                                        executed_copy,
                                     },
                                 });
                             } else if f.ty().result.is_some() {
