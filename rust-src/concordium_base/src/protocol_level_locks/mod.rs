@@ -14,7 +14,7 @@
 //! - [`LockControllerSimpleV0Grant`] - A grant of capabilities to a specific
 //!   account.
 //! - [`LockControllerSimpleV0Capability`] - Individual capability that can be
-//!   granted (`Fund`, `Return`, `Send`, `Cancel`).
+//!   granted (`Fund`, `Release`, `Send`, `Cancel`).
 //!
 //! All types support CBOR serialization/deserialization, and optionally
 //! JSON serialization via serde when the `serde_deprecated` feature is
