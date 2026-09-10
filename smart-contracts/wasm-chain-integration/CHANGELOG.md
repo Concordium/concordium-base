@@ -1,6 +1,19 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+
 ## Unreleased
+
+### Changed
+
+- Added the required `BackingStoreLoad::load_raw_length` and `BackingStoreLoad::load_raw_range` methods. Implementations must use these methods to return the stored payload length and a clamped payload range without loading the complete payload.
+- Added `LoadLengthCallback`, `LoadRangeCallback`, and `BackingStoreLoadCallback` for backing-store length and range queries through the FFI.
+- Added the `CallbackFailure` variant to `LoadError`.
+- Changed the V1 FFI functions that read the backing store. These functions now require a `LoadLengthCallback` and a `LoadRangeCallback` in addition to a `LoadCallback`. This change is a breaking change to the FFI.
+- Changed V1 contract-state entry-size queries. For a cold persisted value, the engine reads only the fixed-size storage metadata. This change does not change contract results or Interpreter Energy.
+- Changed V1 contract-state entry-read queries. For a cold persisted value, the engine reads only the requested payload range and does not cache the complete value. This change does not change contract results or Interpreter Energy.
+
+### Added
 
 - Extend FFI with functions for lookup and inserting values into the state trie.
 
