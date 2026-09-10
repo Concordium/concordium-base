@@ -18,8 +18,8 @@ use concordium_base_derive::{CborDeserialize, CborSerialize, Serialize};
 pub enum LockControllerSimpleV0Capability {
     /// Authorizes funding the lock with a permitted token.
     Fund,
-    /// Authorizes returning funds from the lock.
-    Return,
+    /// Authorizes releasing funds from the lock.
+    Release,
     /// Authorizes sending funds from the lock to a recipient. This is subject to individual token
     /// policies such as pausation and allow/deny lists.
     Send,
@@ -31,7 +31,7 @@ impl LockControllerSimpleV0Capability {
     fn as_str(&self) -> &'static str {
         match self {
             Self::Fund => "fund",
-            Self::Return => "return",
+            Self::Release => "release",
             Self::Send => "send",
             Self::Cancel => "cancel",
         }
@@ -40,7 +40,7 @@ impl LockControllerSimpleV0Capability {
     fn from_str(s: &str) -> Result<Self, CborSerializationError> {
         match s {
             "fund" => Ok(Self::Fund),
-            "return" => Ok(Self::Return),
+            "release" => Ok(Self::Release),
             "send" => Ok(Self::Send),
             "cancel" => Ok(Self::Cancel),
             other => Err(CborSerializationError::invalid_data(format_args!(
@@ -98,7 +98,7 @@ pub struct LockConfigSimpleV0 {
     /// Tokens that may be funded into this lock.
     pub tokens: Vec<TokenId>,
     /// Whether the lock should be kept alive after all funds are
-    /// returned. Interpreted as `false` when omitted from the serialization.
+    /// released. Interpreted as `false` when omitted from the serialization.
     #[cbor(default = false)]
     pub keep_alive: bool,
     /// Optional memo attached to the lock.
@@ -138,7 +138,10 @@ mod tests {
     fn capability_cbor_round_trips_and_matches_fixtures() {
         let fixtures = [
             (LockControllerSimpleV0Capability::Fund, "6466756e64"),
-            (LockControllerSimpleV0Capability::Return, "6672657475726e"),
+            (
+                LockControllerSimpleV0Capability::Release,
+                "6772656c65617365",
+            ),
             (LockControllerSimpleV0Capability::Send, "6473656e64"),
             (LockControllerSimpleV0Capability::Cancel, "6663616e63656c"),
         ];
@@ -237,7 +240,7 @@ mod tests {
     fn capability_serial_round_trips_and_matches_tag_fixtures() {
         let fixtures = [
             (LockControllerSimpleV0Capability::Fund, "00"),
-            (LockControllerSimpleV0Capability::Return, "01"),
+            (LockControllerSimpleV0Capability::Release, "01"),
             (LockControllerSimpleV0Capability::Send, "02"),
             (LockControllerSimpleV0Capability::Cancel, "03"),
         ];
