@@ -8,6 +8,7 @@ readme = "./README.md"
 description = "Concordium's Wasm execution engine"
 homepage = "https://github.com/Concordium/concordium-base/tree/main/smart-contracts/wasm-transform"
 repository = "https://github.com/Concordium/concordium-base/"
+resolver = "3"
 
 [features]
 fuzz-coverage = []

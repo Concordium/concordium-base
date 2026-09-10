@@ -7,6 +7,7 @@ license-file = "../../LICENSE"
 description = "Concordium's smart contract execution engine"
 homepage = "https://github.com/Concordium/concordium-base/tree/main/smart-contracts/wasm-chain-integration"
 repository = "https://github.com/Concordium/concordium-base/"
+resolver = "3"
 
 [features]
 # If this feature is enabled  the ffi exports are going to be produced
