@@ -764,12 +764,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                 InternalOpcode::Copy => {
                     executed_copy += COPY_INSTRUCTION_ENERGY;
                     if executed_copy > ticked_energy {
-                        eprintln!(
-                            "executed_copy = {}, ticked_energy = {}",
-                            executed_copy, ticked_energy
-                        );
                         bail!("executed too many copy operations");
-                        // todo ar log including module address
                     }
                     let copy_source = get_local(constants, locals, &mut pc);
                     let copy_target = get_local_mut(locals, &mut pc);
