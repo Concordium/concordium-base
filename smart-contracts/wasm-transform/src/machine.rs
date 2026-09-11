@@ -776,10 +776,10 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                 }
                 InternalOpcode::Copy => {
                     executed_copy += COPY_INSTRUCTION_ENERGY;
-                    if executed_copy > ticked_energy {
-                        if copy_metering_enabled == CopyMeteringEnabled::True {
-                            bail!("executed too many copy operations");
-                        }
+                    if executed_copy > ticked_energy
+                        && copy_metering_enabled == CopyMeteringEnabled::True
+                    {
+                        bail!("executed too many copy operations");
                     }
                     let copy_source = get_local(constants, locals, &mut pc);
                     let copy_target = get_local_mut(locals, &mut pc);
