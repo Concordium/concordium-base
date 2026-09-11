@@ -28,6 +28,7 @@ mod types;
 use crate::{constants, ExecResult, InterpreterEnergy, OutOfEnergy};
 use anyhow::{anyhow, bail, ensure};
 use concordium_contracts_common::*;
+use concordium_wasm::machine::CopyMeteringEnabled;
 use concordium_wasm::{
     artifact::{Artifact, RunnableCode},
     machine::{self, ExecutionOutcome, NoInterrupt},
@@ -1072,6 +1073,7 @@ pub fn invoke_init<C: RunnableCode, Ctx: HasInitContext>(
         &mut host,
         init_invocation.init_name,
         &[Value::I64(init_invocation.amount as i64)],
+        CopyMeteringEnabled::False,
     ) {
         Ok(ExecutionOutcome::Success { result, .. }) => result,
         Ok(ExecutionOutcome::Interrupted { reason, .. }) => match reason {}, // impossible case, InitHost has no interrupts
@@ -1233,6 +1235,7 @@ pub fn invoke_receive<C: RunnableCode, Ctx: HasReceiveContext>(
         &mut host,
         receive_invocation.receive_name,
         &[Value::I64(receive_invocation.amount as i64)],
+        CopyMeteringEnabled::False,
     ) {
         Ok(ExecutionOutcome::Success { result, .. }) => result,
         Ok(ExecutionOutcome::Interrupted { reason, .. }) => match reason {}, // impossible case, ReceiveHost has no interrupts

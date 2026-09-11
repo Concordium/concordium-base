@@ -1,5 +1,6 @@
 //! Test correctness of instruction execution.
 //! Currently this tests only the sign extension instructions.
+use crate::machine::CopyMeteringEnabled;
 use crate::utils::instantiate_with_metering;
 use crate::{
     artifact::ArtifactNamedImport,
@@ -78,7 +79,12 @@ fn test_sign_extension() -> anyhow::Result<()> {
         instantiate::<ArtifactNamedImport, _>(ValidationConfig::V1, &TestHost, source)?.artifact;
     // Make sure there is no assertion violation, which would be a runtime error,
     // leading to an Err result below.
-    artifact.run(&mut TestHost, "check_sign_extend_instructions", &[])?;
+    artifact.run(
+        &mut TestHost,
+        "check_sign_extend_instructions",
+        &[],
+        CopyMeteringEnabled::False,
+    )?;
 
     Ok(())
 }
@@ -100,22 +106,46 @@ fn test_copy_instruction_limit() {
 
     println!("{}", artifact_disassembler::disassemble_artifact(&artifact));
 
-    artifact.run(&mut TestHost, "add_and_copy", &[]).unwrap();
     artifact
-        .run(&mut TestHost, "add_and_copy_10", &[])
+        .run(
+            &mut TestHost,
+            "add_and_copy",
+            &[],
+            CopyMeteringEnabled::True,
+        )
+        .unwrap();
+    artifact
+        .run(
+            &mut TestHost,
+            "add_and_copy_10",
+            &[],
+            CopyMeteringEnabled::True,
+        )
         .map(|_| ())
         .expect_err("too many copy operations");
     artifact
-        .run(&mut TestHost, "only_copy", &[])
+        .run(&mut TestHost, "only_copy", &[], CopyMeteringEnabled::True)
         .map(|_| ())
         .expect_err("too many copy operations");
     artifact
-        .run(&mut TestHost, "only_copy_10", &[])
+        .run(
+            &mut TestHost,
+            "only_copy_10",
+            &[],
+            CopyMeteringEnabled::True,
+        )
         .map(|_| ())
         .expect_err("too many copy operations");
-    artifact.run(&mut TestHost, "loop_copy", &[]).unwrap();
     artifact
-        .run(&mut TestHost, "loop_copy_10", &[])
+        .run(&mut TestHost, "loop_copy", &[], CopyMeteringEnabled::True)
+        .unwrap();
+    artifact
+        .run(
+            &mut TestHost,
+            "loop_copy_10",
+            &[],
+            CopyMeteringEnabled::True,
+        )
         .map(|_| ())
         .expect_err("too many copy operations");
 }

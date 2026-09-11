@@ -113,6 +113,8 @@ pub struct RunConfig {
     /// resume. The type of the host function that is being called determines
     /// which case we're in so we do not record the information here.
     return_value_loc: usize,
+
+    // Temporary fields related to runtnime metering of copy instructions:
     /// Energy ticked by the interpreter by executing `InternalOpcode::TickEnergy`
     /// instructions in the current invocation (starts when a function is called
     /// and is preserved when execution is resumed from an interruption). Notice that the
@@ -124,6 +126,8 @@ pub struct RunConfig {
     /// a single copy instruction to a unit of energy decides how many copy instructions you
     /// are allowed to execute for a given amount of energy ticked.
     executed_copy: Energy,
+    /// If copy metering is enabled.
+    copy_metering_enabled: CopyMeteringEnabled,
 }
 
 const COPY_INSTRUCTION_ENERGY: Energy = 1;
@@ -526,6 +530,12 @@ fn binary_i64_test(
     target.short = f(unsafe { left.long }, unsafe { right.long });
 }
 
+#[derive(Debug, Copy, Eq, PartialEq, Clone)]
+pub enum CopyMeteringEnabled {
+    False,
+    True,
+}
+
 impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
     /// Attempt to run the entrypoint using the supplied arguments. The
     /// arguments are
@@ -544,6 +554,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         host: &mut H,
         name: &Q,
         args: &[Value],
+        copy_metering_enabled: CopyMeteringEnabled,
     ) -> RunResult<ExecutionOutcome<H::Interrupt>>
     where
         Name: std::borrow::Borrow<Q>,
@@ -631,6 +642,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             return_value_loc: 0, // not used
             ticked_energy: 0,
             executed_copy: 0,
+            copy_metering_enabled,
         };
         self.run_config(host, config)
     }
@@ -685,6 +697,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             return_value_loc: _,
             mut ticked_energy,
             mut executed_copy,
+            copy_metering_enabled,
         } = config;
 
         // Stack used for host function calls, to pass parameters.
@@ -764,7 +777,9 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                 InternalOpcode::Copy => {
                     executed_copy += COPY_INSTRUCTION_ENERGY;
                     if executed_copy > ticked_energy {
-                        bail!("executed too many copy operations");
+                        if copy_metering_enabled == CopyMeteringEnabled::True {
+                            bail!("executed too many copy operations");
+                        }
                     }
                     let copy_source = get_local(constants, locals, &mut pc);
                     let copy_target = get_local_mut(locals, &mut pc);
@@ -854,6 +869,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                     return_value_loc,
                                     ticked_energy,
                                     executed_copy,
+                                    copy_metering_enabled,
                                 },
                             });
                         } else if f.ty().result.is_some() {
@@ -951,6 +967,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                         return_value_loc,
                                         ticked_energy,
                                         executed_copy,
+                                        copy_metering_enabled,
                                     },
                                 });
                             } else if f.ty().result.is_some() {
