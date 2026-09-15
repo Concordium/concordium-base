@@ -2267,8 +2267,8 @@ pub mod cost {
     pub const PLT_LOCK_SEND: Energy = Energy { energy: 100 };
 
     /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
-    /// Additional cost of a lock return operation
-    pub const PLT_LOCK_RETURN: Energy = Energy { energy: 100 };
+    /// Additional cost of a lock release operation
+    pub const PLT_LOCK_RELEASE: Energy = Energy { energy: 100 };
 
     /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
     /// Additional cost of a lock cancel operation
@@ -2737,7 +2737,7 @@ pub mod construct {
                     MetaUpdateOperation::UpdateMetadata(_) => cost::PLT_UPDATE_TOKEN_METADATA,
                     MetaUpdateOperation::LockFund(_) => cost::PLT_LOCK_FUND,
                     MetaUpdateOperation::LockSend(_) => cost::PLT_LOCK_SEND,
-                    MetaUpdateOperation::LockReturn(_) => cost::PLT_LOCK_RETURN,
+                    MetaUpdateOperation::LockRelease(_) => cost::PLT_LOCK_RELEASE,
                     MetaUpdateOperation::LockCreate(_) => cost::PLT_LOCK_CREATE,
                     MetaUpdateOperation::LockCancel(_) => cost::PLT_LOCK_CANCEL,
                 })

@@ -794,7 +794,7 @@ instance ToProto RejectReason where
         LockExpired lockId -> Proto.make $ ProtoFields.lockExpired .= toProto lockId
         LockFundNotAuthorized LockAccountRejectReasonDetails{larrdLockId, larrdAccount} -> Proto.make $ ProtoFields.lockFundNotAuthorized .= mkLockOpNotAuth larrdLockId larrdAccount
         LockSendNotAuthorized LockAccountRejectReasonDetails{larrdLockId, larrdAccount} -> Proto.make $ ProtoFields.lockSendNotAuthorized .= mkLockOpNotAuth larrdLockId larrdAccount
-        LockReturnNotAuthorized LockAccountRejectReasonDetails{larrdLockId, larrdAccount} -> Proto.make $ ProtoFields.lockReturnNotAuthorized .= mkLockOpNotAuth larrdLockId larrdAccount
+        LockReleaseNotAuthorized LockAccountRejectReasonDetails{larrdLockId, larrdAccount} -> Proto.make $ ProtoFields.lockReleaseNotAuthorized .= mkLockOpNotAuth larrdLockId larrdAccount
         LockCancelNotAuthorized LockAccountRejectReasonDetails{larrdLockId, larrdAccount} -> Proto.make $ ProtoFields.lockCancelNotAuthorized .= mkLockOpNotAuth larrdLockId larrdAccount
         LockTokenNotPermitted LockTokenRejectReasonDetails{ltrrdLockId, ltrrdTokenId} ->
             Proto.make $

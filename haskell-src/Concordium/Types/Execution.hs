@@ -2930,8 +2930,8 @@ data RejectReason
       LockFundNotAuthorized !LockAccountRejectReasonDetails
     | -- | The account is not authorized to send funds controlled by the lock.
       LockSendNotAuthorized !LockAccountRejectReasonDetails
-    | -- | The account is not authorized to return funds controlled by the lock.
-      LockReturnNotAuthorized !LockAccountRejectReasonDetails
+    | -- | The account is not authorized to release funds controlled by the lock.
+      LockReleaseNotAuthorized !LockAccountRejectReasonDetails
     | -- | The account is not authorized to cancel the lock.
       LockCancelNotAuthorized !LockAccountRejectReasonDetails
     | -- | The lock does not allow funding with the particular token.
@@ -3047,7 +3047,7 @@ instance S.Serialize RejectReason where
         LockExpired lockId -> S.putWord8 58 <> S.put lockId
         LockFundNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 59 <> S.put larrdLockId <> S.put larrdAccount
         LockSendNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 60 <> S.put larrdLockId <> S.put larrdAccount
-        LockReturnNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 61 <> S.put larrdLockId <> S.put larrdAccount
+        LockReleaseNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 61 <> S.put larrdLockId <> S.put larrdAccount
         LockCancelNotAuthorized LockAccountRejectReasonDetails{..} -> S.putWord8 62 <> S.put larrdLockId <> S.put larrdAccount
         LockTokenNotPermitted LockTokenRejectReasonDetails{..} -> S.putWord8 63 <> S.put ltrrdLockId <> S.put ltrrdTokenId
         LockRecipientNotPermitted LockAccountRejectReasonDetails{..} -> S.putWord8 64 <> S.put larrdLockId <> S.put larrdAccount
@@ -3124,7 +3124,7 @@ instance S.Serialize RejectReason where
             58 -> LockExpired <$> S.get
             59 -> LockFundNotAuthorized <$> getLockAccountRejectReasonDetails
             60 -> LockSendNotAuthorized <$> getLockAccountRejectReasonDetails
-            61 -> LockReturnNotAuthorized <$> getLockAccountRejectReasonDetails
+            61 -> LockReleaseNotAuthorized <$> getLockAccountRejectReasonDetails
             62 -> LockCancelNotAuthorized <$> getLockAccountRejectReasonDetails
             63 -> LockTokenNotPermitted <$> getLockTokenRejectReasonDetails
             64 -> LockRecipientNotPermitted <$> getLockAccountRejectReasonDetails
