@@ -1142,7 +1142,7 @@ mod tests {
     fn test_verification_request_anchor_cbor_roundtrip() {
         let verification_request_anchor = fixtures::verification_request_anchor_fixture();
 
-        let cbor = cbor::cbor_encode(&verification_request_anchor).unwrap();
+        let cbor = cbor::cbor_encode(&verification_request_anchor);
 
         assert_eq!(hex::encode(&cbor), "a4646861736858204bbaffb80ea1a9591ea9105152e64a9bb24c463fb923cb69686197c10ffac109647479706566434344565241667075626c6963a1636b6579046776657273696f6e01");
 
@@ -1154,7 +1154,7 @@ mod tests {
     fn test_verification_audit_anchor_cbor_roundtrip() {
         let verification_audit_anchor_on_chain = fixtures::verification_audit_anchor_fixture();
 
-        let cbor = cbor::cbor_encode(&verification_audit_anchor_on_chain).unwrap();
+        let cbor = cbor::cbor_encode(&verification_audit_anchor_on_chain);
         assert_eq!(hex::encode(&cbor), "a46468617368582048d2fc8fc2cb58431cf9433799e740959691d8f549b30fd99fdd282b3ca3b55f647479706566434344564141667075626c6963a1636b6579046776657273696f6e01");
         let decoded: VerificationAuditAnchor = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(decoded, verification_audit_anchor_on_chain);
