@@ -1052,6 +1052,9 @@ pub struct InitInvocation<'a> {
     pub energy: InterpreterEnergy,
 }
 
+/// For V0 contracts, we enable copy metering from P10 (to avoid having to test a full catchup from genesis).
+const P10_SLOT_TIME_MAINNET: u64 = 1773136816915;
+
 /// Invokes an init-function from a given artifact.
 pub fn invoke_init<C: RunnableCode, Ctx: HasInitContext>(
     artifact: &Artifact<ProcessedImports, C>,
@@ -1059,6 +1062,13 @@ pub fn invoke_init<C: RunnableCode, Ctx: HasInitContext>(
     init_invocation: InitInvocation,
     limit_logs_and_return_values: bool,
 ) -> ExecResult<InitResult> {
+    let copy_metering_enabled = if init_ctx.metadata().slot_time()?.millis >= P10_SLOT_TIME_MAINNET
+    {
+        CopyMeteringEnabled::True
+    } else {
+        CopyMeteringEnabled::False
+    };
+
     let mut host = InitHost {
         energy: init_invocation.energy,
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
@@ -1073,7 +1083,7 @@ pub fn invoke_init<C: RunnableCode, Ctx: HasInitContext>(
         &mut host,
         init_invocation.init_name,
         &[Value::I64(init_invocation.amount as i64)],
-        CopyMeteringEnabled::False,
+        copy_metering_enabled,
     ) {
         Ok(ExecutionOutcome::Success { result, .. }) => result,
         Ok(ExecutionOutcome::Interrupted { reason, .. }) => match reason {}, // impossible case, InitHost has no interrupts
@@ -1219,6 +1229,13 @@ pub fn invoke_receive<C: RunnableCode, Ctx: HasReceiveContext>(
     max_parameter_size: usize,
     limit_logs_and_return_values: bool,
 ) -> ExecResult<ReceiveResult> {
+    let copy_metering_enabled =
+        if receive_ctx.metadata().slot_time()?.millis >= P10_SLOT_TIME_MAINNET {
+            CopyMeteringEnabled::True
+        } else {
+            CopyMeteringEnabled::False
+        };
+
     let mut host = ReceiveHost {
         energy: receive_invocation.energy,
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
@@ -1235,7 +1252,7 @@ pub fn invoke_receive<C: RunnableCode, Ctx: HasReceiveContext>(
         &mut host,
         receive_invocation.receive_name,
         &[Value::I64(receive_invocation.amount as i64)],
-        CopyMeteringEnabled::False,
+        copy_metering_enabled,
     ) {
         Ok(ExecutionOutcome::Success { result, .. }) => result,
         Ok(ExecutionOutcome::Interrupted { reason, .. }) => match reason {}, // impossible case, ReceiveHost has no interrupts
