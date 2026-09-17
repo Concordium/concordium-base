@@ -114,18 +114,19 @@ pub struct RunConfig {
     /// which case we're in so we do not record the information here.
     return_value_loc: usize,
 
-    // Temporary fields related to runtnime metering of copy instructions:
-    /// Energy ticked by the interpreter by executing `InternalOpcode::TickEnergy`
-    /// instructions in the current invocation (starts when a function is called
+    /// Temporary field related to runtime metering of copy instructions.
+    /// The field records the remaining budget for copy instruction measured in units of energy.
+    /// The budget is charged each time a copy instruction is executed. The mapping from
+    /// a single copy instruction to a unit of energy is defined by [`COPY_INSTRUCTION_ENERGY`]
+    /// and decides how many copy instructions you are allowed to execute for a given budget.
+    ///
+    /// Budget is assigned when energy is ticked by the interpreter by executing `InternalOpcode::TickEnergy`
+    /// instructions. The scope of the budget is the current invocation (starts when a function is called
     /// and is preserved when execution is resumed from an interruption). Notice that the
-    /// energy does not include, memory charged from heap memory allocation, host calls (including
+    /// energy does not include memory charged for heap memory allocation and host calls (including
     /// state operations). It does include charges for local variables and parameters. In short, the energy
-    /// accounted for in this variable corresponds to the energy metered in [`super::metering_transformation`].
-    ticked_energy: Energy,
-    /// The amount of copy instructions executed measured in units of energy. The mapping from
-    /// a single copy instruction to a unit of energy decides how many copy instructions you
-    /// are allowed to execute for a given amount of energy ticked.
-    executed_copy: Energy,
+    /// that contributes to the copy budget corresponds to the energy metered in [`super::metering_transformation`].
+    copy_budget: Energy,
     /// If copy metering is enabled.
     copy_metering_enabled: CopyMeteringEnabled,
 }
@@ -640,8 +641,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             globals,
             max_memory,
             return_value_loc: 0, // not used
-            ticked_energy: 0,
-            executed_copy: 0,
+            copy_budget: 0,
             copy_metering_enabled,
         };
         self.run_config(host, config)
@@ -695,8 +695,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             mut globals,
             max_memory,
             return_value_loc: _,
-            mut ticked_energy,
-            mut executed_copy,
+            mut copy_budget,
             copy_metering_enabled,
         } = config;
 
@@ -775,11 +774,12 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     pc = unsafe { instructions.as_ptr().add(target as usize) };
                 }
                 InternalOpcode::Copy => {
-                    executed_copy += COPY_INSTRUCTION_ENERGY;
-                    if executed_copy > ticked_energy
-                        && copy_metering_enabled == CopyMeteringEnabled::True
-                    {
-                        bail!("executed too many copy operations");
+                    if copy_metering_enabled == CopyMeteringEnabled::True {
+                        ensure!(
+                            copy_budget >= COPY_INSTRUCTION_ENERGY,
+                            "executed too many copy operations"
+                        );
+                        copy_budget -= COPY_INSTRUCTION_ENERGY;
                     }
                     let copy_source = get_local(constants, locals, &mut pc);
                     let copy_target = get_local_mut(locals, &mut pc);
@@ -817,7 +817,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                 InternalOpcode::TickEnergy => {
                     let v = get_u32(&mut pc);
                     let energy = v as u64;
-                    ticked_energy += energy;
+                    copy_budget += energy;
                     host.tick_energy(energy)?;
                 }
                 InternalOpcode::Call => {
@@ -867,8 +867,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                     globals,
                                     max_memory,
                                     return_value_loc,
-                                    ticked_energy,
-                                    executed_copy,
+                                    copy_budget,
                                     copy_metering_enabled,
                                 },
                             });
@@ -965,8 +964,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                         globals,
                                         max_memory,
                                         return_value_loc,
-                                        ticked_energy,
-                                        executed_copy,
+                                        copy_budget,
                                         copy_metering_enabled,
                                     },
                                 });

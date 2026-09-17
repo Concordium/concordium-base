@@ -148,4 +148,12 @@ fn test_copy_instruction_limit() {
         )
         .map(|_| ())
         .expect_err("too many copy operations");
+    artifact
+        .run(
+            &mut TestHost,
+            "loop_copy_10",
+            &[],
+            CopyMeteringEnabled::False,
+        )
+        .unwrap();
 }
