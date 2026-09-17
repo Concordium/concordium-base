@@ -336,7 +336,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let module =
             validate::validate_module(ValidationConfig::V1, &NoDuplicateImport, &skeleton).unwrap();
         let artifact = module.compile::<ArtifactNamedImport>().unwrap();
-        println!("{}", artifact_disassembler::disassemble_artifact(&artifact));
+
         for n in [0, 1, 10000, 100000, 200000].iter() {
             group.bench_with_input(format!("execute n = {}", n), n, |b, m| {
                 b.iter(|| {
