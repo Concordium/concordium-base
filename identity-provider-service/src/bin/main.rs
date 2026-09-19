@@ -1842,9 +1842,12 @@ fn validate_recovery_request(
 
             let timestamp = id_recovery_request.value.timestamp;
 
-            let now = chrono::offset::Utc::now().timestamp() as u64;
+            // Compare with saturating arithmetic: a far-future (or pre-epoch)
+            // timestamp must be rejected, not cause an arithmetic panic that
+            // kills the request handler.
+            let now = chrono::offset::Utc::now().timestamp().max(0) as u64;
             let delta = server_config.recovery_timestamp_delta;
-            if timestamp < now - delta || timestamp > now + delta {
+            if now.abs_diff(timestamp) > delta {
                 warn!("Timestamp of id ownership proof out of sync.");
                 return Err(warp::reject::custom(IdRecoveryRejection::InvalidTimestamp));
             }

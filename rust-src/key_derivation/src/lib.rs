@@ -66,6 +66,39 @@ impl fmt::Display for Net {
 #[error("Invalid mnemonic length. The length must be 12, 15, 18, 21 or 24.")]
 pub struct MnemonicLengthError;
 
+#[derive(Debug, Error)]
+pub enum MnemonicError {
+    #[error("Invalid mnemonic length. The length must be 12, 15, 18, 21 or 24.")]
+    InvalidLength,
+    #[error("Invalid mnemonic: {0}")]
+    InvalidMnemonic(String),
+}
+
+/// Verify a BIP-39 mnemonic: correct word count, only English wordlist words,
+/// and a matching embedded checksum.
+///
+/// The checksum check catches typos and transcription errors at wallet
+/// recovery time. Without it, a single wrong word would silently derive a
+/// *different* wallet (with a different, empty balance), which is both a
+/// usability hazard and a foot-gun that phishing flows can exploit.
+pub fn validate_mnemonic(words: &str) -> Result<(), MnemonicError> {
+    let word_count = words.split(' ').filter(|w| !w.is_empty()).count();
+    let allowed_word_counts: [usize; 5] = [12, 15, 18, 21, 24];
+    if !allowed_word_counts.contains(&word_count) {
+        return Err(MnemonicError::InvalidLength);
+    }
+    bip39::Mnemonic::parse_in_normalized(bip39::Language::English, words)
+        .map_err(|e| MnemonicError::InvalidMnemonic(e.to_string()))?;
+    Ok(())
+}
+
+/// Convert 12, 15, 18, 21 or 24 BIP-39 words to a 64 bytes seed, verifying the
+/// BIP-39 checksum first. Use this at wallet-recovery time to catch typos.
+pub fn checked_words_to_seed(words: &str) -> Result<[u8; 64], MnemonicError> {
+    validate_mnemonic(words)?;
+    Ok(words_to_seed(words))
+}
+
 fn bls_key_bytes_from_seed(key_seed: [u8; 32]) -> <ArCurve as Curve>::Scalar {
     keygen_bls(&key_seed, b"").expect("All the inputs are of the correct length, this cannot fail.")
 }

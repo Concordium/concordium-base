@@ -116,6 +116,25 @@ impl<C: Curve> BabyStepGiantStep<C> {
         unreachable!("It should not be feasible to do 2^64 group additions.")
     }
 
+    /// Bounded variant of [`Self::discrete_log`]: gives up after
+    /// `max_iterations` giant steps and returns `None` if the discrete log was
+    /// not found.
+    ///
+    /// Prefer this over [`Self::discrete_log`] whenever the point `v` may be
+    /// influenced by untrusted (e.g. on-chain) data: a point encoding a huge
+    /// exponent would otherwise make the caller loop (almost) forever, which is
+    /// a denial of service for wallets and tooling that decrypt such values.
+    pub fn discrete_log_bounded(&self, v: &C, max_iterations: u64) -> Option<u64> {
+        let mut y = *v;
+        for i in 0..max_iterations {
+            if let Some(j) = self.table.get(&to_bytes(&y)) {
+                return Some(i * self.m + j);
+            }
+            y = y.plus_point(&self.inverse_point);
+        }
+        None
+    }
+
     /// Composition of `new` nad `discrete_log` methods for convenience.
     ///
     /// Less efficient than reusing the table.
@@ -154,6 +173,19 @@ impl<C: Curve> SecretKey<C> {
     pub fn decrypt_exponent(&self, c: &Cipher<C>, bsgs: &BabyStepGiantStep<C>) -> u64 {
         let dec = self.decrypt(c).value;
         bsgs.discrete_log(&dec)
+    }
+
+    /// Bounded variant of [`Self::decrypt_exponent`]: returns `None` instead of
+    /// looping (almost) forever when the encrypted exponent exceeds the search
+    /// bound. Use this when the ciphertext may be attacker-controlled.
+    pub fn decrypt_exponent_bounded(
+        &self,
+        c: &Cipher<C>,
+        bsgs: &BabyStepGiantStep<C>,
+        max_iterations: u64,
+    ) -> Option<u64> {
+        let dec = self.decrypt(c).value;
+        bsgs.discrete_log_bounded(&dec, max_iterations)
     }
 
     /// Generate a `SecretKey` from a `csprng`.
