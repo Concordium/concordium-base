@@ -38,6 +38,12 @@ pub trait Deserial: Sized {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self>;
 }
 
+impl Deserial for () {
+    fn deserial<R: ReadBytesExt>(_source: &mut R) -> ParseResult<Self> {
+        Ok(())
+    }
+}
+
 impl Deserial for u128 {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<u128> {
         Ok(source.read_u128::<BigEndian>()?)
@@ -1014,6 +1020,12 @@ mod test {
     use crate::common::{from_bytes, serialize_deserialize, to_bytes};
     use chrono::{DateTime, Utc};
     use concordium_base_derive::Serialize;
+
+    #[test]
+    fn test_unit_serialization() {
+        assert!(to_bytes(&()).is_empty());
+        assert_eq!(serialize_deserialize(&()).unwrap(), ());
+    }
 
     #[test]
     fn test_map_serialization() {
