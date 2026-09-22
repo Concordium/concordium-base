@@ -2,6 +2,10 @@
 
 ## Unreleased changes
 
+- A temporary option `CopyMeteringEnabled` has been added to `Machine::run`. It is set to `True`
+  for on-chain smart contract execution to guard against malicious smart contracts that executes
+  an unreasonable number of copy operations.
+
 ## concordium-wasm 5.1.0 (2025-03-18)
 
 - Added public methods `get_mod_name` and `get_item_name` to `ArtifactNamedImport`

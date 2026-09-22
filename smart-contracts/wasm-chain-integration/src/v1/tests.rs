@@ -16,6 +16,7 @@ use anyhow::{ensure, Context};
 use concordium_contracts_common::{
     Address, Amount, ChainMetadata, ContractAddress, OwnedEntrypointName, Timestamp,
 };
+use concordium_wasm::machine::CopyMeteringEnabled;
 use concordium_wasm::{
     artifact::{Artifact, CompiledFunction},
     machine, parse,
@@ -189,7 +190,10 @@ impl EntryOperationHarness {
             state,
             trace: DebugTracker::default(),
         };
-        let outcome = self.artifact.run(&mut host, export, arguments).unwrap();
+        let outcome = self
+            .artifact
+            .run(&mut host, export, arguments, CopyMeteringEnabled::True)
+            .unwrap();
         let machine::ExecutionOutcome::Success {
             result: Some(machine::Value::I32(result)),
             ..

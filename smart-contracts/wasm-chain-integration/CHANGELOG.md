@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- On-chain smart contract execution sets `CopyMeteringEnabled` on `Machine::run` to `True`
+  to guard against malicious smart contracts that executes
+  an unreasonable number of copy operations.
+
 ### Changed
 
 - Added the required `BackingStoreLoad::load_raw_length` and `BackingStoreLoad::load_raw_range` methods. Implementations must use these methods to return the stored payload length and a clamped payload range without loading the complete payload.
