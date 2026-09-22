@@ -41,6 +41,7 @@ import Concordium.Genesis.Data.Base
 import qualified Concordium.Genesis.Data.BaseV1 as BaseV1
 import qualified Concordium.Genesis.Data.P1 as P1
 import qualified Concordium.Genesis.Data.P10 as P10
+import qualified Concordium.Genesis.Data.P11 as P11
 import qualified Concordium.Genesis.Data.P2 as P2
 import qualified Concordium.Genesis.Data.P3 as P3
 import qualified Concordium.Genesis.Data.P4 as P4
@@ -71,6 +72,7 @@ newtype instance GenesisData 'P7 = GDP7 {unGDP7 :: P7.GenesisDataP7}
 newtype instance GenesisData 'P8 = GDP8 {unGDP8 :: P8.GenesisDataP8}
 newtype instance GenesisData 'P9 = GDP9 {unGDP9 :: P9.GenesisDataP9}
 newtype instance GenesisData 'P10 = GDP10 {unGDP10 :: P10.GenesisDataP10}
+newtype instance GenesisData 'P11 = GDP11 {unGDP11 :: P11.GenesisDataP11}
 
 -- | Data family for regenesis data. This has been chosen to be a data family, as
 --  opposed to a type family principally so that it is injective, i.e., so that
@@ -87,6 +89,7 @@ newtype instance Regenesis 'P7 = RGDP7 {unRGP7 :: P7.RegenesisP7}
 newtype instance Regenesis 'P8 = RGDP8 {unRGP8 :: P8.RegenesisP8}
 newtype instance Regenesis 'P9 = RGDP9 {unRGP9 :: P9.RegenesisP9}
 newtype instance Regenesis 'P10 = RGDP10 {unRGP10 :: P10.RegenesisP10}
+newtype instance Regenesis 'P11 = RGDP11 {unRGP11 :: P11.RegenesisP11}
 
 instance (IsProtocolVersion pv, IsConsensusV0 pv) => BasicGenesisData (GenesisData pv) where
     gdGenesisTime = case protocolVersion @pv of
@@ -174,6 +177,7 @@ instance (IsProtocolVersion pv) => Eq (GenesisData pv) where
         SP8 -> (==) `on` unGDP8
         SP9 -> (==) `on` unGDP9
         SP10 -> (==) `on` unGDP10
+        SP11 -> (==) `on` unGDP11
 
 instance (IsProtocolVersion pv) => Serialize (GenesisData pv) where
     get = case protocolVersion @pv of
@@ -187,6 +191,7 @@ instance (IsProtocolVersion pv) => Serialize (GenesisData pv) where
         SP8 -> GDP8 <$> P8.getGenesisDataV10
         SP9 -> GDP9 <$> P9.getGenesisDataV11
         SP10 -> GDP10 <$> P10.getGenesisDataV12
+        SP11 -> GDP11 <$> P11.getGenesisDataV13
 
     put = case protocolVersion @pv of
         SP1 -> P1.putGenesisDataV3 . unGDP1
@@ -199,6 +204,7 @@ instance (IsProtocolVersion pv) => Serialize (GenesisData pv) where
         SP8 -> P8.putGenesisDataV10 . unGDP8
         SP9 -> P9.putGenesisDataV11 . unGDP9
         SP10 -> P10.putGenesisDataV12 . unGDP10
+        SP11 -> P11.putGenesisDataV13 . unGDP11
 
 -- | Deserialize 'GenesisConfiguration' given the hash of the genesis. If
 --  'GenesisData' or 'Regenesis' is decodable (using its Serialize instance) from a given
@@ -230,6 +236,7 @@ getVersionedGenesisData = case protocolVersion @pv of
     SP8 -> GDP8 <$> P8.getVersionedGenesisData
     SP9 -> GDP9 <$> P9.getVersionedGenesisData
     SP10 -> GDP10 <$> P10.getVersionedGenesisData
+    SP11 -> GDP11 <$> P11.getVersionedGenesisData
 
 -- | Serialize genesis data with a version tag.
 --  Each version tag must be specific to a protocol version, though more than one version tag can
@@ -240,10 +247,26 @@ getVersionedGenesisData = case protocolVersion @pv of
 --  | Version tag | Protocol version |
 --  +=============+==================+
 --  | 3           | P1               |
+--  +-------------+------------------+
 --  | 4           | P2               |
+--  +-------------+------------------+
 --  | 5           | P3               |
+--  +-------------+------------------+
 --  | 6           | P4               |
+--  +-------------+------------------+
 --  | 7           | P5               |
+--  +-------------+------------------+
+--  | 8           | P6               |
+--  +-------------+------------------+
+--  | 9           | P7               |
+--  +-------------+------------------+
+--  | 10          | P8               |
+--  +-------------+------------------+
+--  | 11          | P9               |
+--  +-------------+------------------+
+--  | 12          | P10              |
+--  +-------------+------------------+
+--  | 13          | P11              |
 --  +-------------+------------------+
 putVersionedGenesisData :: forall pv. (IsProtocolVersion pv) => Putter (GenesisData pv)
 putVersionedGenesisData = case protocolVersion @pv of
@@ -257,6 +280,7 @@ putVersionedGenesisData = case protocolVersion @pv of
     SP8 -> P8.putVersionedGenesisData . unGDP8
     SP9 -> P9.putVersionedGenesisData . unGDP9
     SP10 -> P10.putVersionedGenesisData . unGDP10
+    SP11 -> P11.putVersionedGenesisData . unGDP11
 
 -- | Generate the block hash of a genesis block with the given genesis data.
 --  This is based on the presumption that a block hash is computed from a byte string
@@ -273,6 +297,7 @@ genesisBlockHash = case protocolVersion @pv of
     SP8 -> P8.genesisBlockHash . unGDP8
     SP9 -> P9.genesisBlockHash . unGDP9
     SP10 -> P10.genesisBlockHash . unGDP10
+    SP11 -> P11.genesisBlockHash . unGDP11
 
 -- | Generate the block hash of a regenesis block with the given regenesis data.
 regenesisBlockHash :: forall pv. (IsProtocolVersion pv) => Regenesis pv -> BlockHash
@@ -287,6 +312,7 @@ regenesisBlockHash = case protocolVersion @pv of
     SP8 -> P8.regenesisBlockHash . unRGP8
     SP9 -> P9.regenesisBlockHash . unRGP9
     SP10 -> P10.regenesisBlockHash . unRGP10
+    SP11 -> P11.regenesisBlockHash . unRGP11
 
 -- | Hash of the initial genesis of the chain to which the given genesis data belongs.
 --  Genesis created as part of a protocol update records the genesis
@@ -303,6 +329,7 @@ firstGenesisBlockHash = case protocolVersion @pv of
     SP8 -> P8.firstGenesisBlockHash . unRGP8
     SP9 -> P9.firstGenesisBlockHash . unRGP9
     SP10 -> P10.firstGenesisBlockHash . unRGP10
+    SP11 -> P11.firstGenesisBlockHash . unRGP11
 
 -- | Tag of the genesis variant used for serialization. This tag determines
 --  whether the genesis data is, e.g., initial genesis, or regenesis.
@@ -318,6 +345,7 @@ genesisVariantTag = case protocolVersion @pv of
     SP8 -> P8.genesisVariantTag . unGDP8
     SP9 -> P9.genesisVariantTag . unGDP9
     SP10 -> P10.genesisVariantTag . unGDP10
+    SP11 -> P11.genesisVariantTag . unGDP11
 
 -- | Tag of the regenesis variant used for serialization. This tag determines
 --  whether the genesis data is, e.g., initial genesis, or regenesis and allows
@@ -335,6 +363,7 @@ regenesisVariantTag = case protocolVersion @pv of
     SP8 -> P8.regenesisVariantTag . unRGP8
     SP9 -> P9.regenesisVariantTag . unRGP9
     SP10 -> P10.regenesisVariantTag . unRGP10
+    SP11 -> P11.regenesisVariantTag . unRGP11
 
 -- | A dependent pair of a protocol version and genesis data.
 data PVGenesisData = forall pv. (IsProtocolVersion pv) => PVGenesisData (GenesisData pv)
@@ -359,6 +388,7 @@ getPVGenesisData = do
         10 -> PVGenesisData . GDP8 <$> P8.getGenesisDataV10
         11 -> PVGenesisData . GDP9 <$> P9.getGenesisDataV11
         12 -> PVGenesisData . GDP10 <$> P10.getGenesisDataV12
+        13 -> PVGenesisData . GDP11 <$> P11.getGenesisDataV13
         n -> fail $ "Unsupported genesis version: " ++ show n
 
 -- | Deserialize a genesis data version tag and return the associated protocol
@@ -378,6 +408,7 @@ getPVGenesisDataPV = do
         10 -> return $ SomeProtocolVersion SP8
         11 -> return $ SomeProtocolVersion SP9
         12 -> return $ SomeProtocolVersion SP10
+        13 -> return $ SomeProtocolVersion SP11
         n -> fail $ "Unsupported genesis version: " ++ show n
 
 -- | Serialize genesis data with a version tag. This is a helper function that
@@ -421,6 +452,8 @@ data StateMigrationParameters (p1 :: ProtocolVersion) (p2 :: ProtocolVersion) wh
     StateMigrationParametersP8ToP9 :: P9.StateMigrationData -> StateMigrationParameters 'P8 'P9
     -- | The state is migrated from protocol version 'P9' to 'P10'.
     StateMigrationParametersP9ToP10 :: P10.StateMigrationData -> StateMigrationParameters 'P9 'P10
+    -- | The state is migrated from protocol version 'P10' to 'P11'.
+    StateMigrationParametersP10ToP11 :: P11.StateMigrationData -> StateMigrationParameters 'P10 'P11
 
 -- | Extract the genesis configuration from the genesis data.
 genesisConfiguration :: (IsProtocolVersion pv, IsConsensusV0 pv) => GenesisData pv -> GenesisConfiguration
@@ -454,6 +487,7 @@ genesisCoreParametersV1 = case protocolVersion @pv of
     SP8 -> \(GDP8 genData) -> P8.genesisCore genData
     SP9 -> \(GDP9 genData) -> P9.genesisCore genData
     SP10 -> \(GDP10 genData) -> P10.genesisCore genData
+    SP11 -> \(GDP11 genData) -> P11.genesisCore genData
 
 -- | Extract the V1 core genesis parameters from the regenesis data.
 regenesisCoreParametersV1 ::
@@ -467,3 +501,4 @@ regenesisCoreParametersV1 = case protocolVersion @pv of
     SP8 -> \(RGDP8 genData) -> BaseV1.genesisCore $ P8.genesisRegenesis genData
     SP9 -> \(RGDP9 genData) -> BaseV1.genesisCore $ P9.genesisRegenesis genData
     SP10 -> \(RGDP10 genData) -> BaseV1.genesisCore $ P10.genesisRegenesis genData
+    SP11 -> \(RGDP11 genData) -> BaseV1.genesisCore $ P11.genesisRegenesis genData

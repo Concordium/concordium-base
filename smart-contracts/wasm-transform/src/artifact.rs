@@ -402,7 +402,7 @@ impl RunnableCode for CompiledFunction {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn locals(&self) -> LocalsIterator {
+    fn locals(&self) -> LocalsIterator<'_> {
         LocalsIterator::new(self.num_locals, &self.locals)
     }
 
@@ -449,7 +449,7 @@ impl RunnableCode for CompiledFunctionBytes<'_> {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn locals(&self) -> LocalsIterator {
+    fn locals(&self) -> LocalsIterator<'_> {
         LocalsIterator::new(self.num_locals, &self.locals)
     }
 

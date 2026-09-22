@@ -1,3 +1,4 @@
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -251,6 +252,20 @@ encodeAdditionalMapCbor additional =
         [ (makeMapKeyEncoding (encodeString key), CBOR.encodeTerm val)
         | (key, val) <- Map.toList additional
         ]
+
+-- * Token ID
+
+-- | Decode a CBOR-encoded 'TokenId'.
+decodeTokenId :: Decoder s TokenId
+decodeTokenId = do
+    tid <- decodeStringCanonical
+    case makeTokenId (BSS.toShort $ TextEncoding.encodeUtf8 tid) of
+        Left e -> fail $ "Invalid token ID: " ++ e
+        Right tokenId -> return tokenId
+
+-- | Encode a 'TokenId' as CBOR.
+encodeTokenId :: TokenId -> Encoding
+encodeTokenId (TokenId tid) = encodeString (TextEncoding.decodeUtf8 $ BSS.fromShort tid)
 
 -- * Token holder parameters
 
@@ -582,6 +597,139 @@ tokenMetadataUrlFromBytes =
 tokenMetadataUrlToBytes :: TokenMetadataUrl -> BS.ByteString
 tokenMetadataUrlToBytes = encodeToBytes . encodeTokenMetadataUrl
 
+-- * Administrative roles
+
+-- | The different admin roles defined for the current token module implementation.
+--  Each role gives access to specific adminstrative operations.
+data TokenAdminRole
+    = -- | Authority to perform @assignAdminRoles@ and @revokeAdminRoles@.
+      RoleUpdateAdminRoles
+    | -- | Authority to perform @mint@.
+      RoleMint
+    | -- | Authority to perfrom @burn@.
+      RoleBurn
+    | -- | Authority to perform @addAllowList@ and @removeAllowList@.
+      RoleUpdateAllowList
+    | -- | Authority to perform @addDenyList@ and @removeDenyList@.
+      RoleUpdateDenyList
+    | -- | Authority to perform @pause@ and @unpause@.
+      RolePause
+    | -- | Authority to perform @updateMetadata@.
+      RoleUpdateMetadata
+    deriving (Eq, Ord, Show)
+
+instance AE.ToJSON TokenAdminRole where
+    toJSON = AE.String . tokenAdminRoleToText
+
+instance AE.FromJSON TokenAdminRole where
+    parseJSON = AE.withText "TokenAdminRole" parseTokenAdminRoleFromText
+
+instance AE.ToJSONKey TokenAdminRole where
+    toJSONKey = AE.toJSONKeyText tokenAdminRoleToText
+
+instance AE.FromJSONKey TokenAdminRole where
+    fromJSONKey = AE.FromJSONKeyTextParser parseTokenAdminRoleFromText
+
+-- | Parse a 'Text' as a 'TokenAdminRole'.
+tokenAdminRoleFromText :: Text -> Maybe TokenAdminRole
+tokenAdminRoleFromText "updateAdminRoles" = Just RoleUpdateAdminRoles
+tokenAdminRoleFromText "mint" = Just RoleMint
+tokenAdminRoleFromText "burn" = Just RoleBurn
+tokenAdminRoleFromText "updateAllowList" = Just RoleUpdateAllowList
+tokenAdminRoleFromText "updateDenyList" = Just RoleUpdateDenyList
+tokenAdminRoleFromText "pause" = Just RolePause
+tokenAdminRoleFromText "updateMetadata" = Just RoleUpdateMetadata
+tokenAdminRoleFromText _ = Nothing
+
+-- | Parse a 'TokenAdminRole' from a 'Text' in a monad that supports 'MonadFail'.
+parseTokenAdminRoleFromText :: (MonadFail m) => Text -> m TokenAdminRole
+{-# INLINE parseTokenAdminRoleFromText #-}
+parseTokenAdminRoleFromText role = case tokenAdminRoleFromText role of
+    Just r -> return r
+    Nothing -> fail $ "Unsupported role: " ++ show role
+
+-- | Encode a 'TokenAdminRole' as 'Text'.
+tokenAdminRoleToText :: TokenAdminRole -> Text
+tokenAdminRoleToText RoleUpdateAdminRoles = "updateAdminRoles"
+tokenAdminRoleToText RoleMint = "mint"
+tokenAdminRoleToText RoleBurn = "burn"
+tokenAdminRoleToText RoleUpdateAllowList = "updateAllowList"
+tokenAdminRoleToText RoleUpdateDenyList = "updateDenyList"
+tokenAdminRoleToText RolePause = "pause"
+tokenAdminRoleToText RoleUpdateMetadata = "updateMetadata"
+
+-- | Decode a CBOR-encoded 'TokenAdminRole'.
+decodeTokenAdminRole :: Decoder s TokenAdminRole
+decodeTokenAdminRole = decodeString >>= parseTokenAdminRoleFromText
+
+-- | Encode a 'TokenAdminRole' as CBOR.
+encodeTokenAdminRole :: TokenAdminRole -> Encoding
+encodeTokenAdminRole = encodeString . tokenAdminRoleToText
+
+-- | The details of @assignAdminRoles@ and @revokeAdminRoles@ operations.
+data UpdateAdminRolesDetails = UpdateAdminRolesDetails
+    { -- | The account to assign or revoke administrative roles.
+      uardAccount :: !CborAccountAddress,
+      -- | The roles to assign or revoke.
+      uardRoles :: !(Seq.Seq TokenAdminRole)
+    }
+    deriving (Eq, Show)
+
+instance AE.ToJSON UpdateAdminRolesDetails where
+    toJSON UpdateAdminRolesDetails{..} = do
+        AE.object $
+            [ "account" AE..= uardAccount,
+              "roles" AE..= uardRoles
+            ]
+
+instance AE.FromJSON UpdateAdminRolesDetails where
+    parseJSON = AE.withObject "UpdateAdminRolesDetails" $ \o -> do
+        uardAccount <- o AE..: "account"
+        uardRoles <- o AE..: "roles"
+        return UpdateAdminRolesDetails{..}
+
+data UpdateAdminRolesDetailsBuilder = UpdateAdminRolesDetailsBuilder
+    { _uardbAccount :: Maybe CborAccountAddress,
+      _uardbRoles :: Maybe (Seq.Seq TokenAdminRole)
+    }
+
+makeLenses ''UpdateAdminRolesDetailsBuilder
+
+-- | Empty 'UpdateAdminRolesDetailsBuilder'.
+emptyUpdateAdminRolesDetailsBuilder :: UpdateAdminRolesDetailsBuilder
+emptyUpdateAdminRolesDetailsBuilder = UpdateAdminRolesDetailsBuilder Nothing Nothing
+
+-- | Construct an 'UpdateAdminRolesDetails' from a 'UpdateAdminRolesDetailsBuilder'.
+--  This results in @Left err@ (where @err@ describes the failure reason) when a required parameter
+--  is missing.
+buildUpdateAdminRolesDetails :: UpdateAdminRolesDetailsBuilder -> Either String UpdateAdminRolesDetails
+buildUpdateAdminRolesDetails UpdateAdminRolesDetailsBuilder{..} = do
+    uardAccount <- _uardbAccount `orFail` "Missing \"account\""
+    uardRoles <- _uardbRoles `orFail` "Missing \"roles\""
+    return UpdateAdminRolesDetails{..}
+
+-- | Decode a CBOR-encoded 'UpdateAdminRolesDetails'.
+decodeUpdateAdminRolesDetails :: Decoder s UpdateAdminRolesDetails
+decodeUpdateAdminRolesDetails =
+    decodeMap
+        valDecoder
+        buildUpdateAdminRolesDetails
+        emptyUpdateAdminRolesDetailsBuilder
+  where
+    valDecoder k@"account" = Just $ mapValueDecoder k decodeCborAccountAddress uardbAccount
+    valDecoder k@"roles" = Just $ mapValueDecoder k (decodeSequence decodeTokenAdminRole) uardbRoles
+    valDecoder _ = Nothing
+
+-- | Encode an 'UpdateAdminRolesDetails' as CBOR.
+encodeUpdateAdminRolesDetails :: UpdateAdminRolesDetails -> Encoding
+encodeUpdateAdminRolesDetails UpdateAdminRolesDetails{..} =
+    encodeMapDeterministic $
+        Map.empty
+            & k "account" ?~ encodeCborAccountAddress uardAccount
+            & k "roles" ?~ encodeSequence encodeTokenAdminRole uardRoles
+  where
+    k = at . makeMapKeyEncoding . encodeString
+
 -- * Initialization parameters
 
 -- | The parsed token-initialization-parameters. These parameters are passed to the token module
@@ -862,6 +1010,12 @@ data TokenOperation
       TokenPause
     | -- | Unpause transfer/mint/burn operations for the token.
       TokenUnpause
+    | -- | Assign admin roles to an account.
+      TokenAssignAdminRoles !UpdateAdminRolesDetails
+    | -- | Revoke admin roles from an account.
+      TokenRevokeAdminRoles !UpdateAdminRolesDetails
+    | -- | Update metadata
+      TokenUpdateMetadata !TokenMetadataUrl
     deriving (Eq, Show)
 
 instance AE.ToJSON TokenOperation where
@@ -901,6 +1055,18 @@ instance AE.ToJSON TokenOperation where
         AE.object
             [ "unpause" AE..= AE.object []
             ]
+    toJSON (TokenAssignAdminRoles update) =
+        AE.object
+            [ "assignAdminRoles" AE..= update
+            ]
+    toJSON (TokenRevokeAdminRoles update) =
+        AE.object
+            [ "revokeAdminRoles" AE..= update
+            ]
+    toJSON (TokenUpdateMetadata metadata) =
+        AE.object
+            [ "updateMetadata" AE..= metadata
+            ]
 
 instance AE.FromJSON TokenOperation where
     parseJSON = AE.withObject "TokenOperation" $ \o -> do
@@ -931,6 +1097,15 @@ instance AE.FromJSON TokenOperation where
                 pure TokenPause
             ["unpause"] -> do
                 pure TokenUnpause
+            ["assignAdminRoles"] -> do
+                body <- o AE..: "assignAdminRoles"
+                pure $ TokenAssignAdminRoles body
+            ["revokeAdminRoles"] -> do
+                body <- o AE..: "revokeAdminRoles"
+                pure $ TokenRevokeAdminRoles body
+            ["updateMetadata"] -> do
+                metadata <- o AE..: "updateMetadata"
+                pure $ TokenUpdateMetadata metadata
             other -> fail $ "token-operation: unsupported operation type: " ++ show other
 
 -- | Decode a CBOR-encoded 'TokenOperation'.
@@ -952,6 +1127,9 @@ decodeTokenOperation = do
         "removeDenyList" -> TokenRemoveDenyList <$> decodeListTarget opType
         "pause" -> TokenPause <$ decodeEmptyMap
         "unpause" -> TokenUnpause <$ decodeEmptyMap
+        "assignAdminRoles" -> TokenAssignAdminRoles <$> decodeUpdateAdminRolesDetails
+        "revokeAdminRoles" -> TokenRevokeAdminRoles <$> decodeUpdateAdminRolesDetails
+        "updateMetadata" -> TokenUpdateMetadata <$> decodeTokenMetadataUrl
         _ -> fail $ "token-operation: unsupported operation type: " ++ show opType
     when (isNothing maybeMapLen) $ do
         isEnd <- decodeBreakOr
@@ -990,6 +1168,18 @@ encodeTokenOperation = \case
     TokenRemoveDenyList target -> encodeListTarget "removeDenyList" target
     TokenPause -> encodePause
     TokenUnpause -> encodeUnpause
+    TokenAssignAdminRoles body ->
+        encodeMapLen 1
+            <> encodeString "assignAdminRoles"
+            <> encodeUpdateAdminRolesDetails body
+    TokenRevokeAdminRoles body ->
+        encodeMapLen 1
+            <> encodeString "revokeAdminRoles"
+            <> encodeUpdateAdminRolesDetails body
+    TokenUpdateMetadata metadata ->
+        encodeMapLen 1
+            <> encodeString "updateMetadata"
+            <> encodeTokenMetadataUrl metadata
   where
     encodeSupplyUpdate opType amount =
         encodeMapLen 1
@@ -1041,6 +1231,215 @@ encodeTokenUpdateTransaction = encodeSequence encodeTokenOperation . tokenOperat
 tokenUpdateTransactionToBytes :: TokenUpdateTransaction -> BS.ByteString
 tokenUpdateTransactionToBytes = encodeToBytes . encodeTokenUpdateTransaction
 
+-- * Meta-update operations
+
+-- | A meta-update operation. This can be a token operation or a lock operation.
+data MetaUpdateOperation
+    = MetaTokenUpdate
+    { -- | The token affected by the operation.
+      muoToken :: !TokenId,
+      -- | The token operation to perform.
+      muoTokenOperation :: !TokenOperation
+    }
+    deriving (Eq, Show)
+
+instance AE.ToJSON MetaUpdateOperation where
+    toJSON MetaTokenUpdate{..} =
+        case AE.toJSON muoTokenOperation of
+            AE.Object obj ->
+                case KeyMap.toList obj of
+                    [(opKey, AE.Object opObj)] ->
+                        AE.Object $
+                            KeyMap.singleton
+                                opKey
+                                (AE.Object $ KeyMap.insert "token" (AE.toJSON muoToken) opObj)
+                    _ -> error "Unexpected JSON structure from token operation encoding"
+            _ -> error "Unexpected JSON structure from token operation encoding"
+
+instance AE.FromJSON MetaUpdateOperation where
+    parseJSON = AE.withObject "MetaUpdateOperation" $ \o -> do
+        muoToken <- case KeyMap.toList o of
+            [(_opKey, AE.Object opObj)] -> opObj AE..: "token"
+            _ -> fail "Expected a single key in MetaUpdateOperation object whose value is an object containing a \"token\" field"
+        muoTokenOperation <- AE.parseJSON (AE.Object o)
+        return MetaTokenUpdate{..}
+
+-- | Builder for constructing a 'MetaUpdateOperation'. This is parametrised by
+--  the builder for the particular operation.
+data MetaUpdateBuilder b = MetaUpdateBuilder
+    { _mubToken :: Maybe TokenId,
+      _mubOperationBuilder :: b
+    }
+
+makeLenses ''MetaUpdateBuilder
+
+-- | Empty 'MetaUpdateBuilder'.
+emptyMetaUpdateBuilder :: b -> MetaUpdateBuilder b
+emptyMetaUpdateBuilder = MetaUpdateBuilder Nothing
+
+-- | Decode a CBOR-encoded 'MetaUpdateOperation'.
+decodeMetaUpdateOperation :: Decoder s MetaUpdateOperation
+decodeMetaUpdateOperation = do
+    maybeMapLen <- decodeMapLenOrIndef
+    forM_ maybeMapLen $ \mapLen ->
+        unless (mapLen == 1) $
+            fail $
+                "meta-operation: expected a map of size 1, but saw " ++ show mapLen
+    opType <- decodeString
+    res <- case opType of
+        "transfer" -> muDecodeTokenTransfer
+        "mint" -> decodeSupplyUpdate TokenMint opType
+        "burn" -> decodeSupplyUpdate TokenBurn opType
+        "addAllowList" -> decodeListTarget TokenAddAllowList opType
+        "removeAllowList" -> decodeListTarget TokenRemoveAllowList opType
+        "addDenyList" -> decodeListTarget TokenAddDenyList opType
+        "removeDenyList" -> decodeListTarget TokenRemoveDenyList opType
+        "pause" -> decodeSimpleOp TokenPause opType
+        "unpause" -> decodeSimpleOp TokenUnpause opType
+        "assignAdminRoles" -> decodeUpdateAdminRoles TokenAssignAdminRoles
+        "revokeAdminRoles" -> decodeUpdateAdminRoles TokenRevokeAdminRoles
+        "updateMetadata" -> do
+            TokenMetadataUrl{..} <- decodeTokenMetadataUrl
+            token <- case Map.lookup "token" tmAdditional of
+                Nothing -> fail $ "token-operation (updateMetdata): missing token"
+                Just (CBOR.TString tid) ->
+                    case makeTokenId (BSS.toShort $ TextEncoding.encodeUtf8 tid) of
+                        Left e -> fail $ "Invalid token ID: " ++ e
+                        Right tokenId -> return tokenId
+                Just _ -> fail $ "token-operation (updateMetadata - token): Expected string"
+            let op =
+                    TokenUpdateMetadata
+                        TokenMetadataUrl{tmAdditional = Map.delete "token" tmAdditional, ..}
+            return MetaTokenUpdate{muoToken = token, muoTokenOperation = op}
+        _ -> fail $ "token-operation: unsupported operation type: " ++ show opType
+    when (isNothing maybeMapLen) $ do
+        isEnd <- decodeBreakOr
+        unless isEnd $ fail "token-operation: expected end of map"
+    return res
+  where
+    liftBuild constr build MetaUpdateBuilder{..} = do
+        muoToken <- _mubToken `orFail` "Missing \"token\""
+        muoTokenOperation <- constr <$> build _mubOperationBuilder
+        return $ MetaTokenUpdate{..}
+    muDecodeTokenTransfer = do
+        let valDecoder k@"token" = Just (mapValueDecoder k decodeTokenId mubToken)
+            valDecoder k@"amount" = Just (mapValueDecoder k decodeTokenAmount (mubOperationBuilder . ttbAmount))
+            valDecoder k@"recipient" = Just (mapValueDecoder k decodeCborAccountAddress (mubOperationBuilder . ttbRecipient))
+            valDecoder k@"memo" = Just (mapValueDecoder k decodeTaggableMemo (mubOperationBuilder . ttbMemo))
+            valDecoder _ = Nothing
+        decodeMap valDecoder (liftBuild TokenTransfer buildTokenTransfer) (emptyMetaUpdateBuilder emptyTokenTransferBuilder)
+    decodeSupplyUpdate constr opType = do
+        let valDecoder k@"token" = Just (mapValueDecoder k decodeTokenId mubToken)
+            valDecoder k@"amount" = Just (mapValueDecoder k decodeTokenAmount mubOperationBuilder)
+            valDecoder _ = Nothing
+            build (Just v) = Right v
+            build Nothing =
+                Left $
+                    "token-operation (" ++ Text.unpack opType ++ "): missing amount"
+        decodeMap valDecoder (liftBuild constr build) (emptyMetaUpdateBuilder Nothing)
+    decodeListTarget constr opType = do
+        let valDecoder k@"token" = Just (mapValueDecoder k decodeTokenId mubToken)
+            valDecoder k@"target" = Just (mapValueDecoder k decodeCborAccountAddress mubOperationBuilder)
+            valDecoder _ = Nothing
+            build (Just v) = Right v
+            build Nothing =
+                Left $
+                    "token-operation (" ++ Text.unpack opType ++ "): missing target"
+        decodeMap valDecoder (liftBuild constr build) (emptyMetaUpdateBuilder Nothing)
+    decodeSimpleOp constr opType = do
+        let valDecoder k@"token" = Just (mapValueDecoder k decodeTokenId id)
+            valDecoder _ = Nothing
+            build (Just token) = Right $ MetaTokenUpdate token constr
+            build Nothing =
+                Left $
+                    "token-operation (" ++ Text.unpack opType ++ "): missing token"
+        decodeMap valDecoder build Nothing
+    decodeUpdateAdminRoles constr = do
+        let valDecoder k@"token" = Just (mapValueDecoder k decodeTokenId mubToken)
+            valDecoder k@"account" = Just (mapValueDecoder k decodeCborAccountAddress (mubOperationBuilder . uardbAccount))
+            valDecoder k@"roles" = Just (mapValueDecoder k (decodeSequence decodeTokenAdminRole) (mubOperationBuilder . uardbRoles))
+            valDecoder _ = Nothing
+        decodeMap
+            valDecoder
+            (liftBuild constr buildUpdateAdminRolesDetails)
+            (emptyMetaUpdateBuilder emptyUpdateAdminRolesDetailsBuilder)
+
+-- | Encode a 'MetaUpdateOperation' as CBOR.
+encodeMetaUpdateOperation :: MetaUpdateOperation -> Encoding
+encodeMetaUpdateOperation MetaTokenUpdate{..} = do
+    case muoTokenOperation of
+        TokenTransfer TokenTransferBody{..} ->
+            enc "transfer" $
+                baseMap
+                    & k "amount" ?~ encodeTokenAmount ttAmount
+                    & k "recipient" ?~ encodeCborAccountAddress ttRecipient
+                    & k "memo" .~ (encodeTaggableMemo <$> ttMemo)
+        TokenMint amount -> enc "mint" $ baseMap & k "amount" ?~ encodeTokenAmount amount
+        TokenBurn amount -> enc "burn" $ baseMap & k "amount" ?~ encodeTokenAmount amount
+        TokenAddAllowList target ->
+            enc "addAllowList" $
+                baseMap & k "target" ?~ encodeCborAccountAddress target
+        TokenRemoveAllowList target ->
+            enc "removeAllowList" $
+                baseMap & k "target" ?~ encodeCborAccountAddress target
+        TokenAddDenyList target ->
+            enc "addDenyList" $
+                baseMap & k "target" ?~ encodeCborAccountAddress target
+        TokenRemoveDenyList target ->
+            enc "removeDenyList" $
+                baseMap & k "target" ?~ encodeCborAccountAddress target
+        TokenPause -> enc "pause" baseMap
+        TokenUnpause -> enc "unpause" baseMap
+        TokenAssignAdminRoles details -> enc "assignAdminRoles" $ rolesMap details
+        TokenRevokeAdminRoles details -> enc "revokeAdminRoles" $ rolesMap details
+        TokenUpdateMetadata TokenMetadataUrl{..} ->
+            enc "updateMetadata" $
+                (encodeAdditionalMapCbor tmAdditional)
+                    & k "token" ?~ encodeTokenId muoToken
+                    & k "url" ?~ encodeString tmUrl
+                    & k "checksumSha256" .~ (encodeSha256Hash <$> tmChecksumSha256)
+  where
+    rolesMap UpdateAdminRolesDetails{..} =
+        baseMap
+            & k "account" ?~ encodeCborAccountAddress uardAccount
+            & k "roles" ?~ encodeSequence encodeTokenAdminRole uardRoles
+    baseMap = Map.singleton (makeMapKeyEncoding $ encodeString "token") (encodeTokenId muoToken)
+    k = at . makeMapKeyEncoding . encodeString
+    enc opType body =
+        encodeMapLen 1
+            <> encodeString opType
+            <> encodeMapDeterministic body
+    encodeSha256Hash (SHA256.Hash h) = encodeBytes (FBS.toByteString h)
+
+-- | A token transaction consists of a sequence of token operations.
+newtype MetaUpdateTransaction = MetaUpdateTransaction
+    { metaOperations :: Seq.Seq MetaUpdateOperation
+    }
+    deriving (Eq, Show)
+
+instance AE.ToJSON MetaUpdateTransaction where
+    toJSON = AE.toJSON . metaOperations
+
+instance AE.FromJSON MetaUpdateTransaction where
+    parseJSON = (MetaUpdateTransaction <$>) . AE.parseJSON
+
+-- | Decode a CBOR-encoded 'MetaUpdateTransaction'.
+decodeMetaUpdateTransaction :: Decoder s MetaUpdateTransaction
+decodeMetaUpdateTransaction = MetaUpdateTransaction <$> decodeSequence decodeMetaUpdateOperation
+
+-- | Parse a 'MetaUpdateTransaction' from a 'LBS.ByteString'. The entire bytestring
+--  must be consumed in the parsing.
+metaUpdateTransactionFromBytes :: LBS.ByteString -> Either String MetaUpdateTransaction
+metaUpdateTransactionFromBytes = decodeFromBytes decodeMetaUpdateTransaction "token transaction"
+
+-- | Encode a 'MetaUpdateTransaction' as CBOR.
+encodeMetaUpdateTransaction :: MetaUpdateTransaction -> Encoding
+encodeMetaUpdateTransaction = encodeSequence encodeMetaUpdateOperation . metaOperations
+
+-- | CBOR-encode a 'MetaUpdateTransaction' to a (strict) 'BS.ByteString'.
+metaUpdateTransactionToBytes :: MetaUpdateTransaction -> BS.ByteString
+metaUpdateTransactionToBytes = encodeToBytes . encodeMetaUpdateTransaction
+
 -- * Token module events
 
 -- | A token-module generated event as part of executing a transaction.
@@ -1065,6 +1464,12 @@ data TokenEvent
       Pause
     | -- | The execution of balance-changing operations was unpaused.
       Unpause
+    | -- | The token metadata reference was updated.
+      UpdateMetadataEvent !TokenMetadataUrl
+    | -- | Admin roles were assigned to an account.
+      AssignAdminRolesEvent !UpdateAdminRolesDetails
+    | -- | Admin roles were revoked from an account.
+      RevokeAdminRolesEvent !UpdateAdminRolesDetails
     deriving (Eq, Show)
 
 -- | CBOR-encode the details for the list update events in the form:
@@ -1114,6 +1519,27 @@ encodeTokenEvent = \case
             { eteType = TokenEventType "unpause",
               eteDetails = emptyEventDetails
             }
+    UpdateMetadataEvent meta ->
+        EncodedTokenEvent
+            { eteType = TokenEventType "updateMetadata",
+              eteDetails =
+                TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
+                    encodeTokenMetadataUrl meta
+            }
+    AssignAdminRolesEvent details ->
+        EncodedTokenEvent
+            { eteType = TokenEventType "assignAdminRoles",
+              eteDetails =
+                TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
+                    encodeUpdateAdminRolesDetails details
+            }
+    RevokeAdminRolesEvent details ->
+        EncodedTokenEvent
+            { eteType = TokenEventType "revokeAdminRoles",
+              eteDetails =
+                TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
+                    encodeUpdateAdminRolesDetails details
+            }
 
 -- | Decoder for the event details of the list update events.
 --  This is the "token-list-update-details" type in the CDDL schema.
@@ -1144,11 +1570,16 @@ decodeTokenEvent EncodedTokenEvent{..} = case tokenEventTypeBytes eteType of
     "removeDenyList" -> RemoveDenyListEvent <$> decodeTarget
     "pause" -> Pause <$ decodePauseUnpause
     "unpause" -> Unpause <$ decodePauseUnpause
+    "updateMetadata" -> UpdateMetadataEvent <$> decodeMetadata
+    "assignAdminRoles" -> AssignAdminRolesEvent <$> decodeRoleUpdate
+    "revokeAdminRoles" -> RevokeAdminRolesEvent <$> decodeRoleUpdate
     unknownType -> Left $ "token-event: unsupported event type: " ++ show unknownType
   where
     detailsLBS = LBS.fromStrict $ BSS.fromShort $ tokenEventDetailsBytes eteDetails
     decodeTarget = decodeFromBytes decodeTokenEventTarget "event details" detailsLBS
     decodePauseUnpause = decodeFromBytes decodeEmptyMap "event details" detailsLBS
+    decodeMetadata = decodeFromBytes decodeTokenMetadataUrl "event details" detailsLBS
+    decodeRoleUpdate = decodeFromBytes decodeUpdateAdminRolesDetails "event details" detailsLBS
 
 -- * Reject reasons
 
@@ -1621,6 +2052,39 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
 --  be consumed in the parsing.
 tokenModuleStateFromBytes :: LBS.ByteString -> Either String TokenModuleState
 tokenModuleStateFromBytes = decodeFromBytes decodeTokenModuleState "token module state"
+
+-- * Token authorizations
+
+-- | The authorizations structure for a PLT.
+newtype TokenAuthorizationsMap = TokenAuthorizationsMap
+    { taMap :: Map.Map TokenAdminRole (Seq.Seq CborAccountAddress)
+    }
+    deriving newtype (Eq, Show, AE.ToJSON, AE.FromJSON)
+
+-- | Encode a 'TokenAuthorizationsMap' as CBOR.
+encodeTokenAuthorizationsMap :: TokenAuthorizationsMap -> Encoding
+encodeTokenAuthorizationsMap (TokenAuthorizationsMap m) =
+    encodeMapDeterministic $
+        Map.mapKeys (makeMapKeyEncoding . encodeTokenAdminRole) $
+            encodeSequence encodeCborAccountAddress <$> m
+
+-- | Decode a CBOR-encoded 'TokenAuthorizationsMap'.
+decodeTokenAuthorizationsMap :: Decoder s TokenAuthorizationsMap
+decodeTokenAuthorizationsMap = decodeMap decodeVal (Right . TokenAuthorizationsMap) Map.empty
+  where
+    decodeVal key = do
+        role <- tokenAdminRoleFromText key
+        return $ mapValueDecoder key (decodeSequence decodeCborAccountAddress) (at role)
+
+-- | Parse a 'TokenAuthorizationsMap' form a 'LBS.ByteString'. The entire bytestring must be
+--  consumed by the parsing.
+tokenAuthorizationsMapFromBytes :: LBS.ByteString -> Either String TokenAuthorizationsMap
+tokenAuthorizationsMapFromBytes =
+    decodeFromBytes decodeTokenAuthorizationsMap "token authorizations"
+
+-- | Encode a 'TokenAuthorizationsMap' as a 'BS.ByteString'.
+tokenAuthorizationsMapToBytes :: TokenAuthorizationsMap -> BS.ByteString
+tokenAuthorizationsMapToBytes = encodeToBytes . encodeTokenAuthorizationsMap
 
 -- * Token account state
 

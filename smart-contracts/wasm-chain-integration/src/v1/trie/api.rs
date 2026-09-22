@@ -194,7 +194,7 @@ impl PersistentState {
 
     /// Get an iterator over the (key, value) pairs stored in the persistent
     /// state. The iterator yields keys in ascending lexicographic order.
-    pub fn into_iterator<L: BackingStoreLoad>(self, loader: &mut L) -> PersistentStateIterator<L> {
+    pub fn into_iterator<L: BackingStoreLoad>(self, loader: &mut L) -> PersistentStateIterator<'_, L> {
         let mut state = self.into_trie(loader);
         // get an iterator over the entire state (starting at root)
         match state.iter(loader, &[]) {
@@ -392,7 +392,7 @@ impl MutableStateInner {
     #[inline(always)]
     /// Get exclusive access to the state trie. The state trie must be dropped
     /// to release the lock.
-    pub fn lock(&self) -> StateTrie {
+    pub fn lock(&self) -> StateTrie<'_> {
         self.state.lock().expect("Another thread panicked.")
     }
 }

@@ -55,6 +55,7 @@ isPayloadSupported pv ConfigureBaker{..}
     | otherwise = pv > P7
 isPayloadSupported pv ConfigureDelegation{} = pv > P3
 isPayloadSupported pv TokenUpdate{} = pv >= P9
+isPayloadSupported pv MetaUpdate{} = pv >= P11
 
 testSerializeEncryptedTransfer :: SProtocolVersion pv -> Property
 testSerializeEncryptedTransfer spv =
