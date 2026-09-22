@@ -380,7 +380,8 @@ meta-token-lock-operation =
     / meta-lock-release
 
 ; Fund a lock by locking the specified amount on the sender account (implicit)
-; under the control of a specified lock.
+; under the control of a specified lock. This moves funds within one account and
+; is not subject to token pause, allow-list, or deny-list constraints.
 meta-lock-fund = {
     "lockFund" : {
         "token": token-id,
@@ -398,7 +399,9 @@ lock-fund-body = (
 )
 
 ; Send funds under the control of a lock from a source account to a recipient.
-; The funds will be transferred to the available balance of the recipient.
+; The funds will be transferred to the available balance of the recipient. This
+; transfers funds between accounts and is subject to token pause, allow-list,
+; and deny-list constraints.
 meta-lock-send = {
     "lockSend": {
         "token": token-id,
@@ -421,7 +424,8 @@ lock-send-body = (
 
 ; Release funds under the control of a lock to the owner account.
 ; The funds are moved from the locked balance to the available balance of the
-; owner.
+; owner. This moves funds within one account and is not subject to token pause,
+; allow-list, or deny-list constraints.
 meta-lock-release = {
     "lockRelease": {
         "token": token-id,
@@ -440,7 +444,8 @@ lock-release-body = (
     ? "memo": memo
 )
 
-; Create a lock with the specified configuration.
+; Create a lock with the specified configuration. This does not move funds and
+; is not subject to token pause, allow-list, or deny-list constraints.
 meta-lock-create = {
     "lockCreate": { lock-config }
 }
@@ -495,7 +500,9 @@ lock-controller-simple-grant = {
     "roles": [ + lock-controller-simple-capability]
 }
 
-; Cancel a lock, returning funds to their owners and destroying the lock.
+; Cancel a lock, returning funds to their owners and destroying the lock. This
+; moves funds within each owner's account and is not subject to token pause,
+; allow-list, or deny-list constraints.
 meta-lock-cancel = {
     "lockCancel": { lock-cancel-body }
 }
