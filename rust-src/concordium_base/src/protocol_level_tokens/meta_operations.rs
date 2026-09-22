@@ -301,15 +301,27 @@ impl From<(TokenId, TokenOperation)> for MetaUpdateOperation {
 /// Lock operations.
 #[derive(PartialEq, Debug, Clone)]
 pub enum LockOperation {
-    /// Operation to fund a lock.
+    /// Operation to fund a lock from the sender's available balance.
+    ///
+    /// This moves funds within one account and is not subject to token pause or list constraints.
     Fund(MetaLockFundDetails),
-    /// Operation to send funds controlled by a lock.
+    /// Operation to send funds controlled by a lock to another account.
+    ///
+    /// This transfers funds between accounts and is subject to token pause, allow-list, and
+    /// deny-list constraints.
     Send(MetaLockSendDetails),
-    /// Operation to release funds controlled by a lock to the owner.
+    /// Operation to release funds controlled by a lock to the owner's available balance.
+    ///
+    /// This moves funds within one account and is not subject to token pause or list constraints.
     Release(MetaLockReleaseDetails),
     /// Operation to create a lock.
+    ///
+    /// This does not move funds and is not subject to token pause or list constraints.
     Create(MetaLockCreateDetails),
-    /// Operation to cancel a lock.
+    /// Operation to cancel a lock and return its funds to their owners' available balances.
+    ///
+    /// This moves funds within each owner's account and is not subject to token pause or list
+    /// constraints.
     Cancel(MetaLockCancelDetails),
 }
 
