@@ -4,9 +4,16 @@
 ;   cargo install cddl
 ;   cddl compile-cddl --cddl cis-7.cddl
 
+; Transactions
+
+; NOTE: this currently needs to be the root rule of the document, to allow validation against the transaction fixtures.
+token-update-transaction = [ * token-operation ]
+
 ; Common Types
 
-token-id = (text .size (1..128)) .regexp "[a-zA-Z0-9\\-.%]+"
+token-id =
+    (text .regexp "[a-zA-Z0-9\\-.%]+")
+    .and (text .size (1..128))
 
 token-module-hash = sha256-hash
 
@@ -115,10 +122,9 @@ token-initialization-parameters = {
     ? "burnable": bool .default false,
 }
 
-; Transactions
-
-token-update-transaction = [ * token-operation ]
-
+; Token-specific operation bodies MUST omit "token" for transactions
+; with a non-empty transaction-level token ID, or include it for a
+; transaction that does not operate on a specific token.
 token-operation = token-transfer
     / token-mint
     / token-burn
@@ -127,42 +133,52 @@ token-operation = token-transfer
     / token-unpause
     / token-update-metadata
     / token-update-admin-roles
+    / lock-operation
 
 ; A token transfer operation. This transfers a specified amount of tokens from the sender account
 ; (implicit) to the recipient account.
 token-transfer = {
     ; The operation type is "transfer".
     "transfer": {
-        token-transfer-body
+        ; Optional token ID specifying the token being operated on.
+        ; If the enclosing transaction specifies the token ID, the operation MUST omit it.
+        ; If the enclosing transaction does not specify the token ID, the operation MUST include it.
+        ? "token": token-id,
+        ; the amount of tokens to transfer.
+        "amount": token-amount,
+        ; the recipient account.
+        "recipient": tagged-account-address,
+        ; an optional memo.
+        ? "memo": memo
     }
 }
-
-token-transfer-body = (
-    ; The amount of tokens to transfer.
-    "amount": token-amount,
-    ; The recipient account.
-    "recipient": tagged-account-address,
-    ; An optional memo.
-    ? "memo": memo
-)
 
 ; Mint a specified amount to the sender account.
 token-mint = {
     ; The operation type is "mint".
-    "mint": { token-supply-update-body }
+    "mint": {
+        ; Optional token ID specifying the token being operated on.
+        ; If the enclosing transaction specifies the token ID, the operation MUST omit it.
+        ; If the enclosing transaction does not specify the token ID, the operation MUST include it.
+        ? "token": token-id,
+        ; The amount of tokens to either mint or burn.
+        "amount": token-amount
+    }
 }
 
 ; Burn a specified amount from the sender account.
 token-burn = {
     ; The operation type is "burn".
-    "burn": { token-supply-update-body }
+    "burn": {
+        ; Optional token ID specifying the token being operated on.
+        ; If the enclosing transaction specifies the token ID, the operation MUST omit it.
+        ; If the enclosing transaction does not specify the token ID, the operation MUST include it.
+        ? "token": token-id,
+        ; The amount of tokens to either mint or burn.
+        "amount": token-amount
+    }
 }
 
-; Specifies the details of a mint/burn operation.
-token-supply-update-body = (
-    ; The amount of tokens to either mint or burn.
-    "amount": token-amount
-)
 
 ; Update an allow or a deny list by adding or removing an account from it.
 token-update-list =
@@ -174,32 +190,55 @@ token-update-list =
 ; Add an account to the allow list.
 token-add-allow-list = {
     ; The operation type is "addAllowList".
-    "addAllowList": { token-list-update-body }
+    "addAllowList": {
+        ; Optional token ID specifying the token being operated on.
+        ; If the enclosing transaction specifies the token ID, the operation MUST omit it.
+        ; If the enclosing transaction does not specify the token ID, the operation MUST include it.
+        ? "token": token-id,
+        ; The account to add or remove from the list.
+        "target": tagged-account-address
+    }
 }
 
 ; Remove an account from the allow list.
 token-remove-allow-list = {
     ; The operation type is "removeAllowList".
-    "removeAllowList": { token-list-update-body }
+    "removeAllowList": {
+        ; Optional token ID specifying the token being operated on.
+        ; If the enclosing transaction specifies the token ID, the operation MUST omit it.
+        ; If the enclosing transaction does not specify the token ID, the operation MUST include it.
+        ? "token": token-id,
+        ; The account to add or remove from the list.
+        "target": tagged-account-address
+    }
 }
 
 ; Add an account to the deny list.
 token-add-deny-list = {
     ; The operation type is "addDenyList".
-    "addDenyList": { token-list-update-body }
+    "addDenyList": {
+        ; Optional token ID specifying the token being operated on.
+        ; If the enclosing transaction specifies the token ID, the operation MUST omit it.
+        ; If the enclosing transaction does not specify the token ID, the operation MUST include it.
+        ? "token": token-id,
+        ; The account to add or remove from the list.
+        "target": tagged-account-address
+    }
 }
 
 ; Remove an account from the deny list.
 token-remove-deny-list = {
     ; The operation type is "removeDenyList".
-    "removeDenyList": { token-list-update-body }
+    "removeDenyList": {
+        ; Optional token ID specifying the token being operated on.
+        ; If the enclosing transaction specifies the token ID, the operation MUST omit it.
+        ; If the enclosing transaction does not specify the token ID, the operation MUST include it.
+        ? "token": token-id,
+        ; The account to add or remove from the list.
+        "target": tagged-account-address
+    }
 }
 
-; Specifies the details of a list-update operation.
-token-list-update-body = (
-    ; The account to add or remove from the list.
-    "target": tagged-account-address
-)
 
 ; Suspend any current or future token operations involving
 ; balance changes. If any transaction submitted includes any such operation
@@ -207,48 +246,69 @@ token-list-update-body = (
 ; suspension lasts until the token is unpaused with the corresponding
 ; `token-unpause` operation.
 token-pause = {
-    "pause": {}
+    "pause": {
+        ; Optional token ID specifying the token being operated on.
+        ; If the enclosing transaction specifies the token ID, the operation MUST omit it.
+        ; If the enclosing transaction does not specify the token ID, the operation MUST include it.
+        ? "token": token-id
+    }
 }
 
 ; Unpause the token operations described in the `token-pause` operation,
 ; thus acting as an inverse of `token-pause`.
 token-unpause = {
-    "unpause": {}
+    "unpause": {
+        ; Optional token ID specifying the token being operated on.
+        ; If the enclosing transaction specifies the token ID, the operation MUST omit it.
+        ; If the enclosing transaction does not specify the token ID, the operation MUST include it.
+        ? "token": token-id
+    }
 }
 
 ; Update the token metadata of a token. Supported from protocol version 11.
 token-update-metadata = {
-    "updateMetadata": { token-update-metadata-body }
+    "updateMetadata": {
+        ; Optional token ID specifying the token being operated on.
+        ; If the enclosing transaction specifies the token ID, the operation MUST omit it.
+        ; If the enclosing transaction does not specify the token ID, the operation MUST include it.
+        ? "token": token-id,
+        ; A string field representing the URL
+        "url": text,
+        ; An optional sha256 checksum value tied to the content of the URL
+        ? "checksumSha256": sha256-hash
+    }
 }
-
-; The details to update the token metadata to.
-token-update-metadata-body = (
-    ; A string field representing the URL
-    "url": text,
-    ; An optional sha256 checksum value tied to the content of the URL
-    ? "checksumSha256": sha256-hash
-)
 
 ; Assign an admin role to an account. Supported from protocol version 11.
 token-assign-admin-roles = {
-    "assignAdminRoles": { token-update-admin-roles-body }
+    "assignAdminRoles": {
+        ; Optional token ID specifying the token being operated on.
+        ; If the enclosing transaction specifies the token ID, the operation MUST omit it.
+        ; If the enclosing transaction does not specify the token ID, the operation MUST include it.
+        ? "token": token-id,
+        ; The admin roles to update.
+        "roles": [ * token-admin-role ],
+        ; The account to update admin for.
+        "account": tagged-account-address
+    }
 }
 
 ; Revoke an admin role from an account. Supported from protocol version 11.
 token-revoke-admin-roles = {
-    "revokeAdminRoles": { token-update-admin-roles-body }
+    "revokeAdminRoles": {
+        ; Optional token ID specifying the token being operated on.
+        ; If the enclosing transaction specifies the token ID, the operation MUST omit it.
+        ; If the enclosing transaction does not specify the token ID, the operation MUST include it.
+        ? "token": token-id,
+        ; The admin roles to update.
+        "roles": [ * token-admin-role ],
+        ; The account to update admin for.
+        "account": tagged-account-address
+    }
 }
 
 token-update-admin-roles = token-assign-admin-roles / token-revoke-admin-roles
 
-; The details of the `token-assign-admin-roles` and `token-revoke-admin-roles`
-; operations.
-token-update-admin-roles-body = (
-    ; The admin roles to update.
-    "roles": [ * token-admin-role ],
-    ; The account to update admin for.
-    "account": tagged-account-address
-)
 
 ; The different The different admin roles defined for the current token module implementation.
 ; Each role gives access to specific administrative operations.
@@ -268,214 +328,108 @@ token-admin-role =
     ; Gives authority to perform `token-update-metadata` operations.
     "updateMetadata"
 
-; Meta-update transaction
-
-; A sequence of operations on PLTs and locks.
-meta-update-transaction = [ * meta-operation ]
-
-; Meta-operations combine token and lock operations.
-meta-operation = meta-token-transfer
-    / meta-token-mint
-    / meta-token-burn
-    / meta-token-update-list
-    / meta-token-pause
-    / meta-token-unpause
-    / meta-token-update-metadata
-    / meta-token-update-admin-roles
-    / meta-token-lock-operation
-    / meta-lock-create
-    / meta-lock-cancel
-
-; A token transfer operation. This transfers a specified amount of tokens from the sender account
-; (implicit) to the recipient account.
-meta-token-transfer = {
-    "transfer": {
-        "token": token-id,
-        token-transfer-body
-    }
-}
-
-; Mint a specified amount to the sender account.
-meta-token-mint = {
-    ; The operation type is "mint".
-    "mint": {
-        "token": token-id,
-        token-supply-update-body
-    }
-}
-
-; Burn a specified amount from the sender account.
-meta-token-burn = {
-    ; The operation type is "burn".
-    "burn": {
-        "token": token-id,
-        token-supply-update-body
-    }
-}
-
-meta-token-update-list =
-    meta-token-add-allow-list
-    / meta-token-remove-allow-list
-    / meta-token-add-deny-list
-    / meta-token-remove-deny-list
-
-; Add an account to the allow list.
-meta-token-token-add-allow-list = {
-    ; The operation type is "addAllowList".
-    "addAllowList": {
-        "token": token-id,
-        token-list-update-body
-    }
-}
-
-; Remove an account from the allow list.
-meta-token-remove-allow-list = {
-    ; The operation type is "removeAllowList".
-    "removeAllowList": {
-        "token": token-id,
-        token-list-update-body
-    }
-}
-
-; Add an account to the deny list.
-meta-token-add-deny-list = {
-    ; The operation type is "addDenyList".
-    "addDenyList": {
-        "token": token-id,
-        token-list-update-body
-    }
-}
-
-; Remove an account from the deny list.
-meta-token-remove-deny-list = {
-    ; The operation type is "removeDenyList".
-    "removeDenyList": {
-        "token": token-id,
-        token-list-update-body
-    }
-}
-
-; Suspend any current or future token operations involving
-; balance changes. If any transaction submitted includes any such operation
-; while the token is in its paused state, the transaction will fail. The
-; suspension lasts until the token is unpaused with the corresponding
-; `unpause` operation.
-meta-token-pause = {
-    "pause": {
-        "token": token-id
-    }
-}
-
-; Unpause the balance-changing token operations.
-meta-token-unpause = {
-    "unpause": {
-        "token": token-id
-    }
-}
-
 ; Token lock operations
-meta-token-lock-operation =
-    meta-lock-fund
-    / meta-lock-send
-    / meta-lock-release
+lock-operation =
+    lock-fund
+    / lock-send
+    / lock-release
+    / lock-create
+    / lock-cancel
 
 ; Fund a lock by locking the specified amount on the sender account (implicit)
 ; under the control of a specified lock. This moves funds within one account and
 ; is not subject to token pause, allow-list, or deny-list constraints.
-meta-lock-fund = {
+lock-fund = {
     "lockFund" : {
-        "token": token-id,
-        lock-fund-body
+        ; Optional token ID specifying the token being operated on.
+        ; If the enclosing transaction specifies the token ID, the operation MUST omit it.
+        ; If the enclosing transaction does not specify the token ID, the operation MUST include it.
+        ? "token": token-id,
+        ; The lock that will control the funds.
+        "lock": lock-ref,
+        ; The amount to lock.
+        "amount": token-amount,
+        ; An optional memo.
+        ? "memo": memo
     }
 }
-
-lock-fund-body = (
-    ; The lock that will control the funds.
-    "lock": lock-ref,
-    ; The amount to lock.
-    "amount": token-amount,
-    ; An optional memo.
-    ? "memo": memo
-)
 
 ; Send funds under the control of a lock from a source account to a recipient.
 ; The funds will be transferred to the available balance of the recipient. This
 ; transfers funds between accounts and is subject to token pause, allow-list,
 ; and deny-list constraints.
-meta-lock-send = {
+lock-send = {
     "lockSend": {
-        "token": token-id,
-        lock-send-body
+        ; Optional token ID specifying the token being operated on.
+        ; If the enclosing transaction specifies the token ID, the operation MUST omit it.
+        ; If the enclosing transaction does not specify the token ID, the operation MUST include it.
+        ? "token": token-id,
+        ; The lock controlling the funds.
+        "lock": lock-ref,
+        ; The account holding the funds.
+        "source": tagged-account-address,
+        ; The amount of tokens to transfer.
+        "amount": token-amount,
+        ; The recipient account.
+        "recipient": tagged-account-address,
+        ; An optional memo.
+        ? "memo": memo
     }
 }
-
-lock-send-body = (
-    ; The lock controlling the funds.
-    "lock": lock-ref,
-    ; The account holding the funds.
-    "source": tagged-account-address,
-    ; The amount of tokens to transfer.
-    "amount": token-amount,
-    ; The recipient account.
-    "recipient": tagged-account-address,
-    ; An optional memo.
-    ? "memo": memo
-)
 
 ; Release funds under the control of a lock to the owner account.
 ; The funds are moved from the locked balance to the available balance of the
 ; owner. This moves funds within one account and is not subject to token pause,
 ; allow-list, or deny-list constraints.
-meta-lock-release = {
+lock-release = {
     "lockRelease": {
-        "token": token-id,
-        lock-release-body
+        ; Optional token ID specifying the token being operated on.
+        ; If the enclosing transaction specifies the token ID, the operation MUST omit it.
+        ; If the enclosing transaction does not specify the token ID, the operation MUST include it.
+        ? "token": token-id,
+        ; The lock controlling the funds.
+        "lock": lock-ref,
+        ; The account holding the funds.
+        "source": tagged-account-address,
+        ; The amount of tokens to transfer.
+        "amount": token-amount,
+        ; An optional memo.
+        ? "memo": memo
     }
 }
 
-lock-release-body = (
-    ; The lock controlling the funds.
-    "lock": lock-ref,
-    ; The account holding the funds.
-    "source": tagged-account-address,
-    ; The amount of tokens to transfer.
-    "amount": token-amount,
-    ; An optional memo.
-    ? "memo": memo
-)
-
 ; Create a lock with the specified configuration. This does not move funds and
 ; is not subject to token pause, allow-list, or deny-list constraints.
-meta-lock-create = {
-    "lockCreate": { lock-config }
+lock-create = {
+    "lockCreate": lock-config
 }
 
-lock-config = {
-    "simpleV0": simple-lock-config-v0
-}
+lock-config = lock-config-simple
 
 ; The complete simple lock configuration.
-simple-lock-config-v0 = (
-    ; The set of accounts that are permitted to receive funds controlled
-    ; by the lock.
-    "recipients": lock-recipients,
-    ; The expiry time for the lock.
-    "expiry": epoch-time,
-    ; The set of capability grants for the simple lock.
-    ; At least one account must be granted the "fund" capability.
-    "grants": [ + lock-controller-simple-grant ],
-    ; Only the specified token types may be held by the lock.
-    ; These token IDs must be valid when the lock is created.
-    "tokens": [ + token-id ],
-    ; If set, then the lock will not be destroyed before expiry except
-    ; by a cancel operation.
-    ? "keepAlive": bool .default false,
-    ; An optional description attached to the lock.
-    ; This is handled as a memo (i.e. it may be CBOR or bytes).
-    ? "memo": memo,
-    ; Opaque nested-CBOR lock metadata.
-    ? "metadata": bytes .cbor lock-metadata
-)
+lock-config-simple = {
+    "simpleV0": {
+        ; The set of accounts that are permitted to receive funds controlled
+        ; by the lock.
+        "recipients": lock-recipients,
+        ; The expiry time for the lock.
+        "expiry": epoch-time,
+        ; The set of capability grants for the simple lock.
+        ; At least one account must be granted the "fund" capability.
+        "grants": [ + lock-controller-simple-grant ],
+        ; Only the specified token types may be held by the lock.
+        ; These token IDs must be valid when the lock is created.
+        "tokens": [ + token-id ],
+        ; If set, then the lock will not be destroyed before expiry except
+        ; by a cancel operation.
+        ? "keepAlive": bool .default false,
+        ; An optional description attached to the lock.
+        ; This is handled as a memo (i.e. it may be CBOR or bytes).
+        ? "memo": memo,
+        ; Opaque nested-CBOR lock metadata.
+        ? "metadata": bytes .cbor lock-metadata
+    }
+}
 
 lock-recipients = "any" / [ * tagged-account-address ]
 
@@ -503,16 +457,14 @@ lock-controller-simple-grant = {
 ; Cancel a lock, returning funds to their owners and destroying the lock. This
 ; moves funds within each owner's account and is not subject to token pause,
 ; allow-list, or deny-list constraints.
-meta-lock-cancel = {
-    "lockCancel": { lock-cancel-body }
+lock-cancel = {
+    "lockCancel": {
+        ; The lock to cancel.
+        "lock": lock-ref,
+        ; An optional memo.
+        ? "memo": memo
+    }
 }
-
-lock-cancel-body = (
-    ; The lock to cancel.
-    "lock": lock-ref,
-    ; An optional memo.
-    ? "memo": memo
-)
 
 ; Events
 
