@@ -202,7 +202,7 @@ module Concordium.Types (
     cpltInitializationParameters,
     EncodedTokenOperations (..),
     EncodedTokenInitializationParameters (..),
-    EncodedMetaUpdateOperations (..),
+    EncodedMetaOperations (..),
 
     -- * Protocol-level locks
     module Concordium.Types.Locks,
@@ -1373,24 +1373,24 @@ instance AE.FromJSON EncodedTokenOperations where
     parseJSON v@(AE.String _) = EncodedTokenOperations <$> AE.parseJSON v
     parseJSON _ = fail "EncodedTokenOperations JSON must be either an array or a string"
 
-newtype EncodedMetaUpdateOperations = EncodedMetaUpdateOperations RawCbor
+newtype EncodedMetaOperations = EncodedMetaOperations RawCbor
     deriving newtype (Eq, Show)
 
-instance AE.ToJSON EncodedMetaUpdateOperations where
-    toJSON (EncodedMetaUpdateOperations cbor) =
-        case CBOR.metaUpdateTransactionFromBytes (rawCborToLazyBytes cbor) of
+instance AE.ToJSON EncodedMetaOperations where
+    toJSON (EncodedMetaOperations cbor) =
+        case CBOR.metaOperationsFromBytes (rawCborToLazyBytes cbor) of
             Left _ -> AE.toJSON cbor
             Right v -> AE.toJSON v
 
-instance AE.FromJSON EncodedMetaUpdateOperations where
+instance AE.FromJSON EncodedMetaOperations where
     parseJSON v@(AE.Array _) = do
         tip <- AE.parseJSON v
         return $
-            EncodedMetaUpdateOperations $
+            EncodedMetaOperations $
                 rawCborFromBytes $
-                    CBOR.metaUpdateTransactionToBytes tip
-    parseJSON v@(AE.String _) = EncodedMetaUpdateOperations <$> AE.parseJSON v
-    parseJSON _ = fail "EncodedMetaUpdateOperations JSON must be either an array or a string"
+                    CBOR.metaOperationsToBytes tip
+    parseJSON v@(AE.String _) = EncodedMetaOperations <$> AE.parseJSON v
+    parseJSON _ = fail "EncodedMetaOperations JSON must be either an array or a string"
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)

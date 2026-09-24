@@ -898,50 +898,9 @@ instance ToProto SupplementedTransactionSummary where
                 _ -> Left CEInvalidUpdateResult
 
 -- | Convert an event to a 'Proto.TokenEvent'. Returns @Left ()@ if the event type is not
---  one of the token event types.
+--  one of the Token Update event types.
 tokenUpdateEventToProto :: Event' s -> Either () Proto.TokenEvent
-tokenUpdateEventToProto TokenModuleEvent{..} = Right . Proto.make $ do
-    PLTFields.tokenId .= toProto etmeTokenId
-    PLTFields.moduleEvent
-        .= Proto.make
-            ( do
-                PLTFields.type' .= toProto etmeType
-                PLTFields.details .= toProto etmeDetails
-            )
-tokenUpdateEventToProto TokenTransfer{..} = Right . Proto.make $ do
-    PLTFields.tokenId .= toProto ettTokenId
-    PLTFields.transferEvent
-        .= Proto.make
-            ( do
-                PLTFields.from .= toProto ettFrom
-                PLTFields.to .= toProto ettTo
-                PLTFields.amount .= toProto ettAmount
-                PLTFields.maybe'memo .= fmap toProto ettMemo
-                PLTFields.maybe'fromLock .= fmap toProto ettFromLock
-                PLTFields.maybe'toLock .= fmap toProto ettToLock
-            )
-tokenUpdateEventToProto TokenMint{..} = Right . Proto.make $ do
-    PLTFields.tokenId .= toProto etmTokenId
-    PLTFields.mintEvent
-        .= Proto.make
-            ( do
-                PLTFields.target .= toProto etmTarget
-                PLTFields.amount .= toProto etmAmount
-            )
-tokenUpdateEventToProto TokenBurn{..} = Right . Proto.make $ do
-    PLTFields.tokenId .= toProto etbTokenId
-    PLTFields.burnEvent
-        .= Proto.make
-            ( do
-                PLTFields.target .= toProto etbTarget
-                PLTFields.amount .= toProto etbAmount
-            )
-tokenUpdateEventToProto _ = Left ()
-
--- | Convert an event to a 'Proto.MetaEvent'. Returns @Left ()@ if the event type is
---  not one of the meta event types.
-metaUpdateEventToProto :: Event' s -> Either () Proto.MetaEvent
-metaUpdateEventToProto TokenModuleEvent{..} =
+tokenUpdateEventToProto TokenModuleEvent{..} =
     Right . Proto.make $
         PLTFields.moduleEvent
             .= Proto.make
@@ -950,7 +909,7 @@ metaUpdateEventToProto TokenModuleEvent{..} =
                     PLTFields.details .= toProto etmeDetails
                     PLTFields.tokenId .= toProto etmeTokenId
                 )
-metaUpdateEventToProto TokenTransfer{..} =
+tokenUpdateEventToProto TokenTransfer{..} =
     Right . Proto.make $
         PLTFields.transferEvent
             .= Proto.make
@@ -963,7 +922,7 @@ metaUpdateEventToProto TokenTransfer{..} =
                     PLTFields.maybe'fromLock .= fmap toProto ettFromLock
                     PLTFields.maybe'toLock .= fmap toProto ettToLock
                 )
-metaUpdateEventToProto TokenMint{..} =
+tokenUpdateEventToProto TokenMint{..} =
     Right . Proto.make $
         PLTFields.mintEvent
             .= Proto.make
@@ -972,7 +931,7 @@ metaUpdateEventToProto TokenMint{..} =
                     PLTFields.amount .= toProto etmAmount
                     PLTFields.tokenId .= toProto etmTokenId
                 )
-metaUpdateEventToProto TokenBurn{..} =
+tokenUpdateEventToProto TokenBurn{..} =
     Right . Proto.make $
         PLTFields.burnEvent
             .= Proto.make
@@ -981,7 +940,7 @@ metaUpdateEventToProto TokenBurn{..} =
                     PLTFields.amount .= toProto etbAmount
                     PLTFields.tokenId .= toProto etbTokenId
                 )
-metaUpdateEventToProto LockCreated{..} =
+tokenUpdateEventToProto LockCreated{..} =
     Right . Proto.make $
         PLTFields.lockCreateEvent
             .= Proto.make
@@ -989,11 +948,11 @@ metaUpdateEventToProto LockCreated{..} =
                     PLTFields.lockId .= toProto elcLockId
                     PLTFields.lockConfig .= toProto elcLockConfig
                 )
-metaUpdateEventToProto LockDestroyed{..} =
+tokenUpdateEventToProto LockDestroyed{..} =
     Right . Proto.make $
         PLTFields.lockDestroyEvent
             .= Proto.make (PLTFields.lockId .= toProto eldLockId)
-metaUpdateEventToProto _ = Left ()
+tokenUpdateEventToProto _ = Left ()
 
 instance ToProto TokenHolder where
     type Output TokenHolder = Proto.TokenHolder
@@ -1788,13 +1747,6 @@ convertAccountTransaction ty cost sender mbSponsorDetails result = case ty of
                             mapM tokenUpdateEventToProto events
                     Right . Proto.make $
                         ProtoFields.tokenUpdateEffect . ProtoFields.events .= protoEvents
-            TTMetaUpdate ->
-                mkSuccess <$> do
-                    protoEvents <-
-                        left (const CEInvalidTransactionResult) $
-                            mapM metaUpdateEventToProto events
-                    Right . Proto.make $
-                        ProtoFields.metaUpdateEffect . ProtoFields.events .= protoEvents
   where
     mkSuccess :: Proto.AccountTransactionEffects -> Proto.AccountTransactionDetails
     mkSuccess effects = Proto.make $ do
@@ -1889,7 +1841,6 @@ instance ToProto TransactionType where
     toProto TTConfigureBaker = Proto.CONFIGURE_BAKER
     toProto TTConfigureDelegation = Proto.CONFIGURE_DELEGATION
     toProto TTTokenUpdate = Proto.TOKEN_UPDATE
-    toProto TTMetaUpdate = Proto.META_UPDATE
 
 instance ToProto Energy where
     type Output Energy = Proto.Energy

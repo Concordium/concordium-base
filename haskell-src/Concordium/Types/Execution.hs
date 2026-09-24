@@ -191,6 +191,14 @@ instance AE.FromJSON BakerKeysWithProofs where
         bkwpProofAggregation <- obj AE..: "aggregationKeyOwnershipProof"
         return BakerKeysWithProofs{..}
 
+-- | The two wire forms of a token update transaction.
+data TokenUpdatePayload
+    = -- | The single-token form with a transaction-level token ID.
+      SingleTokenUpdate !TokenId !EncodedTokenOperations
+    | -- | The tokenless form with token IDs carried by applicable operations.
+      TokenlessUpdate !EncodedMetaOperations
+    deriving (Eq, Show)
+
 -- | The transaction payload. Defines the supported kinds of transactions.
 --
 --   * @SPEC: <$DOCS/Transactions#transaction-body>
@@ -378,18 +386,8 @@ data Payload
           -- | The target of the delegation.
           cdDelegationTarget :: !(Maybe DelegationTarget)
         }
-    | -- | An update for a protocol level token.
-      TokenUpdate
-        { -- | Identifier of the token type to which the transaction refers.
-          tuTokenId :: !TokenId,
-          -- | The CBOR-encoded operations to perform.
-          tuOperations :: !RawCbor
-        }
-    | -- | A meta-update transaction, which may perform PLT and lock operations.
-      MetaUpdate
-        { -- | The CBOR-encoded operations to perform.
-          muOperations :: !RawCbor
-        }
+    | -- | An update for protocol-level tokens.
+      TokenUpdate !TokenUpdatePayload
     deriving (Eq, Show)
 
 -- Define `TransactionType`  and relevant conversion function to convert from/to `Payload`.
@@ -427,7 +425,6 @@ instance S.Serialize TransactionType where
         TTConfigureBaker -> S.putWord8 19
         TTConfigureDelegation -> S.putWord8 20
         TTTokenUpdate -> S.putWord8 21
-        TTMetaUpdate -> S.putWord8 22
 
     get =
         S.getWord8 >>= \case
@@ -453,7 +450,6 @@ instance S.Serialize TransactionType where
             19 -> return TTConfigureBaker
             20 -> return TTConfigureDelegation
             21 -> return TTTokenUpdate
-            22 -> return TTMetaUpdate
             n -> fail $ "Unrecognized TransactionType tag: " ++ show n
 
 instance AE.ToJSON Payload where
@@ -576,15 +572,17 @@ instance AE.ToJSON Payload where
               "proofAggregation" AE..= ubkProofAggregation,
               "transactionType" AE..= AE.String "updateBakerKeys"
             ]
-    toJSON TokenUpdate{..} =
+    toJSON (TokenUpdate (SingleTokenUpdate tokenId operations)) =
         AE.object
-            [ "tokenId" AE..= tuTokenId,
-              "operations" AE..= EncodedTokenOperations tuOperations,
+            [ "tokenId" AE..= tokenId,
+              "operations" AE..= operations,
               "transactionType" AE..= AE.String "tokenUpdate"
             ]
-    toJSON MetaUpdate{..} =
+    toJSON (TokenUpdate (TokenlessUpdate operations)) =
         AE.object
-            ["operations" AE..= EncodedMetaUpdateOperations muOperations]
+            [ "operations" AE..= operations,
+              "transactionType" AE..= AE.String "tokenUpdate"
+            ]
 
 instance AE.FromJSON Payload where
     parseJSON = AE.withObject "payload" $ \obj -> do
@@ -694,9 +692,11 @@ instance AE.FromJSON Payload where
                 cdDelegationTarget <- obj AE..: "delegationTarget"
                 return ConfigureDelegation{..}
             "tokenUpdate" -> do
-                tuTokenId <- obj AE..: "tokenId"
-                (EncodedTokenOperations tuOperations) <- obj AE..: "operations"
-                return TokenUpdate{..}
+                tokenId <- obj AE..:? "tokenId"
+                payload <- case tokenId of
+                    Just tokenId' -> SingleTokenUpdate tokenId' <$> (obj AE..: "operations")
+                    Nothing -> TokenlessUpdate <$> (obj AE..: "operations")
+                return (TokenUpdate payload)
             _ -> fail "Unrecognized 'TransactionType' tag"
 
 -- | Payload serialization according to
@@ -836,13 +836,14 @@ putPayload ConfigureDelegation{..} = do
         bitFor 0 cdCapital
             .|. bitFor 1 cdRestakeEarnings
             .|. bitFor 2 cdDelegationTarget
-putPayload TokenUpdate{..} = do
+putPayload (TokenUpdate (SingleTokenUpdate tokenId (EncodedTokenOperations operations))) = do
     S.putWord8 27
-    S.put tuTokenId
-    S.put tuOperations
-putPayload MetaUpdate{..} = do
-    S.putWord8 28
-    S.put muOperations
+    S.put tokenId
+    S.put operations
+putPayload (TokenUpdate (TokenlessUpdate (EncodedMetaOperations operations))) = do
+    S.putWord8 27
+    S.putWord8 0
+    S.put operations
 
 -- | Set the given bit if the value is a 'Just'.
 bitFor :: (Bits b) => Int -> Maybe a -> b
@@ -1009,12 +1010,19 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 cdDelegationTarget <- maybeGet 2
                 return ConfigureDelegation{..}
             27 | supportProtocolLevelTokens -> S.label "TokenUpdate" $ do
-                tuTokenId <- S.get
-                tuOperations <- S.get
-                return TokenUpdate{..}
-            28 | supportMetaUpdate -> S.label "MetaUpdate" $ do
-                muOperations <- S.get
-                return MetaUpdate{..}
+                tokenIdLength <- S.getWord8
+                payload <-
+                    if tokenIdLength == 0
+                        then case spv of
+                            SP11 -> TokenlessUpdate . EncodedMetaOperations <$> S.get
+                            _ -> fail "Tokenless Token Update is unsupported before protocol version 11"
+                        else do
+                            sbs <- S.getShortByteString (fromIntegral tokenIdLength)
+                            tokenId <- case makeTokenId sbs of
+                                Left e -> fail e
+                                Right tokenId -> return tokenId
+                            SingleTokenUpdate tokenId . EncodedTokenOperations <$> S.get
+                return (TokenUpdate payload)
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
     supportMemo = supportsMemo spv
     supportDelegation = protocolSupportsDelegation spv
@@ -1025,7 +1033,6 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
         | otherwise = 0b0000000011111111
     configureDelegationBitMask = 0b0000000000000111
     supportProtocolLevelTokens = protocolSupportsPLT spv
-    supportMetaUpdate = supportsMetaUpdate spv
 
 -- | Builds a set from a list of ascending elements.
 --  Fails if the elements are not ordered or a duplicate is encountered.

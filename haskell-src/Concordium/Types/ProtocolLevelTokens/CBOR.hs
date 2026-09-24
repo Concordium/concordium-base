@@ -1231,10 +1231,10 @@ encodeTokenUpdateTransaction = encodeSequence encodeTokenOperation . tokenOperat
 tokenUpdateTransactionToBytes :: TokenUpdateTransaction -> BS.ByteString
 tokenUpdateTransactionToBytes = encodeToBytes . encodeTokenUpdateTransaction
 
--- * Meta-update operations
+-- * Meta operations
 
--- | A meta-update operation. This can be a token operation or a lock operation.
-data MetaUpdateOperation
+-- | A meta operation. This can be a token operation or a lock operation.
+data MetaOperation
     = MetaTokenUpdate
     { -- | The token affected by the operation.
       muoToken :: !TokenId,
@@ -1243,7 +1243,7 @@ data MetaUpdateOperation
     }
     deriving (Eq, Show)
 
-instance AE.ToJSON MetaUpdateOperation where
+instance AE.ToJSON MetaOperation where
     toJSON MetaTokenUpdate{..} =
         case AE.toJSON muoTokenOperation of
             AE.Object obj ->
@@ -1256,30 +1256,30 @@ instance AE.ToJSON MetaUpdateOperation where
                     _ -> error "Unexpected JSON structure from token operation encoding"
             _ -> error "Unexpected JSON structure from token operation encoding"
 
-instance AE.FromJSON MetaUpdateOperation where
-    parseJSON = AE.withObject "MetaUpdateOperation" $ \o -> do
+instance AE.FromJSON MetaOperation where
+    parseJSON = AE.withObject "MetaOperation" $ \o -> do
         muoToken <- case KeyMap.toList o of
             [(_opKey, AE.Object opObj)] -> opObj AE..: "token"
-            _ -> fail "Expected a single key in MetaUpdateOperation object whose value is an object containing a \"token\" field"
+            _ -> fail "Expected a single key in MetaOperation object whose value is an object containing a \"token\" field"
         muoTokenOperation <- AE.parseJSON (AE.Object o)
         return MetaTokenUpdate{..}
 
--- | Builder for constructing a 'MetaUpdateOperation'. This is parametrised by
+-- | Builder for constructing a 'MetaOperation'. This is parametrised by
 --  the builder for the particular operation.
-data MetaUpdateBuilder b = MetaUpdateBuilder
+data MetaOperationBuilder b = MetaOperationBuilder
     { _mubToken :: Maybe TokenId,
       _mubOperationBuilder :: b
     }
 
-makeLenses ''MetaUpdateBuilder
+makeLenses ''MetaOperationBuilder
 
--- | Empty 'MetaUpdateBuilder'.
-emptyMetaUpdateBuilder :: b -> MetaUpdateBuilder b
-emptyMetaUpdateBuilder = MetaUpdateBuilder Nothing
+-- | Empty 'MetaOperationBuilder'.
+emptyMetaOperationBuilder :: b -> MetaOperationBuilder b
+emptyMetaOperationBuilder = MetaOperationBuilder Nothing
 
--- | Decode a CBOR-encoded 'MetaUpdateOperation'.
-decodeMetaUpdateOperation :: Decoder s MetaUpdateOperation
-decodeMetaUpdateOperation = do
+-- | Decode a CBOR-encoded 'MetaOperation'.
+decodeMetaOperation :: Decoder s MetaOperation
+decodeMetaOperation = do
     maybeMapLen <- decodeMapLenOrIndef
     forM_ maybeMapLen $ \mapLen ->
         unless (mapLen == 1) $
@@ -1317,7 +1317,7 @@ decodeMetaUpdateOperation = do
         unless isEnd $ fail "token-operation: expected end of map"
     return res
   where
-    liftBuild constr build MetaUpdateBuilder{..} = do
+    liftBuild constr build MetaOperationBuilder{..} = do
         muoToken <- _mubToken `orFail` "Missing \"token\""
         muoTokenOperation <- constr <$> build _mubOperationBuilder
         return $ MetaTokenUpdate{..}
@@ -1327,7 +1327,7 @@ decodeMetaUpdateOperation = do
             valDecoder k@"recipient" = Just (mapValueDecoder k decodeCborAccountAddress (mubOperationBuilder . ttbRecipient))
             valDecoder k@"memo" = Just (mapValueDecoder k decodeTaggableMemo (mubOperationBuilder . ttbMemo))
             valDecoder _ = Nothing
-        decodeMap valDecoder (liftBuild TokenTransfer buildTokenTransfer) (emptyMetaUpdateBuilder emptyTokenTransferBuilder)
+        decodeMap valDecoder (liftBuild TokenTransfer buildTokenTransfer) (emptyMetaOperationBuilder emptyTokenTransferBuilder)
     decodeSupplyUpdate constr opType = do
         let valDecoder k@"token" = Just (mapValueDecoder k decodeTokenId mubToken)
             valDecoder k@"amount" = Just (mapValueDecoder k decodeTokenAmount mubOperationBuilder)
@@ -1336,7 +1336,7 @@ decodeMetaUpdateOperation = do
             build Nothing =
                 Left $
                     "token-operation (" ++ Text.unpack opType ++ "): missing amount"
-        decodeMap valDecoder (liftBuild constr build) (emptyMetaUpdateBuilder Nothing)
+        decodeMap valDecoder (liftBuild constr build) (emptyMetaOperationBuilder Nothing)
     decodeListTarget constr opType = do
         let valDecoder k@"token" = Just (mapValueDecoder k decodeTokenId mubToken)
             valDecoder k@"target" = Just (mapValueDecoder k decodeCborAccountAddress mubOperationBuilder)
@@ -1345,7 +1345,7 @@ decodeMetaUpdateOperation = do
             build Nothing =
                 Left $
                     "token-operation (" ++ Text.unpack opType ++ "): missing target"
-        decodeMap valDecoder (liftBuild constr build) (emptyMetaUpdateBuilder Nothing)
+        decodeMap valDecoder (liftBuild constr build) (emptyMetaOperationBuilder Nothing)
     decodeSimpleOp constr opType = do
         let valDecoder k@"token" = Just (mapValueDecoder k decodeTokenId id)
             valDecoder _ = Nothing
@@ -1362,11 +1362,11 @@ decodeMetaUpdateOperation = do
         decodeMap
             valDecoder
             (liftBuild constr buildUpdateAdminRolesDetails)
-            (emptyMetaUpdateBuilder emptyUpdateAdminRolesDetailsBuilder)
+            (emptyMetaOperationBuilder emptyUpdateAdminRolesDetailsBuilder)
 
--- | Encode a 'MetaUpdateOperation' as CBOR.
-encodeMetaUpdateOperation :: MetaUpdateOperation -> Encoding
-encodeMetaUpdateOperation MetaTokenUpdate{..} = do
+-- | Encode a 'MetaOperation' as CBOR.
+encodeMetaOperation :: MetaOperation -> Encoding
+encodeMetaOperation MetaTokenUpdate{..} = do
     case muoTokenOperation of
         TokenTransfer TokenTransferBody{..} ->
             enc "transfer" $
@@ -1412,33 +1412,33 @@ encodeMetaUpdateOperation MetaTokenUpdate{..} = do
     encodeSha256Hash (SHA256.Hash h) = encodeBytes (FBS.toByteString h)
 
 -- | A token transaction consists of a sequence of token operations.
-newtype MetaUpdateTransaction = MetaUpdateTransaction
-    { metaOperations :: Seq.Seq MetaUpdateOperation
+newtype MetaOperations = MetaOperations
+    { metaOperations :: Seq.Seq MetaOperation
     }
     deriving (Eq, Show)
 
-instance AE.ToJSON MetaUpdateTransaction where
+instance AE.ToJSON MetaOperations where
     toJSON = AE.toJSON . metaOperations
 
-instance AE.FromJSON MetaUpdateTransaction where
-    parseJSON = (MetaUpdateTransaction <$>) . AE.parseJSON
+instance AE.FromJSON MetaOperations where
+    parseJSON = (MetaOperations <$>) . AE.parseJSON
 
--- | Decode a CBOR-encoded 'MetaUpdateTransaction'.
-decodeMetaUpdateTransaction :: Decoder s MetaUpdateTransaction
-decodeMetaUpdateTransaction = MetaUpdateTransaction <$> decodeSequence decodeMetaUpdateOperation
+-- | Decode a CBOR-encoded 'MetaOperations'.
+decodeMetaOperations :: Decoder s MetaOperations
+decodeMetaOperations = MetaOperations <$> decodeSequence decodeMetaOperation
 
--- | Parse a 'MetaUpdateTransaction' from a 'LBS.ByteString'. The entire bytestring
+-- | Parse a 'MetaOperations' from a 'LBS.ByteString'. The entire bytestring
 --  must be consumed in the parsing.
-metaUpdateTransactionFromBytes :: LBS.ByteString -> Either String MetaUpdateTransaction
-metaUpdateTransactionFromBytes = decodeFromBytes decodeMetaUpdateTransaction "token transaction"
+metaOperationsFromBytes :: LBS.ByteString -> Either String MetaOperations
+metaOperationsFromBytes = decodeFromBytes decodeMetaOperations "token transaction"
 
--- | Encode a 'MetaUpdateTransaction' as CBOR.
-encodeMetaUpdateTransaction :: MetaUpdateTransaction -> Encoding
-encodeMetaUpdateTransaction = encodeSequence encodeMetaUpdateOperation . metaOperations
+-- | Encode a 'MetaOperations' as CBOR.
+encodeMetaOperations :: MetaOperations -> Encoding
+encodeMetaOperations = encodeSequence encodeMetaOperation . metaOperations
 
--- | CBOR-encode a 'MetaUpdateTransaction' to a (strict) 'BS.ByteString'.
-metaUpdateTransactionToBytes :: MetaUpdateTransaction -> BS.ByteString
-metaUpdateTransactionToBytes = encodeToBytes . encodeMetaUpdateTransaction
+-- | CBOR-encode a 'MetaOperations' to a (strict) 'BS.ByteString'.
+metaOperationsToBytes :: MetaOperations -> BS.ByteString
+metaOperationsToBytes = encodeToBytes . encodeMetaOperations
 
 -- * Token module events
 
