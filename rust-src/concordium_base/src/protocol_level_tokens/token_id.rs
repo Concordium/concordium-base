@@ -103,6 +103,16 @@ impl common::Serial for TokenId {
 impl common::Deserial for TokenId {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> common::ParseResult<Self> {
         let len: u8 = source.get()?;
+        Self::deserial_with_length(source, len)
+    }
+}
+
+impl TokenId {
+    /// Deserialize a token ID after its wire length has already been read.
+    pub fn deserial_with_length<R: byteorder::ReadBytesExt>(
+        source: &mut R,
+        len: u8,
+    ) -> common::ParseResult<Self> {
         let value = common::deserial_string(source, len as usize)?;
         Ok(Self::try_from(value)?)
     }

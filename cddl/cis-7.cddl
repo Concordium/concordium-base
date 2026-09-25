@@ -268,10 +268,11 @@ token-admin-role =
     ; Gives authority to perform `token-update-metadata` operations.
     "updateMetadata"
 
-; Meta-update transaction
+; Tokenless token update transaction
 
-; A sequence of operations on PLTs and locks.
-meta-update-transaction = [ * meta-operation ]
+; A sequence of operations on PLTs and locks. This can only be used in an enclosing token update
+; transaction where the token ID is absent.
+tokenless-update-transaction = [ * meta-operation ]
 
 ; Meta-operations combine token and lock operations.
 meta-operation = meta-token-transfer

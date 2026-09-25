@@ -166,7 +166,7 @@ genPayload pv =
                     [ genPayloadConfigureBaker pv,
                       genPayloadConfigureDelegation
                     ]
-                        ++ [genPayloadToken | pv >= P9]
+                        ++ [genPayloadToken pv | pv >= P9]
 
 -- | Generate payloads that are valid for some protocol version, but may not be valid for all.
 genPayloadUnsafe :: Gen Payload
@@ -353,11 +353,19 @@ genPayloadConfigureDelegation = do
     return ConfigureDelegation{..}
 
 -- | Generate token transaction payloads.
-genPayloadToken :: Gen Payload
-genPayloadToken = do
-    tuTokenId <- genTokenId
-    tuOperations <- genRawCbor
-    return TokenUpdate{..}
+genPayloadToken :: ProtocolVersion -> Gen Payload
+genPayloadToken pv =
+    oneof $
+        [ do
+            tokenId <- genTokenId
+            operations <- EncodedTokenOperations <$> genRawCbor
+            return $ TokenUpdate (SingleTokenUpdate tokenId operations)
+        ]
+            ++ [ do
+                    operations <- EncodedMetaOperations <$> genRawCbor
+                    return $ TokenUpdate (TokenlessUpdate operations)
+               | pv >= P11
+               ]
 
 genCredentialId :: Gen CredentialRegistrationID
 genCredentialId = RegIdCred . generateGroupElementFromSeed globalContext <$> arbitrary

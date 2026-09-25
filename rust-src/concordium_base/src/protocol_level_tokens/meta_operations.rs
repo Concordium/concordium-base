@@ -9,22 +9,22 @@ use crate::{
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
 
-/// Construct a PLT transfer meta-update operation.
+/// Construct a PLT transfer meta operation.
 pub fn transfer_tokens(
     token_id: TokenId,
     receiver: AccountAddress,
     amount: TokenAmount,
-) -> MetaUpdateOperation {
+) -> MetaOperation {
     (token_id, operations::transfer_tokens(receiver, amount)).into()
 }
 
-/// Construct a PLT transfer meta-update operation with a memo.
+/// Construct a PLT transfer meta operation with a memo.
 pub fn transfer_tokens_with_memo(
     token_id: TokenId,
     receiver: AccountAddress,
     amount: TokenAmount,
     memo: CborMemo,
-) -> MetaUpdateOperation {
+) -> MetaOperation {
     (
         token_id,
         operations::transfer_tokens_with_memo(receiver, amount, memo),
@@ -32,44 +32,44 @@ pub fn transfer_tokens_with_memo(
         .into()
 }
 
-/// Construct a PLT mint meta-update operation.
-pub fn mint_tokens(token_id: TokenId, amount: TokenAmount) -> MetaUpdateOperation {
+/// Construct a PLT mint meta operation.
+pub fn mint_tokens(token_id: TokenId, amount: TokenAmount) -> MetaOperation {
     (token_id, operations::mint_tokens(amount)).into()
 }
 
-/// Consturct a PLT burn meta-update operation.
-pub fn burn_tokens(token_id: TokenId, amount: TokenAmount) -> MetaUpdateOperation {
+/// Consturct a PLT burn meta operation.
+pub fn burn_tokens(token_id: TokenId, amount: TokenAmount) -> MetaOperation {
     (token_id, operations::burn_tokens(amount)).into()
 }
 
-/// Construct a PLT add-allow-list meta-update operation.
-pub fn add_token_allow_list(token_id: TokenId, target: AccountAddress) -> MetaUpdateOperation {
+/// Construct a PLT add-allow-list meta operation.
+pub fn add_token_allow_list(token_id: TokenId, target: AccountAddress) -> MetaOperation {
     (token_id, operations::add_token_allow_list(target)).into()
 }
 
-/// Construct a PLT remove-allow-list meta-update operation.
-pub fn remove_token_allow_list(token_id: TokenId, target: AccountAddress) -> MetaUpdateOperation {
+/// Construct a PLT remove-allow-list meta operation.
+pub fn remove_token_allow_list(token_id: TokenId, target: AccountAddress) -> MetaOperation {
     (token_id, operations::remove_token_allow_list(target)).into()
 }
 
-/// Construct a PLT add-deny-list meta-update operation.
-pub fn add_token_deny_list(token_id: TokenId, target: AccountAddress) -> MetaUpdateOperation {
+/// Construct a PLT add-deny-list meta operation.
+pub fn add_token_deny_list(token_id: TokenId, target: AccountAddress) -> MetaOperation {
     (token_id, operations::add_token_deny_list(target)).into()
 }
 
-/// Construct a PLT remove-deny-list meta-update operation.
-pub fn remove_token_deny_list(token_id: TokenId, target: AccountAddress) -> MetaUpdateOperation {
+/// Construct a PLT remove-deny-list meta operation.
+pub fn remove_token_deny_list(token_id: TokenId, target: AccountAddress) -> MetaOperation {
     (token_id, operations::remove_token_deny_list(target)).into()
 }
 
-/// Construct a pause meta-update operation.
-pub fn pause(token_id: TokenId) -> MetaUpdateOperation {
-    MetaUpdateOperation::Pause(MetaTokenPauseDetails { token: token_id })
+/// Construct a pause meta operation.
+pub fn pause(token_id: TokenId) -> MetaOperation {
+    MetaOperation::Pause(MetaTokenPauseDetails { token: token_id })
 }
 
-/// Construct an unpause meta-update operation.
-pub fn unpause(token_id: TokenId) -> MetaUpdateOperation {
-    MetaUpdateOperation::Unpause(MetaTokenPauseDetails { token: token_id })
+/// Construct an unpause meta operation.
+pub fn unpause(token_id: TokenId) -> MetaOperation {
+    MetaOperation::Unpause(MetaTokenPauseDetails { token: token_id })
 }
 
 /// Construct an operation to assign admin roles to an address
@@ -78,7 +78,7 @@ pub fn assign_admin_roles(
     token_id: TokenId,
     account: AccountAddress,
     roles: Vec<TokenAdminRole>,
-) -> MetaUpdateOperation {
+) -> MetaOperation {
     (token_id, operations::assign_admin_roles(account, roles)).into()
 }
 
@@ -88,13 +88,13 @@ pub fn revoke_admin_roles(
     token_id: TokenId,
     account: AccountAddress,
     roles: Vec<TokenAdminRole>,
-) -> MetaUpdateOperation {
+) -> MetaOperation {
     (token_id, operations::revoke_admin_roles(account, roles)).into()
 }
 
 /// Construct an operation to update token metadata for a
 /// protocol-level token.
-pub fn update_metadata(token_id: TokenId, metadata_url: MetadataUrl) -> MetaUpdateOperation {
+pub fn update_metadata(token_id: TokenId, metadata_url: MetadataUrl) -> MetaOperation {
     (token_id, operations::update_metadata(metadata_url)).into()
 }
 
@@ -104,8 +104,8 @@ pub fn lock_fund(
     lock_id: LockId,
     amount: TokenAmount,
     memo: Option<CborMemo>,
-) -> MetaUpdateOperation {
-    MetaUpdateOperation::LockFund(MetaLockFundDetails {
+) -> MetaOperation {
+    MetaOperation::LockFund(MetaLockFundDetails {
         token: token_id,
         lock: lock_id,
         amount,
@@ -121,8 +121,8 @@ pub fn lock_send(
     recipient: AccountAddress,
     amount: TokenAmount,
     memo: Option<CborMemo>,
-) -> MetaUpdateOperation {
-    MetaUpdateOperation::LockSend(MetaLockSendDetails {
+) -> MetaOperation {
+    MetaOperation::LockSend(MetaLockSendDetails {
         token: token_id,
         lock: lock_id,
         source: CborHolderAccount::from(source),
@@ -139,8 +139,8 @@ pub fn lock_release(
     source: AccountAddress,
     amount: TokenAmount,
     memo: Option<CborMemo>,
-) -> MetaUpdateOperation {
-    MetaUpdateOperation::LockRelease(MetaLockReleaseDetails {
+) -> MetaOperation {
+    MetaOperation::LockRelease(MetaLockReleaseDetails {
         token: token_id,
         lock: lock_id,
         source: CborHolderAccount::from(source),
@@ -150,73 +150,73 @@ pub fn lock_release(
 }
 
 /// Construct an operation to create a lock.
-pub fn lock_create(config: LockConfig) -> MetaUpdateOperation {
-    MetaUpdateOperation::LockCreate(MetaLockCreateDetails { config })
+pub fn lock_create(config: LockConfig) -> MetaOperation {
+    MetaOperation::LockCreate(MetaLockCreateDetails { config })
 }
 
 /// Construct an operation to cancel a lock.
-pub fn lock_cancel(lock_id: LockId, memo: Option<CborMemo>) -> MetaUpdateOperation {
-    MetaUpdateOperation::LockCancel(MetaLockCancelDetails {
+pub fn lock_cancel(lock_id: LockId, memo: Option<CborMemo>) -> MetaOperation {
+    MetaOperation::LockCancel(MetaLockCancelDetails {
         lock: lock_id,
         memo,
     })
 }
 
-/// Payload for meta-update transaction. The transaction is a list of meta-update operations
-/// that can be decoded from CBOR using [`MetaUpdatePayload::decode_operations`].
+/// Payload for "tokenless" token update transaction. The transaction is a list of meta operations
+/// that can be decoded from CBOR using [`MetaOperationsPayload::decode_operations`].
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "serde_deprecated",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
-pub struct MetaUpdatePayload {
-    /// Meta-update operations in the transaction.
+pub struct MetaOperationsPayload {
+    /// Meta operations in the transaction.
     pub operations: RawCbor,
 }
 
-impl MetaUpdatePayload {
-    /// Decode meta-update operations from CBOR
-    pub fn decode_operations(&self) -> CborSerializationResult<MetaUpdateOperations> {
+impl MetaOperationsPayload {
+    /// Decode meta operations from CBOR
+    pub fn decode_operations(&self) -> CborSerializationResult<MetaOperations> {
         cbor::cbor_decode(&self.operations)
     }
 }
 
-/// A list of meta-update operations. Can be composed into a meta-update
-/// transaction via [`MetaUpdatePayload`]. The operations are CBOR encoded in the
+/// A list of meta operations. Can be composed into a token update
+/// transaction via [`MetaOperationsPayload`]. The operations are CBOR encoded in the
 /// transaction payload.
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 #[cbor(transparent)]
-pub struct MetaUpdateOperations {
-    /// List of meta-update operations.
-    pub operations: Vec<MetaUpdateOperation>,
+pub struct MetaOperations {
+    /// List of meta operations.
+    pub operations: Vec<MetaOperation>,
 }
 
-impl FromIterator<MetaUpdateOperation> for MetaUpdateOperations {
-    fn from_iter<T: IntoIterator<Item = MetaUpdateOperation>>(iter: T) -> Self {
-        MetaUpdateOperations {
+impl FromIterator<MetaOperation> for MetaOperations {
+    fn from_iter<T: IntoIterator<Item = MetaOperation>>(iter: T) -> Self {
+        MetaOperations {
             operations: iter.into_iter().collect(),
         }
     }
 }
 
-impl MetaUpdateOperations {
-    pub fn new(operations: Vec<MetaUpdateOperation>) -> Self {
+impl MetaOperations {
+    pub fn new(operations: Vec<MetaOperation>) -> Self {
         Self { operations }
     }
 }
 
-/// Meta-update operation. Operation can be composed to a meta-update
-/// transaction via [`MetaUpdateOperations`] and [`MetaUpdatePayload`].
+/// Meta operation can be composed to a token update
+/// transaction via [`MetaOperations`] and [`MetaOperationsPayload`].
 /// The operation is CBOR encoded in the transaction payload.
 ///
-/// Meta-update operations are a superset of [`TokenOperation`]s augmented
-/// with the token ID that the operation applies to. This allows meta-update
+/// Meta operations are a superset of [`TokenOperation`]s augmented
+/// with the token ID that the operation applies to. This allows token update
 /// transactions to perform multiple operations on different tokens in a single
 /// transaction.
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 #[cbor(map)]
-pub enum MetaUpdateOperation {
+pub enum MetaOperation {
     /// Protocol-level token transfer operation
     Transfer(MetaTokenTransfer),
     /// Protocol-level token mint operation
@@ -259,40 +259,36 @@ pub enum MetaUpdateOperation {
     LockCancel(MetaLockCancelDetails),
 }
 
-impl From<(TokenId, TokenOperation)> for MetaUpdateOperation {
+impl From<(TokenId, TokenOperation)> for MetaOperation {
     fn from((token_id, operation): (TokenId, TokenOperation)) -> Self {
         match operation {
             TokenOperation::Transfer(details) => {
-                MetaUpdateOperation::Transfer((token_id, details).into())
+                MetaOperation::Transfer((token_id, details).into())
             }
-            TokenOperation::Mint(details) => MetaUpdateOperation::Mint((token_id, details).into()),
-            TokenOperation::Burn(details) => MetaUpdateOperation::Burn((token_id, details).into()),
+            TokenOperation::Mint(details) => MetaOperation::Mint((token_id, details).into()),
+            TokenOperation::Burn(details) => MetaOperation::Burn((token_id, details).into()),
             TokenOperation::AddAllowList(details) => {
-                MetaUpdateOperation::AddAllowList((token_id, details).into())
+                MetaOperation::AddAllowList((token_id, details).into())
             }
             TokenOperation::RemoveAllowList(details) => {
-                MetaUpdateOperation::RemoveAllowList((token_id, details).into())
+                MetaOperation::RemoveAllowList((token_id, details).into())
             }
             TokenOperation::AddDenyList(details) => {
-                MetaUpdateOperation::AddDenyList((token_id, details).into())
+                MetaOperation::AddDenyList((token_id, details).into())
             }
             TokenOperation::RemoveDenyList(details) => {
-                MetaUpdateOperation::RemoveDenyList((token_id, details).into())
+                MetaOperation::RemoveDenyList((token_id, details).into())
             }
-            TokenOperation::Pause(details) => {
-                MetaUpdateOperation::Pause((token_id, details).into())
-            }
-            TokenOperation::Unpause(details) => {
-                MetaUpdateOperation::Unpause((token_id, details).into())
-            }
+            TokenOperation::Pause(details) => MetaOperation::Pause((token_id, details).into()),
+            TokenOperation::Unpause(details) => MetaOperation::Unpause((token_id, details).into()),
             TokenOperation::AssignAdminRoles(details) => {
-                MetaUpdateOperation::AssignAdminRoles((token_id, details).into())
+                MetaOperation::AssignAdminRoles((token_id, details).into())
             }
             TokenOperation::RevokeAdminRoles(details) => {
-                MetaUpdateOperation::RevokeAdminRoles((token_id, details).into())
+                MetaOperation::RevokeAdminRoles((token_id, details).into())
             }
             TokenOperation::UpdateMetadata(details) => {
-                MetaUpdateOperation::UpdateMetadata((token_id, details).into())
+                MetaOperation::UpdateMetadata((token_id, details).into())
             }
         }
     }
@@ -580,7 +576,7 @@ mod tests {
 
     #[test]
     fn test_meta_operation_cbor_transfer() {
-        let operation = MetaUpdateOperation::Transfer(MetaTokenTransfer {
+        let operation = MetaOperation::Transfer(MetaTokenTransfer {
             token: "tokenid1".parse().unwrap(),
             amount: TokenAmount::from_raw(100000, 2),
             recipient: CborHolderAccount::from(ADDRESS),
@@ -588,14 +584,13 @@ mod tests {
         });
         let cbor = cbor::cbor_encode(&operation);
         assert_eq!(hex::encode(&cbor), "a1687472616e73666572a4646d656d6f440102030465746f6b656e68746f6b656e69643166616d6f756e74c482211a000186a069726563697069656e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
-        let operation_decoded: MetaUpdateOperation =
-            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        let operation_decoded: MetaOperation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
     }
 
     #[test]
     fn test_meta_operation_cbor_mint() {
-        let operation = MetaUpdateOperation::Mint(MetaTokenSupplyUpdateDetails {
+        let operation = MetaOperation::Mint(MetaTokenSupplyUpdateDetails {
             token: "PLTx".parse().unwrap(),
             amount: TokenAmount::from_raw(1000, 0),
         });
@@ -604,19 +599,18 @@ mod tests {
             hex::encode(&cbor),
             "a1646d696e74a265746f6b656e64504c547866616d6f756e74c482001903e8"
         );
-        let operation_decoded: MetaUpdateOperation =
-            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        let operation_decoded: MetaOperation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
         // An alternative CBOR encoding that uses indefinite length strings, oversize ints, and
         // non-canonical key ordering.
-        let operation_decoded: MetaUpdateOperation =
+        let operation_decoded: MetaOperation =
             cbor::cbor_decode(hex::decode("a17f646d696e74ffa266616d6f756e74c482001b00000000000003e865746f6b656e7f63504c546178ff").unwrap()).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
     }
 
     #[test]
     fn test_meta_operation_cbor_burn() {
-        let operation = MetaUpdateOperation::Burn(MetaTokenSupplyUpdateDetails {
+        let operation = MetaOperation::Burn(MetaTokenSupplyUpdateDetails {
             token: "xxx2".parse().unwrap(),
             amount: TokenAmount::from_raw(9999999999999, 27),
         });
@@ -625,14 +619,13 @@ mod tests {
             hex::encode(&cbor),
             "a1646275726ea265746f6b656e647878783266616d6f756e74c482381a1b000009184e729fff"
         );
-        let operation_decoded: MetaUpdateOperation =
-            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        let operation_decoded: MetaOperation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
     }
 
     #[test]
     fn test_meta_operation_cbor_add_allow_list() {
-        let operation = MetaUpdateOperation::AddAllowList(MetaTokenListUpdateDetails {
+        let operation = MetaOperation::AddAllowList(MetaTokenListUpdateDetails {
             token: "testPLT".parse().unwrap(),
             target: CborHolderAccount::from(ADDRESS),
         });
@@ -641,14 +634,13 @@ mod tests {
             hex::encode(&cbor),
             "a16c616464416c6c6f774c697374a265746f6b656e6774657374504c5466746172676574d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
         );
-        let operation_decoded: MetaUpdateOperation =
-            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        let operation_decoded: MetaOperation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
     }
 
     #[test]
     fn test_meta_operation_cbor_remove_allow_list() {
-        let operation = MetaUpdateOperation::RemoveAllowList(MetaTokenListUpdateDetails {
+        let operation = MetaOperation::RemoveAllowList(MetaTokenListUpdateDetails {
             token: "testPLT".parse().unwrap(),
             target: CborHolderAccount::from(ADDRESS),
         });
@@ -657,14 +649,13 @@ mod tests {
             hex::encode(&cbor),
             "a16f72656d6f7665416c6c6f774c697374a265746f6b656e6774657374504c5466746172676574d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
         );
-        let operation_decoded: MetaUpdateOperation =
-            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        let operation_decoded: MetaOperation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
     }
 
     #[test]
     fn test_meta_operation_cbor_add_deny_list() {
-        let operation = MetaUpdateOperation::AddDenyList(MetaTokenListUpdateDetails {
+        let operation = MetaOperation::AddDenyList(MetaTokenListUpdateDetails {
             token: "testPLT".parse().unwrap(),
             target: CborHolderAccount::from(ADDRESS),
         });
@@ -673,14 +664,13 @@ mod tests {
             hex::encode(&cbor),
             "a16b61646444656e794c697374a265746f6b656e6774657374504c5466746172676574d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
         );
-        let operation_decoded: MetaUpdateOperation =
-            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        let operation_decoded: MetaOperation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
     }
 
     #[test]
     fn test_meta_operation_cbor_remove_deny_list() {
-        let operation = MetaUpdateOperation::RemoveDenyList(MetaTokenListUpdateDetails {
+        let operation = MetaOperation::RemoveDenyList(MetaTokenListUpdateDetails {
             token: "testPLT".parse().unwrap(),
             target: CborHolderAccount::from(ADDRESS),
         });
@@ -689,14 +679,13 @@ mod tests {
             hex::encode(&cbor),
             "a16e72656d6f766544656e794c697374a265746f6b656e6774657374504c5466746172676574d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
         );
-        let operation_decoded: MetaUpdateOperation =
-            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        let operation_decoded: MetaOperation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
     }
 
     #[test]
     fn test_meta_operation_cbor_pause() {
-        let operation = MetaUpdateOperation::Pause(MetaTokenPauseDetails {
+        let operation = MetaOperation::Pause(MetaTokenPauseDetails {
             token: "testPLT".parse().unwrap(),
         });
         let cbor = cbor::cbor_encode(&operation);
@@ -704,14 +693,13 @@ mod tests {
             hex::encode(&cbor),
             "a1657061757365a165746f6b656e6774657374504c54"
         );
-        let operation_decoded: MetaUpdateOperation =
-            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        let operation_decoded: MetaOperation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
     }
 
     #[test]
     fn test_meta_operation_cbor_unpause() {
-        let operation = MetaUpdateOperation::Unpause(MetaTokenPauseDetails {
+        let operation = MetaOperation::Unpause(MetaTokenPauseDetails {
             token: "testPLT".parse().unwrap(),
         });
         let cbor = cbor::cbor_encode(&operation);
@@ -719,14 +707,13 @@ mod tests {
             hex::encode(&cbor),
             "a167756e7061757365a165746f6b656e6774657374504c54"
         );
-        let operation_decoded: MetaUpdateOperation =
-            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        let operation_decoded: MetaOperation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
     }
 
     #[test]
     fn test_meta_operation_cbor_assign_admin_roles() {
-        let operation = MetaUpdateOperation::AssignAdminRoles(MetaTokenUpdateAdminRolesDetails {
+        let operation = MetaOperation::AssignAdminRoles(MetaTokenUpdateAdminRolesDetails {
             token: "testPLT".parse().unwrap(),
             roles: vec![TokenAdminRole::Mint, TokenAdminRole::Pause],
             account: CborHolderAccount::from(ADDRESS),
@@ -736,14 +723,13 @@ mod tests {
             hex::encode(&cbor),
             "a17061737369676e41646d696e526f6c6573a365726f6c657382646d696e7465706175736565746f6b656e6774657374504c54676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
         );
-        let operation_decoded: MetaUpdateOperation =
-            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        let operation_decoded: MetaOperation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
     }
 
     #[test]
     fn test_meta_operation_cbor_revoke_admin_roles() {
-        let operation = MetaUpdateOperation::RevokeAdminRoles(MetaTokenUpdateAdminRolesDetails {
+        let operation = MetaOperation::RevokeAdminRoles(MetaTokenUpdateAdminRolesDetails {
             token: "testPLT".parse().unwrap(),
             roles: vec![
                 TokenAdminRole::UpdateAdminRoles,
@@ -757,14 +743,13 @@ mod tests {
             hex::encode(&cbor),
             "a1707265766f6b6541646d696e526f6c6573a365726f6c6573837075706461746541646d696e526f6c6573646275726e6e7570646174654d6574616461746165746f6b656e6774657374504c54676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
         );
-        let operation_decoded: MetaUpdateOperation =
-            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        let operation_decoded: MetaOperation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
     }
 
     #[test]
     fn test_meta_operation_cbor_update_metadata() {
-        let operation = MetaUpdateOperation::UpdateMetadata(MetaMetadataUrlDetails {
+        let operation = MetaOperation::UpdateMetadata(MetaMetadataUrlDetails {
             token: "testPLT".parse().unwrap(),
             metadata_url: MetadataUrl {
                 url: "https://example.com/metadata.json".to_string(),
@@ -777,14 +762,13 @@ mod tests {
             hex::encode(&cbor),
             "a16e7570646174654d65746164617461a265746f6b656e6774657374504c546b6d6574616461746155726ca26375726c782168747470733a2f2f6578616d706c652e636f6d2f6d657461646174612e6a736f6e6e636865636b73756d5368613235365820ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         );
-        let operation_decoded: MetaUpdateOperation =
-            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        let operation_decoded: MetaOperation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
     }
 
     #[test]
     fn test_meta_operation_cbor_lock_fund() {
-        let operation = MetaUpdateOperation::LockFund(MetaLockFundDetails {
+        let operation = MetaOperation::LockFund(MetaLockFundDetails {
             token: "testPLT".parse().unwrap(),
             lock: LockId::new(20, 7, 0),
             amount: TokenAmount::from_raw(5000, 0),
@@ -795,14 +779,13 @@ mod tests {
             hex::encode(&cbor),
             "a1686c6f636b46756e64a4646c6f636bd99fd883140700646d656d6fd81841a065746f6b656e6774657374504c5466616d6f756e74c48200191388"
         );
-        let operation_decoded: MetaUpdateOperation =
-            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        let operation_decoded: MetaOperation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
     }
 
     #[test]
     fn test_meta_operation_cbor_lock_send() {
-        let operation = MetaUpdateOperation::LockSend(MetaLockSendDetails {
+        let operation = MetaOperation::LockSend(MetaLockSendDetails {
             token: "testPLT".parse().unwrap(),
             lock: LockId::new(20, 7, 0),
             source: CborHolderAccount::from(ADDRESS),
@@ -815,14 +798,13 @@ mod tests {
             hex::encode(&cbor),
             "a1686c6f636b53656e64a5646c6f636bd99fd88314070065746f6b656e6774657374504c5466616d6f756e74c4822119138866736f75726365d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2069726563697069656e74d99d73a201d99d71a1011903970358201111111111111111111111111111111111111111111111111111111111111111"
         );
-        let operation_decoded: MetaUpdateOperation =
-            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        let operation_decoded: MetaOperation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
     }
 
     #[test]
     fn test_meta_operation_cbor_lock_release() {
-        let operation = MetaUpdateOperation::LockRelease(MetaLockReleaseDetails {
+        let operation = MetaOperation::LockRelease(MetaLockReleaseDetails {
             token: "testPLT".parse().unwrap(),
             lock: LockId::new(20, 7, 0),
             source: CborHolderAccount::from(ADDRESS),
@@ -834,14 +816,13 @@ mod tests {
             hex::encode(&cbor),
             "a16b6c6f636b52656c65617365a4646c6f636bd99fd88314070065746f6b656e6774657374504c5466616d6f756e74c4820019138866736f75726365d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
         );
-        let operation_decoded: MetaUpdateOperation =
-            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        let operation_decoded: MetaOperation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
     }
 
     #[test]
     fn test_meta_operation_cbor_lock_create() {
-        let operation = MetaUpdateOperation::LockCreate(MetaLockCreateDetails {
+        let operation = MetaOperation::LockCreate(MetaLockCreateDetails {
             config: LockConfig::SimpleV0(LockConfigSimpleV0 {
                 recipients: LockRecipients::Limited(vec![CborHolderAccount::from(ADDRESS)]),
                 expiry: TransactionTime::from_seconds(1_000_000),
@@ -869,14 +850,13 @@ mod tests {
             hex::encode(&cbor),
             "a16a6c6f636b437265617465a16873696d706c655630a466657870697279c11a000f4240666772616e747382a265726f6c6573826466756e646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20a265726f6c6573816473656e64676163636f756e74d99d73a201d99d71a101190397035820111111111111111111111111111111111111111111111111111111111111111166746f6b656e73826774657374504c5463544b4e6a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
         );
-        let operation_decoded: MetaUpdateOperation =
-            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        let operation_decoded: MetaOperation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
     }
 
     #[test]
     fn test_meta_operation_cbor_lock_cancel() {
-        let operation = MetaUpdateOperation::LockCancel(MetaLockCancelDetails {
+        let operation = MetaOperation::LockCancel(MetaLockCancelDetails {
             lock: LockId::new(20, 7, 0),
             memo: Some(CborMemo::Cbor(Memo::try_from(vec![0xa0]).unwrap())),
         });
@@ -885,8 +865,7 @@ mod tests {
             hex::encode(&cbor),
             "a16a6c6f636b43616e63656ca2646c6f636bd99fd883140700646d656d6fd81841a0"
         );
-        let operation_decoded: MetaUpdateOperation =
-            cbor::cbor_decode(&cbor).expect("CBOR deserialize");
+        let operation_decoded: MetaOperation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
     }
 }

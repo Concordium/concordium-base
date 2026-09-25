@@ -26,7 +26,9 @@ use crate::{
         AccountAddress, AccountCredentialMessage, AccountKeys, CredentialDeploymentInfo,
         CredentialPublicKeys, VerifyKey,
     },
-    protocol_level_tokens::{meta_operations::MetaUpdatePayload, TokenOperationsPayload},
+    protocol_level_tokens::{
+        meta_operations::MetaOperationsPayload, TokenId, TokenOperationsPayload,
+    },
     random_oracle::RandomOracle,
     smart_contracts, updates,
 };
@@ -185,8 +187,6 @@ pub enum TransactionType {
     ConfigureDelegation,
     /// Token update transaction. Introduced in Concordium protocol version 9.
     TokenUpdate,
-    /// Meta update transaction. Introduced in Concordium protocol version 11.
-    MetaUpdate,
 }
 
 /// An error that occurs when trying to convert
@@ -222,7 +222,6 @@ impl TryFrom<i32> for TransactionType {
             19 => Self::ConfigureBaker,
             20 => Self::ConfigureDelegation,
             21 => Self::TokenUpdate,
-            22 => Self::MetaUpdate,
             n => return Err(TransactionTypeConversionError(n)),
         })
     }
@@ -999,6 +998,17 @@ pub type AccountCredentialsMap = BTreeMap<
     >,
 >;
 
+/// The two wire forms of a token update transaction.
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+pub enum TokenUpdatePayload {
+    /// The single-token form with a transaction-level token ID.
+    SingleToken(TokenOperationsPayload),
+    /// The tokenless form with token IDs carried by applicable operations.
+    Tokenless(MetaOperationsPayload),
+}
+
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
 #[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
@@ -1145,15 +1155,11 @@ pub enum Payload {
         #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
         data: ConfigureDelegationPayload,
     },
-    /// Token update operations
+    /// Token update operations. A non-empty transaction-level token ID selects
+    /// the legacy format; the tokenless format carries token IDs per operation.
     TokenUpdate {
         #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
-        payload: TokenOperationsPayload,
-    },
-    /// Meta-update operations
-    MetaUpdate {
-        #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
-        payload: MetaUpdatePayload,
+        payload: TokenUpdatePayload,
     },
 }
 
@@ -1190,7 +1196,6 @@ impl Payload {
             Payload::ConfigureBaker { .. } => TransactionType::ConfigureBaker,
             Payload::ConfigureDelegation { .. } => TransactionType::ConfigureDelegation,
             Payload::TokenUpdate { .. } => TransactionType::TokenUpdate,
-            Payload::MetaUpdate { .. } => TransactionType::MetaUpdate,
         }
     }
 }
@@ -1372,12 +1377,16 @@ impl Serial for Payload {
             }
             Payload::TokenUpdate { payload } => {
                 out.put(&27u8);
-                out.put(&payload.token_id);
-                out.put(&payload.operations);
-            }
-            Payload::MetaUpdate { payload } => {
-                out.put(&28u8);
-                out.put(&payload.operations);
+                match payload {
+                    TokenUpdatePayload::SingleToken(payload) => {
+                        out.put(&payload.token_id);
+                        out.put(&payload.operations);
+                    }
+                    TokenUpdatePayload::Tokenless(payload) => {
+                        out.put(&0u8);
+                        out.put(&payload.operations);
+                    }
+                }
             }
         }
     }
@@ -1579,18 +1588,19 @@ impl Deserial for Payload {
                 Ok(Payload::ConfigureDelegation { data })
             }
             27 => {
-                let token_id = source.get()?;
-                let operations = source.get()?;
-                let payload = TokenOperationsPayload {
-                    token_id,
-                    operations,
+                let token_id_length: u8 = source.get()?;
+                let payload = if token_id_length == 0 {
+                    TokenUpdatePayload::Tokenless(MetaOperationsPayload {
+                        operations: source.get()?,
+                    })
+                } else {
+                    let token_id = TokenId::deserial_with_length(source, token_id_length)?;
+                    TokenUpdatePayload::SingleToken(TokenOperationsPayload {
+                        token_id,
+                        operations: source.get()?,
+                    })
                 };
                 Ok(Payload::TokenUpdate { payload })
-            }
-            28 => {
-                let operations = source.get()?;
-                let payload = MetaUpdatePayload { operations };
-                Ok(Payload::MetaUpdate { payload })
             }
             _ => {
                 anyhow::bail!("Unsupported transaction payload tag {}", tag)
@@ -2228,8 +2238,8 @@ pub mod cost {
     /// operations
     pub const PLT_OPERATIONS_TRANSACTIONS: Energy = Energy { energy: 300 };
 
-    /// Additional cost of a transaction consisting of meta-update operations.
-    pub const META_UPDATE_TRANSACTIONS: Energy = Energy { energy: 300 };
+    /// Additional cost of a transaction consisting of meta operations.
+    pub const META_OPERATIONS_TRANSACTIONS: Energy = Energy { energy: 300 };
 
     /// Additional cost of a PLT transfer
     pub const PLT_TRANSFER: Energy = Energy { energy: 100 };
@@ -2391,7 +2401,7 @@ pub mod construct {
     use crate::{
         common::cbor,
         protocol_level_tokens::{
-            meta_operations::{MetaUpdateOperation, MetaUpdateOperations},
+            meta_operations::{MetaOperation, MetaOperations},
             RawCbor, TokenId, TokenOperation, TokenOperations,
         },
     };
@@ -2701,10 +2711,10 @@ pub mod construct {
         let operations = RawCbor::from(cbor::cbor_encode(&operations));
 
         let payload = Payload::TokenUpdate {
-            payload: TokenOperationsPayload {
+            payload: TokenUpdatePayload::SingleToken(TokenOperationsPayload {
                 token_id,
                 operations,
-            },
+            }),
         };
         make_transaction(
             sender,
@@ -2715,52 +2725,51 @@ pub mod construct {
         )
     }
 
-    /// Additional cost of meta update operations transaction
-    fn meta_update_operations_txn_energy(operations: &MetaUpdateOperations) -> Energy {
-        cost::META_UPDATE_TRANSACTIONS
+    /// Additional cost of a Token Update transaction containing meta operations.
+    fn meta_operations_txn_energy(operations: &MetaOperations) -> Energy {
+        cost::META_OPERATIONS_TRANSACTIONS
             + operations
                 .operations
                 .iter()
                 .map(|op| match op {
-                    MetaUpdateOperation::Transfer(_) => cost::PLT_TRANSFER,
-                    MetaUpdateOperation::Mint(_) => cost::PLT_MINT,
-                    MetaUpdateOperation::Burn(_) => cost::PLT_BURN,
-                    MetaUpdateOperation::AddAllowList(_)
-                    | MetaUpdateOperation::RemoveAllowList(_)
-                    | MetaUpdateOperation::AddDenyList(_)
-                    | MetaUpdateOperation::RemoveDenyList(_) => cost::PLT_LIST_UPDATE,
-                    MetaUpdateOperation::Pause(_) | MetaUpdateOperation::Unpause(_) => {
-                        cost::PLT_PAUSE
+                    MetaOperation::Transfer(_) => cost::PLT_TRANSFER,
+                    MetaOperation::Mint(_) => cost::PLT_MINT,
+                    MetaOperation::Burn(_) => cost::PLT_BURN,
+                    MetaOperation::AddAllowList(_)
+                    | MetaOperation::RemoveAllowList(_)
+                    | MetaOperation::AddDenyList(_)
+                    | MetaOperation::RemoveDenyList(_) => cost::PLT_LIST_UPDATE,
+                    MetaOperation::Pause(_) | MetaOperation::Unpause(_) => cost::PLT_PAUSE,
+                    MetaOperation::AssignAdminRoles(_) | MetaOperation::RevokeAdminRoles(_) => {
+                        cost::PLT_ASSIGN_REVOKE_ROLES
                     }
-                    MetaUpdateOperation::AssignAdminRoles(_)
-                    | MetaUpdateOperation::RevokeAdminRoles(_) => cost::PLT_ASSIGN_REVOKE_ROLES,
-                    MetaUpdateOperation::UpdateMetadata(_) => cost::PLT_UPDATE_TOKEN_METADATA,
-                    MetaUpdateOperation::LockFund(_) => cost::PLT_LOCK_FUND,
-                    MetaUpdateOperation::LockSend(_) => cost::PLT_LOCK_SEND,
-                    MetaUpdateOperation::LockRelease(_) => cost::PLT_LOCK_RELEASE,
-                    MetaUpdateOperation::LockCreate(_) => cost::PLT_LOCK_CREATE,
-                    MetaUpdateOperation::LockCancel(_) => cost::PLT_LOCK_CANCEL,
+                    MetaOperation::UpdateMetadata(_) => cost::PLT_UPDATE_TOKEN_METADATA,
+                    MetaOperation::LockFund(_) => cost::PLT_LOCK_FUND,
+                    MetaOperation::LockSend(_) => cost::PLT_LOCK_SEND,
+                    MetaOperation::LockRelease(_) => cost::PLT_LOCK_RELEASE,
+                    MetaOperation::LockCreate(_) => cost::PLT_LOCK_CREATE,
+                    MetaOperation::LockCancel(_) => cost::PLT_LOCK_CANCEL,
                 })
                 .sum()
     }
 
-    /// Construct a meta update transaction consisting of the given meta update
-    /// operations encoded in CBOR.
+    /// Construct a Token Update transaction consisting of meta operations
+    /// encoded in CBOR.
     ///
-    /// Update operations can be created using the functions in
+    /// Meta operations can be created using the functions in
     /// [`meta_operations`](crate::protocol_level_tokens::meta_operations).
-    pub fn meta_update_operations(
+    pub fn meta_operations(
         num_sigs: u32,
         sender: AccountAddress,
         nonce: Nonce,
         expiry: TransactionTime,
-        operations: &MetaUpdateOperations,
+        operations: &MetaOperations,
     ) -> PreAccountTransaction {
-        let energy = meta_update_operations_txn_energy(operations);
+        let energy = meta_operations_txn_energy(operations);
         let operations = RawCbor::from(cbor::cbor_encode(operations));
 
-        let payload = Payload::MetaUpdate {
-            payload: MetaUpdatePayload { operations },
+        let payload = Payload::TokenUpdate {
+            payload: TokenUpdatePayload::Tokenless(MetaOperationsPayload { operations }),
         };
         make_transaction(
             sender,
@@ -3868,6 +3877,7 @@ mod tests {
     use crate::{
         hashes::TransactionSignHash,
         id::types::{SignatureThreshold, VerifyKey},
+        protocol_level_tokens::{meta_operations::MetaOperationsPayload, RawCbor},
     };
     use rand::{rngs::ThreadRng, Rng};
     use std::convert::TryFrom;
@@ -3898,7 +3908,7 @@ mod tests {
         let bound: usize = rng.gen_range(1..20);
         for _ in 0..bound {
             let c_idx = CredentialIndex::from(rng.gen::<u8>());
-            if keys.get(&c_idx).is_none() {
+            if !keys.contains_key(&c_idx) {
                 let inner_bound: usize = rng.gen_range(1..20);
                 let mut cred_keys = BTreeMap::new();
                 for _ in 0..inner_bound {
@@ -4088,5 +4098,42 @@ mod tests {
             ),
             "Sponsored transaction signature must not validate with invalid sender threshold."
         );
+    }
+
+    #[test]
+    fn token_update_payload_wire_forms_round_trip() {
+        let token = Payload::TokenUpdate {
+            payload: TokenUpdatePayload::SingleToken(TokenOperationsPayload {
+                token_id: "T".parse().unwrap(),
+                operations: RawCbor::from(vec![0x80]),
+            }),
+        };
+        let tokenless = Payload::TokenUpdate {
+            payload: TokenUpdatePayload::Tokenless(MetaOperationsPayload {
+                operations: RawCbor::from(vec![0x80]),
+            }),
+        };
+
+        assert_eq!(
+            hex::encode(crate::common::to_bytes(&token)),
+            "1b01540000000180"
+        );
+        assert_eq!(
+            hex::encode(crate::common::to_bytes(&tokenless)),
+            "1b000000000180"
+        );
+
+        assert!(matches!(
+            crate::common::from_bytes(&mut crate::common::to_bytes(&token).as_slice()),
+            Ok(Payload::TokenUpdate {
+                payload: TokenUpdatePayload::SingleToken(_)
+            })
+        ));
+        assert!(matches!(
+            crate::common::from_bytes(&mut crate::common::to_bytes(&tokenless).as_slice()),
+            Ok(Payload::TokenUpdate {
+                payload: TokenUpdatePayload::Tokenless(_)
+            })
+        ));
     }
 }

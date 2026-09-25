@@ -125,10 +125,6 @@ configureDelegationCost = 300
 tokenUpdateBaseCost :: Energy
 tokenUpdateBaseCost = 300
 
--- | Base cost for meta-update transactions.
-metaUpdateBaseCost :: Energy
-metaUpdateBaseCost = 300
-
 -- | Cost for the execution of a token transfer.
 tokenTransferCost :: Energy
 tokenTransferCost = 100
