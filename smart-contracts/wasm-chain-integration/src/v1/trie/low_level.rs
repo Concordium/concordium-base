@@ -579,7 +579,7 @@ impl<V> CachedRef<V> {
 /// A stem is a sequence of [Chunk]s. It is an optimization of the node
 /// representation where common parts of the key are stored inline in a single
 /// node instead of having many nodes with a single child.
-struct Stem {
+pub struct Stem {
     pub(crate) data: Box<[u8]>,
     /// Whether the last chunk is partial or not, i.e., whether all the bytes of
     /// [`data`](Self::data) are in used, or whether only the first 4 bits
@@ -805,7 +805,7 @@ impl From<&[u8]> for MutStem {
         }
     }
 }
-struct StemIter<'a> {
+pub struct StemIter<'a> {
     data: &'a [u8],
     /// Current position (in chunks).
     pos: usize,
@@ -894,8 +894,8 @@ impl<'a> StemIter<'a> {
 #[repr(transparent)]
 /// A wrapper around u8 that indicates an N-bit value. N must be between 1 and
 /// 8.
-struct Chunk<const N: usize> {
-    value: u8,
+pub struct Chunk<const N: usize> {
+    pub value: u8,
 }
 
 impl LowerHex for Chunk<4> {
@@ -1045,17 +1045,17 @@ pub struct Node {
     /// a node should either have at least two children, or a value. It should
     /// never be the case that the node does not have a value and only has one
     /// child. In that case the `path` would be extended.
-    value: Option<ValueLink>,
+    pub value: Option<ValueLink>,
     /// The path above this node which is unique to this node from the parent
     /// node. That is, there is no branching on that path, nor are there any
     /// values. This achieves more compact trie representation.
-    path: Stem,
+    pub path: Stem,
     /// Children, **ordered by increasing key**.
     /// In contrast to `Hashed<Cached<..>>` above for the value, here we store
     /// the hash behind a pointer indirection. The reason for this is that
     /// there are going to be many pointers to the same node, and we want to
     /// avoid duplicating node hashes.
-    children: Vec<(Chunk<4>, ChildLink)>,
+    pub children: Vec<(Chunk<4>, ChildLink)>,
 }
 
 impl Drop for Node {

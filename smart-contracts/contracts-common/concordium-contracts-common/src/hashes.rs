@@ -115,6 +115,12 @@ impl<Purpose> HashBytes<Purpose> {
     }
 }
 
+impl<Purpose> HashBytes<Purpose>  {
+    pub fn into_pure(self) -> Hash {
+        Hash::new(self.bytes)
+    }
+}
+
 impl<Purpose> From<[u8; 32]> for HashBytes<Purpose> {
     fn from(array: [u8; 32]) -> Self {
         Self::new(array)
