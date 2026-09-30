@@ -303,6 +303,7 @@ module Concordium.Types.ProtocolVersion (
     supportsAccountSignatureChecks,
     supportsContractInspectionQueries,
     supportsEncryptedTransfers,
+    supportsTokenlessUpdate,
     supportsPLTLocks,
 
     -- * Defunctionalisation symbols
@@ -1051,6 +1052,22 @@ supportsEncryptedTransfers = \case
     SP9 -> False
     SP10 -> False
     SP11 -> False
+
+-- | Whether the protocol version supports tokenless token updates.
+--  (Enabled from 'P11' and onwards.)
+supportsTokenlessUpdate :: SProtocolVersion pv -> Bool
+supportsTokenlessUpdate = \case
+    SP1 -> False
+    SP2 -> False
+    SP3 -> False
+    SP4 -> False
+    SP5 -> False
+    SP6 -> False
+    SP7 -> False
+    SP8 -> False
+    SP9 -> False
+    SP10 -> False
+    SP11 -> True
 
 -- | Whether the protocol version supports protocol-level locks.
 --  (Enabled from 'P11' and onwards.)
