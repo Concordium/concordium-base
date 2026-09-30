@@ -1010,19 +1010,17 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 cdDelegationTarget <- maybeGet 2
                 return ConfigureDelegation{..}
             27 | supportProtocolLevelTokens -> S.label "TokenUpdate" $ do
-                tokenIdLength <- S.getWord8
                 payload <-
-                    if tokenIdLength == 0
-                        then case spv of
-                            SP11 -> TokenlessUpdate . EncodedMetaOperations <$> S.get
-                            _ -> fail "Tokenless Token Update is unsupported before protocol version 11"
-                        else do
-                            sbs <- S.getShortByteString (fromIntegral tokenIdLength)
-                            tokenId <- case makeTokenId sbs of
-                                Left e -> fail e
-                                Right tokenId -> return tokenId
-                            SingleTokenUpdate tokenId . EncodedTokenOperations <$> S.get
+                    if supportsTokenlessUpdate spv
+                        then do
+                            tokenIdLength <- G.lookAhead S.getWord8
+                            if tokenIdLength == 0
+                                then S.getWord8 >> TokenlessUpdate . EncodedMetaOperations <$> S.get
+                                else getSingleTokenUpdate
+                        else getSingleTokenUpdate
                 return (TokenUpdate payload)
+              where
+                getSingleTokenUpdate = SingleTokenUpdate <$> S.get <*> (EncodedTokenOperations <$> S.get)
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
     supportMemo = supportsMemo spv
     supportDelegation = protocolSupportsDelegation spv

@@ -109,7 +109,7 @@ impl common::Deserial for TokenId {
 
 impl TokenId {
     /// Deserialize a token ID after its wire length has already been read.
-    pub fn deserial_with_length<R: byteorder::ReadBytesExt>(
+    pub(crate) fn deserial_with_length<R: byteorder::ReadBytesExt>(
         source: &mut R,
         len: u8,
     ) -> common::ParseResult<Self> {
