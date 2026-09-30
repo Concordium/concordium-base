@@ -119,20 +119,20 @@ token-initialization-parameters = {
 
 ; Scoped Token Update operations. The non-empty transaction-level token ID
 ; applies to every token operation in this collection.
-token-operations = [ * scoped-token-operation ]
+token-operations = [ * token-operation ]
 
-scoped-token-operation = scoped-token-transfer
-    / scoped-token-mint
-    / scoped-token-burn
-    / scoped-token-update-list
-    / scoped-token-pause
-    / scoped-token-unpause
-    / scoped-token-update-metadata
-    / scoped-token-update-admin-roles
+token-operation = token-transfer
+    / token-mint
+    / token-burn
+    / token-update-list
+    / token-pause
+    / token-unpause
+    / token-update-metadata
+    / token-update-admin-roles
 
 ; A token transfer operation. This transfers a specified amount of tokens from the sender account
 ; (implicit) to the recipient account.
-scoped-token-transfer = {
+token-transfer = {
     ; The operation type is "transfer".
     "transfer": {
         token-transfer-body
@@ -149,13 +149,13 @@ token-transfer-body = (
 )
 
 ; Mint a specified amount to the sender account.
-scoped-token-mint = {
+token-mint = {
     ; The operation type is "mint".
     "mint": { token-supply-update-body }
 }
 
 ; Burn a specified amount from the sender account.
-scoped-token-burn = {
+token-burn = {
     ; The operation type is "burn".
     "burn": { token-supply-update-body }
 }
@@ -167,32 +167,32 @@ token-supply-update-body = (
 )
 
 ; Update an allow or a deny list by adding or removing an account from it.
-scoped-token-update-list =
-    scoped-token-add-allow-list
-    / scoped-token-remove-allow-list
-    / scoped-token-add-deny-list
-    / scoped-token-remove-deny-list
+token-update-list =
+    token-add-allow-list
+    / token-remove-allow-list
+    / token-add-deny-list
+    / token-remove-deny-list
 
 ; Add an account to the allow list.
-scoped-token-add-allow-list = {
+token-add-allow-list = {
     ; The operation type is "addAllowList".
     "addAllowList": { token-list-update-body }
 }
 
 ; Remove an account from the allow list.
-scoped-token-remove-allow-list = {
+token-remove-allow-list = {
     ; The operation type is "removeAllowList".
     "removeAllowList": { token-list-update-body }
 }
 
 ; Add an account to the deny list.
-scoped-token-add-deny-list = {
+token-add-deny-list = {
     ; The operation type is "addDenyList".
     "addDenyList": { token-list-update-body }
 }
 
 ; Remove an account from the deny list.
-scoped-token-remove-deny-list = {
+token-remove-deny-list = {
     ; The operation type is "removeDenyList".
     "removeDenyList": { token-list-update-body }
 }
@@ -207,19 +207,19 @@ token-list-update-body = (
 ; balance changes. If any transaction submitted includes any such operation
 ; while the token is in its paused state, the transaction will fail. The
 ; suspension lasts until the token is unpaused with the corresponding
-; `scoped-token-unpause` operation.
-scoped-token-pause = {
+; `token-unpause` operation.
+token-pause = {
     "pause": {}
 }
 
-; Unpause the token operations described in the `scoped-token-pause` operation,
-; thus acting as an inverse of `scoped-token-pause`.
-scoped-token-unpause = {
+; Unpause the token operations described in the `token-pause` operation,
+; thus acting as an inverse of `token-pause`.
+token-unpause = {
     "unpause": {}
 }
 
 ; Update the token metadata of a token. Supported from protocol version 11.
-scoped-token-update-metadata = {
+token-update-metadata = {
     "updateMetadata": { token-update-metadata-body }
 }
 
@@ -232,16 +232,16 @@ token-update-metadata-body = (
 )
 
 ; Assign an admin role to an account. Supported from protocol version 11.
-scoped-token-assign-admin-roles = {
+token-assign-admin-roles = {
     "assignAdminRoles": { token-update-admin-roles-body }
 }
 
 ; Revoke an admin role from an account. Supported from protocol version 11.
-scoped-token-revoke-admin-roles = {
+token-revoke-admin-roles = {
     "revokeAdminRoles": { token-update-admin-roles-body }
 }
 
-scoped-token-update-admin-roles = scoped-token-assign-admin-roles / scoped-token-revoke-admin-roles
+token-update-admin-roles = token-assign-admin-roles / token-revoke-admin-roles
 
 ; The details of the admin-role update operations.
 token-update-admin-roles-body = (
@@ -274,23 +274,27 @@ token-admin-role =
 operations = [ * operation ]
 
 ; Operations combine token-specific and token-independent lock operations.
-operation = token-operation / lock-operation
-
-token-operation = token-transfer
-    / token-mint
-    / token-burn
-    / token-update-list
-    / token-pause
-    / token-unpause
-    / token-update-metadata
-    / token-update-admin-roles
-    / token-lock-operation
-
-lock-operation = lock-create / lock-cancel
+operation = token-transfer-with-id
+    / token-mint-with-id
+    / token-burn-with-id
+    / token-add-allow-list-with-id
+    / token-remove-allow-list-with-id
+    / token-add-deny-list-with-id
+    / token-remove-deny-list-with-id
+    / token-pause-with-id
+    / token-unpause-with-id
+    / token-update-metadata-with-id
+    / token-assign-admin-roles-with-id
+    / token-revoke-admin-roles-with-id
+    / token-lock-fund-with-id
+    / token-lock-send-with-id
+    / token-lock-release-with-id
+    / lock-create
+    / lock-cancel
 
 ; A token transfer operation. This transfers a specified amount of tokens from the sender account
 ; (implicit) to the recipient account.
-token-transfer = {
+token-transfer-with-id = {
     "transfer": {
         "token": token-id,
         token-transfer-body
@@ -298,7 +302,7 @@ token-transfer = {
 }
 
 ; Mint a specified amount to the sender account.
-token-mint = {
+token-mint-with-id = {
     ; The operation type is "mint".
     "mint": {
         "token": token-id,
@@ -307,7 +311,7 @@ token-mint = {
 }
 
 ; Burn a specified amount from the sender account.
-token-burn = {
+token-burn-with-id = {
     ; The operation type is "burn".
     "burn": {
         "token": token-id,
@@ -315,14 +319,8 @@ token-burn = {
     }
 }
 
-token-update-list =
-    token-add-allow-list
-    / token-remove-allow-list
-    / token-add-deny-list
-    / token-remove-deny-list
-
 ; Add an account to the allow list.
-token-add-allow-list = {
+token-add-allow-list-with-id = {
     ; The operation type is "addAllowList".
     "addAllowList": {
         "token": token-id,
@@ -331,7 +329,7 @@ token-add-allow-list = {
 }
 
 ; Remove an account from the allow list.
-token-remove-allow-list = {
+token-remove-allow-list-with-id = {
     ; The operation type is "removeAllowList".
     "removeAllowList": {
         "token": token-id,
@@ -340,7 +338,7 @@ token-remove-allow-list = {
 }
 
 ; Add an account to the deny list.
-token-add-deny-list = {
+token-add-deny-list-with-id = {
     ; The operation type is "addDenyList".
     "addDenyList": {
         "token": token-id,
@@ -349,7 +347,7 @@ token-add-deny-list = {
 }
 
 ; Remove an account from the deny list.
-token-remove-deny-list = {
+token-remove-deny-list-with-id = {
     ; The operation type is "removeDenyList".
     "removeDenyList": {
         "token": token-id,
@@ -361,31 +359,49 @@ token-remove-deny-list = {
 ; balance changes. If any transaction submitted includes any such operation
 ; while the token is in its paused state, the transaction will fail. The
 ; suspension lasts until the token is unpaused with the corresponding
-; `unpause` operation.
-token-pause = {
+; `token-unpause-with-id` operation.
+token-pause-with-id = {
     "pause": {
         "token": token-id
     }
 }
 
 ; Unpause the balance-changing token operations.
-token-unpause = {
+token-unpause-with-id = {
     "unpause": {
         "token": token-id
     }
 }
 
-; Token lock operations
-token-lock-operation =
-    token-lock-fund
-    / token-lock-send
-    / token-lock-release
+; Update the token metadata of a token. Supported from protocol version 11.
+token-update-metadata-with-id = {
+    "updateMetadata": {
+        "token": token-id,
+        token-update-metadata-body
+    }
+}
+
+; Assign an admin role to an account. Supported from protocol version 11.
+token-assign-admin-roles-with-id = {
+    "assignAdminRoles": {
+        "token": token-id,
+        token-update-admin-roles-body
+    }
+}
+
+; Revoke an admin role from an account. Supported from protocol version 11.
+token-revoke-admin-roles-with-id = {
+    "revokeAdminRoles": {
+        "token": token-id,
+        token-update-admin-roles-body
+    }
+}
 
 ; Fund a lock by locking the specified amount on the sender account (implicit)
 ; under the control of a specified lock. This moves funds within one account and
 ; is not subject to token pause, allow-list, or deny-list constraints.
-token-lock-fund = {
-    "lockFund" : {
+token-lock-fund-with-id = {
+    "lockFund": {
         "token": token-id,
         lock-fund-body
     }
@@ -404,7 +420,7 @@ lock-fund-body = (
 ; The funds will be transferred to the available balance of the recipient. This
 ; transfers funds between accounts and is subject to token pause, allow-list,
 ; and deny-list constraints.
-token-lock-send = {
+token-lock-send-with-id = {
     "lockSend": {
         "token": token-id,
         lock-send-body
@@ -428,7 +444,7 @@ lock-send-body = (
 ; The funds are moved from the locked balance to the available balance of the
 ; owner. This moves funds within one account and is not subject to token pause,
 ; allow-list, or deny-list constraints.
-token-lock-release = {
+token-lock-release-with-id = {
     "lockRelease": {
         "token": token-id,
         lock-release-body
@@ -520,19 +536,19 @@ lock-cancel-body = (
 
 ; The details of a token "addAllowList" event.
 ; Indicates that the account was added to the allow list.
-token-add-allow-list-event = token-list-update-details
+token-add-allow-list-event = { token-list-update-body }
 
 ; The details of a token "removeAllowList" event.
 ; Indicates that the account was removed from the allow list.
-token-remove-allow-list-event = token-list-update-details
+token-remove-allow-list-event = { token-list-update-body }
 
 ; The details of a token "addDenyList" event.
 ; Indicates that the account was added to the deny list.
-token-add-deny-list-event = token-list-update-details
+token-add-deny-list-event = { token-list-update-body }
 
 ; The details of a token "removeDenyList" event.
 ; Indicates that the account was removed from the deny list.
-token-remove-deny-list-event = token-list-update-details
+token-remove-deny-list-event = { token-list-update-body }
 
 ; The details of a token "pause" event.
 ; Indicates that the token operations involving balance changes are suspended.
@@ -548,11 +564,11 @@ token-update-metadata-event = metadata-url
 
 ; The details of a token "assignAdminRoles" event.
 ; Indicates that the account was assigned the admin role specified.
-token-assign-admin-roles-event = token-update-admin-roles-details
+token-assign-admin-roles-event = { token-update-admin-roles-body }
 
 ; The details of a token "revokeAdminRoles" event.
 ; Indicates that the admin role specified was revoked from the account
-token-revoke-admin-roles-event = token-update-admin-roles-details
+token-revoke-admin-roles-event = { token-update-admin-roles-body }
 
 
 ; Reject Reasons
