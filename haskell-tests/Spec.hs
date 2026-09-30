@@ -22,6 +22,7 @@ import qualified Types.AddressesSpec
 import qualified Types.AmountFraction
 import qualified Types.AmountSpec
 import qualified Types.CBOR
+import qualified Types.GRPC2Spec
 import qualified Types.ParametersSpec
 import qualified Types.PayloadSerializationSpec
 import qualified Types.PayloadSpec
@@ -66,3 +67,4 @@ main = hspec $ parallel $ do
     Types.ValidName.tests
     Types.TokensSpec.tests
     Types.CBOR.tests
+    Types.GRPC2Spec.tests

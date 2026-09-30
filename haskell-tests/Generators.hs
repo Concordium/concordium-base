@@ -166,7 +166,7 @@ genPayload pv =
                     [ genPayloadConfigureBaker pv,
                       genPayloadConfigureDelegation
                     ]
-                        ++ [genPayloadToken | pv >= P9]
+                        ++ [genPayloadToken pv | pv >= P9]
 
 -- | Generate payloads that are valid for some protocol version, but may not be valid for all.
 genPayloadUnsafe :: Gen Payload
@@ -353,11 +353,19 @@ genPayloadConfigureDelegation = do
     return ConfigureDelegation{..}
 
 -- | Generate token transaction payloads.
-genPayloadToken :: Gen Payload
-genPayloadToken = do
-    tuTokenId <- genTokenId
-    tuOperations <- genRawCbor
-    return TokenUpdate{..}
+genPayloadToken :: ProtocolVersion -> Gen Payload
+genPayloadToken pv =
+    oneof $
+        [ do
+            tokenId <- genTokenId
+            operations <- EncodedTokenOperations <$> genRawCbor
+            return $ TokenUpdate (ScopedTokenUpdate tokenId operations)
+        ]
+            ++ [ do
+                    operations <- EncodedOperations <$> genRawCbor
+                    return $ TokenUpdate (UnscopedTokenUpdate operations)
+               | pv >= P11
+               ]
 
 genCredentialId :: Gen CredentialRegistrationID
 genCredentialId = RegIdCred . generateGroupElementFromSeed globalContext <$> arbitrary
@@ -820,9 +828,7 @@ genEvent spv =
                 <*> genTokenHolder
                 <*> genTokenHolder
                 <*> genTokenAmount
-                <*> liftArbitrary genMemo
-                <*> (if supportsPLTLocks spv then liftArbitrary genLockId else return Nothing)
-                <*> (if supportsPLTLocks spv then liftArbitrary genLockId else return Nothing),
+                <*> liftArbitrary genMemo,
               TokenMint <$> genTokenId <*> genTokenHolder <*> genTokenAmount,
               TokenBurn <$> genTokenId <*> genTokenHolder <*> genTokenAmount,
               TokenCreated <$> genCreatePLT
@@ -831,7 +837,9 @@ genEvent spv =
     maybeLockEvents
         | supportsPLTLocks spv =
             [ LockCreated <$> genLockId <*> genRawCbor,
-              LockDestroyed <$> genLockId
+              LockDestroyed <$> genLockId,
+              LockAmount <$> genTokenHolder <*> genLockId <*> genTokenId <*> genTokenAmount,
+              UnlockAmount <$> genTokenHolder <*> genLockId <*> genTokenId <*> genTokenAmount
             ]
         | otherwise = []
 

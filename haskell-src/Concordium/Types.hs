@@ -202,7 +202,7 @@ module Concordium.Types (
     cpltInitializationParameters,
     EncodedTokenOperations (..),
     EncodedTokenInitializationParameters (..),
-    EncodedMetaUpdateOperations (..),
+    EncodedOperations (..),
 
     -- * Protocol-level locks
     module Concordium.Types.Locks,
@@ -1352,14 +1352,14 @@ instance AE.FromJSON CreatePLT where
 -- | A wrapper type for (de)-serializing a CBOR-encoded token operations to/from JSON.
 --  This can parse either a JSON object representation of 'TokenOperation'
 -- (which is then re-encoded as CBOR) or a hex-encoded byte string. When
--- rendering JSON,  it will render as a JSON object if the contents can be
+-- rendering JSON, it will render as a JSON object if the contents can be
 -- decoded to a 'TokenOperation', or otherwise as the hex-encoded byte string.
 newtype EncodedTokenOperations = EncodedTokenOperations RawCbor
     deriving newtype (Eq, Show)
 
 instance AE.ToJSON EncodedTokenOperations where
     toJSON (EncodedTokenOperations cbor) =
-        case CBOR.tokenUpdateTransactionFromBytes (rawCborToLazyBytes cbor) of
+        case CBOR.tokenOperationsFromBytes (rawCborToLazyBytes cbor) of
             Left _ -> AE.toJSON cbor
             Right v -> AE.toJSON v
 
@@ -1369,28 +1369,13 @@ instance AE.FromJSON EncodedTokenOperations where
         return $
             EncodedTokenOperations $
                 rawCborFromBytes $
-                    CBOR.tokenUpdateTransactionToBytes tip
+                    CBOR.tokenOperationsToBytes tip
     parseJSON v@(AE.String _) = EncodedTokenOperations <$> AE.parseJSON v
     parseJSON _ = fail "EncodedTokenOperations JSON must be either an array or a string"
 
-newtype EncodedMetaUpdateOperations = EncodedMetaUpdateOperations RawCbor
-    deriving newtype (Eq, Show)
-
-instance AE.ToJSON EncodedMetaUpdateOperations where
-    toJSON (EncodedMetaUpdateOperations cbor) =
-        case CBOR.metaUpdateTransactionFromBytes (rawCborToLazyBytes cbor) of
-            Left _ -> AE.toJSON cbor
-            Right v -> AE.toJSON v
-
-instance AE.FromJSON EncodedMetaUpdateOperations where
-    parseJSON v@(AE.Array _) = do
-        tip <- AE.parseJSON v
-        return $
-            EncodedMetaUpdateOperations $
-                rawCborFromBytes $
-                    CBOR.metaUpdateTransactionToBytes tip
-    parseJSON v@(AE.String _) = EncodedMetaUpdateOperations <$> AE.parseJSON v
-    parseJSON _ = fail "EncodedMetaUpdateOperations JSON must be either an array or a string"
+-- | Opaque CBOR-encoded unscoped operations, represented as a hex string in JSON.
+newtype EncodedOperations = EncodedOperations RawCbor
+    deriving newtype (Eq, Show, AE.ToJSON, AE.FromJSON)
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
