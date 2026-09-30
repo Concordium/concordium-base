@@ -1,5 +1,5 @@
 use crate::{
-    common::cbor::{self, CborSerializationResult},
+    common::cbor::{self, value, CborSerializationResult},
     protocol_level_locks::{LockConfig, LockId},
     protocol_level_tokens::{
         token_operations, CborHolderAccount, CborMemo, MetadataUrl, RawCbor, TokenAdminRole,
@@ -7,7 +7,8 @@ use crate::{
     },
 };
 use concordium_base_derive::{CborDeserialize, CborSerialize};
-use concordium_contracts_common::AccountAddress;
+use concordium_contracts_common::{hashes::Hash, AccountAddress};
+use std::collections::HashMap;
 
 /// Builders for unscoped token and lock operations.
 pub mod operations {
@@ -482,22 +483,39 @@ impl From<TokenTransferWithId> for (TokenId, super::TokenTransfer) {
 pub struct TokenMetadataUrlDetailsWithId {
     /// Token to update.
     pub token: TokenId,
-    /// New metadata URL.
-    pub metadata_url: super::MetadataUrl,
+    /// A string field representing the URL
+    pub url: String,
+
+    /// An optional sha256 checksum value tied to the content of the URL
+    pub checksum_sha_256: Option<Hash>,
+
+    /// Additional fields may be included for future extensibility, e.g. another
+    /// hash algorithm.
+    #[cbor(other)]
+    pub additional: HashMap<String, value::Value>,
 }
 
 impl From<(TokenId, super::MetadataUrl)> for TokenMetadataUrlDetailsWithId {
     fn from((token, metadata_url): (TokenId, super::MetadataUrl)) -> Self {
         TokenMetadataUrlDetailsWithId {
             token,
-            metadata_url,
+            url: metadata_url.url,
+            checksum_sha_256: metadata_url.checksum_sha_256,
+            additional: metadata_url.additional,
         }
     }
 }
 
 impl From<TokenMetadataUrlDetailsWithId> for (TokenId, super::MetadataUrl) {
     fn from(value: TokenMetadataUrlDetailsWithId) -> Self {
-        (value.token, value.metadata_url)
+        (
+            value.token,
+            MetadataUrl {
+                url: value.url,
+                checksum_sha_256: value.checksum_sha_256,
+                additional: value.additional,
+            },
+        )
     }
 }
 
@@ -783,19 +801,69 @@ mod tests {
     fn test_operation_cbor_update_metadata() {
         let operation = Operation::TokenUpdateMetadata(TokenMetadataUrlDetailsWithId {
             token: "testPLT".parse().unwrap(),
-            metadata_url: MetadataUrl {
-                url: "https://example.com/metadata.json".to_string(),
-                checksum_sha_256: Some([255u8; 32].into()),
-                additional: Default::default(),
-            },
+            url: "https://example.com/metadata.json".to_string(),
+            checksum_sha_256: Some([255u8; 32].into()),
+            additional: Default::default(),
         });
         let cbor = cbor::cbor_encode(&operation);
         assert_eq!(
             hex::encode(&cbor),
-            "a173746f6b656e5570646174654d65746164617461a265746f6b656e6774657374504c546b6d6574616461746155726ca26375726c782168747470733a2f2f6578616d706c652e636f6d2f6d657461646174612e6a736f6e6e636865636b73756d5368613235365820ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+            "a173746f6b656e5570646174654d65746164617461a36375726c782168747470733a2f2f6578616d706c652e636f6d2f6d657461646174612e6a736f6e65746f6b656e6774657374504c546e636865636b73756d5368613235365820ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         );
         let operation_decoded: Operation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_operation_cbor_update_metadata_builders() {
+        let token: TokenId = "testPLT".parse().unwrap();
+        let metadata = MetadataUrl::from("https://example.com".to_string());
+        let details = TokenMetadataUrlDetailsWithId::from((token.clone(), metadata.clone()));
+        let expected = "a173746f6b656e5570646174654d65746164617461a26375726c7368747470733a2f2f6578616d706c652e636f6d65746f6b656e6774657374504c54";
+        for operation in [
+            Operation::TokenUpdateMetadata(details.clone()),
+            operations::update_metadata(token.clone(), metadata.clone()),
+            (
+                token.clone(),
+                token_operations::update_metadata(metadata.clone()),
+            )
+                .into(),
+        ] {
+            let bytes = cbor::cbor_encode(&operation);
+            assert_eq!(hex::encode(&bytes), expected);
+            assert_eq!(cbor::cbor_decode::<Operation>(&bytes).unwrap(), operation);
+        }
+        assert_eq!(<(TokenId, MetadataUrl)>::from(details), (token, metadata));
+    }
+
+    #[test]
+    fn test_metadata_details_additional_and_invalid_maps() {
+        let bytes =
+            hex::decode("a365746f6b656e6774657374504c546375726c6178645f666f6f182a").unwrap();
+        let details: TokenMetadataUrlDetailsWithId = cbor::cbor_decode(&bytes).unwrap();
+        assert_eq!(details.additional.len(), 1);
+        assert_eq!(details.additional["_foo"], cbor::value::Value::Positive(42));
+        assert!(!details.additional.contains_key("token"));
+        assert_eq!(
+            cbor::cbor_decode::<TokenMetadataUrlDetailsWithId>(cbor::cbor_encode(&details))
+                .unwrap(),
+            details
+        );
+        for invalid in [
+            "a16375726c6178",                 // Missing token.
+            "a165746f6b656e6774657374504c54", // Missing URL.
+            "a265746f6b656e6774657374504c546b6d6574616461746155726ca16375726c6178", // Old nested map.
+            "a265746f6b656e006375726c6178", // Wrong token type.
+            "a265746f6b656e6774657374504c546375726c00", // Wrong URL type.
+            "a365746f6b656e6774657374504c546375726c61786e636865636b73756d53686132353600",
+            "a365746f6b656e6774657374504c546375726c61780000", // Non-text additional key.
+        ] {
+            assert!(
+                cbor::cbor_decode::<TokenMetadataUrlDetailsWithId>(hex::decode(invalid).unwrap())
+                    .is_err(),
+                "{invalid}"
+            );
+        }
     }
 
     #[test]
