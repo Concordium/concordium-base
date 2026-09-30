@@ -167,7 +167,9 @@ data PendingUpdates cpv auv = PendingUpdates
       -- | Finalization committee parameters queue (CPV2 onwards).
       _pFinalizationCommitteeParametersQueue :: !(OUpdateQueue 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters),
       -- | Validator score parameters queue (CPV3 onwards).
-      _pValidatorScoreParametersQueue :: !(OUpdateQueue 'PTValidatorScoreParameters cpv ValidatorScoreParameters)
+      _pValidatorScoreParametersQueue :: !(OUpdateQueue 'PTValidatorScoreParameters cpv ValidatorScoreParameters),
+      -- | Max lock duration queue (P11/AUV3 onwards).
+      _pMaxLockDurationQueue :: !(Conditionally (SupportsTokenParameters auv) (UpdateQueue Duration))
     }
     deriving (Show, Eq)
 
@@ -197,12 +199,16 @@ instance (IsChainParametersVersion cpv) => HashableTo H.Hash (PendingUpdates cpv
                     <> optionalHash _pMinBlockTimeQueue
                     <> optionalHash _pBlockEnergyLimitQueue
                     <> optionalHash _pFinalizationCommitteeParametersQueue
+                    <> optionalHash _pValidatorScoreParametersQueue
+                    <> conditionalHash _pMaxLockDurationQueue
       where
         hsh :: (HashableTo H.Hash a) => a -> BS.ByteString
         hsh = H.hashToByteString . getHash
         -- For SomeParam, produce the hash. For NoParam, produce the empty string.
         optionalHash :: (HashableTo H.Hash e) => OUpdateQueue pt cpv e -> BS.ByteString
         optionalHash = foldMap hsh
+        conditionalHash :: (HashableTo H.Hash e) => Conditionally b e -> BS.ByteString
+        conditionalHash = foldMap hsh
 
 pendingUpdatesV0ToJSON :: (IsAuthorizationsVersion auv) => PendingUpdates 'ChainParametersV0 auv -> Value
 pendingUpdatesV0ToJSON PendingUpdates{..} =
@@ -282,7 +288,7 @@ pendingUpdatesV3ToJSON
           _pTimeParametersQueue = SomeParam tpq,
           ..
         } =
-        object
+        object $
             [ "rootKeys" AE..= _pRootKeysUpdateQueue,
               "level1Keys" AE..= _pLevel1KeysUpdateQueue,
               "level2Keys" AE..= _pLevel2KeysUpdateQueue,
@@ -299,8 +305,10 @@ pendingUpdatesV3ToJSON
               "cooldownParameters" AE..= cpq,
               "timeParameters" AE..= tpq,
               "consensus2TimingParameters" AE..= unOParam _pTimeoutParametersQueue,
-              "finalizationCommitteeParameters" AE..= unOParam _pFinalizationCommitteeParametersQueue
+              "finalizationCommitteeParameters" AE..= unOParam _pFinalizationCommitteeParametersQueue,
+              "validatorScoreParameters" AE..= unOParam _pValidatorScoreParametersQueue
             ]
+                ++ foldMap (\q -> ["maxLockDuration" AE..= q]) _pMaxLockDurationQueue
 instance (IsChainParametersVersion cpv, IsAuthorizationsVersion auv) => ToJSON (PendingUpdates cpv auv) where
     toJSON = case chainParametersVersion @cpv of
         SChainParametersV0 -> pendingUpdatesV0ToJSON
@@ -308,7 +316,7 @@ instance (IsChainParametersVersion cpv, IsAuthorizationsVersion auv) => ToJSON (
         SChainParametersV2 -> pendingUpdatesV2ToJSON
         SChainParametersV3 -> pendingUpdatesV3ToJSON
 
-parsePendingUpdatesV0 :: (IsAuthorizationsVersion auv) => Value -> AE.Parser (PendingUpdates 'ChainParametersV0 auv)
+parsePendingUpdatesV0 :: forall auv. (IsAuthorizationsVersion auv) => Value -> AE.Parser (PendingUpdates 'ChainParametersV0 auv)
 parsePendingUpdatesV0 = withObject "PendingUpdates" $ \o -> do
     _pRootKeysUpdateQueue <- o AE..: "rootKeys"
     _pLevel1KeysUpdateQueue <- o AE..: "level1Keys"
@@ -331,9 +339,10 @@ parsePendingUpdatesV0 = withObject "PendingUpdates" $ \o -> do
     let _pBlockEnergyLimitQueue = NoParam
     let _pFinalizationCommitteeParametersQueue = NoParam
     let _pValidatorScoreParametersQueue = NoParam
+    let _pMaxLockDurationQueue = conditionally (sSupportsTokenParameters (authorizationsVersion @auv)) emptyUpdateQueue
     return PendingUpdates{..}
 
-parsePendingUpdatesV1 :: (IsAuthorizationsVersion auv) => Value -> AE.Parser (PendingUpdates 'ChainParametersV1 auv)
+parsePendingUpdatesV1 :: forall auv. (IsAuthorizationsVersion auv) => Value -> AE.Parser (PendingUpdates 'ChainParametersV1 auv)
 parsePendingUpdatesV1 = withObject "PendingUpdates" $ \o -> do
     _pRootKeysUpdateQueue <- o AE..: "rootKeys"
     _pLevel1KeysUpdateQueue <- o AE..: "level1Keys"
@@ -358,9 +367,10 @@ parsePendingUpdatesV1 = withObject "PendingUpdates" $ \o -> do
     let _pBlockEnergyLimitQueue = NoParam
     let _pFinalizationCommitteeParametersQueue = NoParam
     let _pValidatorScoreParametersQueue = NoParam
+    let _pMaxLockDurationQueue = conditionally (sSupportsTokenParameters (authorizationsVersion @auv)) emptyUpdateQueue
     return PendingUpdates{..}
 
-parsePendingUpdatesV2 :: (IsAuthorizationsVersion auv) => Value -> AE.Parser (PendingUpdates 'ChainParametersV2 auv)
+parsePendingUpdatesV2 :: forall auv. (IsAuthorizationsVersion auv) => Value -> AE.Parser (PendingUpdates 'ChainParametersV2 auv)
 parsePendingUpdatesV2 = withObject "PendingUpdates" $ \o -> do
     _pRootKeysUpdateQueue <- o AE..: "rootKeys"
     _pLevel1KeysUpdateQueue <- o AE..: "level1Keys"
@@ -385,9 +395,10 @@ parsePendingUpdatesV2 = withObject "PendingUpdates" $ \o -> do
     _pBlockEnergyLimitQueue <- SomeParam <$> o AE..: "blockEnergyLimit"
     _pFinalizationCommitteeParametersQueue <- SomeParam <$> o AE..: "finalizationCommitteeParameters"
     let _pValidatorScoreParametersQueue = NoParam
+    let _pMaxLockDurationQueue = conditionally (sSupportsTokenParameters (authorizationsVersion @auv)) emptyUpdateQueue
     return PendingUpdates{..}
 
-parsePendingUpdatesV3 :: (IsAuthorizationsVersion auv) => Value -> AE.Parser (PendingUpdates 'ChainParametersV3 auv)
+parsePendingUpdatesV3 :: forall auv. (IsAuthorizationsVersion auv) => Value -> AE.Parser (PendingUpdates 'ChainParametersV3 auv)
 parsePendingUpdatesV3 = withObject "PendingUpdates" $ \o -> do
     _pRootKeysUpdateQueue <- o AE..: "rootKeys"
     _pLevel1KeysUpdateQueue <- o AE..: "level1Keys"
@@ -412,6 +423,7 @@ parsePendingUpdatesV3 = withObject "PendingUpdates" $ \o -> do
     _pBlockEnergyLimitQueue <- SomeParam <$> o AE..: "blockEnergyLimit"
     _pFinalizationCommitteeParametersQueue <- SomeParam <$> o AE..: "finalizationCommitteeParameters"
     _pValidatorScoreParametersQueue <- SomeParam <$> o AE..: "validatorScoreParameters"
+    _pMaxLockDurationQueue <- conditionallyA (sSupportsTokenParameters (authorizationsVersion @auv)) $ o AE..: "maxLockDuration"
     return PendingUpdates{..}
 
 instance (IsChainParametersVersion cpv, IsAuthorizationsVersion auv) => FromJSON (PendingUpdates cpv auv) where
@@ -422,7 +434,7 @@ instance (IsChainParametersVersion cpv, IsAuthorizationsVersion auv) => FromJSON
         SChainParametersV3 -> parsePendingUpdatesV3
 
 -- | Initial pending updates with empty queues.
-emptyPendingUpdates :: forall cpv auv. (IsChainParametersVersion cpv) => PendingUpdates cpv auv
+emptyPendingUpdates :: forall cpv auv. (IsChainParametersVersion cpv, IsAuthorizationsVersion auv) => PendingUpdates cpv auv
 emptyPendingUpdates =
     PendingUpdates
         emptyUpdateQueue
@@ -446,6 +458,7 @@ emptyPendingUpdates =
         (whenSupported emptyUpdateQueue)
         (whenSupported emptyUpdateQueue)
         (whenSupported emptyUpdateQueue)
+        (conditionally (sSupportsTokenParameters (authorizationsVersion @auv)) emptyUpdateQueue)
 
 -- | Current state of updatable parameters and update queues.
 data Updates' (cpv :: ChainParametersVersion) (auv :: AuthorizationsVersion) = Updates
