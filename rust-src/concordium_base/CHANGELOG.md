@@ -1,7 +1,10 @@
 ## Unreleased
 - Added `UpdatePayload::MaxLockDuration`, `UpdateType::UpdateMaxLockDuration`, and P11 token-parameters authorization wire support.
-- Extend `TokenUpdatePayload` with a new `::Unscoped` variant, which requires operations to carry the 
-  token ID. The format used in protocol version 9 and 10 is available through the `::Scoped `.
+- BREAKING: `Payload::TokenUpdate::payload` now has type `TokenUpdatePayload` instead of `TokenOperationsPayload`.
+  Wrap existing single-token payloads in `TokenUpdatePayload::Scoped`. Scoped wire encoding is unchanged and remains valid from protocol version 9 onward;
+  the unscoped format uses an empty transaction-level token ID and requires protocol version 11.
+- BREAKING: Scoped operation builders moved from `protocol_level_tokens::operations` to `protocol_level_tokens::token_operations`;
+  the `operations` builder module now constructs "unscoped" operations, which means the token related operations now carry a token ID.
 - Removed `Buffer::start`, `Buffer::start_hint` and `Buffer::result` from the trait `concordium_base::common::Buffer`. 
 - Added `protocol_level_locks` module with types for PLT locks:
   - `LockId`

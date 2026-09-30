@@ -2692,7 +2692,7 @@ pub mod construct {
     /// token update operations encoded in the given CBOR.
     ///
     /// Update operations can be created using the functions in
-    /// [`scoped_operations`](crate::protocol_level_tokens::scoped_operations).
+    /// [`token_operations`](crate::protocol_level_tokens::token_operations).
     pub fn token_update_operations(
         num_sigs: u32,
         sender: AccountAddress,
