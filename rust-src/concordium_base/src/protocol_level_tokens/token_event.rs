@@ -2,7 +2,6 @@ use super::{CborHolderAccount, RawCbor, TokenAmount};
 use crate::common;
 use crate::common::cbor::CborSerializationResult;
 use crate::common::{cbor, Buffer, Deserial, Get, ParseResult, SerdeDeserialize, Serial};
-use crate::protocol_level_locks::LockId;
 use crate::protocol_level_tokens::{MetadataUrl, TokenAdminRole};
 use crate::transactions::Memo;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
@@ -306,20 +305,6 @@ pub struct TokenTransferEvent {
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub memo: Option<Memo>,
-    /// When the funds originate on the locked balance of an account, the
-    /// identity of the lock controlling the funds.
-    #[cfg_attr(
-        feature = "serde_deprecated",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
-    pub from_lock: Option<LockId>,
-    /// When the funds are transferred into the control of a lock, the identity
-    /// of the lock assuming control of the funds.
-    #[cfg_attr(
-        feature = "serde_deprecated",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
-    pub to_lock: Option<LockId>,
 }
 
 /// An event emitted when the token supply is updated, i.e. by minting/burning
@@ -444,6 +429,60 @@ mod test {
         common::cbor,
         protocol_level_tokens::{token_holder, CborHolderAccount},
     };
+
+    // Payload shared by token transfer events. This is aligned with the Haskell event/result
+    // compatibility test.
+    #[cfg(feature = "serde_deprecated")]
+    #[test]
+    fn test_transfer_event_json_compatibility() {
+        let holder = TokenHolder::Account {
+            address: token_holder::test_fixtures::ADDRESS,
+        };
+        let holder_json = serde_json::json!({"type": "account", "address": "2xBvQb4QFBzCDcRdyuGzPDcWSMvDDisfMUnXeRnNJFdWqBBmK7"});
+        for memo in [None, Some(Memo::try_from(vec![1, 2, 3]).unwrap())] {
+            let event = TokenTransferEvent {
+                from: holder.clone(),
+                to: holder.clone(),
+                amount: TokenAmount::from_raw(1000, 4),
+                memo: memo.clone(),
+            };
+            let mut expected = serde_json::json!({
+                "from": holder_json,
+                "to": holder_json,
+                "amount": {"value": "1000", "decimals": 4}
+            });
+            if memo.is_some() {
+                expected["memo"] = serde_json::json!("010203");
+            }
+            assert_eq!(serde_json::to_value(&event).unwrap(), expected);
+            let decoded: TokenTransferEvent = serde_json::from_value(expected).unwrap();
+            assert_eq!(decoded.from, event.from);
+            assert_eq!(decoded.to, event.to);
+            assert_eq!(decoded.amount, event.amount);
+            assert_eq!(decoded.memo, event.memo);
+        }
+    }
+
+    // Payload shared by token mint/burn events. This is aligned with the Haskell event/result
+    // compatibility test.
+    #[cfg(feature = "serde_deprecated")]
+    #[test]
+    fn test_supply_update_event_json_compatibility() {
+        let event = TokenSupplyUpdateEvent {
+            target: TokenHolder::Account {
+                address: token_holder::test_fixtures::ADDRESS,
+            },
+            amount: TokenAmount::from_raw(1000, 4),
+        };
+        let expected = serde_json::json!({
+            "target": {"type": "account", "address": "2xBvQb4QFBzCDcRdyuGzPDcWSMvDDisfMUnXeRnNJFdWqBBmK7"},
+            "amount": {"value": "1000", "decimals": 4}
+        });
+        assert_eq!(serde_json::to_value(&event).unwrap(), expected);
+        let decoded: TokenSupplyUpdateEvent = serde_json::from_value(expected).unwrap();
+        assert_eq!(decoded.target, event.target);
+        assert_eq!(decoded.amount, event.amount);
+    }
 
     #[test]
     fn test_decode_add_allow_list_event_cbor() {
