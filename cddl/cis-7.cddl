@@ -286,16 +286,16 @@ operation = token-transfer-with-id
     / token-update-metadata-with-id
     / token-assign-admin-roles-with-id
     / token-revoke-admin-roles-with-id
-    / token-lock-fund-with-id
-    / token-lock-send-with-id
-    / token-lock-release-with-id
+    / lock-fund
+    / lock-send
+    / lock-release
     / lock-create
     / lock-cancel
 
 ; A token transfer operation. This transfers a specified amount of tokens from the sender account
 ; (implicit) to the recipient account.
 token-transfer-with-id = {
-    "transfer": {
+    "tokenTransfer": {
         "token": token-id,
         token-transfer-body
     }
@@ -303,8 +303,8 @@ token-transfer-with-id = {
 
 ; Mint a specified amount to the sender account.
 token-mint-with-id = {
-    ; The operation type is "mint".
-    "mint": {
+    ; The operation type is "tokenMint".
+    "tokenMint": {
         "token": token-id,
         token-supply-update-body
     }
@@ -312,8 +312,8 @@ token-mint-with-id = {
 
 ; Burn a specified amount from the sender account.
 token-burn-with-id = {
-    ; The operation type is "burn".
-    "burn": {
+    ; The operation type is "tokenBurn".
+    "tokenBurn": {
         "token": token-id,
         token-supply-update-body
     }
@@ -322,7 +322,7 @@ token-burn-with-id = {
 ; Add an account to the allow list.
 token-add-allow-list-with-id = {
     ; The operation type is "addAllowList".
-    "addAllowList": {
+    "tokenAddAllowList": {
         "token": token-id,
         token-list-update-body
     }
@@ -331,7 +331,7 @@ token-add-allow-list-with-id = {
 ; Remove an account from the allow list.
 token-remove-allow-list-with-id = {
     ; The operation type is "removeAllowList".
-    "removeAllowList": {
+    "tokenRemoveAllowList": {
         "token": token-id,
         token-list-update-body
     }
@@ -340,7 +340,7 @@ token-remove-allow-list-with-id = {
 ; Add an account to the deny list.
 token-add-deny-list-with-id = {
     ; The operation type is "addDenyList".
-    "addDenyList": {
+    "tokenAddDenyList": {
         "token": token-id,
         token-list-update-body
     }
@@ -349,7 +349,7 @@ token-add-deny-list-with-id = {
 ; Remove an account from the deny list.
 token-remove-deny-list-with-id = {
     ; The operation type is "removeDenyList".
-    "removeDenyList": {
+    "tokenRemoveDenyList": {
         "token": token-id,
         token-list-update-body
     }
@@ -361,21 +361,21 @@ token-remove-deny-list-with-id = {
 ; suspension lasts until the token is unpaused with the corresponding
 ; `token-unpause-with-id` operation.
 token-pause-with-id = {
-    "pause": {
+    "tokenPause": {
         "token": token-id
     }
 }
 
 ; Unpause the balance-changing token operations.
 token-unpause-with-id = {
-    "unpause": {
+    "tokenUnpause": {
         "token": token-id
     }
 }
 
 ; Update the token metadata of a token. Supported from protocol version 11.
 token-update-metadata-with-id = {
-    "updateMetadata": {
+    "tokenUpdateMetadata": {
         "token": token-id,
         token-update-metadata-body
     }
@@ -383,7 +383,7 @@ token-update-metadata-with-id = {
 
 ; Assign an admin role to an account. Supported from protocol version 11.
 token-assign-admin-roles-with-id = {
-    "assignAdminRoles": {
+    "tokenAssignAdminRoles": {
         "token": token-id,
         token-update-admin-roles-body
     }
@@ -391,7 +391,7 @@ token-assign-admin-roles-with-id = {
 
 ; Revoke an admin role from an account. Supported from protocol version 11.
 token-revoke-admin-roles-with-id = {
-    "revokeAdminRoles": {
+    "tokenRevokeAdminRoles": {
         "token": token-id,
         token-update-admin-roles-body
     }
@@ -400,7 +400,7 @@ token-revoke-admin-roles-with-id = {
 ; Fund a lock by locking the specified amount on the sender account (implicit)
 ; under the control of a specified lock. This moves funds within one account and
 ; is not subject to token pause, allow-list, or deny-list constraints.
-token-lock-fund-with-id = {
+lock-fund = {
     "lockFund": {
         "token": token-id,
         lock-fund-body
@@ -420,7 +420,7 @@ lock-fund-body = (
 ; The funds will be transferred to the available balance of the recipient. This
 ; transfers funds between accounts and is subject to token pause, allow-list,
 ; and deny-list constraints.
-token-lock-send-with-id = {
+lock-send = {
     "lockSend": {
         "token": token-id,
         lock-send-body
@@ -444,7 +444,7 @@ lock-send-body = (
 ; The funds are moved from the locked balance to the available balance of the
 ; owner. This moves funds within one account and is not subject to token pause,
 ; allow-list, or deny-list constraints.
-token-lock-release-with-id = {
+lock-release = {
     "lockRelease": {
         "token": token-id,
         lock-release-body
