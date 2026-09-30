@@ -74,7 +74,11 @@
     ;; Contract: "contract"
     
     (func $init (export "init_contract") (param i64) (result i32)
-        i32.const 0
+        ;; TEMPORARY: A direct constant return produces an unmetered internal Copy
+        ;; with P7+ cost semantics. Runtime copy metering rejects that instruction.
+        ;; Restore the direct constant return after P11 removes this limitation.
+        ;; i32.const 0
+        (i32.add (i32.const 0) (i32.const 0))
     )
 
     ;; Check if the module reference of a contract matches the supplied value.
