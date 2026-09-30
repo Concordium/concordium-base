@@ -13,6 +13,7 @@ use concordium_contracts_common::{
     SeekFrom, Serial,
 };
 use concordium_std::{AccountAddress, Address, HashMap, OwnedEntrypointName, Read, Write};
+use concordium_wasm::machine::CopyMeteringEnabled;
 use concordium_wasm::{
     artifact::{Artifact, ArtifactNamedImport, RunnableCode, TryFromImport},
     machine::{self, NoInterrupt, Value},
@@ -887,8 +888,12 @@ fn generate_schema_run<I: TryFromImport, C: RunnableCode, SchemaType: Deserial>(
     let (ptr, memory) = if let machine::ExecutionOutcome::Success {
         result: Some(Value::I32(ptr)),
         memory,
-    } = artifact.run(&mut TrapHost, schema_fn_name, &[])?
-    {
+    } = artifact.run(
+        &mut TrapHost,
+        schema_fn_name,
+        &[],
+        CopyMeteringEnabled::False,
+    )? {
         (ptr as u32 as usize, memory)
     } else {
         bail!("Schema derivation function is malformed.")

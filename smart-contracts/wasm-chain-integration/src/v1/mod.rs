@@ -41,6 +41,7 @@ use concordium_contracts_common::{
     AccountAddress, Address, Amount, ChainMetadata, ContractAddress, EntrypointName,
     ModuleReference, OwnedEntrypointName, ReceiveName,
 };
+use concordium_wasm::machine::CopyMeteringEnabled;
 use concordium_wasm::{
     artifact::{Artifact, CompiledFunction, CompiledFunctionBytes, RunnableCode},
     machine::{self, ExecutionOutcome, NoInterrupt},
@@ -1701,6 +1702,7 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode, A: DebugInfo
         &mut host,
         init_invocation.init_name,
         &[Value::I64(init_invocation.amount.micro_ccd() as i64)],
+        CopyMeteringEnabled::True,
     );
     let return_value = std::mem::take(&mut host.return_value);
     let remaining_energy = host.energy.energy;
@@ -2211,6 +2213,7 @@ pub fn invoke_receive<
         &mut host,
         receive_invocation.receive_name.get_chain_name(),
         &[Value::I64(receive_invocation.amount.micro_ccd() as i64)],
+        CopyMeteringEnabled::True,
     );
     process_receive_result(artifact, host, result)
 }
