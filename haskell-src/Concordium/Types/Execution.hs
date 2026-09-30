@@ -193,10 +193,10 @@ instance AE.FromJSON BakerKeysWithProofs where
 
 -- | The two wire forms of a token update transaction.
 data TokenUpdatePayload
-    = -- | The single-token form with a transaction-level token ID.
-      SingleTokenUpdate !TokenId !EncodedTokenOperations
-    | -- | The tokenless form with token IDs carried by applicable operations.
-      TokenlessUpdate !EncodedMetaOperations
+    = -- | The scoped form with a transaction-level token ID.
+      ScopedTokenUpdate !TokenId !EncodedTokenOperations
+    | -- | The unscoped form with token IDs carried by applicable operations.
+      UnscopedTokenUpdate !EncodedOperations
     deriving (Eq, Show)
 
 -- | The transaction payload. Defines the supported kinds of transactions.
@@ -572,13 +572,13 @@ instance AE.ToJSON Payload where
               "proofAggregation" AE..= ubkProofAggregation,
               "transactionType" AE..= AE.String "updateBakerKeys"
             ]
-    toJSON (TokenUpdate (SingleTokenUpdate tokenId operations)) =
+    toJSON (TokenUpdate (ScopedTokenUpdate tokenId operations)) =
         AE.object
             [ "tokenId" AE..= tokenId,
               "operations" AE..= operations,
               "transactionType" AE..= AE.String "tokenUpdate"
             ]
-    toJSON (TokenUpdate (TokenlessUpdate operations)) =
+    toJSON (TokenUpdate (UnscopedTokenUpdate operations)) =
         AE.object
             [ "operations" AE..= operations,
               "transactionType" AE..= AE.String "tokenUpdate"
@@ -694,8 +694,8 @@ instance AE.FromJSON Payload where
             "tokenUpdate" -> do
                 tokenId <- obj AE..:? "tokenId"
                 payload <- case tokenId of
-                    Just tokenId' -> SingleTokenUpdate tokenId' <$> (obj AE..: "operations")
-                    Nothing -> TokenlessUpdate <$> (obj AE..: "operations")
+                    Just tokenId' -> ScopedTokenUpdate tokenId' <$> (obj AE..: "operations")
+                    Nothing -> UnscopedTokenUpdate <$> (obj AE..: "operations")
                 return (TokenUpdate payload)
             _ -> fail "Unrecognized 'TransactionType' tag"
 
@@ -836,11 +836,11 @@ putPayload ConfigureDelegation{..} = do
         bitFor 0 cdCapital
             .|. bitFor 1 cdRestakeEarnings
             .|. bitFor 2 cdDelegationTarget
-putPayload (TokenUpdate (SingleTokenUpdate tokenId (EncodedTokenOperations operations))) = do
+putPayload (TokenUpdate (ScopedTokenUpdate tokenId (EncodedTokenOperations operations))) = do
     S.putWord8 27
     S.put tokenId
     S.put operations
-putPayload (TokenUpdate (TokenlessUpdate (EncodedMetaOperations operations))) = do
+putPayload (TokenUpdate (UnscopedTokenUpdate (EncodedOperations operations))) = do
     S.putWord8 27
     S.putWord8 0
     S.put operations
@@ -1011,16 +1011,16 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 return ConfigureDelegation{..}
             27 | supportProtocolLevelTokens -> S.label "TokenUpdate" $ do
                 payload <-
-                    if supportsTokenlessUpdate spv
+                    if supportsUnscopedTokenUpdate spv
                         then do
                             tokenIdLength <- G.lookAhead S.getWord8
                             if tokenIdLength == 0
-                                then S.getWord8 >> TokenlessUpdate . EncodedMetaOperations <$> S.get
-                                else getSingleTokenUpdate
-                        else getSingleTokenUpdate
+                                then S.getWord8 >> UnscopedTokenUpdate . EncodedOperations <$> S.get
+                                else getScopedUpdate
+                        else getScopedUpdate
                 return (TokenUpdate payload)
               where
-                getSingleTokenUpdate = SingleTokenUpdate <$> S.get <*> (EncodedTokenOperations <$> S.get)
+                getScopedUpdate = ScopedTokenUpdate <$> S.get <*> (EncodedTokenOperations <$> S.get)
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
     supportMemo = supportsMemo spv
     supportDelegation = protocolSupportsDelegation spv
@@ -1420,16 +1420,7 @@ data Event' (supplemented :: Bool)
           -- | The amount transferred.
           ettAmount :: !TokenAmount,
           -- | An optional memo for the transfer.
-          ettMemo :: !(Maybe Memo),
-          -- | When the funds originate on the locked balance of an account, the
-          --  identity of the lock controlling the funds. Absent when the funds
-          --  are not on the locked balance of the originating account.
-          ettFromLock :: !(Maybe LockId),
-          -- | When the funds are transferred into the control of a lock, the
-          --  identity of the lock assuming control of the funds. Absent when
-          --  the funds are sent to the available balance of the receiving
-          --  account.
-          ettToLock :: !(Maybe LockId)
+          ettMemo :: !(Maybe Memo)
         }
     | -- | A token mint event.
       -- The serialization uses a bitmap to indicate which fields are present.
@@ -1471,6 +1462,28 @@ data Event' (supplemented :: Bool)
       LockDestroyed
         { -- | Lock ID of the destroyed lock.
           eldLockId :: !LockId
+        }
+    | -- | An amount was moved into the control of a protocol-level lock.
+      LockAmount
+        { -- | The holder whose available balance was locked.
+          elaTokenHolder :: !TokenHolder,
+          -- | The lock controlling the amount.
+          elaLockId :: !LockId,
+          -- | The token affected by the lock operation.
+          elaTokenId :: !TokenId,
+          -- | The amount locked.
+          elaAmount :: !TokenAmount
+        }
+    | -- | An amount was moved out of the control of a protocol-level lock.
+      UnlockAmount
+        { -- | The holder whose locked balance was unlocked.
+          euaTokenHolder :: !TokenHolder,
+          -- | The lock that controlled the amount.
+          euaLockId :: !LockId,
+          -- | The token affected by the lock operation.
+          euaTokenId :: !TokenId,
+          -- | The amount unlocked.
+          euaAmount :: !TokenAmount
         }
     deriving (Show, Generic, Eq)
 
@@ -1537,6 +1550,8 @@ addInitializeParameter _ TokenBurn{..} = pure TokenBurn{..}
 addInitializeParameter _ TokenCreated{..} = pure TokenCreated{..}
 addInitializeParameter _ LockCreated{..} = pure LockCreated{..}
 addInitializeParameter _ LockDestroyed{..} = pure LockDestroyed{..}
+addInitializeParameter _ LockAmount{..} = pure LockAmount{..}
+addInitializeParameter _ UnlockAmount{..} = pure UnlockAmount{..}
 
 putEvent :: S.Putter Event
 putEvent = \case
@@ -1742,13 +1757,8 @@ putEvent = \case
             <> S.put ettTo
             <> S.put ettAmount
             <> mapM_ S.put ettMemo
-            <> mapM_ S.put ettFromLock
-            <> mapM_ S.put ettToLock
       where
-        bitmap =
-            bitFor 0 ettMemo
-                .|. bitFor 1 ettFromLock
-                .|. bitFor 2 ettToLock
+        bitmap = bitFor 0 ettMemo
     TokenMint{..} ->
         S.putWord8 40
             -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
@@ -1775,6 +1785,18 @@ putEvent = \case
     LockDestroyed{..} ->
         S.putWord8 44
             <> S.put eldLockId
+    LockAmount{..} ->
+        S.putWord8 45
+            <> S.put elaTokenHolder
+            <> S.put elaLockId
+            <> S.put elaTokenId
+            <> S.put elaAmount
+    UnlockAmount{..} ->
+        S.putWord8 46
+            <> S.put euaTokenHolder
+            <> S.put euaLockId
+            <> S.put euaTokenId
+            <> S.put euaAmount
 
 getEvent :: SProtocolVersion pv -> S.Get Event
 getEvent spv =
@@ -1985,8 +2007,6 @@ getEvent spv =
                     | testBit bitmap b = Just <$> S.get
                     | otherwise = return Nothing
             ettMemo <- maybeGet 0
-            ettFromLock <- maybeGet 1
-            ettToLock <- maybeGet 2
             return TokenTransfer{..}
         40 | supportPlt -> do
             -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
@@ -2018,6 +2038,18 @@ getEvent spv =
         44 | supportLocks -> do
             eldLockId <- S.get
             return LockDestroyed{..}
+        45 | supportLocks -> do
+            elaTokenHolder <- S.get
+            elaLockId <- S.get
+            elaTokenId <- S.get
+            elaAmount <- S.get
+            return LockAmount{..}
+        46 | supportLocks -> do
+            euaTokenHolder <- S.get
+            euaLockId <- S.get
+            euaTokenId <- S.get
+            euaAmount <- S.get
+            return UnlockAmount{..}
         n -> fail $ "Unrecognized event tag: " ++ show n
   where
     supportMemo = supportsMemo spv
@@ -2026,9 +2058,7 @@ getEvent spv =
     supportSuspend = protocolSupportsSuspend spv
     supportPlt = protocolSupportsPLT spv
     supportLocks = supportsPLTLocks spv
-    configureTokenTransferBitMask
-        | supportLocks = 0b0000000000000111
-        | otherwise = 0b0000000000000001
+    configureTokenTransferBitMask = 0b0000000000000001
     configureTokenMintBitMask = 0b0000000000000000
     configureTokenBurnBitMask = 0b0000000000000000
 
@@ -2312,8 +2342,6 @@ instance AE.ToJSON (Event' supplemented) where
                   "amount" .= ettAmount
                 ]
                     ++ foldMap (\memo -> ["memo" .= memo]) ettMemo
-                    ++ foldMap (\fromLock -> ["fromLock" .= fromLock]) ettFromLock
-                    ++ foldMap (\toLock -> ["toLock" .= toLock]) ettToLock
         TokenMint{..} ->
             AE.object
                 [ "tag" .= AE.String "TokenMint",
@@ -2343,6 +2371,22 @@ instance AE.ToJSON (Event' supplemented) where
             AE.object
                 [ "tag" .= AE.String "LockDestroyed",
                   "lockId" .= eldLockId
+                ]
+        LockAmount{..} ->
+            AE.object
+                [ "tag" .= AE.String "LockAmount",
+                  "tokenHolder" .= elaTokenHolder,
+                  "lockId" .= elaLockId,
+                  "tokenId" .= elaTokenId,
+                  "amount" .= elaAmount
+                ]
+        UnlockAmount{..} ->
+            AE.object
+                [ "tag" .= AE.String "UnlockAmount",
+                  "tokenHolder" .= euaTokenHolder,
+                  "lockId" .= euaLockId,
+                  "tokenId" .= euaTokenId,
+                  "amount" .= euaAmount
                 ]
 
 instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
@@ -2545,8 +2589,6 @@ instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
                 ettTo <- obj .: "to"
                 ettAmount <- obj .: "amount"
                 ettMemo <- obj AE..:? "memo"
-                ettFromLock <- obj AE..:? "fromLock"
-                ettToLock <- obj AE..:? "toLock"
                 return TokenTransfer{..}
             "TokenMint" -> do
                 etmTokenId <- obj .: "tokenId"
@@ -2568,6 +2610,18 @@ instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
             "LockDestroyed" -> do
                 eldLockId <- obj .: "lockId"
                 return LockDestroyed{..}
+            "LockAmount" -> do
+                elaTokenHolder <- obj .: "tokenHolder"
+                elaLockId <- obj .: "lockId"
+                elaTokenId <- obj .: "tokenId"
+                elaAmount <- obj .: "amount"
+                return LockAmount{..}
+            "UnlockAmount" -> do
+                euaTokenHolder <- obj .: "tokenHolder"
+                euaLockId <- obj .: "lockId"
+                euaTokenId <- obj .: "tokenId"
+                euaAmount <- obj .: "amount"
+                return UnlockAmount{..}
             tag -> fail $ "Unrecognized 'Event' tag " ++ Text.unpack tag
 
 -- | 'SupplementEvents' provides a traversal that can be used to replace 'Event's with

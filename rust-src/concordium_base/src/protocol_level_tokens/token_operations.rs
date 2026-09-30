@@ -16,7 +16,8 @@ use concordium_contracts_common::AccountAddress;
 /// [`construct::token_update_operations`](crate::transactions::construct::token_update_operations)
 /// To construct and sign transactions, use
 /// [`send::token_update_operations`](crate::transactions::send::token_update_operations)
-pub mod operations {
+
+pub mod token_operations {
     use super::*;
 
     /// Construct a protocol level tokens transfer operation.

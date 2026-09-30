@@ -83,8 +83,8 @@ genAdditionalKV = do
     return ("_" <> key, val)
 
 -- | Generator for `TokenTransferBody`
-genTokenTransfer :: Gen TokenTransferBody
-genTokenTransfer = do
+genTokenTransferBody :: Gen TokenTransferBody
+genTokenTransferBody = do
     ttAmount <- genTokenAmount
     ttRecipient <- genCborAccountAddress
     ttMemo <- oneof [pure Nothing, Just <$> genTaggableMemo]
@@ -146,7 +146,7 @@ genUpdateAdminRolesDetails = do
 genTokenOperation :: Gen TokenOperation
 genTokenOperation =
     oneof
-        [ TokenTransfer <$> genTokenTransfer,
+        [ TokenTransfer <$> genTokenTransferBody,
           TokenMint <$> genTokenAmount,
           TokenBurn <$> genTokenAmount,
           TokenAddAllowList <$> genCborAccountAddress,
@@ -161,23 +161,10 @@ genTokenOperation =
         ]
 
 -- | Generator for 'TokenGovernanceOperation'.
-genTokenTransaction :: Gen TokenUpdateTransaction
+genTokenTransaction :: Gen TokenOperations
 genTokenTransaction =
-    TokenUpdateTransaction . Seq.fromList
+    TokenOperations . Seq.fromList
         <$> listOf genTokenOperation
-
--- | Generator for 'MetaOperation'.
-genMetaOperation :: Gen MetaOperation
-genMetaOperation =
-    oneof
-        [ MetaTokenUpdate <$> genTokenId <*> genTokenOperation
-        ]
-
--- | Generator for 'MetaOperations'.
-genMetaOperations :: Gen MetaOperations
-genMetaOperations =
-    MetaOperations . Seq.fromList
-        <$> listOf genMetaOperation
 
 genTokenModuleStateSimple :: Gen TokenModuleState
 genTokenModuleStateSimple = do
@@ -417,10 +404,10 @@ testInitializationParametersJSON = describe "TokenInitializationParameters JSON 
                     tokenInitializationParametersMinimal
                 )
 
--- | A test value for 'TokenUpdateTransaction'.
-tops1 :: TokenUpdateTransaction
+-- | A test value for 'TokenOperations'.
+tops1 :: TokenOperations
 tops1 =
-    TokenUpdateTransaction $
+    TokenOperations $
         Seq.fromList
             [ TokenTransfer
                 TokenTransferBody
@@ -472,12 +459,12 @@ encTops1 =
     EncodedTokenOperations $
         rawCborFromBytes $
             CBOR.toStrictByteString $
-                encodeTokenUpdateTransaction tops1
+                encodeTokenOperations tops1
 
--- | Another example 'TokenUpdateTransaction', which tests new operations introduced in P11.
-tops2 :: TokenUpdateTransaction
+-- | Another example 'TokenOperations', which tests new operations introduced in P11.
+tops2 :: TokenOperations
 tops2 =
-    TokenUpdateTransaction $
+    TokenOperations $
         Seq.fromList
             [ TokenAssignAdminRoles
                 UpdateAdminRolesDetails
@@ -521,7 +508,7 @@ encTops2 =
     EncodedTokenOperations $
         rawCborFromBytes $
             CBOR.toStrictByteString $
-                encodeTokenUpdateTransaction tops1
+                encodeTokenOperations tops1
 
 -- | A dummy 'CborAccountAddress' value.
 dummyCborHolder :: CborAccountAddress
@@ -612,7 +599,7 @@ testEncodedTokenOperationsJSON = describe "EncodedTokenOperations JSON serializa
                 _ -> assertFailure "Does not encode to JSON object"
             _ -> assertFailure "Does not encode to JSON array"
 
-    it "Serialize/Deserialize roundtrip where CBOR is not a valid TokenUpdateTransaction" $
+    it "Serialize/Deserialize roundtrip where CBOR is not a valid TokenOperations" $
         assertEqual
             "Deserialized"
             (Just invalidEncTops1)
@@ -626,44 +613,23 @@ testTokenOperationsCBOR = describe "EncodedTokenOperations CBOR serialization" $
     it "Serialize/Deserialize roundtrip" $
         assertEqual
             "Deserialized"
-            (tokenUpdateTransactionFromBytes $ B8.fromStrict $ tokenUpdateTransactionToBytes tops1)
+            (tokenOperationsFromBytes $ B8.fromStrict $ tokenOperationsToBytes tops1)
             (Right tops1)
     it "Serializes to expected CBOR bytestring" $
         assertEqual
             "CBOR serialized"
-            (tokenUpdateTransactionToBytes tops1)
+            (tokenOperationsToBytes tops1)
             tops1ExpectedCbor
     it "Serialize/Deserialize roundtrip (P11 ops)" $
         assertEqual
             "Deserialized"
-            (tokenUpdateTransactionFromBytes $ B8.fromStrict $ tokenUpdateTransactionToBytes tops2)
+            (tokenOperationsFromBytes $ B8.fromStrict $ tokenOperationsToBytes tops2)
             (Right tops2)
     it "Serializes to expected CBOR bytestring (P11 ops)" $
         assertEqual
             "CBOR serialized"
-            (tokenUpdateTransactionToBytes tops2)
+            (tokenOperationsToBytes tops2)
             tops2ExpectedCbor
-
-mops1 :: MetaOperations
-mops1 = MetaOperations $ MetaTokenUpdate tok <$> tokenOperations tops1
-  where
-    tok = TokenId "tTEST"
-
-mops1ExpectedCBOR :: BS.ByteString
-mops1ExpectedCBOR = BS16.decodeLenient "89A1687472616E73666572A4646D656D6F440102030465746F6B656E65745445535466616D6F756E74C4822419303969726563697069656E74D99D73A201D99D71A1011903970358200101010101010101010101010101010101010101010101010101010101010101A1646D696E74A265746F6B656E65745445535466616D6F756E74C48224193039A1646275726EA265746F6B656E65745445535466616D6F756E74C48224193039A16C616464416C6C6F774C697374A265746F6B656E65745445535466746172676574D99D73A201D99D71A1011903970358200101010101010101010101010101010101010101010101010101010101010101A16F72656D6F7665416C6C6F774C697374A265746F6B656E65745445535466746172676574D99D73A201D99D71A1011903970358200101010101010101010101010101010101010101010101010101010101010101A16B61646444656E794C697374A265746F6B656E65745445535466746172676574D99D73A201D99D71A1011903970358200101010101010101010101010101010101010101010101010101010101010101A16E72656D6F766544656E794C697374A265746F6B656E65745445535466746172676574D99D73A201D99D71A1011903970358200101010101010101010101010101010101010101010101010101010101010101A1657061757365A165746F6B656E657454455354A167756E7061757365A165746F6B656E657454455354"
-
-testMetaOperationsCBOR :: Spec
-testMetaOperationsCBOR = describe "MetaOperations CBOR serialization" $ do
-    it "Serialize/deserialize roundtrip" $
-        assertEqual
-            "Deserialized"
-            (metaOperationsFromBytes $ B8.fromStrict $ metaOperationsToBytes mops1)
-            (Right mops1)
-    it "Serializes to expected CBOR bytestring" $
-        assertEqual
-            "CBOR serialized"
-            (metaOperationsToBytes mops1)
-            mops1ExpectedCBOR
 
 testEncodedTokenEvents :: Spec
 testEncodedTokenEvents = describe "TokenEvents CBOR serialization" $ do
@@ -1527,7 +1493,7 @@ testLockAccountFundsCBOR = describe "LockAccountFunds CBOR" $ do
 
 testTransactionVectors :: Spec
 testTransactionVectors = do
-    let emptyTransaction = TokenUpdateTransaction Seq.empty
+    let emptyTransaction = TokenOperations Seq.empty
     it "empty operations" $ checkOK emptyTransaction "80"
     it "empty operations - indefinite length" $ checkOK emptyTransaction "9FFF"
     let pauseTransaction = singletonTx TokenPause
@@ -1614,7 +1580,7 @@ testTransactionVectors = do
     it "transfer - duplicate memo" $ checkReject "DeserialiseFailure 26 \"Key already set: \\\"memo\\\"\"" "81a1687472616e73666572a4646d656d6f4100646d656d6f410166616d6f756e74c48221186469726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
     it "transfer - duplicate amount" $ checkReject "DeserialiseFailure 36 \"Key already set: \\\"amount\\\"\"" "81a1687472616e73666572a366616d6f756e74c48221186466616d6f756e74c4822118c869726563697069656e74d99d73a201d99d71a101190397035820a26c957377a2461b6d0b9f63e7c9504136181942145e16c926451bbce5502b15"
     let twoTransfers =
-            TokenUpdateTransaction $
+            TokenOperations $
                 Seq.fromList
                     [ TokenTransfer $ TokenTransferBody (TokenAmount 100 2) (accountTokenHolder testAccount) Nothing,
                       TokenTransfer $ TokenTransferBody (TokenAmount 500 2) (accountTokenHolder testAccount) Nothing
@@ -1624,12 +1590,12 @@ testTransactionVectors = do
     testAccount = case addressFromText "4BH5qnFPDfaD3MxnDzfhnu1jAHoBWXnq2i57T6G1eZn1kC194e" of
         Right addr -> addr
         Left e -> error e
-    singletonTx = TokenUpdateTransaction . Seq.singleton
+    singletonTx = TokenOperations . Seq.singleton
     checkDecode expect bs =
         assertEqual
             "decoded transaction"
             expect
-            (tokenUpdateTransactionFromBytes . B8.fromStrict =<< BS16.decode bs)
+            (tokenOperationsFromBytes . B8.fromStrict =<< BS16.decode bs)
     checkOK expect = checkDecode (Right expect)
     checkReject msg = checkDecode (Left msg)
 
@@ -1640,7 +1606,6 @@ tests = parallel $ describe "CBOR" $ do
     testInitializationParametersJSON
     testEncodedTokenOperationsJSON
     testTokenOperationsCBOR
-    testMetaOperationsCBOR
     testEncodedTokenEvents
     testTokenMetadataUrlJSON
     testTokenMetadataUrlCBOR
@@ -1696,16 +1661,16 @@ tests = parallel $ describe "CBOR" $ do
                 AE.encode
                     tt
             )
-    it "Encode and decode TokenTransfer" $ withMaxSuccess 1000 $ forAll genTokenTransfer $ \tt ->
+    it "Encode and decode TokenTransfer" $ withMaxSuccess 1000 $ forAll genTokenTransferBody $ \tt ->
         Right ("", tt)
             === deserialiseFromBytes
-                decodeTokenTransfer
-                (toLazyByteString $ encodeTokenTransfer tt)
-    it "Encode and decode TokenTransfer" $ withMaxSuccess 1000 $ forAll genTokenTransfer $ \tt ->
+                decodeTokenTransferBody
+                (toLazyByteString $ encodeTokenTransferBody tt)
+    it "Encode and decode TokenTransfer" $ withMaxSuccess 1000 $ forAll genTokenTransferBody $ \tt ->
         (Right ("", tt))
             === ( deserialiseFromBytes
-                    decodeTokenTransfer
-                    (toLazyByteString $ encodeTokenTransfer tt)
+                    decodeTokenTransferBody
+                    (toLazyByteString $ encodeTokenTransferBody tt)
                 )
     it "CBOR Encode and decode TokenMetadataUrl (simple)" $ withMaxSuccess 1000 $ forAll genTokenMetadataUrlSimple $ \tmu ->
         Right ("", tmu)
@@ -1727,11 +1692,11 @@ tests = parallel $ describe "CBOR" $ do
             === deserialiseFromBytes
                 decodeCborAccountAddress
                 (toLazyByteString $ encodeCborAccountAddress th)
-    it "Encode and decode TokenUpdateTransaction" $ withMaxSuccess 1000 $ forAll genTokenTransaction $ \tt ->
+    it "Encode and decode TokenOperations" $ withMaxSuccess 1000 $ forAll genTokenTransaction $ \tt ->
         Right ("", tt)
             === deserialiseFromBytes
-                decodeTokenUpdateTransaction
-                (toLazyByteString $ encodeTokenUpdateTransaction tt)
+                decodeTokenOperations
+                (toLazyByteString $ encodeTokenOperations tt)
     it "Encode and decode TokenOperation" $ withMaxSuccess 1000 $ forAll genTokenOperation $ \tt ->
         Right ("", tt)
             === deserialiseFromBytes
@@ -1741,13 +1706,3 @@ tests = parallel $ describe "CBOR" $ do
         Right tt === decodeTokenEvent (encodeTokenEvent tt)
     it "Encode and decode TokenRejectReason" $ withMaxSuccess 1000 $ forAll genTokenRejectReason $ \tt ->
         Right tt === decodeTokenRejectReason (encodeTokenRejectReason tt)
-    it "CBOR encode and decode MetaOperations" $
-        withMaxSuccess 1000 $
-            forAll genMetaOperations $ \tr ->
-                Right tr
-                    === metaOperationsFromBytes
-                        (B8.fromStrict $ metaOperationsToBytes tr)
-    it "JSON encode and decode MetaOperations" $
-        withMaxSuccess 1000 $
-            forAll genMetaOperations $
-                \tr -> Right tr == AE.eitherDecode (AE.encode tr)

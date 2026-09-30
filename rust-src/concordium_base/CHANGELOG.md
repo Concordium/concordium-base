@@ -1,6 +1,6 @@
 ## Unreleased
 - Added `UpdatePayload::MaxLockDuration`, `UpdateType::UpdateMaxLockDuration`, and P11 token-parameters authorization wire support.
-- Extend `TokenUpdatePayload` with a new "tokenless" variant, which requires operations to carry the token ID.
+- Extend `TokenUpdatePayload` with a new "unscoped" variant, which requires operations to carry the token ID.
 - Removed `Buffer::start`, `Buffer::start_hint` and `Buffer::result` from the trait `concordium_base::common::Buffer`. 
 - Added `protocol_level_locks` module with types for PLT locks:
   - `LockId`

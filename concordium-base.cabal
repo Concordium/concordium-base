@@ -334,6 +334,7 @@ test-suite test
       Types.AmountFraction
       Types.AmountSpec
       Types.CBOR
+      Types.GRPC2Spec
       Types.ParametersSpec
       Types.PayloadSerializationSpec
       Types.PayloadSpec

@@ -359,11 +359,11 @@ genPayloadToken pv =
         [ do
             tokenId <- genTokenId
             operations <- EncodedTokenOperations <$> genRawCbor
-            return $ TokenUpdate (SingleTokenUpdate tokenId operations)
+            return $ TokenUpdate (ScopedTokenUpdate tokenId operations)
         ]
             ++ [ do
-                    operations <- EncodedMetaOperations <$> genRawCbor
-                    return $ TokenUpdate (TokenlessUpdate operations)
+                    operations <- EncodedOperations <$> genRawCbor
+                    return $ TokenUpdate (UnscopedTokenUpdate operations)
                | pv >= P11
                ]
 
@@ -828,9 +828,7 @@ genEvent spv =
                 <*> genTokenHolder
                 <*> genTokenHolder
                 <*> genTokenAmount
-                <*> liftArbitrary genMemo
-                <*> (if supportsPLTLocks spv then liftArbitrary genLockId else return Nothing)
-                <*> (if supportsPLTLocks spv then liftArbitrary genLockId else return Nothing),
+                <*> liftArbitrary genMemo,
               TokenMint <$> genTokenId <*> genTokenHolder <*> genTokenAmount,
               TokenBurn <$> genTokenId <*> genTokenHolder <*> genTokenAmount,
               TokenCreated <$> genCreatePLT
@@ -839,7 +837,9 @@ genEvent spv =
     maybeLockEvents
         | supportsPLTLocks spv =
             [ LockCreated <$> genLockId <*> genRawCbor,
-              LockDestroyed <$> genLockId
+              LockDestroyed <$> genLockId,
+              LockAmount <$> genTokenHolder <*> genLockId <*> genTokenId <*> genTokenAmount,
+              UnlockAmount <$> genTokenHolder <*> genLockId <*> genTokenId <*> genTokenAmount
             ]
         | otherwise = []
 

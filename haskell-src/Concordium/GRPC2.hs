@@ -16,6 +16,7 @@ module Concordium.GRPC2 (
 
     -- * Helpers
     mkSerialize,
+    convertAccountTransaction,
     mkWord64,
     mkWord32,
     mkWord16,
@@ -30,6 +31,7 @@ import qualified Data.ByteString.Short as BSS
 import Data.Coerce
 import Data.Foldable (toList)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (catMaybes)
 import qualified Data.ProtoLens as Proto
 import qualified Data.ProtoLens.Combinators as Proto
 import qualified Data.ProtoLens.Field
@@ -897,20 +899,21 @@ instance ToProto SupplementedTransactionSummary where
                                 )
                 _ -> Left CEInvalidUpdateResult
 
--- | Convert an event to a 'Proto.TokenEvent'. Returns @Left ()@ if the event type is not
---  one of the Token Update event types.
+-- | Convert an event to a 'Proto.TokenEvent'. Returns @Left ()@ when the event
+-- is a lock event, which is represented only in the unified operation-event list.
 tokenUpdateEventToProto :: Event' s -> Either () Proto.TokenEvent
 tokenUpdateEventToProto TokenModuleEvent{..} =
-    Right . Proto.make $
+    Right . Proto.make $ do
+        PLTFields.tokenId .= toProto etmeTokenId
         PLTFields.moduleEvent
             .= Proto.make
                 ( do
                     PLTFields.type' .= toProto etmeType
                     PLTFields.details .= toProto etmeDetails
-                    PLTFields.tokenId .= toProto etmeTokenId
                 )
 tokenUpdateEventToProto TokenTransfer{..} =
-    Right . Proto.make $
+    Right . Proto.make $ do
+        PLTFields.tokenId .= toProto ettTokenId
         PLTFields.transferEvent
             .= Proto.make
                 ( do
@@ -918,29 +921,30 @@ tokenUpdateEventToProto TokenTransfer{..} =
                     PLTFields.to .= toProto ettTo
                     PLTFields.amount .= toProto ettAmount
                     PLTFields.maybe'memo .= fmap toProto ettMemo
-                    PLTFields.tokenId .= toProto ettTokenId
-                    PLTFields.maybe'fromLock .= fmap toProto ettFromLock
-                    PLTFields.maybe'toLock .= fmap toProto ettToLock
                 )
 tokenUpdateEventToProto TokenMint{..} =
-    Right . Proto.make $
+    Right . Proto.make $ do
+        PLTFields.tokenId .= toProto etmTokenId
         PLTFields.mintEvent
             .= Proto.make
                 ( do
                     PLTFields.target .= toProto etmTarget
                     PLTFields.amount .= toProto etmAmount
-                    PLTFields.tokenId .= toProto etmTokenId
                 )
 tokenUpdateEventToProto TokenBurn{..} =
-    Right . Proto.make $
+    Right . Proto.make $ do
+        PLTFields.tokenId .= toProto etbTokenId
         PLTFields.burnEvent
             .= Proto.make
                 ( do
                     PLTFields.target .= toProto etbTarget
                     PLTFields.amount .= toProto etbAmount
-                    PLTFields.tokenId .= toProto etbTokenId
                 )
-tokenUpdateEventToProto LockCreated{..} =
+tokenUpdateEventToProto _ = Left ()
+
+-- | Convert an event to a 'Proto.LockEvent'.
+lockEventToProto :: Event' s -> Either () Proto.LockEvent
+lockEventToProto LockCreated{..} =
     Right . Proto.make $
         PLTFields.lockCreateEvent
             .= Proto.make
@@ -948,11 +952,48 @@ tokenUpdateEventToProto LockCreated{..} =
                     PLTFields.lockId .= toProto elcLockId
                     PLTFields.lockConfig .= toProto elcLockConfig
                 )
-tokenUpdateEventToProto LockDestroyed{..} =
+lockEventToProto LockDestroyed{..} =
     Right . Proto.make $
         PLTFields.lockDestroyEvent
             .= Proto.make (PLTFields.lockId .= toProto eldLockId)
-tokenUpdateEventToProto _ = Left ()
+lockEventToProto UnlockAmount{..} =
+    Right . Proto.make $
+        PLTFields.unlockAmountEvent
+            .= Proto.make
+                ( do
+                    PLTFields.tokenHolder .= toProto euaTokenHolder
+                    PLTFields.lockId .= toProto euaLockId
+                    PLTFields.tokenId .= toProto euaTokenId
+                    PLTFields.amount .= toProto euaAmount
+                )
+lockEventToProto LockAmount{..} =
+    Right . Proto.make $
+        PLTFields.lockAmountEvent
+            .= Proto.make
+                ( do
+                    PLTFields.tokenHolder .= toProto elaTokenHolder
+                    PLTFields.lockId .= toProto elaLockId
+                    PLTFields.tokenId .= toProto elaTokenId
+                    PLTFields.amount .= toProto elaAmount
+                )
+lockEventToProto _ = Left ()
+
+-- | Convert an event to a unified operation event, retaining its token event
+-- when applicable so both fields can use the same converted value.
+tokenUpdateOperationEventToProto :: Event' s -> Either () (Maybe Proto.TokenEvent, Proto.OperationEvent)
+tokenUpdateOperationEventToProto event =
+    case tokenUpdateEventToProto event of
+        Right tokenEvent ->
+            Right
+                ( Just tokenEvent,
+                  Proto.make $ PLTFields.tokenEvent .= tokenEvent
+                )
+        Left () -> do
+            lockEvent <- lockEventToProto event
+            Right
+                ( Nothing,
+                  Proto.make $ PLTFields.lockEvent .= lockEvent
+                )
 
 instance ToProto TokenHolder where
     type Output TokenHolder = Proto.TokenHolder
@@ -1742,11 +1783,13 @@ convertAccountTransaction ty cost sender mbSponsorDetails result = case ty of
                     Right . Proto.make $ ProtoFields.delegationConfigured . ProtoFields.events .= v
             TTTokenUpdate ->
                 mkSuccess <$> do
-                    protoEvents <-
+                    convertedEvents <-
                         left (const CEInvalidTransactionResult) $
-                            mapM tokenUpdateEventToProto events
-                    Right . Proto.make $
-                        ProtoFields.tokenUpdateEffect . ProtoFields.events .= protoEvents
+                            mapM tokenUpdateOperationEventToProto events
+                    let (maybeTokenEvents, operationEvents) = unzip convertedEvents
+                    Right . Proto.make $ do
+                        ProtoFields.tokenUpdateEffect . PLTFields.tokenEvents .= catMaybes maybeTokenEvents
+                        ProtoFields.tokenUpdateEffect . PLTFields.events .= operationEvents
   where
     mkSuccess :: Proto.AccountTransactionEffects -> Proto.AccountTransactionDetails
     mkSuccess effects = Proto.make $ do
