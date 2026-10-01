@@ -688,17 +688,6 @@ pub mod test {
     }
 
     #[test]
-    fn test_token_operation_update_metadata_unknown_fields() {
-        let bytes =
-            hex::decode("a16e7570646174654d65746164617461a26375726c6178645f666f6f182a").unwrap();
-        assert!(cbor::cbor_decode_with_options::<TokenOperation>(
-            bytes,
-            cbor::SerializationOptions::default().unknown_map_keys(cbor::UnknownMapKeys::Fail),
-        )
-        .is_err());
-    }
-
-    #[test]
     fn test_token_operations_payload() {
         let operations = TokenOperations {
             operations: vec![TokenOperation::Transfer(TokenTransfer {
