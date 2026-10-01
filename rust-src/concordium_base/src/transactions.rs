@@ -3369,7 +3369,7 @@ pub mod construct {
 /// for transaction.
 pub mod send {
     use super::*;
-    use crate::protocol_level_tokens::{TokenId, TokenOperations};
+    use crate::protocol_level_tokens::{Operations, TokenId, TokenOperations};
 
     /// Construct a native coin (CCD) transfer transaction.
     pub fn transfer(
@@ -3409,7 +3409,7 @@ pub mod send {
     /// of the token update operations encoded in the given CBOR.
     ///
     /// Update operations can be created using the functions in
-    /// [`operations`](crate::protocol_level_tokens::operations).
+    /// [`token_operations`](crate::protocol_level_tokens::token_operations).
     pub fn token_update_operations(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -3427,6 +3427,20 @@ pub mod send {
             operations,
         )
         .sign(signer)
+    }
+
+    /// Construct and sign an unscoped token update transaction.
+    ///
+    /// Operations can be created using
+    /// [`operations`](crate::protocol_level_tokens::operations).
+    pub fn operations(
+        signer: &impl ExactSizeTransactionSigner,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        operations: &Operations,
+    ) -> AccountTransaction<EncodedPayload> {
+        construct::operations(signer.num_keys(), sender, nonce, expiry, operations).sign(signer)
     }
 
     /// Make an encrypted transfer. The payload can be constructed using

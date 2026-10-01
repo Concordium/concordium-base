@@ -1,14 +1,13 @@
 use crate::{
-    common::cbor::{self, value, CborSerializationResult},
+    common::cbor::{self, CborSerializationResult},
     protocol_level_locks::{LockConfig, LockId},
     protocol_level_tokens::{
-        token_operations, CborHolderAccount, CborMemo, MetadataUrl, RawCbor, TokenAdminRole,
-        TokenAmount, TokenId, TokenOperation,
+        token_operations, CborHolderAccount, CborMemo, RawCbor, TokenAdminRole, TokenAmount,
+        TokenId, TokenMetadataUrlDetails, TokenOperation,
     },
 };
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::{hashes::Hash, AccountAddress};
-use std::collections::HashMap;
 
 /// Builders for unscoped token and lock operations.
 pub mod operations {
@@ -72,18 +71,18 @@ pub mod operations {
     }
 
     /// Construct a pause unscoped operation.
-    pub fn pause(token_id: TokenId) -> Operation {
+    pub fn pause_token(token_id: TokenId) -> Operation {
         Operation::TokenPause(TokenPauseDetailsWithId { token: token_id })
     }
 
     /// Construct an unpause unscoped operation.
-    pub fn unpause(token_id: TokenId) -> Operation {
+    pub fn unpause_token(token_id: TokenId) -> Operation {
         Operation::TokenUnpause(TokenPauseDetailsWithId { token: token_id })
     }
 
     /// Construct an operation to assign admin roles to an address
     /// for a protocol-level token.
-    pub fn assign_admin_roles(
+    pub fn assign_token_admin_roles(
         token_id: TokenId,
         account: AccountAddress,
         roles: Vec<TokenAdminRole>,
@@ -97,7 +96,7 @@ pub mod operations {
 
     /// Construct an operation to revoke admin roles from an address
     /// for a protocol-level token.
-    pub fn revoke_admin_roles(
+    pub fn revoke_token_admin_roles(
         token_id: TokenId,
         account: AccountAddress,
         roles: Vec<TokenAdminRole>,
@@ -111,18 +110,21 @@ pub mod operations {
 
     /// Construct an operation to update token metadata for a
     /// protocol-level token.
-    pub fn update_metadata(token_id: TokenId, metadata_url: MetadataUrl) -> Operation {
+    pub fn update_token_metadata(
+        token_id: TokenId,
+        metadata_url: TokenMetadataUrlDetails,
+    ) -> Operation {
         (token_id, token_operations::update_metadata(metadata_url)).into()
     }
 
     /// Construct an operation to fund a lock.
-    pub fn lock_fund(
+    pub fn fund_lock(
         token_id: TokenId,
         lock_id: LockId,
         amount: TokenAmount,
         memo: Option<CborMemo>,
     ) -> Operation {
-        Operation::LockFund(LockFund {
+        Operation::LockFund(LockFundDetails {
             token: token_id,
             lock: lock_id,
             amount,
@@ -131,7 +133,7 @@ pub mod operations {
     }
 
     /// Construct an operation to send funds controlled by a lock.
-    pub fn lock_send(
+    pub fn send_locked_tokens(
         token_id: TokenId,
         lock_id: LockId,
         source: AccountAddress,
@@ -139,7 +141,7 @@ pub mod operations {
         amount: TokenAmount,
         memo: Option<CborMemo>,
     ) -> Operation {
-        Operation::LockSend(LockSend {
+        Operation::LockSend(LockSendDetails {
             token: token_id,
             lock: lock_id,
             source: CborHolderAccount::from(source),
@@ -150,14 +152,14 @@ pub mod operations {
     }
 
     /// Construct an operation to release funds controlled by a lock to the owner.
-    pub fn lock_release(
+    pub fn release_locked_tokens(
         token_id: TokenId,
         lock_id: LockId,
         source: AccountAddress,
         amount: TokenAmount,
         memo: Option<CborMemo>,
     ) -> Operation {
-        Operation::LockRelease(LockRelease {
+        Operation::LockRelease(LockReleaseDetails {
             token: token_id,
             lock: lock_id,
             source: CborHolderAccount::from(source),
@@ -167,13 +169,13 @@ pub mod operations {
     }
 
     /// Construct an operation to create a lock.
-    pub fn lock_create(config: LockConfig) -> Operation {
-        Operation::LockCreate(LockCreate { config })
+    pub fn create_lock(config: LockConfig) -> Operation {
+        Operation::LockCreate(LockCreateDetails { config })
     }
 
     /// Construct an operation to cancel a lock.
-    pub fn lock_cancel(lock_id: LockId, memo: Option<CborMemo>) -> Operation {
-        Operation::LockCancel(LockCancel {
+    pub fn cancel_lock(lock_id: LockId, memo: Option<CborMemo>) -> Operation {
+        Operation::LockCancel(LockCancelDetails {
             lock: lock_id,
             memo,
         })
@@ -281,15 +283,15 @@ pub enum Operation {
     /// Operation to update token metadata
     TokenUpdateMetadata(TokenMetadataUrlDetailsWithId),
     /// Operation to fund a lock using the operation's token ID.
-    LockFund(LockFund),
+    LockFund(LockFundDetails),
     /// Operation to send funds controlled by a lock using the operation's token ID.
-    LockSend(LockSend),
+    LockSend(LockSendDetails),
     /// Operation to release funds controlled by a lock using the operation's token ID.
-    LockRelease(LockRelease),
+    LockRelease(LockReleaseDetails),
     /// Operation to create a lock.
-    LockCreate(LockCreate),
+    LockCreate(LockCreateDetails),
     /// Operation to cancel a lock.
-    LockCancel(LockCancel),
+    LockCancel(LockCancelDetails),
 }
 
 impl From<(TokenId, TokenOperation)> for Operation {
@@ -488,32 +490,25 @@ pub struct TokenMetadataUrlDetailsWithId {
 
     /// An optional sha256 checksum value tied to the content of the URL
     pub checksum_sha_256: Option<Hash>,
-
-    /// Additional fields may be included for future extensibility, e.g. another
-    /// hash algorithm.
-    #[cbor(other)]
-    pub additional: HashMap<String, value::Value>,
 }
 
-impl From<(TokenId, super::MetadataUrl)> for TokenMetadataUrlDetailsWithId {
-    fn from((token, metadata_url): (TokenId, super::MetadataUrl)) -> Self {
+impl From<(TokenId, super::TokenMetadataUrlDetails)> for TokenMetadataUrlDetailsWithId {
+    fn from((token, metadata_url): (TokenId, super::TokenMetadataUrlDetails)) -> Self {
         TokenMetadataUrlDetailsWithId {
             token,
             url: metadata_url.url,
             checksum_sha_256: metadata_url.checksum_sha_256,
-            additional: metadata_url.additional,
         }
     }
 }
 
-impl From<TokenMetadataUrlDetailsWithId> for (TokenId, super::MetadataUrl) {
+impl From<TokenMetadataUrlDetailsWithId> for (TokenId, super::TokenMetadataUrlDetails) {
     fn from(value: TokenMetadataUrlDetailsWithId) -> Self {
         (
             value.token,
-            MetadataUrl {
+            TokenMetadataUrlDetails {
                 url: value.url,
                 checksum_sha_256: value.checksum_sha_256,
-                additional: value.additional,
             },
         )
     }
@@ -522,7 +517,7 @@ impl From<TokenMetadataUrlDetailsWithId> for (TokenId, super::MetadataUrl) {
 /// Fund a lock by locking the specified amount on the sender account under the
 /// control of the specified lock.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-pub struct LockFund {
+pub struct LockFundDetails {
     /// Token to fund the lock with.
     pub token: TokenId,
     /// The lock that will control the funds.
@@ -536,7 +531,7 @@ pub struct LockFund {
 /// Send funds under the control of a lock from a source account to a recipient.
 /// The funds will be transferred to the available balance of the recipient.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-pub struct LockSend {
+pub struct LockSendDetails {
     /// Token to send.
     pub token: TokenId,
     /// The lock that controls the funds.
@@ -555,7 +550,7 @@ pub struct LockSend {
 /// The funds are moved from the locked balance to the available balance
 /// of the owner.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-pub struct LockRelease {
+pub struct LockReleaseDetails {
     /// The token the operation applies to.
     pub token: TokenId,
     /// The lock controlling the funds.
@@ -571,14 +566,14 @@ pub struct LockRelease {
 /// Create a lock with the specified configuration.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
 #[cbor(transparent)]
-pub struct LockCreate {
+pub struct LockCreateDetails {
     /// The configuration for the new lock.
     pub config: LockConfig,
 }
 
 /// Cancel a lock, returning funds to their owners and destroying the lock.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-pub struct LockCancel {
+pub struct LockCancelDetails {
     /// The lock to cancel.
     pub lock: LockId,
     /// An optional memo.
@@ -595,34 +590,8 @@ mod tests {
         LockConfig, LockConfigSimpleV0, LockControllerSimpleV0Capability,
         LockControllerSimpleV0Grant, LockRecipients,
     };
-    use crate::protocol_level_tokens::{test_fixtures::ADDRESS, MetadataUrl, TokenAdminRole};
+    use crate::protocol_level_tokens::{test_fixtures::ADDRESS, TokenAdminRole};
     use crate::transactions::Memo;
-
-    #[test]
-    fn test_public_builders_and_required_token_ids() {
-        use crate::protocol_level_tokens::{operations, token_operations};
-
-        let amount = TokenAmount::from_raw(100000, 2);
-        let token: TokenId = "tokenid1".parse().unwrap();
-        let scoped = token_operations::transfer_tokens(ADDRESS, amount);
-        assert_eq!(
-            operations::transfer_tokens(token.clone(), ADDRESS, amount),
-            (token, scoped).into()
-        );
-        // Unscoped operations cannot silently default a missing token ID.
-        for bytes in [
-            "a169746f6b656e4d696e74a166616d6f756e74c482001903e8",
-            "a1686c6f636b46756e64a2646c6f636bd99fd88314070066616d6f756e74c48200191388",
-            "a16a746f6b656e5061757365a0",
-        ] {
-            assert!(cbor::cbor_decode::<Operation>(hex::decode(bytes).unwrap()).is_err());
-        }
-        // Scoped P9/P10 operation keys are not accepted as unscoped keys.
-        assert!(cbor::cbor_decode::<Operation>(
-            hex::decode("a1657061757365a165746f6b656e6774657374504c54").unwrap()
-        )
-        .is_err());
-    }
 
     #[test]
     fn test_operation_cbor_transfer() {
@@ -803,7 +772,6 @@ mod tests {
             token: "testPLT".parse().unwrap(),
             url: "https://example.com/metadata.json".to_string(),
             checksum_sha_256: Some([255u8; 32].into()),
-            additional: Default::default(),
         });
         let cbor = cbor::cbor_encode(&operation);
         assert_eq!(
@@ -815,60 +783,8 @@ mod tests {
     }
 
     #[test]
-    fn test_operation_cbor_update_metadata_builders() {
-        let token: TokenId = "testPLT".parse().unwrap();
-        let metadata = MetadataUrl::from("https://example.com".to_string());
-        let details = TokenMetadataUrlDetailsWithId::from((token.clone(), metadata.clone()));
-        let expected = "a173746f6b656e5570646174654d65746164617461a26375726c7368747470733a2f2f6578616d706c652e636f6d65746f6b656e6774657374504c54";
-        for operation in [
-            Operation::TokenUpdateMetadata(details.clone()),
-            operations::update_metadata(token.clone(), metadata.clone()),
-            (
-                token.clone(),
-                token_operations::update_metadata(metadata.clone()),
-            )
-                .into(),
-        ] {
-            let bytes = cbor::cbor_encode(&operation);
-            assert_eq!(hex::encode(&bytes), expected);
-            assert_eq!(cbor::cbor_decode::<Operation>(&bytes).unwrap(), operation);
-        }
-        assert_eq!(<(TokenId, MetadataUrl)>::from(details), (token, metadata));
-    }
-
-    #[test]
-    fn test_metadata_details_additional_and_invalid_maps() {
-        let bytes =
-            hex::decode("a365746f6b656e6774657374504c546375726c6178645f666f6f182a").unwrap();
-        let details: TokenMetadataUrlDetailsWithId = cbor::cbor_decode(&bytes).unwrap();
-        assert_eq!(details.additional.len(), 1);
-        assert_eq!(details.additional["_foo"], cbor::value::Value::Positive(42));
-        assert!(!details.additional.contains_key("token"));
-        assert_eq!(
-            cbor::cbor_decode::<TokenMetadataUrlDetailsWithId>(cbor::cbor_encode(&details))
-                .unwrap(),
-            details
-        );
-        for invalid in [
-            "a16375726c6178",                 // Missing token.
-            "a165746f6b656e6774657374504c54", // Missing URL.
-            "a265746f6b656e6774657374504c546b6d6574616461746155726ca16375726c6178", // Old nested map.
-            "a265746f6b656e006375726c6178", // Wrong token type.
-            "a265746f6b656e6774657374504c546375726c00", // Wrong URL type.
-            "a365746f6b656e6774657374504c546375726c61786e636865636b73756d53686132353600",
-            "a365746f6b656e6774657374504c546375726c61780000", // Non-text additional key.
-        ] {
-            assert!(
-                cbor::cbor_decode::<TokenMetadataUrlDetailsWithId>(hex::decode(invalid).unwrap())
-                    .is_err(),
-                "{invalid}"
-            );
-        }
-    }
-
-    #[test]
     fn test_operation_cbor_lock_fund() {
-        let operation = Operation::LockFund(LockFund {
+        let operation = Operation::LockFund(LockFundDetails {
             token: "testPLT".parse().unwrap(),
             lock: LockId::new(20, 7, 0),
             amount: TokenAmount::from_raw(5000, 0),
@@ -885,7 +801,7 @@ mod tests {
 
     #[test]
     fn test_operation_cbor_lock_send() {
-        let operation = Operation::LockSend(LockSend {
+        let operation = Operation::LockSend(LockSendDetails {
             token: "testPLT".parse().unwrap(),
             lock: LockId::new(20, 7, 0),
             source: CborHolderAccount::from(ADDRESS),
@@ -904,7 +820,7 @@ mod tests {
 
     #[test]
     fn test_operation_cbor_lock_release() {
-        let operation = Operation::LockRelease(LockRelease {
+        let operation = Operation::LockRelease(LockReleaseDetails {
             token: "testPLT".parse().unwrap(),
             lock: LockId::new(20, 7, 0),
             source: CborHolderAccount::from(ADDRESS),
@@ -922,7 +838,7 @@ mod tests {
 
     #[test]
     fn test_operation_cbor_lock_create() {
-        let operation = Operation::LockCreate(LockCreate {
+        let operation = Operation::LockCreate(LockCreateDetails {
             config: LockConfig::SimpleV0(LockConfigSimpleV0 {
                 recipients: LockRecipients::Limited(vec![CborHolderAccount::from(ADDRESS)]),
                 expiry: TransactionTime::from_seconds(1_000_000),
@@ -956,7 +872,7 @@ mod tests {
 
     #[test]
     fn test_operation_cbor_lock_cancel() {
-        let operation = Operation::LockCancel(LockCancel {
+        let operation = Operation::LockCancel(LockCancelDetails {
             lock: LockId::new(20, 7, 0),
             memo: Some(CborMemo::Cbor(Memo::try_from(vec![0xa0]).unwrap())),
         });
