@@ -1,14 +1,22 @@
 use crate::common::cbor::{
     CborDecoder, CborDeserialize, CborEncoder, CborMaybeKnown, CborSerialize,
 };
-use crate::protocol_level_tokens::MetadataUrl;
 use crate::{
     common::cbor::{self, CborSerializationResult},
     protocol_level_tokens::{CborHolderAccount, CoinInfo, RawCbor, TokenAmount, TokenId},
     transactions::Memo,
 };
 use concordium_base_derive::{CborDeserialize, CborSerialize, Serialize};
-use concordium_contracts_common::AccountAddress;
+use concordium_contracts_common::{hashes::Hash, AccountAddress};
+
+/// Details of an operation to update token metadata.
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+pub struct TokenMetadataUrlDetails {
+    /// A string field representing the URL.
+    pub url: String,
+    /// An optional SHA-256 checksum tied to the content of the URL.
+    pub checksum_sha_256: Option<Hash>,
+}
 
 /// Module that implements easy construction of protocol level token operations.
 ///
@@ -140,7 +148,7 @@ pub mod token_operations {
 
     /// Construct operation to update token metadata for a protocol
     /// level token.
-    pub fn update_metadata(metadata_url: MetadataUrl) -> TokenOperation {
+    pub fn update_metadata(metadata_url: TokenMetadataUrlDetails) -> TokenOperation {
         TokenOperation::UpdateMetadata(metadata_url)
     }
 }
@@ -244,7 +252,7 @@ pub enum TokenOperation {
     /// Operation to revoke roles for an account for a protocol level token.
     RevokeAdminRoles(TokenUpdateAdminRolesDetails),
     /// Operation to update token metadata
-    UpdateMetadata(MetadataUrl),
+    UpdateMetadata(TokenMetadataUrlDetails),
 }
 
 /// Details of an operation that changes a protocol level token supply.
@@ -413,8 +421,6 @@ impl CborDeserialize for TokenAdminRole {
 
 #[cfg(test)]
 pub mod test {
-    use std::collections::HashMap;
-
     use super::*;
     use crate::{
         common::{
@@ -651,10 +657,9 @@ pub mod test {
 
     #[test]
     fn test_token_operation_update_metadata() {
-        let operation = TokenOperation::UpdateMetadata(MetadataUrl {
+        let operation = TokenOperation::UpdateMetadata(TokenMetadataUrlDetails {
             url: "SomeUrl".to_string(),
             checksum_sha_256: None,
-            additional: HashMap::new(),
         });
 
         let cbor = cbor::cbor_encode(&operation);
@@ -664,6 +669,33 @@ pub mod test {
         );
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_token_operation_update_metadata_checksum() {
+        let details = TokenMetadataUrlDetails {
+            url: "SomeUrl".to_string(),
+            checksum_sha_256: Some([255u8; 32].into()),
+        };
+        let operation = token_operations::update_metadata(details.clone());
+        assert_eq!(operation, TokenOperation::UpdateMetadata(details));
+        let bytes = cbor::cbor_encode(&operation);
+        assert_eq!(hex::encode(&bytes), "a16e7570646174654d65746164617461a26375726c67536f6d6555726c6e636865636b73756d5368613235365820ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        assert_eq!(
+            cbor::cbor_decode::<TokenOperation>(&bytes).unwrap(),
+            operation
+        );
+    }
+
+    #[test]
+    fn test_token_operation_update_metadata_unknown_fields() {
+        let bytes =
+            hex::decode("a16e7570646174654d65746164617461a26375726c6178645f666f6f182a").unwrap();
+        assert!(cbor::cbor_decode_with_options::<TokenOperation>(
+            bytes,
+            cbor::SerializationOptions::default().unknown_map_keys(cbor::UnknownMapKeys::Fail),
+        )
+        .is_err());
     }
 
     #[test]
