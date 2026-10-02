@@ -11,6 +11,7 @@ use concordium_smart_contract_engine::{
     },
     InterpreterEnergy,
 };
+use concordium_wasm::machine::CopyMeteringEnabled;
 use concordium_wasm::{
     artifact::{ArtifactNamedImport, TryFromImport},
     machine::{Host, NoInterrupt, Value},
@@ -335,12 +336,18 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let module =
             validate::validate_module(ValidationConfig::V1, &NoDuplicateImport, &skeleton).unwrap();
         let artifact = module.compile::<ArtifactNamedImport>().unwrap();
+
         for n in [0, 1, 10000, 100000, 200000].iter() {
             group.bench_with_input(format!("execute n = {}", n), n, |b, m| {
                 b.iter(|| {
                     assert!(
                         artifact
-                            .run(&mut TrapHost, "foo_extern", &[Value::I64(*m)])
+                            .run(
+                                &mut TrapHost,
+                                "foo_extern",
+                                &[Value::I64(*m)],
+                                CopyMeteringEnabled::False
+                            )
                             .is_ok(),
                         "Precondition violation."
                     )
@@ -358,7 +365,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 b.iter(|| {
                     assert!(
                         artifact
-                            .run(&mut TrapHost, "foo_extern", &[Value::I32(*m)])
+                            .run(
+                                &mut TrapHost,
+                                "foo_extern",
+                                &[Value::I32(*m)],
+                                CopyMeteringEnabled::False
+                            )
                             .is_ok(),
                         "Precondition violation."
                     )
@@ -373,7 +385,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 b.iter(|| {
                     assert!(
                         artifact
-                            .run(&mut TrapHost, "write_u32", &[Value::I32(*m)])
+                            .run(
+                                &mut TrapHost,
+                                "write_u32",
+                                &[Value::I32(*m)],
+                                CopyMeteringEnabled::False
+                            )
                             .is_ok(),
                         "Precondition violation."
                     )
@@ -388,7 +405,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 b.iter(|| {
                     assert!(
                         artifact
-                            .run(&mut TrapHost, "write_u64", &[Value::I32(*m)])
+                            .run(
+                                &mut TrapHost,
+                                "write_u64",
+                                &[Value::I32(*m)],
+                                CopyMeteringEnabled::False
+                            )
                             .is_ok(),
                         "Precondition violation."
                     )
@@ -403,7 +425,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 b.iter(|| {
                     assert!(
                         artifact
-                            .run(&mut TrapHost, "write_u32_u8", &[Value::I32(*m)])
+                            .run(
+                                &mut TrapHost,
+                                "write_u32_u8",
+                                &[Value::I32(*m)],
+                                CopyMeteringEnabled::False
+                            )
                             .is_ok(),
                         "Precondition violation."
                     )
@@ -418,7 +445,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 b.iter(|| {
                     assert!(
                         artifact
-                            .run(&mut TrapHost, "write_u64_u8", &[Value::I32(*m)])
+                            .run(
+                                &mut TrapHost,
+                                "write_u64_u8",
+                                &[Value::I32(*m)],
+                                CopyMeteringEnabled::False
+                            )
                             .is_ok(),
                         "Precondition violation."
                     )
@@ -460,7 +492,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         activation_frames: MAX_ACTIVATION_FRAMES,
                     };
                     let r = artifact
-                        .run(&mut host, name, args)
+                        .run(&mut host, name, args, CopyMeteringEnabled::True)
                         .expect_err("Precondition violation, did not terminate with an error.");
                     assert!(
                         r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>()
@@ -652,7 +684,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 b.iter(|| {
                     let mut host = setup_init_host();
                     let r = artifact
-                        .run(&mut host, name, args)
+                        .run(&mut host, name, args, CopyMeteringEnabled::True)
                         .expect_err("Execution should fail due to out of energy.");
                     assert!(
                         r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>()
@@ -673,7 +705,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     let mut host =
                         setup_receive_host(State::new(state), Parameter::new_unchecked(params));
                     let r = artifact
-                        .run(&mut host, name, args)
+                        .run(&mut host, name, args, CopyMeteringEnabled::True)
                         .expect_err("Execution should fail due to out of energy.");
                     assert!(
                         r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>()

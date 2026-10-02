@@ -11,6 +11,7 @@
 //! high-level functionality. The remaining modules contain low-level details.
 
 pub mod artifact;
+pub mod artifact_disassembler;
 mod artifact_input;
 mod artifact_output;
 pub mod constants;

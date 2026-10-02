@@ -1,5 +1,6 @@
 use anyhow::{bail, ensure};
 use clap::AppSettings;
+use concordium_wasm::machine::CopyMeteringEnabled;
 use concordium_wasm::{
     artifact::{Artifact, ArtifactNamedImport, CompiledFunction},
     machine::{ExecutionOutcome, Host, NoInterrupt, RunResult, RuntimeError, RuntimeStack, Value},
@@ -202,7 +203,7 @@ fn invoke_update(
     name: &str,
     args: &[Value],
 ) -> anyhow::Result<Option<Value>> {
-    match artifact.run(&mut TrapHost, name, args)? {
+    match artifact.run(&mut TrapHost, name, args, CopyMeteringEnabled::False)? {
         ExecutionOutcome::Success { result, .. } => Ok(result),
         ExecutionOutcome::Interrupted { reason, .. } => match reason {}, // impossible case
     }
@@ -213,7 +214,12 @@ fn invoke_update_metering(
     name: &str,
     args: &[Value],
 ) -> anyhow::Result<Option<Value>> {
-    let run = artifact.run(&mut MeteringHost { call_depth: 0 }, name, args)?;
+    let run = artifact.run(
+        &mut MeteringHost { call_depth: 0 },
+        name,
+        args,
+        CopyMeteringEnabled::False,
+    )?;
     match run {
         ExecutionOutcome::Success { result, .. } => Ok(result),
         ExecutionOutcome::Interrupted { reason, .. } => match reason {},
