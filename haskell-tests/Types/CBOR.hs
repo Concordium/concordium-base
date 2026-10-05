@@ -508,7 +508,7 @@ encTops2 =
     EncodedTokenOperations $
         rawCborFromBytes $
             CBOR.toStrictByteString $
-                encodeTokenOperations tops1
+                encodeTokenOperations tops2
 
 -- | A dummy 'CborAccountAddress' value.
 dummyCborHolder :: CborAccountAddress
@@ -580,7 +580,7 @@ testEncodedTokenOperationsJSON = describe "EncodedTokenOperations JSON serializa
     it "Serializes to expected JSON object" $
         case AE.toJSON encTops1 of
             AE.Array v -> case V.head v of
-                AE.Object o -> assertBool "Does not contain field amount" $ AE.member "transfer" o
+                AE.Object o -> assertBool "Does not contain field transfer" $ AE.member "transfer" o
                 _ -> assertFailure "Does not encode to JSON object"
             _ -> assertFailure "Does not encode to JSON array"
 
@@ -595,7 +595,7 @@ testEncodedTokenOperationsJSON = describe "EncodedTokenOperations JSON serializa
     it "Serializes to expected JSON object (P11 ops)" $
         case AE.toJSON encTops2 of
             AE.Array v -> case V.head v of
-                AE.Object o -> assertBool "Does not contain field amount" $ AE.member "transfer" o
+                AE.Object o -> assertBool "Does not contain field assignAdminRoles" $ AE.member "assignAdminRoles" o
                 _ -> assertFailure "Does not encode to JSON object"
             _ -> assertFailure "Does not encode to JSON array"
 
