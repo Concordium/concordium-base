@@ -230,6 +230,13 @@ pub fn verify_scalars<C: Curve>(
     n: usize,
     proof: &InnerProductProof<C>,
 ) -> Option<VerificationScalars<C>> {
+    // An inner-product proof for vectors of length n has exactly log2(n)
+    // rounds. Besides rejecting malformed proofs, checking this here ensures
+    // that the challenge vector is long enough for the indexing below.
+    if !n.is_power_of_two() || proof.lr_vec.len() != n.trailing_zeros() as usize {
+        return None;
+    }
+
     // let n = G_vec.len();
     let L_R = &proof.lr_vec;
     let a = proof.a;
@@ -294,11 +301,11 @@ pub fn verify_scalars<C: Curve>(
 /// - `Q` - the elliptic curve point `Q`
 /// - `proof` - the inner product proof
 ///
-/// Preconditions:
-/// `G_vec` and `H_vec` must be of the same length, and this length must a power
-/// of 2.
+/// Returns `false` if `G_vec` and `H_vec` have different lengths or their
+/// common length is not a power of two.
 #[allow(non_snake_case)]
-pub fn verify_inner_product<C: Curve>(
+#[cfg(test)]
+pub(crate) fn verify_inner_product<C: Curve>(
     transcript: &mut impl TranscriptProtocol,
     G_vec: &[C],
     H_vec: &[C],
@@ -306,6 +313,10 @@ pub fn verify_inner_product<C: Curve>(
     Q: &C,
     proof: &InnerProductProof<C>,
 ) -> bool {
+    if G_vec.len() != H_vec.len() || !G_vec.len().is_power_of_two() {
+        return false;
+    }
+
     // call verify_inner_product_with_scalars
     // Since H is directly given, set all exponents for H to 1
     let n = G_vec.len();
@@ -530,6 +541,69 @@ mod tests {
             &P_prime,
             &Q,
             &proof
-        ))
+        ));
+
+        let mut transcript = RandomOracle::empty();
+        assert!(!verify_inner_product(
+            &mut transcript,
+            &G_vec,
+            &H_vec[..n - 1],
+            &P_prime,
+            &Q,
+            &proof,
+        ));
+
+        let mut transcript = RandomOracle::empty();
+        assert!(!verify_inner_product(
+            &mut transcript,
+            &G_vec[..n - 1],
+            &H_vec[..n - 1],
+            &P_prime,
+            &Q,
+            &proof,
+        ));
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn malformed_inner_product_proof_round_count_is_rejected() {
+        let rng = &mut thread_rng();
+        let n = 4;
+        let G_vec: Vec<_> = (0..n).map(|_| SomeCurve::generate(rng)).collect();
+        let H_vec: Vec<_> = (0..n).map(|_| SomeCurve::generate(rng)).collect();
+        let a_vec: Vec<_> = (0..n).map(|_| SomeCurve::generate_scalar(rng)).collect();
+        let b_vec: Vec<_> = (0..n).map(|_| SomeCurve::generate_scalar(rng)).collect();
+        let Q = SomeCurve::generate(rng);
+        let P_prime = multiexp(&G_vec, &a_vec)
+            .plus_point(&multiexp(&H_vec, &b_vec))
+            .plus_point(&Q.mul_by_scalar(&inner_product(&a_vec, &b_vec)));
+
+        let mut prover_transcript = RandomOracle::empty();
+        let proof = prove_inner_product(&mut prover_transcript, &G_vec, &H_vec, &Q, &a_vec, &b_vec)
+            .unwrap();
+
+        let mut short_proof = proof.clone();
+        short_proof.lr_vec.pop();
+        let mut verifier_transcript = RandomOracle::empty();
+        assert!(!verify_inner_product(
+            &mut verifier_transcript,
+            &G_vec,
+            &H_vec,
+            &P_prime,
+            &Q,
+            &short_proof,
+        ));
+
+        let mut long_proof = proof.clone();
+        long_proof.lr_vec.push(long_proof.lr_vec[0]);
+        let mut verifier_transcript = RandomOracle::empty();
+        assert!(!verify_inner_product(
+            &mut verifier_transcript,
+            &G_vec,
+            &H_vec,
+            &P_prime,
+            &Q,
+            &long_proof,
+        ));
     }
 }

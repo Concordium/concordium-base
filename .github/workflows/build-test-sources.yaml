@@ -120,7 +120,7 @@ jobs:
     strategy:
       matrix:
         plan:
-        - rust: 1.73 # Should be MSRV
+        - rust: 1.85 # Should be MSRV
 
     steps:
     - name: Checkout
@@ -146,6 +146,11 @@ jobs:
           rust: 1.85
 
     steps:
+    - name: Free up disk space
+      uses: endersonmenezes/free-disk-space@v4
+      with:
+          remove_android: true
+          remove_dotnet: true
     - name: Checkout
       uses: actions/checkout@v2
       with:

@@ -29,16 +29,79 @@ pub use types::*;
 
 pub use low_level::{MutableTrie, Node};
 
-/// A [loader](BackingStoreLoad) implemented by an external function.
-/// This is the dual to [`StoreCallback`]
+/// An external function that loads a complete payload.
 pub type LoadCallback = extern "C" fn(Reference) -> *mut Vec<u8>;
 
-impl BackingStoreLoad for LoadCallback {
+/// An external function that reads only the payload-length metadata.
+/// The function returns zero and writes the length to `out_length` after a
+/// successful read. It returns a nonzero value after a failed read.
+pub type LoadLengthCallback = extern "C" fn(Reference, *mut u64) -> u8;
+
+/// An external function that reads a clamped payload range into a Rust vector.
+/// The function returns zero and writes an allocated vector to `out` after a
+/// successful read. It returns a nonzero value after a failed read.
+pub type LoadRangeCallback = extern "C" fn(Reference, u64, libc::size_t, *mut *mut Vec<u8>) -> u8;
+
+/// Named operations that give contract execution access to immutable backing
+/// storage. The caller owns the callbacks. It must keep them alive during the
+/// complete execution, including interruptions and resumed executions.
+#[derive(Clone, Copy)]
+pub struct BackingStoreLoadCallback {
+    load: LoadCallback,
+    load_length: LoadLengthCallback,
+    load_range: LoadRangeCallback,
+}
+
+impl BackingStoreLoadCallback {
+    pub fn new(
+        load: LoadCallback,
+        load_length: LoadLengthCallback,
+        load_range: LoadRangeCallback,
+    ) -> Self {
+        Self {
+            load,
+            load_length,
+            load_range,
+        }
+    }
+}
+
+impl BackingStoreLoad for BackingStoreLoadCallback {
     type R = Vec<u8>;
 
     #[inline]
     fn load_raw(&mut self, location: Reference) -> LoadResult<Self::R> {
-        Ok(*unsafe { Box::from_raw(self(location)) })
+        let ptr = (self.load)(location);
+        Ok(*unsafe { Box::from_raw(ptr) })
+    }
+
+    #[inline]
+    fn load_raw_length(&mut self, location: Reference) -> LoadResult<u64> {
+        let mut length = 0;
+        if (self.load_length)(location, &mut length) == 0 {
+            Ok(length)
+        } else {
+            Err(LoadError::CallbackFailure)
+        }
+    }
+
+    #[inline]
+    fn load_raw_range(
+        &mut self,
+        location: Reference,
+        offset: u64,
+        length: usize,
+    ) -> LoadResult<Self::R> {
+        let mut ptr = std::ptr::null_mut();
+        if (self.load_range)(location, offset, length, &mut ptr) != 0 || ptr.is_null() {
+            return Err(LoadError::CallbackFailure);
+        }
+        let value = *unsafe { Box::from_raw(ptr) };
+        if value.len() > length {
+            Err(LoadError::OutOfBoundsRead)
+        } else {
+            Ok(value)
+        }
     }
 }
 

@@ -252,6 +252,10 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         return Err(Reason::WrongArParameters);
     }
 
+    if poks_common.bulletproofs.len() != common_fields.ip_ar_data.len() {
+        return Err(Reason::IncorrectProof);
+    }
+
     // We also need to check that the threshold is actually equal to
     // the number of coefficients in the sharing polynomial
     // (corresponding to the degree+1)
@@ -317,7 +321,7 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
             g: h_in_exponent,
             h: pk,
         };
-        let gens = &context.global_context.bulletproof_generators().take(32 * 8);
+        let gens = context.global_context.bulletproof_generators();
         let commitments = ciphers.iter().map(|x| Commitment(x.1)).collect::<Vec<_>>();
         transcript.append_message(b"encrypted_share", &ciphers);
         if verify_efficient(
@@ -808,6 +812,30 @@ mod tests {
 
         // Assert
         assert!(ver_ok.is_ok());
+
+        let mut pio_with_missing_bulletproof = pio.clone();
+        pio_with_missing_bulletproof
+            .poks
+            .common_proof_fields
+            .bulletproofs
+            .pop()
+            .expect("test PIO should contain a Bulletproof");
+        assert_eq!(
+            validate_request(&pio_with_missing_bulletproof, context),
+            Err(Reason::IncorrectProof)
+        );
+
+        let mut global_ctx_with_too_few_generators = global_ctx.clone();
+        global_ctx_with_too_few_generators
+            .bulletproof_generators
+            .G_H
+            .truncate(32 * 8 - 1);
+        let context_with_too_few_generators =
+            IpContext::new(&ip_info, &ars_infos, &global_ctx_with_too_few_generators);
+        assert_eq!(
+            validate_request(&pio, context_with_too_few_generators),
+            Err(Reason::IncorrectProof)
+        );
     }
 
     #[test]

@@ -16,6 +16,7 @@ use anyhow::Context;
 use concordium_contracts_common::{
     Address, Amount, ChainMetadata, ContractAddress, OwnedEntrypointName, Timestamp,
 };
+use concordium_wasm::machine::CopyMeteringEnabled;
 use concordium_wasm::{
     artifact::{Artifact, CompiledFunctionBytes},
     machine,
@@ -127,7 +128,7 @@ fn test_crypto_prims() -> anyhow::Result<()> {
             state,
             trace: (),
         };
-        let r = artifact.run(&mut host, name, args);
+        let r = artifact.run(&mut host, name, args, CopyMeteringEnabled::True);
         match r {
             Ok(res) => match res {
                 machine::ExecutionOutcome::Success { .. } => host.stateless.return_value,

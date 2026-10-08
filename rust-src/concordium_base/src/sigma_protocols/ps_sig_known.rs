@@ -142,7 +142,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         let g_tilde = self.ps_pub_key.g_tilda;
-        let a_hat = self.blinded_sig.sig.0;
+        let a_hat = self.blinded_sig.sig.a();
         let y_tilde = |i| self.ps_pub_key.y_tildas.get(i).copied();
         let cmm_key = self.cmm_key;
 
@@ -272,8 +272,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for PsSigKnown
         response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         let g_tilde = self.ps_pub_key.g_tilda;
-        let a_hat = self.blinded_sig.sig.0;
-        let b_hat = self.blinded_sig.sig.1;
+        let a_hat = self.blinded_sig.sig.a();
+        let b_hat = self.blinded_sig.sig.b();
         let x_tilde = self.ps_pub_key.x_tilda;
         let y_tilde = |i| self.ps_pub_key.y_tildas.get(i).copied();
         let cmm_key = self.cmm_key;

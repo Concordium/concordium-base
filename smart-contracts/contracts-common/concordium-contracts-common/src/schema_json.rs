@@ -444,6 +444,7 @@ impl ToJsonError {
     /// // In deserializing position <cursor-position> into type List(...)"#;
     /// list_bytes.extend_from_slice(&account_bytes);
     /// list_bytes.extend_from_slice(&contract_bytes[..10]); // Malformed contract address.
+    ///
     /// let mut cursor = Cursor::new(list_bytes.clone());
     /// let schema_object = Type::Struct(Fields::Named(vec![
     ///     ("a".into(), Type::AccountAddress),
@@ -1625,6 +1626,7 @@ fn write_bytes_for_length_of_size<W: Write>(
     }
 }
 
+#[expect(clippy::items_after_test_module)]
 #[cfg(test)]
 mod tests {
     use serde_json::json;

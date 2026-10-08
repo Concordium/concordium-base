@@ -1,5 +1,6 @@
 use anyhow::{bail, ensure};
 use clap::AppSettings;
+use concordium_wasm::machine::CopyMeteringEnabled;
 use concordium_wasm::{
     artifact::{Artifact, ArtifactNamedImport, CompiledFunction},
     machine::{ExecutionOutcome, Host, NoInterrupt, RunResult, RuntimeError, RuntimeStack, Value},
@@ -9,7 +10,7 @@ use concordium_wasm::{
 };
 use std::{collections::BTreeMap, fs, path::PathBuf};
 use structopt::StructOpt;
-use wast::{parser, AssertExpression, Expression, Span, Wast, WastExecute};
+use wast::{AssertExpression, Expression, Span, Wast, WastExecute, parser};
 
 #[derive(Debug, StructOpt)]
 #[structopt(bin_name = "wasm-test")]
@@ -137,15 +138,17 @@ macro_rules! fail_test {
         let (line, col) = $span.linecol_in(&$input);
         // The +1 in line is because the line indexing as returned by linecol_in is
         // 0-based, but usually in editors it is 1-based
-        bail!(ansi_term::Color::Red
-            .paint(format!(
-                "{}: line: {}, column: {}, message: {}",
-                $name,
-                line + 1,
-                col,
-                $message
-            ))
-            .to_string())
+        bail!(
+            ansi_term::Color::Red
+                .paint(format!(
+                    "{}: line: {}, column: {}, message: {}",
+                    $name,
+                    line + 1,
+                    col,
+                    $message
+                ))
+                .to_string()
+        )
     }};
     ($b:expr => $span:expr, $name:expr, $input:expr, $message:expr) => {
         if $b {
@@ -200,7 +203,7 @@ fn invoke_update(
     name: &str,
     args: &[Value],
 ) -> anyhow::Result<Option<Value>> {
-    match artifact.run(&mut TrapHost, name, args)? {
+    match artifact.run(&mut TrapHost, name, args, CopyMeteringEnabled::False)? {
         ExecutionOutcome::Success { result, .. } => Ok(result),
         ExecutionOutcome::Interrupted { reason, .. } => match reason {}, // impossible case
     }
@@ -211,7 +214,12 @@ fn invoke_update_metering(
     name: &str,
     args: &[Value],
 ) -> anyhow::Result<Option<Value>> {
-    let run = artifact.run(&mut MeteringHost { call_depth: 0 }, name, args)?;
+    let run = artifact.run(
+        &mut MeteringHost { call_depth: 0 },
+        name,
+        args,
+        CopyMeteringEnabled::False,
+    )?;
     match run {
         ExecutionOutcome::Success { result, .. } => Ok(result),
         ExecutionOutcome::Interrupted { reason, .. } => match reason {},
@@ -380,7 +388,7 @@ fn main() -> anyhow::Result<()> {
                                         wast::QuoteModule::Quote(mods_bytes) => {
                                             for bytes in mods_bytes {
                                                 fail_test!(
-                                                    validate(&bytes).is_ok() =>
+                                                    validate(bytes).is_ok() =>
                                                     span,
                                                     file_name,
                                                     input,

@@ -20,6 +20,7 @@ use concordium_smart_contract_engine::{
     },
     InterpreterEnergy,
 };
+use concordium_wasm::machine::CopyMeteringEnabled;
 use concordium_wasm::{
     machine, parse,
     validate::{self, ValidationConfig},
@@ -148,7 +149,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                             trace: (),
                         };
                         let r = artifact
-                            .run(&mut host, name, args)
+                            .run(&mut host, name, args, CopyMeteringEnabled::True)
                             .expect_err("Execution should fail due to out of energy.");
                         // Should fail due to out of energy.
                         assert!(
@@ -296,7 +297,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         state,
                         trace: (),
                     };
-                    match artifact.run(&mut host, name, args) {
+                    match artifact.run(&mut host, name, args, CopyMeteringEnabled::True) {
                         Ok(r) => match r {
                             machine::ExecutionOutcome::Success {
                                 ..
@@ -398,7 +399,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         trace: (),
                     };
                     let r = artifact
-                        .run(&mut host, name, args)
+                        .run(&mut host, name, args, CopyMeteringEnabled::True)
                         .expect_err("Execution should fail due to out of energy.");
                     // Should fail due to out of energy.
                     assert!(
