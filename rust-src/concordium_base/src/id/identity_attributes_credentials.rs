@@ -592,7 +592,7 @@ fn signature_knowledge_verifier<
 
 #[cfg(test)]
 mod test {
-    use crate::curve_arithmetic::Value;
+    use crate::curve_arithmetic::{Curve, Value};
     use crate::elgamal::Message;
     use crate::id::constants::{ArCurve, AttributeKind, IpPairing};
     use crate::id::identity_attributes_credentials::{
@@ -607,6 +607,7 @@ mod test {
         IpData, IpInfo, YearMonth,
     };
     use crate::id::{identity_provider, test};
+    use crate::ps_sig;
     use crate::random_oracle::RandomOracle;
     use assert_matches::assert_matches;
     use std::collections::BTreeMap;

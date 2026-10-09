@@ -59,7 +59,8 @@
     The field could not contain any data.
 
 - Introduce protocol version 11 variant `ProtocolVersion::P11`.
-- The flag `serde_deprecated` now guards `serde::Serialize` and `serde::Deserialize` implemetations on the following types. The implementations will eventually be removed.
+- Set minimum supported Rust version to 1.85.
+- The flag `serde_deprecated` now guards `serde::Serialize` and `serde::Deserialize` implementations on the following types. The implementations will eventually be removed.
   - `protocol_level_tokens::token_metadata_url::MetadataUrl`
   - `protocol_level_tokens::token_amount::TokenAmount`
   - `protocol_level_tokens::token_amount::TokenAmountJson`
@@ -138,6 +139,14 @@
 - In V1 identity based verifiable presentations, it has been changed such that the same attribute 
   can be used both in set membership and range proofs, and at the same time being revealed. It was already possible
   for account credentials.
+- The first component of a `ps_sig::Signature` can no longer be the identity of `G1`. Such a signature satisfies
+  the verification equation for any message, and makes the proofs of knowledge of a signature satisfiable
+  without knowing a signature. Consequently:
+  - The components of `ps_sig::Signature` are no longer public. Implemented `Signature::try_new` to construct
+    a signature, and `Signature::a` and `Signature::b` to access its components.
+  - Deserialization of `ps_sig::Signature`, and thereby of `ps_sig::BlindedSignature`, now fails if the first
+    component is the identity of `G1`. The serialization format is unchanged.
+- Fixes a bug where `verify_cdi` accepts credentials with an empty AR map.
 
 - Serialization derive macros `common::Serial` and consequently `common::Serialize` now panic when trying to serialize
   containers with a size exceeding their max bound.

@@ -194,7 +194,10 @@ impl PersistentState {
 
     /// Get an iterator over the (key, value) pairs stored in the persistent
     /// state. The iterator yields keys in ascending lexicographic order.
-    pub fn into_iterator<L: BackingStoreLoad>(self, loader: &mut L) -> PersistentStateIterator<'_, L> {
+    pub fn into_iterator<L: BackingStoreLoad>(
+        self,
+        loader: &mut L,
+    ) -> PersistentStateIterator<'_, L> {
         let mut state = self.into_trie(loader);
         // get an iterator over the entire state (starting at root)
         match state.iter(loader, &[]) {

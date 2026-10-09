@@ -1,9 +1,8 @@
 //! Different types of hashes based on SHA256.
 
 use crate::constants::SHA256;
-#[cfg(all(feature = "derive-serde", not(feature = "std")))]
+#[cfg(feature = "derive-serde")]
 use core::str::FromStr;
-#[cfg(not(feature = "std"))]
 use core::{
     convert::{TryFrom, TryInto},
     fmt, hash,
@@ -12,15 +11,6 @@ use core::{
 };
 #[cfg(feature = "derive-serde")]
 use serde;
-#[cfg(all(feature = "derive-serde", feature = "std"))]
-use std::str::FromStr;
-#[cfg(feature = "std")]
-use std::{
-    convert::{TryFrom, TryInto},
-    fmt, hash,
-    marker::PhantomData,
-    ops::Deref,
-};
 
 #[derive(Ord, PartialOrd, Copy)]
 #[cfg_attr(feature = "derive-serde", derive(serde::Serialize))]

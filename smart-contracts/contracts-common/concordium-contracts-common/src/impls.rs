@@ -1,23 +1,15 @@
 use crate::{constants::*, schema, traits::*, types::*};
 
-#[cfg(not(feature = "std"))]
 use alloc::{boxed::Box, collections, string::String, vec::Vec};
 use collections::{BTreeMap, BTreeSet};
 use convert::TryFrom;
 use core::cmp::Ordering;
-#[cfg(not(feature = "std"))]
 use core::{
     convert, hash, marker,
     mem::{transmute, MaybeUninit},
     slice,
 };
 use hash::Hash;
-#[cfg(feature = "std")]
-use std::{
-    collections, convert, hash, marker,
-    mem::{transmute, MaybeUninit},
-    slice,
-};
 // Implementations of Serialize
 
 impl Serial for () {
