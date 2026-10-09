@@ -37,8 +37,8 @@ jobs:
           TAG_VERSION_NUMBER=${TAG##releases/wasm-chain-integration/}
 
           # Check if the tag version number matches the expected version from Cargo.toml
-          if [ "$TAG_VERSION_NUMBER_NUMBER" != "$EXPECTED_VERSION_FROM_CARGO" ]; then
-            echo "version tagged: $TAG_VERSION_NUMBER_NUMBER  does not match cargo version: $EXPECTED_VERSION_FROM_CARGO. Exiting."
+          if [ "$TAG_VERSION_NUMBER" != "$EXPECTED_VERSION_FROM_CARGO" ]; then
+            echo "version tagged: $TAG_VERSION_NUMBER  does not match cargo version: $EXPECTED_VERSION_FROM_CARGO. Exiting."
             exit 1
           else
             echo "Tag version number matches expected version from Cargo.toml. Proceeding with release."
