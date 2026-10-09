@@ -1,4 +1,4 @@
-## Unreleased
+## 11.0.0 (2026-10-09)
 
 - Set minimum supported Rust version to 1.85.
 - The flag `serde_deprecated` now guards `serde::Serialize` and `serde::Deserialize` implementations on the following types. The implementations will eventually be removed.
