@@ -5,7 +5,7 @@ on:
 
   push:
     tags:
-      - releases/wasm-chain-integration/*
+      - releases/concordium-smart-contract-engine/*
 
 env:
   TAG: ${{ github.ref_name }}
@@ -34,7 +34,7 @@ jobs:
         run: |
           echo "Validating tag version $TAG matches expected version from Cargo.toml"
           EXPECTED_VERSION_FROM_CARGO=$(yq .package.version ./Cargo.toml)
-          TAG_VERSION_NUMBER=${TAG##releases/wasm-chain-integration/}
+          TAG_VERSION_NUMBER=${TAG##releases/concordium-smart-contract-engine/}
 
           # Check if the tag version number matches the expected version from Cargo.toml
           if [ "$TAG_VERSION_NUMBER" != "$EXPECTED_VERSION_FROM_CARGO" ]; then
