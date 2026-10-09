@@ -1,25 +1,25 @@
-name: Release Concordium Base Derive
+name: Release Concordium Contracts Common
 
 on:
   workflow_dispatch: # allows manual trigger
 
   push:
     tags:
-      - releases/concordium_base_derive/*
+      - releases/concordium-contracts-common/*
 
 env:
   TAG: ${{ github.ref_name }}
 
 jobs:
 
-  ## Concordium Base Derive Release Build
-  concordium-base-derive-release:
-    name: concordium-base-derive:release
+  ## Concordium Contracts Common Release Build
+  contracts-common-release:
+    name: contracts-common:release
     runs-on: ubuntu-latest
     defaults:
       run:
-        # Set the default working directory to concordium_base_derive
-        working-directory: rust-src/concordium_base_derive
+        # Set the default working directory to concordium-contracts-common
+        working-directory: smart-contracts/contracts-common/concordium-contracts-common
 
     environment: release
 
@@ -34,8 +34,8 @@ jobs:
         run: |
           echo "Validating tag version $TAG matches expected version from Cargo.toml"
           EXPECTED_VERSION_FROM_CARGO=$(yq .package.version ./Cargo.toml)
-          TAG_VERSION_NUMBER=${TAG##releases/concordium_base_derive/}
-          
+          TAG_VERSION_NUMBER=${TAG##releases/concordium-contracts-common/}
+
           # Check if the tag version number matches the expected version from Cargo.toml
           if [ "$TAG_VERSION_NUMBER" != "$EXPECTED_VERSION_FROM_CARGO" ]; then
             echo "version tagged: $TAG_VERSION_NUMBER  does not match cargo version: $EXPECTED_VERSION_FROM_CARGO. Exiting."
@@ -49,5 +49,5 @@ jobs:
         env:
           CARGO_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          echo "Publishing Concordium Base Derive to crates.io for version: $TAG_VERSION_NUMBER"
+          echo "Publishing Concordium Contracts Common to crates.io for version: $TAG_VERSION_NUMBER"
           cargo publish --token $CARGO_TOKEN --locked
