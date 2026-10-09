@@ -26,7 +26,7 @@ use crate::{
         AccountAddress, AccountCredentialMessage, AccountKeys, CredentialDeploymentInfo,
         CredentialPublicKeys, VerifyKey,
     },
-    protocol_level_tokens::TokenOperationsPayload,
+    protocol_level_tokens::{OperationsPayload, TokenId, TokenOperationsPayload},
     random_oracle::RandomOracle,
     smart_contracts, updates,
 };
@@ -48,7 +48,7 @@ pub struct Memo {
 }
 
 impl CborSerialize for Memo {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
         encoder.encode_bytes(&self.bytes)
     }
 }
@@ -996,6 +996,17 @@ pub type AccountCredentialsMap = BTreeMap<
     >,
 >;
 
+/// The two wire forms of a token update transaction.
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
+pub enum TokenUpdatePayload {
+    /// The scoped form with a transaction-level token ID.
+    Scoped(TokenOperationsPayload),
+    /// The unscoped form with token IDs carried by applicable operations.
+    Unscoped(OperationsPayload),
+}
+
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
 #[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
@@ -1142,10 +1153,11 @@ pub enum Payload {
         #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
         data: ConfigureDelegationPayload,
     },
-    /// Token update operations
+    /// Token update operations. A non-empty transaction-level token ID selects
+    /// the scoped format; the unscoped format carries token IDs per operation.
     TokenUpdate {
         #[cfg_attr(feature = "serde_deprecated", serde(flatten))]
-        payload: TokenOperationsPayload,
+        payload: TokenUpdatePayload,
     },
 }
 
@@ -1363,8 +1375,16 @@ impl Serial for Payload {
             }
             Payload::TokenUpdate { payload } => {
                 out.put(&27u8);
-                out.put(&payload.token_id);
-                out.put(&payload.operations);
+                match payload {
+                    TokenUpdatePayload::Scoped(payload) => {
+                        out.put(&payload.token_id);
+                        out.put(&payload.operations);
+                    }
+                    TokenUpdatePayload::Unscoped(payload) => {
+                        out.put(&0u8);
+                        out.put(&payload.operations);
+                    }
+                }
             }
         }
     }
@@ -1566,11 +1586,17 @@ impl Deserial for Payload {
                 Ok(Payload::ConfigureDelegation { data })
             }
             27 => {
-                let token_id = source.get()?;
-                let operations = source.get()?;
-                let payload = TokenOperationsPayload {
-                    token_id,
-                    operations,
+                let token_id_length: u8 = source.get()?;
+                let payload = if token_id_length == 0 {
+                    TokenUpdatePayload::Unscoped(OperationsPayload {
+                        operations: source.get()?,
+                    })
+                } else {
+                    let token_id = TokenId::deserial_with_length(source, token_id_length)?;
+                    TokenUpdatePayload::Scoped(TokenOperationsPayload {
+                        token_id,
+                        operations: source.get()?,
+                    })
                 };
                 Ok(Payload::TokenUpdate { payload })
             }
@@ -1607,7 +1633,7 @@ pub fn compute_transaction_sign_hash(
     let mut hasher = sha2::Sha256::new();
     hasher.put(header);
     payload.encode_to_buffer(&mut hasher);
-    hashes::HashBytes::new(hasher.result())
+    hashes::HashBytes::new(hasher.finalize().into())
 }
 
 // The transaction header prefix for v1.
@@ -1623,7 +1649,7 @@ pub fn compute_transaction_sign_hash_v1(
     hasher.put(&TRANSACTION_HEADER_PREFIX_V1);
     hasher.put(header);
     payload.encode_to_buffer(&mut hasher);
-    hashes::HashBytes::new(hasher.result())
+    hashes::HashBytes::new(hasher.finalize().into())
 }
 
 /// Abstraction of private keys.
@@ -2035,7 +2061,7 @@ impl<PayloadType> BlockItem<PayloadType> {
     {
         let mut hasher = sha2::Sha256::new();
         hasher.put(&self);
-        hashes::HashBytes::new(hasher.result())
+        hashes::HashBytes::new(hasher.finalize().into())
     }
 }
 
@@ -2226,6 +2252,34 @@ pub mod cost {
     /// Additional cost of a PLT pause
     pub const PLT_PAUSE: Energy = Energy { energy: 50 };
 
+    /// TODO - this is a placeholder value for now - RBC-26 will investigate the correct energy to use.
+    /// Additional cost of assigning/revoking roles for a PLT
+    pub const PLT_ASSIGN_REVOKE_ROLES: Energy = Energy { energy: 50 };
+
+    /// TODO - this is a placeholder value for now - RBC-26 will investigate the correct energy to use.
+    /// Additional cost of update token metadata for a PLT
+    pub const PLT_UPDATE_TOKEN_METADATA: Energy = Energy { energy: 50 };
+
+    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
+    /// Additional cost of a lock creation
+    pub const PLT_LOCK_CREATE: Energy = Energy { energy: 50 };
+
+    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
+    /// Additional cost of a lock fund operation
+    pub const PLT_LOCK_FUND: Energy = Energy { energy: 100 };
+
+    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
+    /// Additional cost of a lock send operation
+    pub const PLT_LOCK_SEND: Energy = Energy { energy: 100 };
+
+    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
+    /// Additional cost of a lock release operation
+    pub const PLT_LOCK_RELEASE: Energy = Energy { energy: 100 };
+
+    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
+    /// Additional cost of a lock cancel operation
+    pub const PLT_LOCK_CANCEL: Energy = Energy { energy: 50 };
+
     /// Additional cost of an encrypted transfer.
     #[deprecated(
         since = "5.0.1",
@@ -2340,10 +2394,11 @@ pub mod cost {
 /// See also the [send] module above which combines construction with signing.
 pub mod construct {
     use super::*;
-    use crate::common::upward::Upward;
     use crate::{
         common::cbor,
-        protocol_level_tokens::{RawCbor, TokenId, TokenOperation, TokenOperations},
+        protocol_level_tokens::{
+            Operation, Operations, RawCbor, TokenId, TokenOperation, TokenOperations,
+        },
     };
 
     /// A transaction that is prepared to be signed.
@@ -2618,16 +2673,18 @@ pub mod construct {
                 .operations
                 .iter()
                 .map(|op| match op {
-                    Upward::Known(TokenOperation::Transfer(_)) => cost::PLT_TRANSFER,
-                    Upward::Known(TokenOperation::Mint(_)) => cost::PLT_MINT,
-                    Upward::Known(TokenOperation::Burn(_)) => cost::PLT_BURN,
-                    Upward::Known(TokenOperation::AddAllowList(_))
-                    | Upward::Known(TokenOperation::RemoveAllowList(_))
-                    | Upward::Known(TokenOperation::AddDenyList(_))
-                    | Upward::Known(TokenOperation::RemoveDenyList(_)) => cost::PLT_LIST_UPDATE,
-                    Upward::Known(TokenOperation::Pause(_))
-                    | Upward::Known(TokenOperation::Unpause(_)) => cost::PLT_PAUSE,
-                    Upward::Unknown(_) => Default::default(),
+                    TokenOperation::Transfer(_) => cost::PLT_TRANSFER,
+                    TokenOperation::Mint(_) => cost::PLT_MINT,
+                    TokenOperation::Burn(_) => cost::PLT_BURN,
+                    TokenOperation::AddAllowList(_)
+                    | TokenOperation::RemoveAllowList(_)
+                    | TokenOperation::AddDenyList(_)
+                    | TokenOperation::RemoveDenyList(_) => cost::PLT_LIST_UPDATE,
+                    TokenOperation::Pause(_) | TokenOperation::Unpause(_) => cost::PLT_PAUSE,
+                    TokenOperation::AssignAdminRoles(_) | TokenOperation::RevokeAdminRoles(_) => {
+                        cost::PLT_ASSIGN_REVOKE_ROLES
+                    }
+                    TokenOperation::UpdateMetadata(_) => cost::PLT_UPDATE_TOKEN_METADATA,
                 })
                 .sum()
     }
@@ -2636,7 +2693,7 @@ pub mod construct {
     /// token update operations encoded in the given CBOR.
     ///
     /// Update operations can be created using the functions in
-    /// [`operations`](crate::protocol_level_tokens::operations).
+    /// [`token_operations`](crate::protocol_level_tokens::token_operations).
     pub fn token_update_operations(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2644,23 +2701,78 @@ pub mod construct {
         expiry: TransactionTime,
         token_id: TokenId,
         operations: TokenOperations,
-    ) -> CborSerializationResult<PreAccountTransaction> {
+    ) -> PreAccountTransaction {
         let energy = token_operations_txn_energy(&operations);
-        let operations = RawCbor::from(cbor::cbor_encode(&operations)?);
+        let operations = RawCbor::from(cbor::cbor_encode(&operations));
 
         let payload = Payload::TokenUpdate {
-            payload: TokenOperationsPayload {
+            payload: TokenUpdatePayload::Scoped(TokenOperationsPayload {
                 token_id,
                 operations,
-            },
+            }),
         };
-        Ok(make_transaction(
+        make_transaction(
             sender,
             nonce,
             expiry,
             GivenEnergy::Add { num_sigs, energy },
             payload,
-        ))
+        )
+    }
+
+    /// Additional cost of a Token Update transaction containing unscoped operations.
+    fn operations_txn_energy(operations: &Operations) -> Energy {
+        cost::PLT_OPERATIONS_TRANSACTIONS
+            + operations
+                .operations
+                .iter()
+                .map(|op| match op {
+                    Operation::TokenTransfer(_) => cost::PLT_TRANSFER,
+                    Operation::TokenMint(_) => cost::PLT_MINT,
+                    Operation::TokenBurn(_) => cost::PLT_BURN,
+                    Operation::TokenAddAllowList(_)
+                    | Operation::TokenRemoveAllowList(_)
+                    | Operation::TokenAddDenyList(_)
+                    | Operation::TokenRemoveDenyList(_) => cost::PLT_LIST_UPDATE,
+                    Operation::TokenPause(_) | Operation::TokenUnpause(_) => cost::PLT_PAUSE,
+                    Operation::TokenAssignAdminRoles(_) | Operation::TokenRevokeAdminRoles(_) => {
+                        cost::PLT_ASSIGN_REVOKE_ROLES
+                    }
+                    Operation::TokenUpdateMetadata(_) => cost::PLT_UPDATE_TOKEN_METADATA,
+                    Operation::LockFund(_) => cost::PLT_LOCK_FUND,
+                    Operation::LockSend(_) => cost::PLT_LOCK_SEND,
+                    Operation::LockRelease(_) => cost::PLT_LOCK_RELEASE,
+                    Operation::LockCreate(_) => cost::PLT_LOCK_CREATE,
+                    Operation::LockCancel(_) => cost::PLT_LOCK_CANCEL,
+                })
+                .sum()
+    }
+
+    /// Construct a Token Update transaction consisting of unscoped operations
+    /// encoded in CBOR.
+    ///
+    /// Unscoped operations can be created using the functions in
+    /// [`operations`](crate::protocol_level_tokens::operations).
+    pub fn operations(
+        num_sigs: u32,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        operations: &Operations,
+    ) -> PreAccountTransaction {
+        let energy = operations_txn_energy(operations);
+        let operations = RawCbor::from(cbor::cbor_encode(operations));
+
+        let payload = Payload::TokenUpdate {
+            payload: TokenUpdatePayload::Unscoped(OperationsPayload { operations }),
+        };
+        make_transaction(
+            sender,
+            nonce,
+            expiry,
+            GivenEnergy::Add { num_sigs, energy },
+            payload,
+        )
     }
 
     /// Make an encrypted transfer. The payload can be constructed using
@@ -3258,7 +3370,7 @@ pub mod construct {
 /// for transaction.
 pub mod send {
     use super::*;
-    use crate::protocol_level_tokens::{TokenId, TokenOperations};
+    use crate::protocol_level_tokens::{Operations, TokenId, TokenOperations};
 
     /// Construct a native coin (CCD) transfer transaction.
     pub fn transfer(
@@ -3298,7 +3410,7 @@ pub mod send {
     /// of the token update operations encoded in the given CBOR.
     ///
     /// Update operations can be created using the functions in
-    /// [`operations`](crate::protocol_level_tokens::operations).
+    /// [`token_operations`](crate::protocol_level_tokens::token_operations).
     pub fn token_update_operations(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -3306,16 +3418,30 @@ pub mod send {
         expiry: TransactionTime,
         token_id: TokenId,
         operations: TokenOperations,
-    ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
-        Ok(construct::token_update_operations(
+    ) -> AccountTransaction<EncodedPayload> {
+        construct::token_update_operations(
             signer.num_keys(),
             sender,
             nonce,
             expiry,
             token_id,
             operations,
-        )?
-        .sign(signer))
+        )
+        .sign(signer)
+    }
+
+    /// Construct and sign an unscoped token update transaction.
+    ///
+    /// Operations can be created using
+    /// [`operations`](crate::protocol_level_tokens::operations).
+    pub fn operations(
+        signer: &impl ExactSizeTransactionSigner,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        operations: &Operations,
+    ) -> AccountTransaction<EncodedPayload> {
+        construct::operations(signer.num_keys(), sender, nonce, expiry, operations).sign(signer)
     }
 
     /// Make an encrypted transfer. The payload can be constructed using
@@ -3760,6 +3886,7 @@ mod tests {
     use crate::{
         hashes::TransactionSignHash,
         id::types::{SignatureThreshold, VerifyKey},
+        protocol_level_tokens::{OperationsPayload, RawCbor},
     };
     use rand::{rngs::ThreadRng, Rng};
     use std::convert::TryFrom;
@@ -3790,7 +3917,7 @@ mod tests {
         let bound: usize = rng.gen_range(1..20);
         for _ in 0..bound {
             let c_idx = CredentialIndex::from(rng.gen::<u8>());
-            if keys.get(&c_idx).is_none() {
+            if !keys.contains_key(&c_idx) {
                 let inner_bound: usize = rng.gen_range(1..20);
                 let mut cred_keys = BTreeMap::new();
                 for _ in 0..inner_bound {
@@ -3980,5 +4107,42 @@ mod tests {
             ),
             "Sponsored transaction signature must not validate with invalid sender threshold."
         );
+    }
+
+    #[test]
+    fn token_update_payload_wire_forms_round_trip() {
+        let token = Payload::TokenUpdate {
+            payload: TokenUpdatePayload::Scoped(TokenOperationsPayload {
+                token_id: "T".parse().unwrap(),
+                operations: RawCbor::from(vec![0x80]),
+            }),
+        };
+        let unscoped = Payload::TokenUpdate {
+            payload: TokenUpdatePayload::Unscoped(OperationsPayload {
+                operations: RawCbor::from(vec![0x80]),
+            }),
+        };
+
+        assert_eq!(
+            hex::encode(crate::common::to_bytes(&token)),
+            "1b01540000000180"
+        );
+        assert_eq!(
+            hex::encode(crate::common::to_bytes(&unscoped)),
+            "1b000000000180"
+        );
+
+        assert!(matches!(
+            crate::common::from_bytes(&mut crate::common::to_bytes(&token).as_slice()),
+            Ok(Payload::TokenUpdate {
+                payload: TokenUpdatePayload::Scoped(_)
+            })
+        ));
+        assert!(matches!(
+            crate::common::from_bytes(&mut crate::common::to_bytes(&unscoped).as_slice()),
+            Ok(Payload::TokenUpdate {
+                payload: TokenUpdatePayload::Unscoped(_)
+            })
+        ));
     }
 }

@@ -202,15 +202,24 @@ pub enum RootUpdate {
     /// ### Note
     ///
     /// The `AuthorizationsV1` provided to this constructor *must* have `None`
-    /// for the `create_plt` field.
+    /// for both the `create_plt` and `token_parameters` fields.
     Level2KeysUpdateV1(Box<AuthorizationsV1>),
     /// Updates the level 2 keys using the provided `AuthorizationsV1`.
     ///
     /// ### Note
     ///
     /// The `AuthorizationsV1` provided to this constructor *must* have
-    /// `Some(create_plt)` for the `create_plt` field.
+    /// `Some(create_plt)` for the `create_plt` field and `None` for the
+    /// `token_parameters` field.
     Level2KeysUpdateV2(Box<AuthorizationsV1>),
+    /// Updates the level 2 keys using the provided `AuthorizationsV1`.
+    ///
+    /// ### Note
+    ///
+    /// The `AuthorizationsV1` provided to this constructor *must* have
+    /// `Some(create_plt)` for the `create_plt` field and
+    /// `Some(token_parameters)` for the `token_parameters` field.
+    Level2KeysUpdateV3(Box<AuthorizationsV1>),
 }
 
 impl Serial for RootUpdate {
@@ -236,6 +245,10 @@ impl Serial for RootUpdate {
                 4u8.serial(out);
                 l2k.serial(out)
             }
+            RootUpdate::Level2KeysUpdateV3(l2k) => {
+                5u8.serial(out);
+                l2k.serial(out)
+            }
         }
     }
 }
@@ -251,6 +264,9 @@ impl Deserial for RootUpdate {
             ))),
             4u8 => Ok(RootUpdate::Level2KeysUpdateV2(Box::new(
                 AuthorizationsV1::deserial_v2(source)?,
+            ))),
+            5u8 => Ok(RootUpdate::Level2KeysUpdateV3(Box::new(
+                AuthorizationsV1::deserial_v3(source)?,
             ))),
             tag => anyhow::bail!("Unknown RootUpdate tag {}", tag),
         }
@@ -274,15 +290,24 @@ pub enum Level1Update {
     /// ### Note
     ///
     /// The `AuthorizationsV1` provided to this constructor *must* have `None`
-    /// for the `create_plt` field.
+    /// for both the `create_plt` and `token_parameters` fields.
     Level2KeysUpdateV1(Box<AuthorizationsV1>),
     /// Updates the level 2 keys using the provided `AuthorizationsV1`.
     ///
     /// ### Note
     ///
     /// The `AuthorizationsV1` provided to this constructor *must* have
-    /// `Some(create_plt)` for the `create_plt` field.
+    /// `Some(create_plt)` for the `create_plt` field and `None` for the
+    /// `token_parameters` field.
     Level2KeysUpdateV2(Box<AuthorizationsV1>),
+    /// Updates the level 2 keys using the provided `AuthorizationsV1`.
+    ///
+    /// ### Note
+    ///
+    /// The `AuthorizationsV1` provided to this constructor *must* have
+    /// `Some(create_plt)` for the `create_plt` field and
+    /// `Some(token_parameters)` for the `token_parameters` field.
+    Level2KeysUpdateV3(Box<AuthorizationsV1>),
 }
 
 impl Serial for Level1Update {
@@ -304,6 +329,10 @@ impl Serial for Level1Update {
                 3u8.serial(out);
                 l2k.serial(out)
             }
+            Level1Update::Level2KeysUpdateV3(l2k) => {
+                4u8.serial(out);
+                l2k.serial(out)
+            }
         }
     }
 }
@@ -318,6 +347,9 @@ impl Deserial for Level1Update {
             ))),
             3u8 => Ok(Level1Update::Level2KeysUpdateV2(Box::new(
                 AuthorizationsV1::deserial_v2(source)?,
+            ))),
+            4u8 => Ok(Level1Update::Level2KeysUpdateV3(Box::new(
+                AuthorizationsV1::deserial_v3(source)?,
             ))),
             tag => anyhow::bail!("Unknown Level1Update tag {}", tag),
         }
@@ -517,6 +549,8 @@ pub struct AuthorizationsV1 {
     pub time_parameters: AccessStructure,
     /// Keys for creating a protocol level token.
     pub create_plt: Option<AccessStructure>,
+    /// Keys for changing token and lock related chain parameters.
+    pub token_parameters: Option<AccessStructure>,
 }
 
 impl AuthorizationsV1 {
@@ -542,41 +576,53 @@ impl Serial for AuthorizationsV1 {
         self.v0.serial(out);
         self.cooldown_parameters.serial(out);
         self.time_parameters.serial(out);
-        if let Some(create_plt) = &self.create_plt {
-            create_plt.serial(out);
-        }
+
+        // AuthorizationsV2
+        let Some(create_plt) = &self.create_plt else {
+            return;
+        };
+        create_plt.serial(out);
+
+        // AuthorizationsV3
+        let Some(token_parameters) = &self.token_parameters else {
+            return;
+        };
+        token_parameters.serial(out);
     }
 }
 
 impl AuthorizationsV1 {
     /// Deserialize an "AuthorizationsV1" as an `AuthorizationsV1`.
-    /// This version does omits `create_plt`.
+    /// This version omits `create_plt` and `token_parameters`.
     fn deserial_v1<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let v0: AuthorizationsV0 = source.get()?;
         let cooldown_parameters: AccessStructure = source.get()?;
         let time_parameters: AccessStructure = source.get()?;
         let create_plt = None;
+        let token_parameters = None;
         Ok(Self {
             v0,
             cooldown_parameters,
             time_parameters,
             create_plt,
+            token_parameters,
         })
     }
 
-    /// Deserialize an "AuthorizationsV2"` as an `AuthorizationsV1`.
-    /// This version includes `create_plt`.
+    /// Deserialize an "AuthorizationsV2" as an `AuthorizationsV1`.
+    /// This version includes `create_plt` and omits `token_parameters`.
     fn deserial_v2<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let v0: AuthorizationsV0 = source.get()?;
-        let cooldown_parameters: AccessStructure = source.get()?;
-        let time_parameters: AccessStructure = source.get()?;
-        let create_plt = Some(source.get()?);
-        Ok(Self {
-            v0,
-            cooldown_parameters,
-            time_parameters,
-            create_plt,
-        })
+        let mut v2 = Self::deserial_v1(source)?;
+        v2.create_plt = Some(source.get()?);
+        Ok(v2)
+    }
+
+    /// Deserialize an "AuthorizationsV3" as an `AuthorizationsV1`.
+    /// This version includes both `create_plt` and `token_parameters`.
+    fn deserial_v3<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let mut v3 = Self::deserial_v2(source)?;
+        v3.token_parameters = Some(source.get()?);
+        Ok(v3)
     }
 }
 
@@ -826,9 +872,11 @@ pub enum UpdatePayload {
     ValidatorScoreParametersCPV3(ValidatorScoreParameters),
     #[cfg_attr(feature = "serde_deprecated", serde(rename = "createPlt"))]
     CreatePlt(CreatePlt),
+    #[cfg_attr(feature = "serde_deprecated", serde(rename = "maxLockDuration"))]
+    MaxLockDuration(concordium_contracts_common::Duration),
 }
 
-#[derive(Debug, Clone, common::Serialize)]
+#[derive(Debug, Clone, PartialEq, common::Serialize)]
 #[cfg_attr(feature = "serde_deprecated", derive(SerdeSerialize, SerdeDeserialize))]
 #[cfg_attr(feature = "serde_deprecated", serde(rename_all = "camelCase"))]
 pub struct CreatePlt {
@@ -908,6 +956,9 @@ pub enum UpdateType {
     /// Create a new protocol level token. Only applies to
     /// protocol version [`P9`](ProtocolVersion::P9) and up.
     UpdateCreatePLT,
+    /// Update the maximum relative duration for protocol-level token locks.
+    /// Only applies to protocol version [`P11`](ProtocolVersion::P11) and up.
+    UpdateMaxLockDuration,
 }
 
 impl UpdatePayload {
@@ -940,6 +991,7 @@ impl UpdatePayload {
             }
             UpdatePayload::ValidatorScoreParametersCPV3(_) => UpdateValidatorScoreParameters,
             UpdatePayload::CreatePlt(_) => UpdateCreatePLT,
+            UpdatePayload::MaxLockDuration(_) => UpdateMaxLockDuration,
         }
     }
 }
@@ -1229,6 +1281,10 @@ impl Serial for UpdatePayload {
                 24u8.serial(out);
                 update.serial(out)
             }
+            UpdatePayload::MaxLockDuration(update) => {
+                25u8.serial(out);
+                update.serial(out)
+            }
         }
     }
 }
@@ -1284,6 +1340,7 @@ impl Deserial for UpdatePayload {
             )),
             23u8 => Ok(UpdatePayload::ValidatorScoreParametersCPV3(source.get()?)),
             24u8 => Ok(UpdatePayload::CreatePlt(source.get()?)),
+            25u8 => Ok(UpdatePayload::MaxLockDuration(source.get()?)),
             tag => anyhow::bail!("Unknown update payload tag {}", tag),
         }
     }
@@ -1291,7 +1348,120 @@ impl Deserial for UpdatePayload {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use super::*;
+
+    fn test_access_structure() -> AccessStructure {
+        let mut authorized_keys = BTreeSet::new();
+        authorized_keys.insert(UpdateKeysIndex { index: 0 });
+        AccessStructure {
+            authorized_keys,
+            threshold: 1.try_into().unwrap(),
+        }
+    }
+
+    fn test_authorizations_v1(
+        create_plt: Option<AccessStructure>,
+        token_parameters: Option<AccessStructure>,
+    ) -> AuthorizationsV1 {
+        let mut rng = rand::thread_rng();
+        let key = UpdatePublicKey::from(&UpdateKeyPair::generate(&mut rng));
+        let access = test_access_structure();
+        AuthorizationsV1 {
+            v0: AuthorizationsV0 {
+                keys: vec![key],
+                emergency: access.clone(),
+                protocol: access.clone(),
+                election_difficulty: access.clone(),
+                euro_per_energy: access.clone(),
+                micro_gtu_per_euro: access.clone(),
+                foundation_account: access.clone(),
+                mint_distribution: access.clone(),
+                transaction_fee_distribution: access.clone(),
+                param_gas_rewards: access.clone(),
+                pool_parameters: access.clone(),
+                add_anonymity_revoker: access.clone(),
+                add_identity_provider: access.clone(),
+            },
+            cooldown_parameters: access.clone(),
+            time_parameters: access.clone(),
+            create_plt,
+            token_parameters,
+        }
+    }
+
+    #[test]
+    fn test_authorizations_v1_wire_variants() {
+        let v1 = test_authorizations_v1(None, None);
+        let create_plt = test_access_structure();
+        let token_parameters = test_access_structure();
+        let v2 = test_authorizations_v1(Some(create_plt.clone()), None);
+        let v3 = test_authorizations_v1(Some(create_plt), Some(token_parameters));
+
+        let mut root_v1_bytes = Vec::new();
+        RootUpdate::Level2KeysUpdateV1(Box::new(v1)).serial(&mut root_v1_bytes);
+        assert_eq!(root_v1_bytes[0], 3);
+        let RootUpdate::Level2KeysUpdateV1(decoded_v1) =
+            RootUpdate::deserial(&mut Cursor::new(&root_v1_bytes)).unwrap()
+        else {
+            panic!("Expected Level2KeysUpdateV1");
+        };
+        assert!(decoded_v1.create_plt.is_none());
+        assert!(decoded_v1.token_parameters.is_none());
+
+        let mut root_v2_bytes = Vec::new();
+        RootUpdate::Level2KeysUpdateV2(Box::new(v2.clone())).serial(&mut root_v2_bytes);
+        assert_eq!(root_v2_bytes[0], 4);
+        let RootUpdate::Level2KeysUpdateV2(decoded_v2) =
+            RootUpdate::deserial(&mut Cursor::new(&root_v2_bytes)).unwrap()
+        else {
+            panic!("Expected Level2KeysUpdateV2");
+        };
+        assert!(decoded_v2.create_plt.is_some());
+        assert!(decoded_v2.token_parameters.is_none());
+
+        let mut root_v3_bytes = Vec::new();
+        RootUpdate::Level2KeysUpdateV3(Box::new(v3.clone())).serial(&mut root_v3_bytes);
+        assert_eq!(root_v3_bytes[0], 5);
+        let RootUpdate::Level2KeysUpdateV3(decoded_v3) =
+            RootUpdate::deserial(&mut Cursor::new(&root_v3_bytes)).unwrap()
+        else {
+            panic!("Expected Level2KeysUpdateV3");
+        };
+        assert!(decoded_v3.create_plt.is_some());
+        assert!(decoded_v3.token_parameters.is_some());
+
+        let mut level1_v3_bytes = Vec::new();
+        Level1Update::Level2KeysUpdateV3(Box::new(v3)).serial(&mut level1_v3_bytes);
+        assert_eq!(level1_v3_bytes[0], 4);
+        let Level1Update::Level2KeysUpdateV3(decoded_level1_v3) =
+            Level1Update::deserial(&mut Cursor::new(&level1_v3_bytes)).unwrap()
+        else {
+            panic!("Expected Level1 Level2KeysUpdateV3");
+        };
+        assert!(decoded_level1_v3.create_plt.is_some());
+        assert!(decoded_level1_v3.token_parameters.is_some());
+    }
+
+    #[test]
+    fn test_max_lock_duration_payload_encode_decode() {
+        let duration = concordium_contracts_common::Duration::from_millis(12345);
+        let payload = UpdatePayload::MaxLockDuration(duration);
+        let mut bytes = Vec::new();
+        payload.serial(&mut bytes);
+        assert_eq!(bytes[0], 25);
+        let decoded = UpdatePayload::deserial(&mut Cursor::new(&bytes))
+            .expect("Failed decoding max lock duration payload");
+        let UpdatePayload::MaxLockDuration(decoded) = decoded else {
+            panic!("Unexpected update payload type");
+        };
+        assert_eq!(duration, decoded);
+        assert!(matches!(
+            payload.update_type(),
+            UpdateType::UpdateMaxLockDuration
+        ));
+    }
 
     #[test]
     fn test_payload_encode_decode() {

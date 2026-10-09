@@ -10,6 +10,7 @@ import Test.QuickCheck.Monadic
 import Control.Monad
 import qualified Data.Bits as Bit
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Short as BSS
 import Data.Either (isLeft)
 import Data.Int
 import Data.Maybe (isNothing)
@@ -54,7 +55,8 @@ isPayloadSupported pv ConfigureBaker{..}
     | isNothing cbSuspend = pv > P3
     | otherwise = pv > P7
 isPayloadSupported pv ConfigureDelegation{} = pv > P3
-isPayloadSupported pv TokenUpdate{} = pv >= P9
+isPayloadSupported pv (TokenUpdate (ScopedTokenUpdate _ _)) = pv >= P9
+isPayloadSupported pv (TokenUpdate (UnscopedTokenUpdate _)) = pv >= P11
 
 testSerializeEncryptedTransfer :: SProtocolVersion pv -> Property
 testSerializeEncryptedTransfer spv =
@@ -172,8 +174,24 @@ checkInvalidPayloadByteString :: SProtocolVersion pv -> BS.ByteString -> Propert
 checkInvalidPayloadByteString spv bs =
     property $ isLeft $ S.runGet (getPayload spv (fromIntegral (BS.length bs))) bs
 
+testTokenUpdatePayloads :: Spec
+testTokenUpdatePayloads =
+    describe "TokenUpdate payloads" $ do
+        let operations = rawCborFromBytes $ BS.singleton 0x80
+        it "uses tag 27 followed by the token ID and token operations for the scoped form" $ do
+            let payload = TokenUpdate (ScopedTokenUpdate (TokenId $ BSS.pack [84]) (EncodedTokenOperations operations))
+                bytes = S.runPut $ putPayload payload
+            BS.take 3 bytes `shouldBe` BS.pack [27, 1, 84]
+            S.runGet (getPayload SP9 (fromIntegral $ BS.length bytes)) bytes `shouldBe` Right payload
+        it "uses tag 27 with an empty token ID and unscoped operations for the unscoped form" $ do
+            let payload = TokenUpdate (UnscopedTokenUpdate (EncodedOperations operations))
+                bytes = S.runPut $ putPayload payload
+            BS.take 2 bytes `shouldBe` BS.pack [27, 0]
+            S.runGet (getPayload SP11 (fromIntegral $ BS.length bytes)) bytes `shouldBe` Right payload
+
 tests :: Spec
 tests = do
+    testTokenUpdatePayloads
     describe "Payload serialization tests" $ do
         test SP1 25 1000
         test SP2 50 500

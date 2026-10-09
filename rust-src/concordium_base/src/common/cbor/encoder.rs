@@ -1,83 +1,90 @@
-use crate::common::cbor::{
-    CborArrayEncoder, CborEncoder, CborMapEncoder, CborSerializationError, CborSerializationResult,
-    CborSerialize,
-};
+use crate::common::cbor;
+use crate::common::cbor::{CborArrayEncoder, CborEncoder, CborMapEncoder, CborSerialize};
+use ciborium_io::Write;
 use ciborium_ll::Header;
-use std::{
-    io::Write,
-    ops::{Index, Range},
-};
+use std::ops::{Index, Range};
+
+/// Writer that is infallible. I used to serialize to `Vec<u8>`
+#[derive(Debug)]
+pub struct VecWrite<'a>(pub &'a mut Vec<u8>);
+
+impl Write for VecWrite<'_> {
+    type Error = core::convert::Infallible;
+
+    fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
+        self.0.extend_from_slice(data);
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
 
 /// CBOR encoder implementation
 pub struct Encoder<W: Write> {
-    write: W,
+    inner: ciborium_ll::Encoder<W>,
 }
 
 impl<W: Write> Encoder<W> {
     pub fn new(write: W) -> Self {
-        Self { write }
-    }
+        let inner = ciborium_ll::Encoder::from(write);
 
-    fn encode_raw(&mut self, bytes: &[u8]) -> CborSerializationResult<()> {
-        Ok(self.write.write_all(bytes)?)
-    }
-
-    fn encoder(&mut self) -> ciborium_ll::Encoder<&mut W> {
-        ciborium_ll::Encoder::from(&mut self.write)
+        Self { inner }
     }
 }
 
-impl<'a, W: Write> CborEncoder for &'a mut Encoder<W>
-where
-    CborSerializationError: From<<W as ciborium_io::Write>::Error>,
-{
+impl<W: Write> Encoder<W> {
+    fn encode_raw(&mut self, bytes: &[u8]) -> Result<(), <W as Write>::Error> {
+        self.inner.write_all(bytes)
+    }
+}
+
+impl<'a, W: Write> CborEncoder for &'a mut Encoder<W> {
     type ArrayEncoder = ArrayEncoder<'a, W>;
     type MapEncoder = MapEncoder<'a, W>;
+    type WriteError = <W as Write>::Error;
 
-    fn encode_tag(&mut self, tag: u64) -> CborSerializationResult<()> {
-        Ok(self.encoder().push(Header::Tag(tag))?)
+    fn encode_tag(&mut self, tag: u64) -> Result<(), Self::WriteError> {
+        self.inner.push(Header::Tag(tag))
     }
 
-    fn encode_positive(self, positive: u64) -> CborSerializationResult<()> {
-        Ok(self.encoder().push(Header::Positive(positive))?)
+    fn encode_positive(self, positive: u64) -> Result<(), Self::WriteError> {
+        self.inner.push(Header::Positive(positive))
     }
 
-    fn encode_negative(self, negative: u64) -> CborSerializationResult<()> {
-        Ok(self.encoder().push(Header::Negative(negative))?)
+    fn encode_negative(self, negative: u64) -> Result<(), Self::WriteError> {
+        self.inner.push(Header::Negative(negative))
     }
 
-    fn encode_map(self, size: usize) -> CborSerializationResult<Self::MapEncoder> {
-        self.encoder().push(Header::Map(Some(size)))?;
-        Ok(MapEncoder::new(size, self))
+    fn encode_map(self) -> Result<Self::MapEncoder, Self::WriteError> {
+        Ok(MapEncoder::new(self))
     }
 
-    fn encode_array(self, size: usize) -> CborSerializationResult<Self::ArrayEncoder> {
-        self.encoder().push(Header::Array(Some(size)))?;
-        Ok(ArrayEncoder::new(size, self))
+    fn encode_array(self) -> Result<Self::ArrayEncoder, Self::WriteError> {
+        Ok(ArrayEncoder::new(self))
     }
 
-    fn encode_bytes(self, bytes: &[u8]) -> CborSerializationResult<()> {
-        Ok(self.encoder().bytes(bytes, None)?)
+    fn encode_bytes(self, bytes: &[u8]) -> Result<(), Self::WriteError> {
+        self.inner.bytes(bytes, None)
     }
 
-    fn encode_text(self, text: &str) -> CborSerializationResult<()> {
-        Ok(self.encoder().text(text, None)?)
+    fn encode_text(self, text: &str) -> Result<(), Self::WriteError> {
+        self.inner.text(text, None)
     }
 
-    fn encode_simple(self, value: u8) -> CborSerializationResult<()> {
-        Ok(self.encoder().push(Header::Simple(value))?)
+    fn encode_simple(self, value: u8) -> Result<(), Self::WriteError> {
+        self.inner.push(Header::Simple(value))
     }
 
-    fn encode_float(self, float: f64) -> CborSerializationResult<()> {
-        Ok(self.encoder().push(Header::Float(float))?)
+    fn encode_float(self, float: f64) -> Result<(), Self::WriteError> {
+        self.inner.push(Header::Float(float))
     }
 }
 
 /// CBOR map encoder
 #[must_use]
 pub struct MapEncoder<'a, W: Write> {
-    declared_size: usize,
-    current_size: usize,
     encoder: &'a mut Encoder<W>,
     /// Temporary buffer for unordered map entries
     buffer: Vec<u8>,
@@ -86,93 +93,86 @@ pub struct MapEncoder<'a, W: Write> {
 }
 
 impl<'a, W: Write> MapEncoder<'a, W> {
-    fn new(size: usize, encoder: &'a mut Encoder<W>) -> Self {
+    fn new(encoder: &'a mut Encoder<W>) -> Self {
         Self {
-            declared_size: size,
-            current_size: 0,
             encoder,
             buffer: Vec::new(),
-            entries_indexes: Vec::with_capacity(size),
+            entries_indexes: Vec::new(),
         }
     }
 }
 
-impl<W: Write> CborMapEncoder for MapEncoder<'_, W>
-where
-    CborSerializationError: From<<W as ciborium_io::Write>::Error>,
-{
+impl<W: Write> CborMapEncoder for MapEncoder<'_, W> {
+    type WriteError = <W as Write>::Error;
+
     fn serialize_entry<K: CborSerialize + ?Sized, V: CborSerialize + ?Sized>(
         &mut self,
         key: &K,
         value: &V,
-    ) -> CborSerializationResult<()> {
-        self.current_size += 1;
+    ) -> Result<(), Self::WriteError> {
+        // start of entry
         let index_start = self.buffer.len();
-        let mut tmp_encoder = Encoder::new(&mut self.buffer);
-        key.serialize(&mut tmp_encoder)?;
-        value.serialize(&mut tmp_encoder)?;
+        let mut tmp_encoder = Encoder::new(VecWrite(&mut self.buffer));
+        cbor::into_ok(key.serialize(&mut tmp_encoder));
+        cbor::into_ok(value.serialize(&mut tmp_encoder));
+        // the buffer haw now been extended, so buffer.len() is where the entry ends
         self.entries_indexes.push(index_start..self.buffer.len());
         Ok(())
     }
 
-    fn end(mut self) -> CborSerializationResult<()> {
-        if self.declared_size == self.current_size {
-            // Sort according to lexicographic byte order: https://www.rfc-editor.org/rfc/rfc8949.html#name-core-deterministic-encoding
-            self.entries_indexes
-                .sort_by_key(|index| self.buffer.index(index.clone()));
-            for index in &self.entries_indexes {
-                self.encoder.encode_raw(self.buffer.index(index.clone()))?;
-            }
-            Ok(())
-        } else {
-            Err(CborSerializationError::map_size(
-                self.declared_size,
-                Some(self.current_size),
-            ))
+    fn end(mut self) -> Result<(), Self::WriteError> {
+        self.encoder
+            .inner
+            .push(Header::Map(Some(self.entries_indexes.len())))?;
+        // Sort according to lexicographic byte order: https://www.rfc-editor.org/rfc/rfc8949.html#name-core-deterministic-encoding
+        self.entries_indexes
+            .sort_by_key(|index| self.buffer.index(index.clone()));
+        for index in &self.entries_indexes {
+            self.encoder.encode_raw(self.buffer.index(index.clone()))?;
         }
+        Ok(())
     }
 }
 
 /// CBOR array encoder
 #[must_use]
 pub struct ArrayEncoder<'a, W: Write> {
-    declared_size: usize,
-    current_size: usize,
     encoder: &'a mut Encoder<W>,
+    /// Temporary buffer for elements
+    buffer: Vec<u8>,
+    /// Number of elements in buffer
+    element_count: usize,
 }
 
 impl<'a, W: Write> ArrayEncoder<'a, W> {
-    fn new(size: usize, encoder: &'a mut Encoder<W>) -> Self {
+    fn new(encoder: &'a mut Encoder<W>) -> Self {
         Self {
-            declared_size: size,
-            current_size: 0,
             encoder,
+            buffer: Vec::new(),
+            element_count: 0,
         }
     }
 }
 
-impl<W: Write> CborArrayEncoder for ArrayEncoder<'_, W>
-where
-    CborSerializationError: From<<W as ciborium_io::Write>::Error>,
-{
+impl<W: Write> CborArrayEncoder for ArrayEncoder<'_, W> {
+    type WriteError = <W as Write>::Error;
+
     fn serialize_element<T: CborSerialize + ?Sized>(
         &mut self,
         element: &T,
-    ) -> CborSerializationResult<()> {
-        self.current_size += 1;
-        element.serialize(&mut *self.encoder)?;
+    ) -> Result<(), Self::WriteError> {
+        let mut tmp_encoder = Encoder::new(VecWrite(&mut self.buffer));
+        cbor::into_ok(element.serialize(&mut tmp_encoder));
+        self.element_count += 1;
         Ok(())
     }
 
-    fn end(self) -> CborSerializationResult<()> {
-        if self.declared_size == self.current_size {
-            Ok(())
-        } else {
-            Err(CborSerializationError::array_size(
-                self.declared_size,
-                Some(self.current_size),
-            ))
-        }
+    fn end(self) -> Result<(), Self::WriteError> {
+        self.encoder
+            .inner
+            .push(Header::Array(Some(self.element_count)))?;
+        self.encoder.encode_raw(&self.buffer)?;
+        Ok(())
     }
 }
 
@@ -180,31 +180,13 @@ where
 mod test {
     use super::*;
 
-    #[test]
-    fn test_map_wrong_size() {
-        let mut bytes = Vec::new();
-        let mut encoder = Encoder::new(&mut bytes);
-        let map_encoder = encoder.encode_map(1).unwrap();
-        let err = map_encoder.end().unwrap_err().to_string();
-        assert!(err.contains("expected map size 1"), "err: {}", err);
-    }
-
-    #[test]
-    fn test_array_wrong_size() {
-        let mut bytes = Vec::new();
-        let mut encoder = Encoder::new(&mut bytes);
-        let array_encoder = encoder.encode_array(1).unwrap();
-        let err = array_encoder.end().unwrap_err().to_string();
-        assert!(err.contains("expected array length 1"), "err: {}", err);
-    }
-
     /// Test that map entries are ordered according to the rules
     /// in <https://www.rfc-editor.org/rfc/rfc8949.html#name-core-deterministic-encoding>
     #[test]
     fn test_map_entry_order() {
         let mut bytes = Vec::new();
         let mut encoder = Encoder::new(&mut bytes);
-        let mut map_encoder = encoder.encode_map(5).unwrap();
+        let mut map_encoder = encoder.encode_map().unwrap();
         map_encoder.serialize_entry(&"key2", &0).unwrap();
         map_encoder.serialize_entry(&256, &0).unwrap();
         map_encoder.serialize_entry(&"key1", &0).unwrap();
