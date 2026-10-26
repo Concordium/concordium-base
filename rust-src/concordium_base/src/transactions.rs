@@ -2260,25 +2260,78 @@ pub mod cost {
     /// Additional cost of update token metadata for a PLT
     pub const PLT_UPDATE_TOKEN_METADATA: Energy = Energy { energy: 50 };
 
-    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
-    /// Additional cost of a lock creation
-    pub const PLT_LOCK_CREATE: Energy = Energy { energy: 50 };
+    /// Lock creation cost: `100 + 500 * H * T + 10 * G` NRG.
+    ///
+    /// # Arguments
+    /// * `config` - Decoded configuration; aliases and duplicate grants are merged,
+    ///   empty grants retained, and token IDs counted distinctly after ASCII lowercasing.
+    ///   `H` counts Fund-authorized holders, `T` tokens and `G` grants.
+    ///
+    /// # Errors
+    /// This function is infallible. Arithmetic saturates at `u64::MAX` rather than wrapping.
+    ///
+    /// # Example
+    /// ```
+    /// use concordium_base::transactions::cost::plt_lock_create;
+    /// use concordium_base::protocol_level_locks::{LockConfig, LockConfigSimpleV0, LockRecipients};
+    /// use concordium_base::common::types::TransactionTime;
+    /// let config = LockConfig::SimpleV0(LockConfigSimpleV0 {
+    ///     recipients: LockRecipients::Any, expiry: TransactionTime::from_seconds(0),
+    ///     grants: vec![], tokens: vec![], keep_alive: false, memo: None, metadata: None,
+    /// });
+    /// assert_eq!(plt_lock_create(&config).energy, 100);
+    /// ```
+    pub fn plt_lock_create(config: &crate::protocol_level_locks::LockConfig) -> Energy {
+        let parameters = config.get_creation_complexity_parameters();
+        Energy::from(
+            100u64
+                .saturating_add(
+                    500u64
+                        .saturating_mul(parameters.token_holders)
+                        .saturating_mul(parameters.tokens),
+                )
+                .saturating_add(10u64.saturating_mul(parameters.grants)),
+        )
+    }
 
-    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
-    /// Additional cost of a lock fund operation
-    pub const PLT_LOCK_FUND: Energy = Energy { energy: 100 };
+    /// Additional cost of a lock fund operation, in NRG.
+    pub const PLT_LOCK_FUND: Energy = Energy { energy: 250 };
 
-    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
-    /// Additional cost of a lock send operation
-    pub const PLT_LOCK_SEND: Energy = Energy { energy: 100 };
+    /// Additional cost of a lock send operation, in NRG.
+    pub const PLT_LOCK_SEND: Energy = Energy { energy: 250 };
 
-    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
-    /// Additional cost of a lock release operation
-    pub const PLT_LOCK_RELEASE: Energy = Energy { energy: 100 };
+    /// Additional cost of a lock release operation, in NRG.
+    pub const PLT_LOCK_RELEASE: Energy = Energy { energy: 250 };
 
-    /// TODO - this is a placeholder value for now - COR-2306 will investigate the correct energy to use.
-    /// Additional cost of a lock cancel operation
-    pub const PLT_LOCK_CANCEL: Energy = Energy { energy: 50 };
+    /// Manual cancellation cost: `500 * balance_references` NRG.
+    ///
+    /// # Arguments
+    /// * `balance_references` - Query lock information using the lock ID, then sum
+    ///   `amounts.len()` over its funds to obtain the current number of balance references.
+    ///
+    /// # Errors
+    /// Infallible; results exceeding `u64::MAX` saturate instead of wrapping.
+    ///
+    /// # Example
+    /// ```
+    /// use concordium_base::transactions::cost::plt_lock_cancel;
+    /// assert_eq!(plt_lock_cancel(3).energy, 1500);
+    /// assert_eq!(plt_lock_cancel(0).energy, 0);
+    /// ```
+    pub fn plt_lock_cancel(balance_references: u64) -> Energy {
+        Energy::from(500u64.saturating_mul(balance_references))
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn lock_cost_formulas() {
+        assert_eq!(plt_lock_cancel(0).energy, 0);
+        assert_eq!(plt_lock_cancel(3).energy, 1500);
+        assert_eq!(plt_lock_cancel(u64::MAX).energy, u64::MAX);
+        assert_eq!(PLT_LOCK_FUND.energy, 250);
+        assert_eq!(PLT_LOCK_SEND.energy, 250);
+        assert_eq!(PLT_LOCK_RELEASE.energy, 250);
+    }
 
     /// Additional cost of an encrypted transfer.
     #[deprecated(
@@ -2394,6 +2447,81 @@ pub mod cost {
 /// See also the [send] module above which combines construction with signing.
 pub mod construct {
     use super::*;
+    use crate::protocol_level_tokens::{
+        LockCancelDetails, LockCreateDetails, LockFundDetails, LockReleaseDetails, LockSendDetails,
+        TokenListUpdateDetailsWithId, TokenMetadataUrlDetailsWithId, TokenPauseDetailsWithId,
+        TokenSupplyUpdateDetailsWithId, TokenTransferWithId, TokenUpdateAdminRolesDetailsWithId,
+    };
+
+    /// Construction-only operation with the state needed for energy estimation.
+    /// Conversion into [`Operation`] discards estimation data without changing the wire format.
+    #[derive(Debug, Clone, PartialEq)]
+    pub enum OperationInput {
+        /// Transfer tokens.
+        TokenTransfer(TokenTransferWithId),
+        /// Mint tokens.
+        TokenMint(TokenSupplyUpdateDetailsWithId),
+        /// Burn tokens.
+        TokenBurn(TokenSupplyUpdateDetailsWithId),
+        /// Add an allow-list member.
+        TokenAddAllowList(TokenListUpdateDetailsWithId),
+        /// Remove an allow-list member.
+        TokenRemoveAllowList(TokenListUpdateDetailsWithId),
+        /// Add a deny-list member.
+        TokenAddDenyList(TokenListUpdateDetailsWithId),
+        /// Remove a deny-list member.
+        TokenRemoveDenyList(TokenListUpdateDetailsWithId),
+        /// Pause a token.
+        TokenPause(TokenPauseDetailsWithId),
+        /// Unpause a token.
+        TokenUnpause(TokenPauseDetailsWithId),
+        /// Assign administrator roles.
+        TokenAssignAdminRoles(TokenUpdateAdminRolesDetailsWithId),
+        /// Revoke administrator roles.
+        TokenRevokeAdminRoles(TokenUpdateAdminRolesDetailsWithId),
+        /// Update token metadata.
+        TokenUpdateMetadata(TokenMetadataUrlDetailsWithId),
+        /// Fund a lock.
+        LockFund(LockFundDetails),
+        /// Send locked funds.
+        LockSend(LockSendDetails),
+        /// Release locked funds.
+        LockRelease(LockReleaseDetails),
+        /// Create a lock.
+        LockCreate(LockCreateDetails),
+        /// Cancel a lock using a caller-supplied estimate of its balance references.
+        LockCancel {
+            /// Details encoded in the transaction.
+            details: LockCancelDetails,
+            /// Sum of `amounts.len()` over funds in queried lock information.
+            balance_references: u64,
+        },
+    }
+
+    impl From<OperationInput> for Operation {
+        fn from(operation: OperationInput) -> Self {
+            match operation {
+                OperationInput::TokenTransfer(d) => Self::TokenTransfer(d),
+                OperationInput::TokenMint(d) => Self::TokenMint(d),
+                OperationInput::TokenBurn(d) => Self::TokenBurn(d),
+                OperationInput::TokenAddAllowList(d) => Self::TokenAddAllowList(d),
+                OperationInput::TokenRemoveAllowList(d) => Self::TokenRemoveAllowList(d),
+                OperationInput::TokenAddDenyList(d) => Self::TokenAddDenyList(d),
+                OperationInput::TokenRemoveDenyList(d) => Self::TokenRemoveDenyList(d),
+                OperationInput::TokenPause(d) => Self::TokenPause(d),
+                OperationInput::TokenUnpause(d) => Self::TokenUnpause(d),
+                OperationInput::TokenAssignAdminRoles(d) => Self::TokenAssignAdminRoles(d),
+                OperationInput::TokenRevokeAdminRoles(d) => Self::TokenRevokeAdminRoles(d),
+                OperationInput::TokenUpdateMetadata(d) => Self::TokenUpdateMetadata(d),
+                OperationInput::LockFund(d) => Self::LockFund(d),
+                OperationInput::LockSend(d) => Self::LockSend(d),
+                OperationInput::LockRelease(d) => Self::LockRelease(d),
+                OperationInput::LockCreate(d) => Self::LockCreate(d),
+                OperationInput::LockCancel { details, .. } => Self::LockCancel(details),
+            }
+        }
+    }
+
     use crate::{
         common::cbor,
         protocol_level_tokens::{
@@ -2721,47 +2849,147 @@ pub mod construct {
     }
 
     /// Additional cost of a Token Update transaction containing unscoped operations.
-    fn operations_txn_energy(operations: &Operations) -> Energy {
-        cost::PLT_OPERATIONS_TRANSACTIONS
-            + operations
-                .operations
-                .iter()
-                .map(|op| match op {
-                    Operation::TokenTransfer(_) => cost::PLT_TRANSFER,
-                    Operation::TokenMint(_) => cost::PLT_MINT,
-                    Operation::TokenBurn(_) => cost::PLT_BURN,
-                    Operation::TokenAddAllowList(_)
-                    | Operation::TokenRemoveAllowList(_)
-                    | Operation::TokenAddDenyList(_)
-                    | Operation::TokenRemoveDenyList(_) => cost::PLT_LIST_UPDATE,
-                    Operation::TokenPause(_) | Operation::TokenUnpause(_) => cost::PLT_PAUSE,
-                    Operation::TokenAssignAdminRoles(_) | Operation::TokenRevokeAdminRoles(_) => {
+    fn operations_txn_energy(operations: &[OperationInput]) -> Energy {
+        use OperationInput as Op;
+        let mut energy = cost::PLT_OPERATIONS_TRANSACTIONS;
+        for op in operations {
+            energy = energy
+                + match op {
+                    Op::TokenTransfer(_) => cost::PLT_TRANSFER,
+                    Op::TokenMint(_) => cost::PLT_MINT,
+                    Op::TokenBurn(_) => cost::PLT_BURN,
+                    Op::TokenAddAllowList(_)
+                    | Op::TokenRemoveAllowList(_)
+                    | Op::TokenAddDenyList(_)
+                    | Op::TokenRemoveDenyList(_) => cost::PLT_LIST_UPDATE,
+                    Op::TokenPause(_) | Op::TokenUnpause(_) => cost::PLT_PAUSE,
+                    Op::TokenAssignAdminRoles(_) | Op::TokenRevokeAdminRoles(_) => {
                         cost::PLT_ASSIGN_REVOKE_ROLES
                     }
-                    Operation::TokenUpdateMetadata(_) => cost::PLT_UPDATE_TOKEN_METADATA,
-                    Operation::LockFund(_) => cost::PLT_LOCK_FUND,
-                    Operation::LockSend(_) => cost::PLT_LOCK_SEND,
-                    Operation::LockRelease(_) => cost::PLT_LOCK_RELEASE,
-                    Operation::LockCreate(_) => cost::PLT_LOCK_CREATE,
-                    Operation::LockCancel(_) => cost::PLT_LOCK_CANCEL,
-                })
-                .sum()
+                    Op::TokenUpdateMetadata(_) => cost::PLT_UPDATE_TOKEN_METADATA,
+                    Op::LockFund(_) => cost::PLT_LOCK_FUND,
+                    Op::LockSend(_) => cost::PLT_LOCK_SEND,
+                    Op::LockRelease(_) => cost::PLT_LOCK_RELEASE,
+                    Op::LockCreate(details) => cost::plt_lock_create(&details.config),
+                    Op::LockCancel {
+                        balance_references, ..
+                    } => cost::plt_lock_cancel(*balance_references),
+                };
+        }
+        energy
     }
 
-    /// Construct a Token Update transaction consisting of unscoped operations
-    /// encoded in CBOR.
+    #[cfg(test)]
+    mod operation_energy_tests {
+        use super::*;
+        use crate::protocol_level_locks::{LockConfig, LockConfigSimpleV0, LockId, LockRecipients};
+        use crate::protocol_level_tokens::{
+            LockCancelDetails, LockCreateDetails, LockFundDetails, LockReleaseDetails,
+            LockSendDetails, TokenPauseDetailsWithId,
+        };
+
+        fn lock() -> LockId {
+            LockId {
+                account_index: 1,
+                sequence_number: 2,
+                creation_order: 0,
+            }
+        }
+
+        #[test]
+        fn create_fixed_and_non_lock_costs() {
+            let token: TokenId = "TEST".parse().unwrap();
+            let account =
+                crate::protocol_level_tokens::CborHolderAccount::from(AccountAddress([0; 32]));
+            let amount = crate::protocol_level_tokens::TokenAmount::from_raw(1, 0);
+            let ops = vec![
+                OperationInput::LockCreate(LockCreateDetails {
+                    config: LockConfig::SimpleV0(LockConfigSimpleV0 {
+                        recipients: LockRecipients::Any,
+                        expiry: TransactionTime::from_seconds(0),
+                        grants: vec![],
+                        tokens: vec![],
+                        keep_alive: false,
+                        memo: None,
+                        metadata: None,
+                    }),
+                }),
+                OperationInput::LockFund(LockFundDetails {
+                    token: token.clone(),
+                    lock: lock(),
+                    amount,
+                    memo: None,
+                }),
+                OperationInput::LockSend(LockSendDetails {
+                    token: token.clone(),
+                    lock: lock(),
+                    source: account.clone(),
+                    recipient: account.clone(),
+                    amount,
+                    memo: None,
+                }),
+                OperationInput::LockRelease(LockReleaseDetails {
+                    token,
+                    lock: lock(),
+                    source: account,
+                    amount,
+                    memo: None,
+                }),
+            ];
+            assert_eq!(
+                operations_txn_energy(&ops),
+                cost::PLT_OPERATIONS_TRANSACTIONS + Energy::from(850)
+            );
+
+            assert_eq!(
+                operations_txn_energy(&[OperationInput::TokenPause(TokenPauseDetailsWithId {
+                    token: "TEST".parse().unwrap(),
+                })]),
+                cost::PLT_OPERATIONS_TRANSACTIONS + cost::PLT_PAUSE
+            );
+        }
+
+        #[test]
+        fn cancel_cost_and_wire_preservation() {
+            let details = LockCancelDetails {
+                lock: lock(),
+                memo: None,
+            };
+            let wire = Operation::LockCancel(details.clone());
+            for count in [0, 1, 3] {
+                let input = OperationInput::LockCancel {
+                    details: details.clone(),
+                    balance_references: count,
+                };
+                assert_eq!(
+                    operations_txn_energy(&[input.clone()]),
+                    cost::PLT_OPERATIONS_TRANSACTIONS + Energy::from(500 * count)
+                );
+                assert_eq!(Operation::from(input.clone()), wire);
+                assert_eq!(
+                    cbor::cbor_encode(&Operation::from(input)),
+                    cbor::cbor_encode(&wire)
+                );
+            }
+        }
+    }
+
+    /// Construct an unscoped token update, encoding only wire operation details.
     ///
-    /// Unscoped operations can be created using the functions in
-    /// [`operations`](crate::protocol_level_tokens::operations).
+    /// Arguments are the signature count, sender address, nonce, expiry and enriched
+    /// operations in execution order.
     pub fn operations(
         num_sigs: u32,
         sender: AccountAddress,
         nonce: Nonce,
         expiry: TransactionTime,
-        operations: &Operations,
+        operations: &[OperationInput],
     ) -> PreAccountTransaction {
         let energy = operations_txn_energy(operations);
-        let operations = RawCbor::from(cbor::cbor_encode(operations));
+        let operations = Operations {
+            operations: operations.iter().cloned().map(Operation::from).collect(),
+        };
+        let operations = RawCbor::from(cbor::cbor_encode(&operations));
 
         let payload = Payload::TokenUpdate {
             payload: TokenUpdatePayload::Unscoped(OperationsPayload { operations }),
@@ -3370,7 +3598,7 @@ pub mod construct {
 /// for transaction.
 pub mod send {
     use super::*;
-    use crate::protocol_level_tokens::{Operations, TokenId, TokenOperations};
+    use crate::protocol_level_tokens::{TokenId, TokenOperations};
 
     /// Construct a native coin (CCD) transfer transaction.
     pub fn transfer(
@@ -3432,14 +3660,15 @@ pub mod send {
 
     /// Construct and sign an unscoped token update transaction.
     ///
-    /// Operations can be created using
-    /// [`operations`](crate::protocol_level_tokens::operations).
+    /// Arguments are the signer, sender address, nonce, expiry and enriched operations
+    /// in execution order. See [`construct::operations`] for estimation requirements
+    /// and [`construct::OperationInput`] for construction examples.
     pub fn operations(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
         nonce: Nonce,
         expiry: TransactionTime,
-        operations: &Operations,
+        operations: &[construct::OperationInput],
     ) -> AccountTransaction<EncodedPayload> {
         construct::operations(signer.num_keys(), sender, nonce, expiry, operations).sign(signer)
     }
