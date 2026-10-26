@@ -2879,101 +2879,6 @@ pub mod construct {
         energy
     }
 
-    #[cfg(test)]
-    mod operation_energy_tests {
-        use super::*;
-        use crate::protocol_level_locks::{LockConfig, LockConfigSimpleV0, LockId, LockRecipients};
-        use crate::protocol_level_tokens::{
-            LockCancelDetails, LockCreateDetails, LockFundDetails, LockReleaseDetails,
-            LockSendDetails, TokenPauseDetailsWithId,
-        };
-
-        fn lock() -> LockId {
-            LockId {
-                account_index: 1,
-                sequence_number: 2,
-                creation_order: 0,
-            }
-        }
-
-        #[test]
-        fn create_fixed_and_non_lock_costs() {
-            let token: TokenId = "TEST".parse().unwrap();
-            let account =
-                crate::protocol_level_tokens::CborHolderAccount::from(AccountAddress([0; 32]));
-            let amount = crate::protocol_level_tokens::TokenAmount::from_raw(1, 0);
-            let ops = vec![
-                OperationInput::LockCreate(LockCreateDetails {
-                    config: LockConfig::SimpleV0(LockConfigSimpleV0 {
-                        recipients: LockRecipients::Any,
-                        expiry: TransactionTime::from_seconds(0),
-                        grants: vec![],
-                        tokens: vec![],
-                        keep_alive: false,
-                        memo: None,
-                        metadata: None,
-                    }),
-                }),
-                OperationInput::LockFund(LockFundDetails {
-                    token: token.clone(),
-                    lock: lock(),
-                    amount,
-                    memo: None,
-                }),
-                OperationInput::LockSend(LockSendDetails {
-                    token: token.clone(),
-                    lock: lock(),
-                    source: account.clone(),
-                    recipient: account.clone(),
-                    amount,
-                    memo: None,
-                }),
-                OperationInput::LockRelease(LockReleaseDetails {
-                    token,
-                    lock: lock(),
-                    source: account,
-                    amount,
-                    memo: None,
-                }),
-            ];
-            assert_eq!(
-                operations_txn_energy(&ops),
-                cost::PLT_OPERATIONS_TRANSACTIONS + Energy::from(850)
-            );
-
-            assert_eq!(
-                operations_txn_energy(&[OperationInput::TokenPause(TokenPauseDetailsWithId {
-                    token: "TEST".parse().unwrap(),
-                })]),
-                cost::PLT_OPERATIONS_TRANSACTIONS + cost::PLT_PAUSE
-            );
-        }
-
-        #[test]
-        fn cancel_cost_and_wire_preservation() {
-            let details = LockCancelDetails {
-                lock: lock(),
-                memo: None,
-            };
-            let wire = Operation::LockCancel(details.clone());
-            for count in [0, 1, 3] {
-                let input = OperationInput::LockCancel {
-                    details: details.clone(),
-                    balance_references: count,
-                };
-                assert_eq!(
-                    operations_txn_energy(&[input.clone()]),
-                    cost::PLT_OPERATIONS_TRANSACTIONS + Energy::from(500 * count)
-                );
-                assert_eq!(Operation::from(input.clone()), wire);
-                assert_eq!(
-                    cbor::cbor_encode(&Operation::from(input)),
-                    cbor::cbor_encode(&wire)
-                );
-            }
-        }
-    }
-
     /// Construct an unscoped token update, encoding only wire operation details.
     ///
     /// Arguments are the signature count, sender address, nonce, expiry and enriched
@@ -3591,6 +3496,101 @@ pub mod construct {
         };
         builder.construct(cost)
     }
+
+    #[cfg(test)]
+    mod operation_energy_tests {
+        use super::*;
+        use crate::protocol_level_locks::{LockConfig, LockConfigSimpleV0, LockId, LockRecipients};
+        use crate::protocol_level_tokens::{
+            LockCancelDetails, LockCreateDetails, LockFundDetails, LockReleaseDetails,
+            LockSendDetails, TokenPauseDetailsWithId,
+        };
+
+        fn lock() -> LockId {
+            LockId {
+                account_index: 1,
+                sequence_number: 2,
+                creation_order: 0,
+            }
+        }
+
+        #[test]
+        fn create_fixed_and_non_lock_costs() {
+            let token: TokenId = "TEST".parse().unwrap();
+            let account =
+                crate::protocol_level_tokens::CborHolderAccount::from(AccountAddress([0; 32]));
+            let amount = crate::protocol_level_tokens::TokenAmount::from_raw(1, 0);
+            let ops = vec![
+                OperationInput::LockCreate(LockCreateDetails {
+                    config: LockConfig::SimpleV0(LockConfigSimpleV0 {
+                        recipients: LockRecipients::Any,
+                        expiry: TransactionTime::from_seconds(0),
+                        grants: vec![],
+                        tokens: vec![],
+                        keep_alive: false,
+                        memo: None,
+                        metadata: None,
+                    }),
+                }),
+                OperationInput::LockFund(LockFundDetails {
+                    token: token.clone(),
+                    lock: lock(),
+                    amount,
+                    memo: None,
+                }),
+                OperationInput::LockSend(LockSendDetails {
+                    token: token.clone(),
+                    lock: lock(),
+                    source: account.clone(),
+                    recipient: account.clone(),
+                    amount,
+                    memo: None,
+                }),
+                OperationInput::LockRelease(LockReleaseDetails {
+                    token,
+                    lock: lock(),
+                    source: account,
+                    amount,
+                    memo: None,
+                }),
+            ];
+            assert_eq!(
+                operations_txn_energy(&ops),
+                cost::PLT_OPERATIONS_TRANSACTIONS + Energy::from(850)
+            );
+
+            assert_eq!(
+                operations_txn_energy(&[OperationInput::TokenPause(TokenPauseDetailsWithId {
+                    token: "TEST".parse().unwrap(),
+                })]),
+                cost::PLT_OPERATIONS_TRANSACTIONS + cost::PLT_PAUSE
+            );
+        }
+
+        #[test]
+        fn cancel_cost_and_wire_preservation() {
+            let details = LockCancelDetails {
+                lock: lock(),
+                memo: None,
+            };
+            let wire = Operation::LockCancel(details.clone());
+            for count in [0, 1, 3] {
+                let input = OperationInput::LockCancel {
+                    details: details.clone(),
+                    balance_references: count,
+                };
+                assert_eq!(
+                    operations_txn_energy(std::slice::from_ref(&input)),
+                    cost::PLT_OPERATIONS_TRANSACTIONS + Energy::from(500 * count)
+                );
+                assert_eq!(Operation::from(input.clone()), wire);
+                assert_eq!(
+                    cbor::cbor_encode(&Operation::from(input)),
+                    cbor::cbor_encode(&wire)
+                );
+            }
+        }
+    }
 }
 
 /// High level wrappers for making transactions with minimal user input.
@@ -4146,15 +4146,15 @@ mod tests {
         let bound: usize = rng.gen_range(1..20);
         for _ in 0..bound {
             let c_idx = CredentialIndex::from(rng.gen::<u8>());
-            if !keys.contains_key(&c_idx) {
+            keys.entry(c_idx).or_insert_with(|| {
                 let inner_bound: usize = rng.gen_range(1..20);
                 let mut cred_keys = BTreeMap::new();
                 for _ in 0..inner_bound {
                     let k_idx = KeyIndex::from(rng.gen::<u8>());
                     cred_keys.insert(k_idx, KeyPair::generate(rng));
                 }
-                keys.insert(c_idx, cred_keys);
-            }
+                cred_keys
+            });
         }
         keys
     }
