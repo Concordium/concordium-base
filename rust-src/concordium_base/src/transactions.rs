@@ -2260,15 +2260,21 @@ pub mod cost {
     /// Additional cost of update token metadata for a PLT
     pub const PLT_UPDATE_TOKEN_METADATA: Energy = Energy { energy: 50 };
 
+    /// Base cost of creating a lock, in NRG.
+    const PLT_LOCK_CREATE_BASE: u64 = 100;
+
+    /// Cost per lock balance reference, prepaid at creation and charged on manual cancellation, in NRG.
+    const PLT_LOCK_BALANCE_REFERENCE: u64 = 500;
+
+    /// Storage cost per canonical lock grant, in NRG.
+    const PLT_LOCK_GRANT: u64 = 10;
+
     /// Lock creation cost: `100 + 500 * H * T + 10 * G` NRG.
     ///
     /// # Arguments
     /// * `config` - Decoded configuration; aliases and duplicate grants are merged,
     ///   empty grants retained, and token IDs counted distinctly after ASCII lowercasing.
     ///   `H` counts Fund-authorized holders, `T` tokens and `G` grants.
-    ///
-    /// # Errors
-    /// This function is infallible. Arithmetic saturates at `u64::MAX` rather than wrapping.
     ///
     /// # Example
     /// ```
@@ -2284,13 +2290,13 @@ pub mod cost {
     pub fn plt_lock_create(config: &crate::protocol_level_locks::LockConfig) -> Energy {
         let parameters = config.get_creation_complexity_parameters();
         Energy::from(
-            100u64
+            PLT_LOCK_CREATE_BASE
                 .saturating_add(
-                    500u64
+                    PLT_LOCK_BALANCE_REFERENCE
                         .saturating_mul(parameters.token_holders)
                         .saturating_mul(parameters.tokens),
                 )
-                .saturating_add(10u64.saturating_mul(parameters.grants)),
+                .saturating_add(PLT_LOCK_GRANT.saturating_mul(parameters.grants)),
         )
     }
 
@@ -2303,14 +2309,11 @@ pub mod cost {
     /// Additional cost of a lock release operation, in NRG.
     pub const PLT_LOCK_RELEASE: Energy = Energy { energy: 250 };
 
-    /// Manual cancellation cost: `500 * balance_references` NRG.
+    /// Cancellation cost: `500 * balance_references` NRG.
     ///
     /// # Arguments
     /// * `balance_references` - Query lock information using the lock ID, then sum
     ///   `amounts.len()` over its funds to obtain the current number of balance references.
-    ///
-    /// # Errors
-    /// Infallible; results exceeding `u64::MAX` saturate instead of wrapping.
     ///
     /// # Example
     /// ```
@@ -2319,7 +2322,7 @@ pub mod cost {
     /// assert_eq!(plt_lock_cancel(0).energy, 0);
     /// ```
     pub fn plt_lock_cancel(balance_references: u64) -> Energy {
-        Energy::from(500u64.saturating_mul(balance_references))
+        Energy::from(PLT_LOCK_BALANCE_REFERENCE.saturating_mul(balance_references))
     }
 
     #[cfg(test)]
@@ -2454,7 +2457,6 @@ pub mod construct {
     };
 
     /// Construction-only operation with the state needed for energy estimation.
-    /// Conversion into [`Operation`] discards estimation data without changing the wire format.
     #[derive(Debug, Clone, PartialEq)]
     pub enum OperationInput {
         /// Transfer tokens.
