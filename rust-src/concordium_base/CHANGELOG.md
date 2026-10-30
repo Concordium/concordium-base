@@ -1,4 +1,9 @@
 ## Unreleased
+
+- BREAKING: `transactions::construct::operations` and `transactions::send::operations` now accept
+  `&[transactions::construct::OperationInput]` instead of `&Operations`. Construct input variants explicitly;
+  `OperationInput::LockCancel` requires a balance-reference count obtainable from the lock-info query.
+- Added `transactions::cost::plt_lock_create` and `plt_lock_cancel` and constants to get the cost of send, fund, and release operations.
 - Added `UpdatePayload::MaxLockDuration`, `UpdateType::UpdateMaxLockDuration`, and P11 token-parameters authorization wire support.
 - BREAKING: `Payload::TokenUpdate::payload` now has type `TokenUpdatePayload` instead of `TokenOperationsPayload`.
   Wrap existing single-token payloads in `TokenUpdatePayload::Scoped`. Scoped wire encoding is unchanged and remains valid from protocol version 9 onward;
