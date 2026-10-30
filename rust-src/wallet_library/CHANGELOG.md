@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added optional field `address` to `UnsignedCredentialInput`. When set, `create_unsigned_credential_v1_aux` creates the credential for that existing account, using the supplied attribute randomness.
+- Added method `compute_existing_account_credential_deployment_hash_to_sign` for computing the digest that must be signed to deploy a credential onto an existing account.
+
 ## [0.4.0]
 
 ### Added

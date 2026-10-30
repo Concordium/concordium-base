@@ -111,11 +111,11 @@
   (func (export "hostfn.resize_state") (param $arg i64) (result i32)
     (loop $loop
       (if (i64.eqz (local.get $arg))
-        (block
+        (then (block
           (local.set $arg (i64.const 1))
           (call $resize_state (i32.const 0))
           (br $loop)
-        )
+        ))
       )
       (local.set $arg (i64.const 0))
       (call $resize_state (i32.const 16383))

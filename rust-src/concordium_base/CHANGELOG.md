@@ -1,4 +1,4 @@
-## Unreleased
+## 11.0.0 (2026-10-09)
 
 - BREAKING: `transactions::construct::operations` and `transactions::send::operations` now accept
   `&[transactions::construct::OperationInput]` instead of `&Operations`. Construct input variants explicitly;
