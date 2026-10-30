@@ -42,7 +42,10 @@ data GenesisChainParameters' (cpv :: ChainParametersVersion) = GenesisChainParam
       gcpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters),
       -- | The score parameters.
       --  These parameters are introduced as part of protocol 8 (cpv3).
-      gcpValidatorScoreParameters :: !(OParam 'PTValidatorScoreParameters cpv ValidatorScoreParameters)
+      gcpValidatorScoreParameters :: !(OParam 'PTValidatorScoreParameters cpv ValidatorScoreParameters),
+      -- | Maximum relative duration for protocol-level token locks.
+      --  This is an optional CPV3 field.
+      gcpMaxLockDuration :: !(OParam 'PTMaxLockDuration cpv (Maybe Duration))
     }
     deriving (Eq, Show)
 
@@ -73,6 +76,7 @@ parseJSONForGCPV0 =
             gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
             gcpFinalizationCommitteeParameters = NoParam
             gcpValidatorScoreParameters = NoParam
+            gcpMaxLockDuration = NoParam
         return GenesisChainParameters{..}
 
 -- | Parse 'GenesisChainParameters' from JSON for 'ChainParametersV1'.
@@ -106,6 +110,7 @@ parseJSONForGCPV1 =
             _ppCommissionBounds = CommissionRanges{..}
             gcpFinalizationCommitteeParameters = NoParam
             gcpValidatorScoreParameters = NoParam
+            gcpMaxLockDuration = NoParam
         return GenesisChainParameters{..}
 
 -- | Parse 'GenesisChainParameters' from JSON for 'ChainParametersV2'.
@@ -148,6 +153,7 @@ parseJSONForGCPV2 =
             gcpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
             gcpConsensusParameters = ConsensusParametersV1{..}
             gcpValidatorScoreParameters = NoParam
+            gcpMaxLockDuration = NoParam
         return GenesisChainParameters{..}
 
 -- | Parse 'GenesisChainParameters' from JSON for 'ChainParametersV2'.
@@ -191,7 +197,9 @@ parseJSONForGCPV3 =
             gcpConsensusParameters = ConsensusParametersV1{..}
 
         _vspMaxMissedRounds <- v .: "maximumMissedRounds"
+        _maxLockDuration <- v .:? "maxLockDuration"
         let gcpValidatorScoreParameters = SomeParam ValidatorScoreParameters{..}
+            gcpMaxLockDuration = SomeParam _maxLockDuration
         return GenesisChainParameters{..}
 
 instance ToJSON (GenesisChainParameters' 'ChainParametersV0) where
@@ -264,7 +272,7 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV2) where
 
 instance ToJSON (GenesisChainParameters' 'ChainParametersV3) where
     toJSON GenesisChainParameters{..} =
-        object
+        object $
             [ "euroPerEnergy" AE..= _erEuroPerEnergy gcpExchangeRates,
               "microGTUPerEuro" AE..= _erMicroGTUPerEuro gcpExchangeRates,
               "poolOwnerCooldown" AE..= _cpPoolOwnerCooldown gcpCooldownParameters,
@@ -293,6 +301,7 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV3) where
               "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam gcpFinalizationCommitteeParameters),
               "maximumMissedRounds" AE..= _vspMaxMissedRounds (unOParam gcpValidatorScoreParameters)
             ]
+                ++ maybe [] (\d -> ["maxLockDuration" AE..= d]) (unOParam gcpMaxLockDuration)
 
 -- | 'GenesisParametersV2' provides a convenient abstraction for
 -- constructing 'GenesisData'. The following invariants are

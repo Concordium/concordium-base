@@ -474,8 +474,8 @@ setFreshRec body = do
     return newIdent
 
 -- | The Merkle schema for a block hash.
-blockSchema :: (NonTerminal, MerkleSchema)
-blockSchema = runState builder emptySchemaBuilderState & _2 %~ _builderSchema
+blockSchema :: ProtocolVersion -> (NonTerminal, MerkleSchema)
+blockSchema pv = runState builder emptySchemaBuilderState & _2 %~ _builderSchema
   where
     -- Raw byte representation of various types
     -- 64-bit integer
@@ -599,7 +599,7 @@ blockSchema = runState builder emptySchemaBuilderState & _2 %~ _builderSchema
         rootHash <-
             setFresh . Sequence $
                 [Hashed "header" blockHeaderHash, Hashed "quasi" blockQuasiHash]
-        schemaAt blockHash ?= Sequence [LiteralBytes (S.encode P7), Hashed "root" rootHash]
+        schemaAt blockHash ?= Sequence [LiteralBytes (S.encode pv), Hashed "root" rootHash]
         return blockHash
 
 -- | A class for types @t@ that can produce 'MerkleProof's in a monadic context @m@.

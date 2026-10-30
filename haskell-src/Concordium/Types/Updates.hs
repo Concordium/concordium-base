@@ -189,7 +189,9 @@ data Authorizations (auv :: AuthorizationsVersion) = Authorizations
       -- | Parameter keys: Length of reward period / payday
       asTimeParameters :: !(Conditionally (SupportsTimeParameters auv) AccessStructure),
       -- | Authorization keys: CreatePLT transaction
-      asCreatePLT :: !(Conditionally (SupportsCreatePLT auv) AccessStructure)
+      asCreatePLT :: !(Conditionally (SupportsCreatePLT auv) AccessStructure),
+      -- | Authorization keys: token and lock related parameter updates
+      asTokenParameters :: !(Conditionally (SupportsTokenParameters auv) AccessStructure)
     }
 
 deriving instance Eq (Authorizations auv)
@@ -214,6 +216,7 @@ putAuthorizations Authorizations{..} = do
     mapM_ put asCooldownParameters
     mapM_ put asTimeParameters
     mapM_ put asCreatePLT
+    mapM_ put asTokenParameters
 
 getAuthorizations :: forall auv. (IsAuthorizationsVersion auv) => Get (Authorizations auv)
 getAuthorizations = label "deserialization update authorizations" $ do
@@ -241,6 +244,7 @@ getAuthorizations = label "deserialization update authorizations" $ do
     asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure (sing @auv)) getChecked
     asTimeParameters <- conditionallyA (sSupportsTimeParameters (sing @auv)) getChecked
     asCreatePLT <- conditionallyA (sSupportsCreatePLT (sing @auv)) getChecked
+    asTokenParameters <- conditionallyA (sSupportsTokenParameters (sing @auv)) getChecked
     return Authorizations{..}
 
 instance (IsAuthorizationsVersion auv) => Serialize (Authorizations auv) where
@@ -286,6 +290,7 @@ parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
     asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure auv) $ parseAS "cooldownParameters"
     asTimeParameters <- conditionallyA (sSupportsTimeParameters auv) $ parseAS "timeParameters"
     asCreatePLT <- conditionallyA (sSupportsCreatePLT auv) $ parseAS "createPLT"
+    asTokenParameters <- conditionallyA (sSupportsTokenParameters auv) $ parseAS "tokenParameters"
     return Authorizations{..}
 
 instance (IsAuthorizationsVersion auv) => AE.FromJSON (Authorizations auv) where
@@ -312,6 +317,7 @@ instance (IsAuthorizationsVersion auv) => AE.ToJSON (Authorizations auv) where
                 ++ cooldownParameters
                 ++ timeParameters'
                 ++ createPLT
+                ++ tokenParameters
             )
       where
         t AccessStructure{..} =
@@ -322,6 +328,7 @@ instance (IsAuthorizationsVersion auv) => AE.ToJSON (Authorizations auv) where
         cooldownParameters = foldMap (\as -> ["cooldownParameters" AE..= t as]) asCooldownParameters
         timeParameters' = foldMap (\as -> ["timeParameters" AE..= t as]) asTimeParameters
         createPLT = foldMap (\as -> ["createPLT" AE..= t as]) asCreatePLT
+        tokenParameters = foldMap (\as -> ["tokenParameters" AE..= t as]) asTokenParameters
 
 -----------------
 
@@ -401,6 +408,10 @@ data RootUpdate
       Level2KeysRootUpdateV2
         { l2kruAuthorizationsV2 :: !(Authorizations 'AuthorizationsVersion2)
         }
+    | -- | Update the level 2 keys in authorizations version 3
+      Level2KeysRootUpdateV3
+        { l2kruAuthorizationsV3 :: !(Authorizations 'AuthorizationsVersion3)
+        }
     deriving (Eq, Show)
 
 putRootUpdate :: Putter RootUpdate
@@ -419,6 +430,9 @@ putRootUpdate Level2KeysRootUpdateV1{..} = do
 putRootUpdate Level2KeysRootUpdateV2{..} = do
     putWord8 4
     putAuthorizations l2kruAuthorizationsV2
+putRootUpdate Level2KeysRootUpdateV3{..} = do
+    putWord8 5
+    putAuthorizations l2kruAuthorizationsV3
 
 getRootUpdate :: SAuthorizationsVersion auv -> Get RootUpdate
 getRootUpdate sauv = label "RootUpdate" $ do
@@ -429,6 +443,7 @@ getRootUpdate sauv = label "RootUpdate" $ do
         2 | SAuthorizationsVersion0 <- sauv -> Level2KeysRootUpdate <$> getAuthorizations
         3 | SAuthorizationsVersion1 <- sauv -> Level2KeysRootUpdateV1 <$> getAuthorizations
         4 | SAuthorizationsVersion2 <- sauv -> Level2KeysRootUpdateV2 <$> getAuthorizations
+        5 | SAuthorizationsVersion3 <- sauv -> Level2KeysRootUpdateV3 <$> getAuthorizations
         _ -> fail $ "Unknown variant: " ++ show variant
 
 instance AE.FromJSON RootUpdate where
@@ -440,6 +455,7 @@ instance AE.FromJSON RootUpdate where
             "level2KeysUpdate" -> Level2KeysRootUpdate <$> o .: "updatePayload"
             "level2KeysUpdateV1" -> Level2KeysRootUpdateV1 <$> o .: "updatePayload"
             "level2KeysUpdateV2" -> Level2KeysRootUpdateV2 <$> o .: "updatePayload"
+            "level2KeysUpdateV3" -> Level2KeysRootUpdateV3 <$> o .: "updatePayload"
             _ -> fail $ "Unknown variant: " ++ show variant
 
 instance AE.ToJSON RootUpdate where
@@ -468,6 +484,11 @@ instance AE.ToJSON RootUpdate where
             [ "typeOfUpdate" AE..= ("level2KeysUpdateV2" :: Text),
               "updatePayload" AE..= l2kruAuthorizationsV2
             ]
+    toJSON Level2KeysRootUpdateV3{..} =
+        AE.object
+            [ "typeOfUpdate" AE..= ("level2KeysUpdateV3" :: Text),
+              "updatePayload" AE..= l2kruAuthorizationsV3
+            ]
 
 --------------------
 
@@ -490,6 +511,9 @@ data Level1Update
     | Level2KeysLevel1UpdateV2
         { l2kl1uAuthorizationsV2 :: !(Authorizations 'AuthorizationsVersion2)
         }
+    | Level2KeysLevel1UpdateV3
+        { l2kl1uAuthorizationsV3 :: !(Authorizations 'AuthorizationsVersion3)
+        }
 
 deriving instance Eq Level1Update
 deriving instance Show Level1Update
@@ -507,6 +531,9 @@ putLevel1Update Level2KeysLevel1UpdateV1{..} = do
 putLevel1Update Level2KeysLevel1UpdateV2{..} = do
     putWord8 3
     putAuthorizations l2kl1uAuthorizationsV2
+putLevel1Update Level2KeysLevel1UpdateV3{..} = do
+    putWord8 4
+    putAuthorizations l2kl1uAuthorizationsV3
 
 getLevel1Update :: SAuthorizationsVersion auv -> Get Level1Update
 getLevel1Update sauv = label "Level1Update" $ do
@@ -516,6 +543,7 @@ getLevel1Update sauv = label "Level1Update" $ do
         1 | SAuthorizationsVersion0 <- sauv -> Level2KeysLevel1Update <$> getAuthorizations
         2 | SAuthorizationsVersion1 <- sauv -> Level2KeysLevel1UpdateV1 <$> getAuthorizations
         3 | SAuthorizationsVersion2 <- sauv -> Level2KeysLevel1UpdateV2 <$> getAuthorizations
+        4 | SAuthorizationsVersion3 <- sauv -> Level2KeysLevel1UpdateV3 <$> getAuthorizations
         _ -> fail $ "Unknown variant: " ++ show variant
 
 instance AE.FromJSON Level1Update where
@@ -526,6 +554,7 @@ instance AE.FromJSON Level1Update where
             "level2KeysUpdate" -> Level2KeysLevel1Update <$> o .: "updatePayload"
             "level2KeysUpdateV1" -> Level2KeysLevel1UpdateV1 <$> o .: "updatePayload"
             "level2KeysUpdateV2" -> Level2KeysLevel1UpdateV2 <$> o .: "updatePayload"
+            "level2KeysUpdateV3" -> Level2KeysLevel1UpdateV3 <$> o .: "updatePayload"
             _ -> fail $ "Unknown variant: " ++ show variant
 
 instance AE.ToJSON Level1Update where
@@ -548,6 +577,11 @@ instance AE.ToJSON Level1Update where
         AE.object
             [ "typeOfUpdate" AE..= ("level2KeysUpdateV2" :: Text),
               "updatePayload" AE..= l2kl1uAuthorizationsV2
+            ]
+    toJSON Level2KeysLevel1UpdateV3{..} =
+        AE.object
+            [ "typeOfUpdate" AE..= ("level2KeysUpdateV3" :: Text),
+              "updatePayload" AE..= l2kl1uAuthorizationsV3
             ]
 
 ----------------------
@@ -725,6 +759,8 @@ data UpdateType
       UpdateValidatorScoreParameters
     | -- | Update creating a protocol level token
       UpdateCreatePLT
+    | -- | Update the maximum relative duration for protocol-level token locks
+      UpdateMaxLockDuration
     deriving (Eq, Ord, Show, Ix, Bounded, Enum)
 
 -- The JSON instance will encode all values as strings, lower-casing the first
@@ -760,6 +796,7 @@ instance Serialize UpdateType where
     put UpdateFinalizationCommitteeParameters = putWord8 20
     put UpdateValidatorScoreParameters = putWord8 21
     put UpdateCreatePLT = putWord8 22
+    put UpdateMaxLockDuration = putWord8 23
     get =
         getWord8 >>= \case
             1 -> return UpdateProtocol
@@ -784,6 +821,7 @@ instance Serialize UpdateType where
             20 -> return UpdateFinalizationCommitteeParameters
             21 -> return UpdateValidatorScoreParameters
             22 -> return UpdateCreatePLT
+            23 -> return UpdateMaxLockDuration
             n -> fail $ "invalid update type: " ++ show n
 
 -- | Sequence number for updates of a given type.
@@ -880,6 +918,8 @@ data UpdatePayload
       ValidatorScoreParametersUpdatePayload !ValidatorScoreParameters
     | -- | Issue a new Protocol Level Token (PLT) (Support starting from protocol version 9)
       CreatePLTUpdatePayload !CreatePLT
+    | -- | Update the maximum relative duration for protocol-level token locks
+      MaxLockDurationUpdatePayload !Duration
     deriving (Eq, Show)
 
 putUpdatePayload :: Putter UpdatePayload
@@ -907,6 +947,7 @@ putUpdatePayload (GASRewardsCPV2UpdatePayload u) = putWord8 21 >> put u
 putUpdatePayload (FinalizationCommitteeParametersUpdatePayload u) = putWord8 22 >> put u
 putUpdatePayload (ValidatorScoreParametersUpdatePayload u) = putWord8 23 >> put u
 putUpdatePayload (CreatePLTUpdatePayload u) = putWord8 24 >> put u
+putUpdatePayload (MaxLockDurationUpdatePayload u) = putWord8 25 >> put u
 
 getUpdatePayload :: SProtocolVersion pv -> Get UpdatePayload
 getUpdatePayload spv =
@@ -949,12 +990,22 @@ getUpdatePayload spv =
         22 | isSupported PTFinalizationCommitteeParameters cpv -> FinalizationCommitteeParametersUpdatePayload <$> get
         23 | isSupported PTValidatorScoreParameters cpv -> ValidatorScoreParametersUpdatePayload <$> get
         24 | supportsCreatePLT auv -> CreatePLTUpdatePayload <$> get
+        25 | supportsMaxLockDurationUpdate spv -> MaxLockDurationUpdatePayload <$> get
         x -> fail $ "Unknown update payload kind: " ++ show x
   where
     scpv = sChainParametersVersionFor spv
     cpv = demoteChainParameterVersion scpv
-    sauv = sAuthorizationsVersionFor spv
-    auv = fromSing sauv
+    auv = fromSing (sAuthorizationsVersionFor spv)
+
+-- | Whether the protocol version supports the 'maxLockDuration' update payload.
+--
+-- This is deliberately a protocol-version feature check rather than a check for
+-- the reused 'tokenParameters' authorization access structure. Future token
+-- parameter updates may reuse the same authorization without being available in
+-- the same protocol versions.
+supportsMaxLockDurationUpdate :: SProtocolVersion pv -> Bool
+supportsMaxLockDurationUpdate SP11 = True
+supportsMaxLockDurationUpdate _ = False
 
 $( deriveJSON
     defaultOptions
@@ -987,16 +1038,19 @@ updateType (RootUpdatePayload Level1KeysRootUpdate{}) = UpdateLevel1Keys
 updateType (RootUpdatePayload Level2KeysRootUpdate{}) = UpdateLevel2Keys
 updateType (RootUpdatePayload Level2KeysRootUpdateV1{}) = UpdateLevel2Keys
 updateType (RootUpdatePayload Level2KeysRootUpdateV2{}) = UpdateLevel2Keys
+updateType (RootUpdatePayload Level2KeysRootUpdateV3{}) = UpdateLevel2Keys
 updateType (Level1UpdatePayload Level1KeysLevel1Update{}) = UpdateLevel1Keys
 updateType (Level1UpdatePayload Level2KeysLevel1Update{}) = UpdateLevel2Keys
 updateType (Level1UpdatePayload Level2KeysLevel1UpdateV1{}) = UpdateLevel2Keys
 updateType (Level1UpdatePayload Level2KeysLevel1UpdateV2{}) = UpdateLevel2Keys
+updateType (Level1UpdatePayload Level2KeysLevel1UpdateV3{}) = UpdateLevel2Keys
 updateType TimeoutParametersUpdatePayload{} = UpdateTimeoutParameters
 updateType MinBlockTimeUpdatePayload{} = UpdateMinBlockTime
 updateType BlockEnergyLimitUpdatePayload{} = UpdateBlockEnergyLimit
 updateType FinalizationCommitteeParametersUpdatePayload{} = UpdateFinalizationCommitteeParameters
 updateType ValidatorScoreParametersUpdatePayload{} = UpdateValidatorScoreParameters
 updateType CreatePLTUpdatePayload{} = UpdateCreatePLT
+updateType MaxLockDurationUpdatePayload{} = UpdateMaxLockDuration
 
 -- | Extract the relevant set of key indices and threshold authorized for the given update instruction.
 extractKeysIndices :: UpdatePayload -> UpdateKeysCollection cpv -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
@@ -1026,6 +1080,7 @@ extractKeysIndices p =
         FinalizationCommitteeParametersUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
         ValidatorScoreParametersUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
         CreatePLTUpdatePayload{} -> getOptionalLevel2KeysAndThreshold asCreatePLT
+        MaxLockDurationUpdatePayload{} -> getOptionalLevel2KeysAndThreshold asTokenParameters
   where
     getLevel2KeysAndThreshold accessStructure = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . accessStructure . level2Keys
     getOptionalLevel2KeysAndThreshold accessStructure = keysForOParam . accessStructure . level2Keys

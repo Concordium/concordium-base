@@ -331,6 +331,8 @@ module Concordium.Types.Parameters (
     cpPoolParameters,
     -- | Parameters for validator suspension. Available since P8.
     cpValidatorScoreParameters,
+    -- | Maximum protocol-level token lock duration. Available since P11 as an optional CPV3 field.
+    cpMaxLockDuration,
     EChainParameters (..),
     ChainParameters,
     putChainParameters,
@@ -379,6 +381,9 @@ module Concordium.Types.Parameters (
     SupportsCreatePLT,
     supportsCreatePLT,
     sSupportsCreatePLT,
+    SupportsTokenParameters,
+    supportsTokenParameters,
+    sSupportsTokenParameters,
 
     -- * Consensus version
     IsConsensusV0,
@@ -397,6 +402,7 @@ module Concordium.Types.Parameters (
     PTFinalizationProofSym0,
     PTFinalizationCommitteeParametersSym0,
     PTValidatorScoreParametersSym0,
+    PTMaxLockDurationSym0,
 ) where
 
 import Control.Monad
@@ -565,18 +571,28 @@ $( singletons
         supportsCooldownParametersAccessStructure AuthorizationsVersion0 = False
         supportsCooldownParametersAccessStructure AuthorizationsVersion1 = True
         supportsCooldownParametersAccessStructure AuthorizationsVersion2 = True
+        supportsCooldownParametersAccessStructure AuthorizationsVersion3 = True
 
         -- \|Whether time parameters are supported for an 'AuthorizationsVersion'.
         supportsTimeParameters :: AuthorizationsVersion -> Bool
         supportsTimeParameters AuthorizationsVersion0 = False
         supportsTimeParameters AuthorizationsVersion1 = True
         supportsTimeParameters AuthorizationsVersion2 = True
+        supportsTimeParameters AuthorizationsVersion3 = True
 
         -- \|Whether `CreatePLT` access structure is supported for an 'AuthorizationsVersion'.
         supportsCreatePLT :: AuthorizationsVersion -> Bool
         supportsCreatePLT AuthorizationsVersion0 = False
         supportsCreatePLT AuthorizationsVersion1 = False
         supportsCreatePLT AuthorizationsVersion2 = True
+        supportsCreatePLT AuthorizationsVersion3 = True
+
+        -- \|Whether `tokenParameters` access structure is supported for an 'AuthorizationsVersion'.
+        supportsTokenParameters :: AuthorizationsVersion -> Bool
+        supportsTokenParameters AuthorizationsVersion0 = False
+        supportsTokenParameters AuthorizationsVersion1 = False
+        supportsTokenParameters AuthorizationsVersion2 = False
+        supportsTokenParameters AuthorizationsVersion3 = True
 
         -- \|Parameter types that are conditionally supported at different 'ChainParametersVersion's.
         data ParameterType
@@ -600,6 +616,8 @@ $( singletons
               PTFinalizationCommitteeParameters
             | -- Maximal score a validator can reach before it gets suspended
               PTValidatorScoreParameters
+            | -- Maximum relative duration for protocol-level token locks
+              PTMaxLockDuration
 
         -- \|Whether a particular parameter is supported at a particular 'ChainParametersVersion'.
         isSupported :: ParameterType -> ChainParametersVersion -> Bool
@@ -637,6 +655,10 @@ $( singletons
         isSupported PTValidatorScoreParameters ChainParametersV1 = False
         isSupported PTValidatorScoreParameters ChainParametersV2 = False
         isSupported PTValidatorScoreParameters ChainParametersV3 = True
+        isSupported PTMaxLockDuration ChainParametersV0 = False
+        isSupported PTMaxLockDuration ChainParametersV1 = False
+        isSupported PTMaxLockDuration ChainParametersV2 = False
+        isSupported PTMaxLockDuration ChainParametersV3 = True
         |]
  )
 
@@ -1786,7 +1808,10 @@ data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
       _cpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters),
       -- | The score parameters.
       --  These parameters are introduced as part of protocol 8 (cpv3).
-      _cpValidatorScoreParameters :: !(OParam 'PTValidatorScoreParameters cpv ValidatorScoreParameters)
+      _cpValidatorScoreParameters :: !(OParam 'PTValidatorScoreParameters cpv ValidatorScoreParameters),
+      -- | Maximum relative duration for protocol-level token locks.
+      --  This is an optional CPV3 field: absent for P10 and present for P11-and-onwards states.
+      _cpMaxLockDuration :: !(OParam 'PTMaxLockDuration cpv (Maybe Duration))
     }
     deriving (Eq, Show)
 
@@ -1819,6 +1844,7 @@ putChainParameters ChainParameters{..} = do
     putPoolParameters _cpPoolParameters
     put _cpFinalizationCommitteeParameters
     put _cpValidatorScoreParameters
+    put _cpMaxLockDuration
 
 -- | Deserialize a 'ChainParameters''.
 getChainParameters :: forall cpv. (IsChainParametersVersion cpv) => Get (ChainParameters' cpv)
@@ -1833,6 +1859,7 @@ getChainParameters = do
     _cpPoolParameters <- withIsPoolParametersVersionFor (chainParametersVersion @cpv) get
     _cpFinalizationCommitteeParameters <- get
     _cpValidatorScoreParameters <- get
+    _cpMaxLockDuration <- get
     return ChainParameters{..}
 
 instance (IsChainParametersVersion cpv) => Serialize (ChainParameters' cpv) where
@@ -1869,6 +1896,7 @@ parseJSONForCPV0 =
         let _cpTimeParameters = NoParam
             _cpFinalizationCommitteeParameters = NoParam
             _cpValidatorScoreParameters = NoParam
+            _cpMaxLockDuration = NoParam
         return ChainParameters{..}
 
 parseJSONForCPV1 :: Value -> Parser (ChainParameters' 'ChainParametersV1)
@@ -1902,6 +1930,7 @@ parseJSONForCPV1 =
             _ppCommissionBounds = CommissionRanges{..}
             _cpFinalizationCommitteeParameters = NoParam
             _cpValidatorScoreParameters = NoParam
+            _cpMaxLockDuration = NoParam
         return ChainParameters{..}
 
 parseJSONForCPV2 :: Value -> Parser (ChainParameters' 'ChainParametersV2)
@@ -1944,6 +1973,7 @@ parseJSONForCPV2 =
             _cpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
             _cpConsensusParameters = ConsensusParametersV1{..}
             _cpValidatorScoreParameters = NoParam
+            _cpMaxLockDuration = NoParam
         return ChainParameters{..}
 
 parseJSONForCPV3 :: Value -> Parser (ChainParameters' 'ChainParametersV3)
@@ -1987,7 +2017,9 @@ parseJSONForCPV3 =
             _cpConsensusParameters = ConsensusParametersV1{..}
 
         _vspMaxMissedRounds <- v .: "maximumMissedRounds"
+        _maxLockDuration <- v .:? "maxLockDuration"
         let _cpValidatorScoreParameters = SomeParam ValidatorScoreParameters{..}
+            _cpMaxLockDuration = SomeParam _maxLockDuration
 
         return ChainParameters{..}
 
@@ -2063,7 +2095,7 @@ instance forall cpv. (IsChainParametersVersion cpv) => ToJSON (ChainParameters' 
                   "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam _cpFinalizationCommitteeParameters)
                 ]
         SChainParametersV3 ->
-            object
+            object $
                 [ "euroPerEnergy" AE..= _erEuroPerEnergy _cpExchangeRates,
                   "microGTUPerEuro" AE..= _erMicroGTUPerEuro _cpExchangeRates,
                   "poolOwnerCooldown" AE..= _cpPoolOwnerCooldown _cpCooldownParameters,
@@ -2092,6 +2124,7 @@ instance forall cpv. (IsChainParametersVersion cpv) => ToJSON (ChainParameters' 
                   "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam _cpFinalizationCommitteeParameters),
                   "maximumMissedRounds" AE..= _vspMaxMissedRounds (unOParam _cpValidatorScoreParameters)
                 ]
+                    ++ maybe [] (\d -> ["maxLockDuration" AE..= d]) (unOParam _cpMaxLockDuration)
 
 -- | Parameters that affect finalization.
 data FinalizationParameters = FinalizationParameters
@@ -2207,6 +2240,7 @@ delegationChainParameters = case protocolVersion @pv of
     SP8 -> DelegationChainParameters
     SP9 -> DelegationChainParameters
     SP10 -> DelegationChainParameters
+    SP11 -> DelegationChainParameters
 
 -- * Consensus versions
 
@@ -2245,3 +2279,4 @@ consensusVersionFor SP7 = ConsensusV1
 consensusVersionFor SP8 = ConsensusV1
 consensusVersionFor SP9 = ConsensusV1
 consensusVersionFor SP10 = ConsensusV1
+consensusVersionFor SP11 = ConsensusV1
