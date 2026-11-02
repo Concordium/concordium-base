@@ -2450,84 +2450,11 @@ pub mod cost {
 /// See also the [send] module above which combines construction with signing.
 pub mod construct {
     use super::*;
-    use crate::protocol_level_tokens::{
-        LockCancelDetails, LockCreateDetails, LockFundDetails, LockReleaseDetails, LockSendDetails,
-        TokenListUpdateDetailsWithId, TokenMetadataUrlDetailsWithId, TokenPauseDetailsWithId,
-        TokenSupplyUpdateDetailsWithId, TokenTransferWithId, TokenUpdateAdminRolesDetailsWithId,
-    };
-
-    /// Construction-only operation with the state needed for energy estimation.
-    #[derive(Debug, Clone, PartialEq)]
-    pub enum OperationInput {
-        /// Transfer tokens.
-        TokenTransfer(TokenTransferWithId),
-        /// Mint tokens.
-        TokenMint(TokenSupplyUpdateDetailsWithId),
-        /// Burn tokens.
-        TokenBurn(TokenSupplyUpdateDetailsWithId),
-        /// Add an allow-list member.
-        TokenAddAllowList(TokenListUpdateDetailsWithId),
-        /// Remove an allow-list member.
-        TokenRemoveAllowList(TokenListUpdateDetailsWithId),
-        /// Add a deny-list member.
-        TokenAddDenyList(TokenListUpdateDetailsWithId),
-        /// Remove a deny-list member.
-        TokenRemoveDenyList(TokenListUpdateDetailsWithId),
-        /// Pause a token.
-        TokenPause(TokenPauseDetailsWithId),
-        /// Unpause a token.
-        TokenUnpause(TokenPauseDetailsWithId),
-        /// Assign administrator roles.
-        TokenAssignAdminRoles(TokenUpdateAdminRolesDetailsWithId),
-        /// Revoke administrator roles.
-        TokenRevokeAdminRoles(TokenUpdateAdminRolesDetailsWithId),
-        /// Update token metadata.
-        TokenUpdateMetadata(TokenMetadataUrlDetailsWithId),
-        /// Fund a lock.
-        LockFund(LockFundDetails),
-        /// Send locked funds.
-        LockSend(LockSendDetails),
-        /// Release locked funds.
-        LockRelease(LockReleaseDetails),
-        /// Create a lock.
-        LockCreate(LockCreateDetails),
-        /// Cancel a lock using a caller-supplied estimate of its balance references.
-        LockCancel {
-            /// Details encoded in the transaction.
-            details: LockCancelDetails,
-            /// Sum of `amounts.len()` over funds in queried lock information.
-            balance_references: u64,
-        },
-    }
-
-    impl From<OperationInput> for Operation {
-        fn from(operation: OperationInput) -> Self {
-            match operation {
-                OperationInput::TokenTransfer(d) => Self::TokenTransfer(d),
-                OperationInput::TokenMint(d) => Self::TokenMint(d),
-                OperationInput::TokenBurn(d) => Self::TokenBurn(d),
-                OperationInput::TokenAddAllowList(d) => Self::TokenAddAllowList(d),
-                OperationInput::TokenRemoveAllowList(d) => Self::TokenRemoveAllowList(d),
-                OperationInput::TokenAddDenyList(d) => Self::TokenAddDenyList(d),
-                OperationInput::TokenRemoveDenyList(d) => Self::TokenRemoveDenyList(d),
-                OperationInput::TokenPause(d) => Self::TokenPause(d),
-                OperationInput::TokenUnpause(d) => Self::TokenUnpause(d),
-                OperationInput::TokenAssignAdminRoles(d) => Self::TokenAssignAdminRoles(d),
-                OperationInput::TokenRevokeAdminRoles(d) => Self::TokenRevokeAdminRoles(d),
-                OperationInput::TokenUpdateMetadata(d) => Self::TokenUpdateMetadata(d),
-                OperationInput::LockFund(d) => Self::LockFund(d),
-                OperationInput::LockSend(d) => Self::LockSend(d),
-                OperationInput::LockRelease(d) => Self::LockRelease(d),
-                OperationInput::LockCreate(d) => Self::LockCreate(d),
-                OperationInput::LockCancel { details, .. } => Self::LockCancel(details),
-            }
-        }
-    }
-
     use crate::{
         common::cbor,
         protocol_level_tokens::{
-            Operation, Operations, RawCbor, TokenId, TokenOperation, TokenOperations,
+            Operation, OperationInput, Operations, RawCbor, TokenId, TokenOperation,
+            TokenOperations,
         },
     };
 
@@ -3577,10 +3504,11 @@ pub mod construct {
             };
             let wire = Operation::LockCancel(details.clone());
             for count in [0, 1, 3] {
-                let input = OperationInput::LockCancel {
-                    details: details.clone(),
-                    balance_references: count,
-                };
+                let input = crate::protocol_level_tokens::operations::cancel_lock(
+                    details.lock.clone(),
+                    count,
+                    details.memo.clone(),
+                );
                 assert_eq!(
                     operations_txn_energy(std::slice::from_ref(&input)),
                     cost::PLT_OPERATIONS_TRANSACTIONS + Energy::from(500 * count)
@@ -3600,7 +3528,7 @@ pub mod construct {
 /// for transaction.
 pub mod send {
     use super::*;
-    use crate::protocol_level_tokens::{TokenId, TokenOperations};
+    use crate::protocol_level_tokens::{OperationInput, TokenId, TokenOperations};
 
     /// Construct a native coin (CCD) transfer transaction.
     pub fn transfer(
@@ -3664,13 +3592,13 @@ pub mod send {
     ///
     /// Arguments are the signer, sender address, nonce, expiry and enriched operations
     /// in execution order. See [`construct::operations`] for estimation requirements
-    /// and [`construct::OperationInput`] for construction examples.
+    /// and [`OperationInput`] for construction examples.
     pub fn operations(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
         nonce: Nonce,
         expiry: TransactionTime,
-        operations: &[construct::OperationInput],
+        operations: &[OperationInput],
     ) -> AccountTransaction<EncodedPayload> {
         construct::operations(signer.num_keys(), sender, nonce, expiry, operations).sign(signer)
     }
