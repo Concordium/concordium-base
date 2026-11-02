@@ -1,4 +1,4 @@
-## Unreleased
+## 11.0.0 (2026-10-09)
 
 - Added `transactions::cost::plt_lock_create` and `plt_lock_cancel` and constants to get the cost of send, fund, and release operations.
 - Added `UpdatePayload::MaxLockDuration`, `UpdateType::UpdateMaxLockDuration`, and P11 token-parameters authorization wire support.

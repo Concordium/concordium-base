@@ -683,6 +683,13 @@ instance ToProto TokenAuthorizations where
         ProtoFields.tokenId .= toProto taTokenId
         ProtoFields.details .= Proto.make (PLTFields.value .= taDetails)
 
+-- | Discovery preserves the raw configuration bytes and does not include balances.
+instance ToProto (LockId, RawCbor) where
+    type Output (LockId, RawCbor) = Proto.LockConfiguration
+    toProto (lockId, config) = Proto.make $ do
+        ProtoFields.lockId .= toProto lockId
+        ProtoFields.lockConfig .= toProto config
+
 instance ToProto LockInfo where
     type Output LockInfo = Proto.LockInfo
     toProto LockInfo{..} = Proto.make $ do
