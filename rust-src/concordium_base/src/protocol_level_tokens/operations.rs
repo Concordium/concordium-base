@@ -9,7 +9,110 @@ use crate::{
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::{hashes::Hash, AccountAddress};
 
-/// Builders for unscoped token and lock operations.
+/// Construction-only operation with the state needed for energy estimation.
+///
+/// Use [`operations`] to build inputs for [`crate::transactions::construct::operations`]
+/// or [`crate::transactions::send::operations`]. Converting to [`Operation`] discards
+/// estimation-only state without changing wire details.
+///
+/// ```
+/// use concordium_base::{protocol_level_locks::LockId, protocol_level_tokens::{operations, Operation}};
+/// let input = operations::cancel_lock(LockId::new(20, 7, 0), 3, None);
+/// assert!(matches!(Operation::from(input), Operation::LockCancel(_)));
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub enum OperationInput {
+    /// Transfer tokens.
+    TokenTransfer(TokenTransferWithId),
+    /// Mint tokens.
+    TokenMint(TokenSupplyUpdateDetailsWithId),
+    /// Burn tokens.
+    TokenBurn(TokenSupplyUpdateDetailsWithId),
+    /// Add an allow-list member.
+    TokenAddAllowList(TokenListUpdateDetailsWithId),
+    /// Remove an allow-list member.
+    TokenRemoveAllowList(TokenListUpdateDetailsWithId),
+    /// Add a deny-list member.
+    TokenAddDenyList(TokenListUpdateDetailsWithId),
+    /// Remove a deny-list member.
+    TokenRemoveDenyList(TokenListUpdateDetailsWithId),
+    /// Pause a token.
+    TokenPause(TokenPauseDetailsWithId),
+    /// Unpause a token.
+    TokenUnpause(TokenPauseDetailsWithId),
+    /// Assign administrator roles.
+    TokenAssignAdminRoles(TokenUpdateAdminRolesDetailsWithId),
+    /// Revoke administrator roles.
+    TokenRevokeAdminRoles(TokenUpdateAdminRolesDetailsWithId),
+    /// Update token metadata.
+    TokenUpdateMetadata(TokenMetadataUrlDetailsWithId),
+    /// Fund a lock.
+    LockFund(LockFundDetails),
+    /// Send locked funds.
+    LockSend(LockSendDetails),
+    /// Release locked funds.
+    LockRelease(LockReleaseDetails),
+    /// Create a lock.
+    LockCreate(LockCreateDetails),
+    /// Cancel a lock using a caller-supplied estimate of its balance references.
+    LockCancel {
+        /// Details encoded in the transaction.
+        details: LockCancelDetails,
+        /// Estimation-only sum of `amounts.len()` over funds in the queried lock-info snapshot.
+        /// Account for earlier operations in the transaction and state changes before execution.
+        /// This count is not serialized.
+        balance_references: u64,
+    },
+}
+
+impl From<OperationInput> for Operation {
+    fn from(operation: OperationInput) -> Self {
+        match operation {
+            OperationInput::TokenTransfer(d) => Self::TokenTransfer(d),
+            OperationInput::TokenMint(d) => Self::TokenMint(d),
+            OperationInput::TokenBurn(d) => Self::TokenBurn(d),
+            OperationInput::TokenAddAllowList(d) => Self::TokenAddAllowList(d),
+            OperationInput::TokenRemoveAllowList(d) => Self::TokenRemoveAllowList(d),
+            OperationInput::TokenAddDenyList(d) => Self::TokenAddDenyList(d),
+            OperationInput::TokenRemoveDenyList(d) => Self::TokenRemoveDenyList(d),
+            OperationInput::TokenPause(d) => Self::TokenPause(d),
+            OperationInput::TokenUnpause(d) => Self::TokenUnpause(d),
+            OperationInput::TokenAssignAdminRoles(d) => Self::TokenAssignAdminRoles(d),
+            OperationInput::TokenRevokeAdminRoles(d) => Self::TokenRevokeAdminRoles(d),
+            OperationInput::TokenUpdateMetadata(d) => Self::TokenUpdateMetadata(d),
+            OperationInput::LockFund(d) => Self::LockFund(d),
+            OperationInput::LockSend(d) => Self::LockSend(d),
+            OperationInput::LockRelease(d) => Self::LockRelease(d),
+            OperationInput::LockCreate(d) => Self::LockCreate(d),
+            OperationInput::LockCancel { details, .. } => Self::LockCancel(details),
+        }
+    }
+}
+
+impl From<(TokenId, TokenOperation)> for OperationInput {
+    fn from((token_id, operation): (TokenId, TokenOperation)) -> Self {
+        match operation {
+            TokenOperation::Transfer(d) => Self::TokenTransfer((token_id, d).into()),
+            TokenOperation::Mint(d) => Self::TokenMint((token_id, d).into()),
+            TokenOperation::Burn(d) => Self::TokenBurn((token_id, d).into()),
+            TokenOperation::AddAllowList(d) => Self::TokenAddAllowList((token_id, d).into()),
+            TokenOperation::RemoveAllowList(d) => Self::TokenRemoveAllowList((token_id, d).into()),
+            TokenOperation::AddDenyList(d) => Self::TokenAddDenyList((token_id, d).into()),
+            TokenOperation::RemoveDenyList(d) => Self::TokenRemoveDenyList((token_id, d).into()),
+            TokenOperation::Pause(d) => Self::TokenPause((token_id, d).into()),
+            TokenOperation::Unpause(d) => Self::TokenUnpause((token_id, d).into()),
+            TokenOperation::AssignAdminRoles(d) => {
+                Self::TokenAssignAdminRoles((token_id, d).into())
+            }
+            TokenOperation::RevokeAdminRoles(d) => {
+                Self::TokenRevokeAdminRoles((token_id, d).into())
+            }
+            TokenOperation::UpdateMetadata(d) => Self::TokenUpdateMetadata((token_id, d).into()),
+        }
+    }
+}
+
+/// Builders for construction-only unscoped token and lock operation inputs.
 pub mod operations {
     use super::*;
 
@@ -18,7 +121,7 @@ pub mod operations {
         token_id: TokenId,
         receiver: AccountAddress,
         amount: TokenAmount,
-    ) -> Operation {
+    ) -> OperationInput {
         (
             token_id,
             token_operations::transfer_tokens(receiver, amount),
@@ -32,7 +135,7 @@ pub mod operations {
         receiver: AccountAddress,
         amount: TokenAmount,
         memo: CborMemo,
-    ) -> Operation {
+    ) -> OperationInput {
         (
             token_id,
             token_operations::transfer_tokens_with_memo(receiver, amount, memo),
@@ -41,43 +144,43 @@ pub mod operations {
     }
 
     /// Construct a PLT mint unscoped operation.
-    pub fn mint_tokens(token_id: TokenId, amount: TokenAmount) -> Operation {
+    pub fn mint_tokens(token_id: TokenId, amount: TokenAmount) -> OperationInput {
         (token_id, token_operations::mint_tokens(amount)).into()
     }
 
     /// Consturct a PLT burn unscoped operation.
-    pub fn burn_tokens(token_id: TokenId, amount: TokenAmount) -> Operation {
+    pub fn burn_tokens(token_id: TokenId, amount: TokenAmount) -> OperationInput {
         (token_id, token_operations::burn_tokens(amount)).into()
     }
 
     /// Construct a PLT add-allow-list unscoped operation.
-    pub fn add_token_allow_list(token_id: TokenId, target: AccountAddress) -> Operation {
+    pub fn add_token_allow_list(token_id: TokenId, target: AccountAddress) -> OperationInput {
         (token_id, token_operations::add_token_allow_list(target)).into()
     }
 
     /// Construct a PLT remove-allow-list unscoped operation.
-    pub fn remove_token_allow_list(token_id: TokenId, target: AccountAddress) -> Operation {
+    pub fn remove_token_allow_list(token_id: TokenId, target: AccountAddress) -> OperationInput {
         (token_id, token_operations::remove_token_allow_list(target)).into()
     }
 
     /// Construct a PLT add-deny-list unscoped operation.
-    pub fn add_token_deny_list(token_id: TokenId, target: AccountAddress) -> Operation {
+    pub fn add_token_deny_list(token_id: TokenId, target: AccountAddress) -> OperationInput {
         (token_id, token_operations::add_token_deny_list(target)).into()
     }
 
     /// Construct a PLT remove-deny-list unscoped operation.
-    pub fn remove_token_deny_list(token_id: TokenId, target: AccountAddress) -> Operation {
+    pub fn remove_token_deny_list(token_id: TokenId, target: AccountAddress) -> OperationInput {
         (token_id, token_operations::remove_token_deny_list(target)).into()
     }
 
     /// Construct a pause unscoped operation.
-    pub fn pause_token(token_id: TokenId) -> Operation {
-        Operation::TokenPause(TokenPauseDetailsWithId { token: token_id })
+    pub fn pause_token(token_id: TokenId) -> OperationInput {
+        OperationInput::TokenPause(TokenPauseDetailsWithId { token: token_id })
     }
 
     /// Construct an unpause unscoped operation.
-    pub fn unpause_token(token_id: TokenId) -> Operation {
-        Operation::TokenUnpause(TokenPauseDetailsWithId { token: token_id })
+    pub fn unpause_token(token_id: TokenId) -> OperationInput {
+        OperationInput::TokenUnpause(TokenPauseDetailsWithId { token: token_id })
     }
 
     /// Construct an operation to assign admin roles to an address
@@ -86,7 +189,7 @@ pub mod operations {
         token_id: TokenId,
         account: AccountAddress,
         roles: Vec<TokenAdminRole>,
-    ) -> Operation {
+    ) -> OperationInput {
         (
             token_id,
             token_operations::assign_admin_roles(account, roles),
@@ -100,7 +203,7 @@ pub mod operations {
         token_id: TokenId,
         account: AccountAddress,
         roles: Vec<TokenAdminRole>,
-    ) -> Operation {
+    ) -> OperationInput {
         (
             token_id,
             token_operations::revoke_admin_roles(account, roles),
@@ -113,7 +216,7 @@ pub mod operations {
     pub fn update_token_metadata(
         token_id: TokenId,
         metadata_url: TokenMetadataUrlDetails,
-    ) -> Operation {
+    ) -> OperationInput {
         (token_id, token_operations::update_metadata(metadata_url)).into()
     }
 
@@ -123,8 +226,8 @@ pub mod operations {
         lock_id: LockId,
         amount: TokenAmount,
         memo: Option<CborMemo>,
-    ) -> Operation {
-        Operation::LockFund(LockFundDetails {
+    ) -> OperationInput {
+        OperationInput::LockFund(LockFundDetails {
             token: token_id,
             lock: lock_id,
             amount,
@@ -140,8 +243,8 @@ pub mod operations {
         recipient: AccountAddress,
         amount: TokenAmount,
         memo: Option<CborMemo>,
-    ) -> Operation {
-        Operation::LockSend(LockSendDetails {
+    ) -> OperationInput {
+        OperationInput::LockSend(LockSendDetails {
             token: token_id,
             lock: lock_id,
             source: CborHolderAccount::from(source),
@@ -158,8 +261,8 @@ pub mod operations {
         source: AccountAddress,
         amount: TokenAmount,
         memo: Option<CborMemo>,
-    ) -> Operation {
-        Operation::LockRelease(LockReleaseDetails {
+    ) -> OperationInput {
+        OperationInput::LockRelease(LockReleaseDetails {
             token: token_id,
             lock: lock_id,
             source: CborHolderAccount::from(source),
@@ -169,16 +272,32 @@ pub mod operations {
     }
 
     /// Construct an operation to create a lock.
-    pub fn create_lock(config: LockConfig) -> Operation {
-        Operation::LockCreate(LockCreateDetails { config })
+    pub fn create_lock(config: LockConfig) -> OperationInput {
+        OperationInput::LockCreate(LockCreateDetails { config })
     }
 
-    /// Construct an operation to cancel a lock.
-    pub fn cancel_lock(lock_id: LockId, memo: Option<CborMemo>) -> Operation {
-        Operation::LockCancel(LockCancelDetails {
-            lock: lock_id,
-            memo,
-        })
+    /// Construct an operation to cancel `lock_id`, with an optional `memo`.
+    ///
+    /// `balance_references` is estimation-only: sum `amounts.len()` over funds
+    /// in the queried lock-info snapshot, accounting for earlier operations in
+    /// this transaction and state changes before execution. It is not serialized.
+    ///
+    /// ```
+    /// use concordium_base::{protocol_level_locks::LockId, protocol_level_tokens::operations};
+    /// let input = operations::cancel_lock(LockId::new(20, 7, 0), 3, None);
+    /// ```
+    pub fn cancel_lock(
+        lock_id: LockId,
+        balance_references: u64,
+        memo: Option<CborMemo>,
+    ) -> OperationInput {
+        OperationInput::LockCancel {
+            details: LockCancelDetails {
+                lock: lock_id,
+                memo,
+            },
+            balance_references,
+        }
     }
 }
 
