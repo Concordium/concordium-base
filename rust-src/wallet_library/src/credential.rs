@@ -13,7 +13,7 @@ use concordium_base::{
         utils::credential_hash_to_sign,
     },
 };
-use either::Either::Left;
+use either::Either::{Left, Right};
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -21,7 +21,8 @@ use std::collections::BTreeMap;
 type JsonString = String;
 
 /// Required input for generating an unsigned credential where the private keys
-/// are supplied directly.
+/// are supplied directly. If `address` is set, the credential is created for
+/// deployment onto that existing account, otherwise it is for a new account.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UnsignedCredentialInput {
@@ -36,6 +37,8 @@ pub struct UnsignedCredentialInput {
     blinding_randomness: String,
     attribute_randomness: BTreeMap<AttributeTag, PedersenRandomness<ArCurve>>,
     credential_public_keys: CredentialPublicKeys,
+    #[serde(default)]
+    address: Option<AccountAddress>,
 }
 
 /// Defines the JSON structure that matches the output of the function
@@ -48,7 +51,9 @@ struct UnsignedCredentialDeploymentInfoWithRandomness {
 }
 
 /// Creates unsigned credential deployment information and the corresponding
-/// randomness where the secrets are provided directly as input.
+/// randomness where the secrets are provided directly as input. The credential
+/// is for a new account, or for the existing account given by
+/// [`UnsignedCredentialInput`]'s `address`.
 pub fn create_unsigned_credential_v1_aux(input: UnsignedCredentialInput) -> Result<JsonString> {
     let chi = CredentialHolderInfo::<constants::ArCurve> {
         id_cred: IdCredentials {
@@ -83,7 +88,7 @@ pub fn create_unsigned_credential_v1_aux(input: UnsignedCredentialInput) -> Resu
         input.cred_number,
         policy,
         input.credential_public_keys,
-        None,
+        input.address.as_ref(),
         &input.attribute_randomness,
     )?;
 
@@ -135,6 +140,28 @@ pub fn compute_credential_deployment_hash_to_sign(
         &credential_deployment_details.unsigned_cdi.values,
         &credential_deployment_details.unsigned_cdi.proofs,
         &Left(credential_deployment_details.expiry),
+    );
+    hex::encode(credential_deployment_hash)
+}
+
+/// The details for a credential deployment onto an existing account.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExistingAccountCredentialDeploymentDetails {
+    address: AccountAddress,
+    unsigned_cdi: UnsignedCredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind>,
+}
+
+/// Computes the hash of a credential deployment onto an existing account that
+/// should be signed by the new credential's keys. The hash is returned hex
+/// encoded.
+pub fn compute_existing_account_credential_deployment_hash_to_sign(
+    credential_deployment_details: ExistingAccountCredentialDeploymentDetails,
+) -> String {
+    let credential_deployment_hash = credential_hash_to_sign(
+        &credential_deployment_details.unsigned_cdi.values,
+        &credential_deployment_details.unsigned_cdi.proofs,
+        &Right(credential_deployment_details.address),
     );
     hex::encode(credential_deployment_hash)
 }
@@ -199,7 +226,7 @@ mod tests {
         assert_eq!(values.threshold.threshold(), 1);
     }
 
-    fn create_unsigned_credential() -> UnsignedCredentialDeploymentInfoWithRandomness {
+    fn unsigned_credential_input() -> UnsignedCredentialInput {
         let cred_number = 1;
         let revealed_attributes = Vec::new();
         let ip_info = read_ip_info();
@@ -242,7 +269,7 @@ mod tests {
             keys: key_map,
         };
 
-        let input = UnsignedCredentialInput {
+        UnsignedCredentialInput {
             ars_infos,
             cred_number,
             global_context,
@@ -254,18 +281,70 @@ mod tests {
             blinding_randomness,
             attribute_randomness,
             credential_public_keys,
-        };
+            address: None,
+        }
+    }
 
+    fn create_unsigned_credential_from_input(
+        input: UnsignedCredentialInput,
+    ) -> UnsignedCredentialDeploymentInfoWithRandomness {
         let result_str = create_unsigned_credential_v1_aux(input).unwrap();
-        let result: UnsignedCredentialDeploymentInfoWithRandomness =
-            serde_json::from_str(&result_str).unwrap();
-        result
+        serde_json::from_str(&result_str).unwrap()
+    }
+
+    fn create_unsigned_credential() -> UnsignedCredentialDeploymentInfoWithRandomness {
+        create_unsigned_credential_from_input(unsigned_credential_input())
     }
 
     #[test]
     pub fn create_unsigned_credential_test() {
         let unsigned_credential = create_unsigned_credential();
         assert_unsigned_credential(unsigned_credential.unsigned_cdi.values);
+    }
+
+    #[test]
+    pub fn create_unsigned_credential_existing_account_test() {
+        let mut csprng = rand::thread_rng();
+        let address = AccountAddress([2u8; 32]);
+
+        let mut input = unsigned_credential_input();
+        for randomness in input.attribute_randomness.values_mut() {
+            *randomness = PedersenRandomness::generate(&mut csprng);
+        }
+        input.address = Some(address);
+        let attribute_randomness = input.attribute_randomness.clone();
+
+        let result = create_unsigned_credential_from_input(input);
+        assert_unsigned_credential(result.unsigned_cdi.values);
+
+        // The supplied attribute randomness is used rather than generated.
+        assert!(!result.randomness.attributes_rand.is_empty());
+        for (tag, randomness) in result.randomness.attributes_rand.iter() {
+            assert_eq!(Some(randomness), attribute_randomness.get(tag));
+        }
+    }
+
+    #[test]
+    pub fn compute_existing_account_credential_deployment_hash_to_sign_test() {
+        let address = AccountAddress([2u8; 32]);
+        let mut input = unsigned_credential_input();
+        input.address = Some(address);
+        let unsigned_cdi = create_unsigned_credential_from_input(input).unsigned_cdi;
+
+        let expected = hex::encode(credential_hash_to_sign(
+            &unsigned_cdi.values,
+            &unsigned_cdi.proofs,
+            &Right(address),
+        ));
+        let details = ExistingAccountCredentialDeploymentDetails {
+            address,
+            unsigned_cdi,
+        };
+
+        assert_eq!(
+            compute_existing_account_credential_deployment_hash_to_sign(details),
+            expected
+        );
     }
 
     #[test]

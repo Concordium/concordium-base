@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased changes
+## concordium-wasm 6.0.0 (2026-10-09)
 
 - A temporary option `CopyMeteringEnabled` has been added to `Machine::run`. It is set to `True`
   for on-chain smart contract execution to guard against malicious smart contracts that executes

@@ -162,7 +162,7 @@
 
        (if (i64.eq (i64.const 0) (local.get $amount))
         ;; If we are in test_case 2, with amount = 0, check that the invocation succeeded.
-        (call $assert_invoke_success (local.get $rv)))
+        (then (call $assert_invoke_success (local.get $rv))))
 
         ;; check that the size of [0] has not changed.
         (call $assert_eq
