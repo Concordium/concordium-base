@@ -117,7 +117,7 @@
     ;; If n == 0, return early.
     (if
         (i32.eq (local.get $n) (i32.const 0))
-        (return (i32.const 0)))
+        (then (return (i32.const 0))))
 
     (loop $loop
       ;; Log a message with $n. Assert that it worked and thus returned 1.
@@ -131,7 +131,7 @@
       ;; Go to top of loop if $i < $n.
       (if
           (i32.lt_u (local.get $i) (local.get $n))
-          (br $loop)
+          (then (br $loop))
       )
     )
     (return (i32.const 0))

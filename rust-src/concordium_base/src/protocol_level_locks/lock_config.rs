@@ -114,6 +114,40 @@ pub enum LockConfig {
     SimpleV0(LockConfigSimpleV0),
 }
 
+/// Canonical parameters used to price lock creation.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct LockComplexityParameters {
+    pub(crate) token_holders: u64,
+    pub(crate) tokens: u64,
+    pub(crate) grants: u64,
+}
+
+impl LockConfig {
+    /// Canonical (Fund-authorized accounts, distinct tokens, account grants).
+    /// Mirrors persistent grant union/empty-grant retention without resolving accounts.
+    pub(crate) fn get_creation_complexity_parameters(&self) -> LockComplexityParameters {
+        use super::LockControllerSimpleV0Capability::Fund;
+        use crate::base::AccountAddressEq;
+        use std::collections::HashSet;
+
+        let Self::SimpleV0(config) = self;
+        let mut grants = HashMap::<AccountAddressEq, bool>::new();
+        for grant in &config.grants {
+            *grants.entry(grant.account.address.into()).or_default() |= grant.roles.contains(&Fund);
+        }
+        let tokens: HashSet<_> = config
+            .tokens
+            .iter()
+            .map(|token| token.as_ref().to_ascii_lowercase())
+            .collect();
+        LockComplexityParameters {
+            token_holders: grants.values().filter(|&&fund| fund).count() as u64,
+            tokens: tokens.len() as u64,
+            grants: grants.len() as u64,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,6 +185,81 @@ mod tests {
             memo: Some(CborMemo::Raw(Memo::try_from(vec![1, 2, 3]).unwrap())),
             metadata,
         })
+    }
+
+    #[test]
+    fn create_complexity_matches_persistent_grant_normalization() {
+        use concordium_contracts_common::AccountAddress;
+        use LockControllerSimpleV0Capability::*;
+        let address = |n| AccountAddress([n; 32]);
+        let grant = |account, roles| LockControllerSimpleV0Grant {
+            account: CborHolderAccount::from(account),
+            roles,
+        };
+        // Same grant pattern as persistent grants_normalize_union_lookup_and_hash_deterministically:
+        // account 9 is split, account 5 has no roles, and account 1 can Fund.
+        let mut alias = address(9);
+        alias.0[31] = 42;
+        let mut simple = match config(LockRecipients::Any, None) {
+            LockConfig::SimpleV0(simple) => simple,
+        };
+        simple.grants = vec![
+            grant(address(9), vec![Send]),
+            grant(address(1), vec![Fund, Fund]),
+            grant(alias, vec![Release, Fund]),
+            grant(address(5), vec![]),
+            grant(address(5), vec![]),
+        ];
+        simple.tokens = vec![
+            "A".parse().unwrap(),
+            "B".parse().unwrap(),
+            "a".parse().unwrap(),
+        ];
+        let first = LockConfig::SimpleV0(simple.clone());
+        assert_eq!(
+            first.get_creation_complexity_parameters(),
+            LockComplexityParameters {
+                token_holders: 2,
+                tokens: 2,
+                grants: 3
+            }
+        );
+        simple.grants.reverse();
+        simple.tokens.reverse();
+        let reordered = LockConfig::SimpleV0(simple.clone());
+        assert_eq!(
+            first.get_creation_complexity_parameters(),
+            reordered.get_creation_complexity_parameters()
+        );
+        assert_eq!(
+            crate::transactions::cost::plt_lock_create(&first).energy,
+            2130
+        );
+        // Equivalent canonical grants, including the retained empty grant.
+        simple.grants = vec![
+            grant(address(1), vec![Fund]),
+            grant(address(5), vec![]),
+            grant(address(9), vec![Send, Release, Fund]),
+        ];
+        simple.tokens.pop();
+        assert_eq!(
+            LockConfig::SimpleV0(simple.clone()).get_creation_complexity_parameters(),
+            LockComplexityParameters {
+                token_holders: 2,
+                tokens: 2,
+                grants: 3
+            }
+        );
+        simple.grants.clear();
+        simple.tokens.clear();
+        assert_eq!(
+            LockConfig::SimpleV0(simple).get_creation_complexity_parameters(),
+            LockComplexityParameters {
+                token_holders: 0,
+                tokens: 0,
+                grants: 0
+            }
+        );
     }
 
     #[test]

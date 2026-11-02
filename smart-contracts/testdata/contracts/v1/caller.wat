@@ -34,7 +34,7 @@
   )
   ;; always fail with error code -17
   (func $fail (export "caller.fail") (param i64) (result i32)
-      (i32.const -17)
+      (i32.add (i32.const -17) (i32.const 0))
   )
 
   ;; always unreachable
