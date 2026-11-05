@@ -2299,6 +2299,20 @@ instance ToProto TxTypes.SpecialTransactionOutcome where
                         ProtoFields.bakerId .= toProto vsBakerId
                         ProtoFields.account .= toProto vsAccount
                     )
+    toProto TxTypes.SpecialUnlockAmount{..} =
+        Proto.make $
+            ProtoFields.unlockAmount
+                .= Proto.make
+                    ( do
+                        PLTFields.tokenHolder .= toProto suaTokenHolder
+                        PLTFields.lockId .= toProto suaLockId
+                        PLTFields.tokenId .= toProto suaTokenId
+                        PLTFields.amount .= toProto suaAmount
+                    )
+    toProto TxTypes.SpecialLockDestroyed{..} =
+        Proto.make $
+            ProtoFields.lockDestroyed
+                .= Proto.make (PLTFields.lockId .= toProto sldLockId)
 
 instance ToProto (TransactionTime, QueryTypes.PendingUpdateEffect) where
     type Output (TransactionTime, QueryTypes.PendingUpdateEffect) = Proto.PendingUpdate

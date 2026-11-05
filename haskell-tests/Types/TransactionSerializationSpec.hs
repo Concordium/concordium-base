@@ -113,6 +113,12 @@ testTransactionBaseCostAccountTransactionV1 = forAll genAccountTransactionV1 $ \
 
 tests :: Spec
 tests = parallel $ do
+    specify "Special unlock amount serialization." $
+        forAll ((,,,) <$> genTokenHolder <*> genLockId <*> genTokenId <*> genTokenAmount) $ \(holder, lockId, tokenId, amount) ->
+            checkTransaction (SpecialUnlockAmount holder lockId tokenId amount)
+    specify "Special lock destroyed serialization." $
+        forAll genLockId $
+            checkTransaction . SpecialLockDestroyed
     specify "Transaction serialization." $ withMaxSuccess 1000 testAccountTransaction
     specify "TransactionV1 serialization." $ withMaxSuccess 1000 testAccountTransactionV1
 
