@@ -3513,7 +3513,7 @@ pub mod construct {
                 );
                 assert_eq!(
                     operations_txn_energy(std::slice::from_ref(&input)),
-                    cost::PLT_OPERATIONS_TRANSACTIONS + Energy::from(500 * count)
+                    cost::PLT_OPERATIONS_TRANSACTIONS + Energy::from(100 + 500 * count)
                 );
                 assert_eq!(Operation::from(input.clone()), wire);
                 assert_eq!(
