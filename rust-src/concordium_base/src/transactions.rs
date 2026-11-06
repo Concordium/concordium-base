@@ -2309,6 +2309,9 @@ pub mod cost {
     /// Additional cost of a lock release operation, in NRG.
     pub const PLT_LOCK_RELEASE: Energy = Energy { energy: 250 };
 
+    /// Base cost of a lock cancel operation.
+    pub const PLT_LOCK_CANCEL_BASE: Energy = Energy { energy: 100 };
+
     /// Cancellation cost: `100 + 500 * balance_references` NRG.
     ///
     /// # Arguments
@@ -2323,7 +2326,9 @@ pub mod cost {
     /// ```
     pub fn plt_lock_cancel(balance_references: u64) -> Energy {
         Energy::from(
-            100u64.saturating_add(PLT_LOCK_BALANCE_REFERENCE.saturating_mul(balance_references)),
+            PLT_LOCK_CANCEL_BASE
+                .energy
+                .saturating_add(PLT_LOCK_BALANCE_REFERENCE.saturating_mul(balance_references)),
         )
     }
 
