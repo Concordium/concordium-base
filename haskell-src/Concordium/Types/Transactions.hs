@@ -34,6 +34,7 @@ import Concordium.Crypto.SignatureScheme as SigScheme
 import Concordium.ID.Types
 import Concordium.Types
 import Concordium.Types.HashableTo
+import Concordium.Types.Tokens (TokenAmount)
 import Concordium.Types.Updates
 import Concordium.Utils
 import Concordium.Utils.Serialization
@@ -1085,6 +1086,17 @@ data SpecialTransactionOutcome
           -- | The address of the account associated with the validator.
           vsAccount :: !AccountAddress
         }
+    | -- | An amount was automatically unlocked from a lock.
+      SpecialUnlockAmount
+        { suaTokenHolder :: !TokenHolder,
+          suaLockId :: !LockId,
+          suaTokenId :: !TokenId,
+          suaAmount :: !TokenAmount
+        }
+    | -- | A lock was automatically destroyed.
+      SpecialLockDestroyed
+        { sldLockId :: !LockId
+        }
     deriving (Show, Eq)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''SpecialTransactionOutcome)
@@ -1152,6 +1164,15 @@ instance S.Serialize SpecialTransactionOutcome where
         S.putWord8 9
         S.put vsBakerId
         S.put vsAccount
+    put SpecialUnlockAmount{..} = do
+        S.putWord8 10
+        S.put suaTokenHolder
+        S.put suaLockId
+        S.put suaTokenId
+        S.put suaAmount
+    put SpecialLockDestroyed{..} = do
+        S.putWord8 11
+        S.put sldLockId
 
     get =
         S.getWord8 >>= \case
@@ -1211,4 +1232,13 @@ instance S.Serialize SpecialTransactionOutcome where
                 vsBakerId <- S.get
                 vsAccount <- S.get
                 return ValidatorSuspended{..}
+            10 -> do
+                suaTokenHolder <- S.get
+                suaLockId <- S.get
+                suaTokenId <- S.get
+                suaAmount <- S.get
+                return SpecialUnlockAmount{..}
+            11 -> do
+                sldLockId <- S.get
+                return SpecialLockDestroyed{..}
             _ -> fail "Invalid SpecialTransactionOutcome type"
