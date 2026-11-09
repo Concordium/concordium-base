@@ -2309,7 +2309,10 @@ pub mod cost {
     /// Additional cost of a lock release operation, in NRG.
     pub const PLT_LOCK_RELEASE: Energy = Energy { energy: 250 };
 
-    /// Cancellation cost: `500 * balance_references` NRG.
+    /// Base cost of a lock cancel operation.
+    pub const PLT_LOCK_CANCEL_BASE: Energy = Energy { energy: 100 };
+
+    /// Cancellation cost: `100 + 500 * balance_references` NRG.
     ///
     /// # Arguments
     /// * `balance_references` - Query lock information using the lock ID, then sum
@@ -2318,18 +2321,22 @@ pub mod cost {
     /// # Example
     /// ```
     /// use concordium_base::transactions::cost::plt_lock_cancel;
-    /// assert_eq!(plt_lock_cancel(3).energy, 1500);
-    /// assert_eq!(plt_lock_cancel(0).energy, 0);
+    /// assert_eq!(plt_lock_cancel(3).energy, 1600);
+    /// assert_eq!(plt_lock_cancel(0).energy, 100);
     /// ```
     pub fn plt_lock_cancel(balance_references: u64) -> Energy {
-        Energy::from(PLT_LOCK_BALANCE_REFERENCE.saturating_mul(balance_references))
+        Energy::from(
+            PLT_LOCK_CANCEL_BASE
+                .energy
+                .saturating_add(PLT_LOCK_BALANCE_REFERENCE.saturating_mul(balance_references)),
+        )
     }
 
     #[cfg(test)]
     #[test]
     fn lock_cost_formulas() {
-        assert_eq!(plt_lock_cancel(0).energy, 0);
-        assert_eq!(plt_lock_cancel(3).energy, 1500);
+        assert_eq!(plt_lock_cancel(0).energy, 100);
+        assert_eq!(plt_lock_cancel(3).energy, 1600);
         assert_eq!(plt_lock_cancel(u64::MAX).energy, u64::MAX);
         assert_eq!(PLT_LOCK_FUND.energy, 250);
         assert_eq!(PLT_LOCK_SEND.energy, 250);
@@ -3511,7 +3518,7 @@ pub mod construct {
                 );
                 assert_eq!(
                     operations_txn_energy(std::slice::from_ref(&input)),
-                    cost::PLT_OPERATIONS_TRANSACTIONS + Energy::from(500 * count)
+                    cost::PLT_OPERATIONS_TRANSACTIONS + Energy::from(100 + 500 * count)
                 );
                 assert_eq!(Operation::from(input.clone()), wire);
                 assert_eq!(
