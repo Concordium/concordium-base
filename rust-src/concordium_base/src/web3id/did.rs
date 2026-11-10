@@ -14,15 +14,135 @@ use nom::{
     IResult,
 };
 
-#[derive(
-    Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash,
-)]
-/// Supported networks for Concordium DIDs.
+/// The number of bytes of a genesis block hash used to identify a network.
+pub const GENESIS_HASH_PREFIX_LEN: usize = 16;
+
+/// The first [`GENESIS_HASH_PREFIX_LEN`] bytes of the hash of a chain's
+/// genesis block. This identifies a Concordium network without relying on a
+/// name, and matches the reference part of `ccd:<prefix>` chain IDs.
+///
+/// Its string form is exactly 32 lowercase hex characters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GenesisHashPrefix(pub [u8; GENESIS_HASH_PREFIX_LEN]);
+
+impl GenesisHashPrefix {
+    /// Genesis hash prefix of Concordium testnet.
+    pub const TESTNET: Self = Self([
+        0x42, 0x21, 0x33, 0x2d, 0x34, 0xe1, 0x69, 0x41, 0x68, 0xc2, 0xa0, 0xc0, 0xb3, 0xfd, 0x0f,
+        0x27,
+    ]);
+    /// Genesis hash prefix of Concordium mainnet.
+    pub const MAINNET: Self = Self([
+        0x9d, 0xd9, 0xca, 0x4d, 0x19, 0xe9, 0x39, 0x38, 0x77, 0xd2, 0xc4, 0x4b, 0x70, 0xf8, 0x9a,
+        0xcb,
+    ]);
+
+    /// Take the prefix of a full genesis block hash.
+    pub fn from_genesis_hash(hash: &crate::hashes::BlockHash) -> Self {
+        let mut bytes = [0u8; GENESIS_HASH_PREFIX_LEN];
+        bytes.copy_from_slice(&hash.as_ref()[..GENESIS_HASH_PREFIX_LEN]);
+        Self(bytes)
+    }
+}
+
+impl std::fmt::Display for GenesisHashPrefix {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&hex::encode(self.0))
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+#[error("Invalid genesis hash prefix: {0}. Expected {len} lowercase hex characters.", len = 2 * GENESIS_HASH_PREFIX_LEN)]
+/// An error that can occur when parsing a [`GenesisHashPrefix`].
+pub struct GenesisHashPrefixFromStrError(String);
+
+impl std::str::FromStr for GenesisHashPrefix {
+    type Err = GenesisHashPrefixFromStrError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let err = || GenesisHashPrefixFromStrError(s.to_string());
+        // Require the canonical (lowercase) form so the textual representation of
+        // a network is unique.
+        if s.len() != 2 * GENESIS_HASH_PREFIX_LEN
+            || !s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        {
+            return Err(err());
+        }
+        let mut bytes = [0u8; GENESIS_HASH_PREFIX_LEN];
+        hex::decode_to_slice(s, &mut bytes).map_err(|_| err())?;
+        Ok(Self(bytes))
+    }
+}
+
+/// The network part of a Concordium DID.
+///
+/// A network is written either by name (`testnet`, `mainnet`) or by the
+/// prefix of its genesis block hash (see [`GenesisHashPrefix`]). The latter
+/// works for any chain, including ones without a well-known name.
+///
+/// Equality, ordering and hashing compare the *chain* a network refers to,
+/// not how it is written: `Network::Testnet` is equal to
+/// `Network::Genesis(GenesisHashPrefix::TESTNET)`. Serialization (string,
+/// JSON and binary) preserves the form the value was constructed with, so
+/// existing data is unaffected.
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[serde(into = "String", try_from = "String")]
+#[non_exhaustive]
 pub enum Network {
-    #[serde(rename = "testnet")]
+    /// Concordium testnet, written `testnet`.
     Testnet,
-    #[serde(rename = "mainnet")]
+    /// Concordium mainnet, written `mainnet`.
     Mainnet,
+    /// Any network, identified by the prefix of its genesis block hash.
+    Genesis(GenesisHashPrefix),
+}
+
+impl Network {
+    /// The genesis hash prefix of the chain this network refers to.
+    pub fn genesis_hash_prefix(&self) -> GenesisHashPrefix {
+        match self {
+            Network::Testnet => GenesisHashPrefix::TESTNET,
+            Network::Mainnet => GenesisHashPrefix::MAINNET,
+            Network::Genesis(prefix) => *prefix,
+        }
+    }
+
+    /// Whether `self` and `other` refer to the same chain. Equivalent to `==`.
+    pub fn same_chain(&self, other: &Network) -> bool {
+        self.genesis_hash_prefix() == other.genesis_hash_prefix()
+    }
+}
+
+impl From<GenesisHashPrefix> for Network {
+    fn from(prefix: GenesisHashPrefix) -> Self {
+        Network::Genesis(prefix)
+    }
+}
+
+impl PartialEq for Network {
+    fn eq(&self, other: &Self) -> bool {
+        self.same_chain(other)
+    }
+}
+
+impl Eq for Network {}
+
+impl std::hash::Hash for Network {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.genesis_hash_prefix().hash(state)
+    }
+}
+
+impl PartialOrd for Network {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Network {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.genesis_hash_prefix().cmp(&other.genesis_hash_prefix())
+    }
 }
 
 impl std::fmt::Display for Network {
@@ -30,6 +150,7 @@ impl std::fmt::Display for Network {
         match self {
             Network::Testnet => f.write_str("testnet"),
             Network::Mainnet => f.write_str("mainnet"),
+            Network::Genesis(prefix) => prefix.fmt(f),
         }
     }
 }
@@ -48,10 +169,27 @@ impl std::str::FromStr for Network {
         match s {
             "testnet" => Ok(Self::Testnet),
             "mainnet" => Ok(Self::Mainnet),
-            other => Err(NetworkFromStrError {
-                network: other.to_string(),
-            }),
+            other => other
+                .parse::<GenesisHashPrefix>()
+                .map(Self::Genesis)
+                .map_err(|_| NetworkFromStrError {
+                    network: other.to_string(),
+                }),
         }
+    }
+}
+
+impl From<Network> for String {
+    fn from(value: Network) -> Self {
+        value.to_string()
+    }
+}
+
+impl TryFrom<String> for Network {
+    type Error = NetworkFromStrError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value.parse()
     }
 }
 
@@ -60,6 +198,11 @@ impl crate::common::Serial for Network {
         match self {
             Network::Testnet => 0u8.serial(out),
             Network::Mainnet => 1u8.serial(out),
+            Network::Genesis(prefix) => {
+                2u8.serial(out);
+                out.write_all(&prefix.0)
+                    .expect("Writing to a buffer should succeed.");
+            }
         }
     }
 }
@@ -69,6 +212,11 @@ impl crate::common::Deserial for Network {
         match u8::deserial(source)? {
             0u8 => Ok(Self::Testnet),
             1u8 => Ok(Self::Mainnet),
+            2u8 => {
+                let mut bytes = [0u8; GENESIS_HASH_PREFIX_LEN];
+                source.read_exact(&mut bytes)?;
+                Ok(Self::Genesis(GenesisHashPrefix(bytes)))
+            }
             n => anyhow::bail!("Unrecognized network tag {n}"),
         }
     }
@@ -290,6 +438,20 @@ fn network(input: &str) -> IResult<&str, Network> {
             }
         }
         Err(_) => {
+            // A run of hex digits followed by `:` is a genesis hash prefix. Identifier
+            // type tags are short (the only all-hex one is `acc`), so a run longer than
+            // that which is not exactly a prefix is reported as a bad network rather
+            // than falling through to a confusing identifier error.
+            let hex_len = input.bytes().take_while(|b| b.is_ascii_hexdigit()).count();
+            if hex_len > 3 && input.as_bytes().get(hex_len) == Some(&b':') {
+                let Ok(prefix) = input[..hex_len].parse::<GenesisHashPrefix>() else {
+                    return Err(nom::Err::Failure(nom::error::Error::new(
+                        input,
+                        nom::error::ErrorKind::Verify,
+                    )));
+                };
+                return Ok((&input[hex_len + 1..], Network::Genesis(prefix)));
+            }
             // No network means we default to mainnet.
             Ok((input, Network::Mainnet))
         }
@@ -633,6 +795,121 @@ mod tests {
         assert!(format!("did:ccd:idp:{idp_identity}/ff")
             .parse::<Method>()
             .is_err());
+        Ok(())
+    }
+
+    const TESTNET_PREFIX: &str = "4221332d34e1694168c2a0c0b3fd0f27";
+    const CUSTOM_PREFIX: &str = "0123456789abcdef0123456789abcdef";
+
+    #[test]
+    fn test_network_string_round_trip() -> anyhow::Result<()> {
+        for s in ["testnet", "mainnet", TESTNET_PREFIX, CUSTOM_PREFIX] {
+            let network: Network = s.parse()?;
+            assert_eq!(network.to_string(), s, "Display must preserve the form");
+            let json = serde_json::to_string(&network)?;
+            assert_eq!(json, format!("\"{s}\""));
+            let back: Network = serde_json::from_str(&json)?;
+            assert_eq!(back.to_string(), s);
+        }
+        assert!(matches!(
+            TESTNET_PREFIX.parse::<Network>()?,
+            Network::Genesis(_)
+        ));
+        // Not canonical / not a network.
+        for s in [
+            "Testnet",
+            "4221332D34E1694168C2A0C0B3FD0F27",
+            "4221332d34e1694168c2a0c0b3fd0f2",
+            "4221332d34e1694168c2a0c0b3fd0f2700",
+            "stagenet",
+        ] {
+            assert!(s.parse::<Network>().is_err(), "{s} should not parse");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_network_binary_serialization() -> anyhow::Result<()> {
+        // Existing encodings must be unchanged.
+        assert_eq!(crate::common::to_bytes(&Network::Testnet), vec![0u8]);
+        assert_eq!(crate::common::to_bytes(&Network::Mainnet), vec![1u8]);
+
+        let custom: Network = CUSTOM_PREFIX.parse()?;
+        let bytes = crate::common::to_bytes(&custom);
+        assert_eq!(bytes.len(), 1 + GENESIS_HASH_PREFIX_LEN);
+        assert_eq!(bytes[0], 2u8);
+        assert_eq!(&bytes[1..], hex::decode(CUSTOM_PREFIX)?.as_slice());
+
+        for network in [Network::Testnet, Network::Mainnet, custom] {
+            let back: Network = crate::common::from_bytes(&mut std::io::Cursor::new(
+                crate::common::to_bytes(&network),
+            ))?;
+            assert_eq!(back.to_string(), network.to_string());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_network_same_chain_equality() -> anyhow::Result<()> {
+        let testnet_genesis: Network = TESTNET_PREFIX.parse()?;
+        assert_eq!(Network::Testnet, testnet_genesis);
+        assert_eq!(
+            Network::Mainnet,
+            Network::Genesis(GenesisHashPrefix::MAINNET)
+        );
+        assert_ne!(Network::Testnet, Network::Mainnet);
+        assert_ne!(Network::Testnet, CUSTOM_PREFIX.parse::<Network>()?);
+
+        let mut set = std::collections::HashSet::new();
+        set.insert(Network::Testnet);
+        assert!(set.contains(&testnet_genesis));
+
+        let hash = "4221332d34e1694168c2a0c0b3fd0f273809612cb13d000d5c2e00e85f50f796"
+            .parse::<crate::hashes::BlockHash>()?;
+        assert_eq!(
+            GenesisHashPrefix::from_genesis_hash(&hash),
+            GenesisHashPrefix::TESTNET
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_genesis_network_dids() -> anyhow::Result<()> {
+        let address: AccountAddress =
+            "3kBx2h5Y2veb4hZgAJWPrr8RyQESKm5TjzF3ti1QQ4VSYLwK1G".parse()?;
+        let cred_id = "a5bedc6d92d6cc8333684aa69091095c425d0b5971f554964a6ac8e297a3074748d25268f1d217234c400f3103669f90";
+        let key = "9cb20e36766a8c1fee1cae8e09eca75785f3bfda220f83b2f0d865cc8a44cd86";
+        let encidcred = hex::encode(&identity_cred_id_fixture().0);
+        for prefix in [TESTNET_PREFIX, CUSTOM_PREFIX] {
+            let network: Network = prefix.parse()?;
+            for s in [
+                format!("did:ccd:{prefix}:acc:{address}"),
+                format!("did:ccd:{prefix}:cred:{cred_id}"),
+                format!("did:ccd:{prefix}:sci:37:123/viewStuff/7b0b00000d"),
+                format!("did:ccd:{prefix}:pkc:{key}"),
+                format!("did:ccd:{prefix}:idp:37"),
+                format!("did:ccd:{prefix}:encidcred:{encidcred}"),
+            ] {
+                let method: Method = s.parse()?;
+                assert!(matches!(method.network, Network::Genesis(_)));
+                assert_eq!(method.network, network);
+                assert_eq!(method.network.to_string(), prefix);
+                assert_eq!(method.to_string(), s, "Display must round trip");
+            }
+        }
+        // The genesis form of testnet refers to the same DID as the named form.
+        assert_eq!(
+            format!("did:ccd:{TESTNET_PREFIX}:idp:37").parse::<Method>()?,
+            "did:ccd:testnet:idp:37".parse::<Method>()?
+        );
+        // Malformed prefixes are rejected instead of being read as mainnet.
+        for s in [
+            "did:ccd:4221332d34e1694168c2a0c0b3fd0f2:idp:37",
+            "did:ccd:4221332D34E1694168C2A0C0B3FD0F27:idp:37",
+            "did:ccd:4221332d34e1694168c2a0c0b3fd0f273809612cb13d000d5c2e00e85f50f796:idp:37",
+        ] {
+            assert!(s.parse::<Method>().is_err(), "{s} should not parse");
+        }
         Ok(())
     }
 
