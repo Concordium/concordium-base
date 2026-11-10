@@ -5,9 +5,9 @@
   This works for any chain, including ones without a well-known name.
   - Added `web3id::did::GenesisHashPrefix` (with `TESTNET`/`MAINNET` constants and `from_genesis_hash`) and the
     `web3id::did::Network::Genesis` variant, plus `Network::genesis_hash_prefix` and `Network::same_chain`.
-  - Breaking: adding the `Genesis` variant breaks exhaustive matches on `web3id::did::Network` outside this
-    crate. `Network` is also now `#[non_exhaustive]`, so such matches need a wildcard arm, and future variants
-    will not be breaking.
+  - `Network` is now `#[non_exhaustive]`. Code outside this crate that matches on `Network` variant by variant
+    (`Testnet`/`Mainnet`) must add a wildcard arm (`_ => …`) to compile. Code that only passes `Network` values
+    around or compares them is unaffected.
   - Equality, ordering and hashing of `Network` compare the chain it refers to, so
     `Network::Testnet == Network::Genesis(GenesisHashPrefix::TESTNET)`, and network checks during verification
     accept either form for the same chain. For `Testnet` and `Mainnet` on their own this behaves exactly as
