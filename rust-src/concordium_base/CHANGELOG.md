@@ -1,3 +1,23 @@
+## Unreleased
+
+- Concordium DIDs can identify the network by the prefix of its genesis block hash, e.g.
+  `did:ccd:4221332d34e1694168c2a0c0b3fd0f27:idp:0`, matching the reference part of `ccd:<prefix>` chain IDs.
+  This works for any chain, including ones without a well-known name.
+  - Added `web3id::did::GenesisHashPrefix` (with `TESTNET`/`MAINNET` constants and `from_genesis_hash`) and the
+    `web3id::did::Network::Genesis` variant, plus `Network::genesis_hash_prefix` and `Network::same_chain`.
+  - Breaking: adding the `Genesis` variant breaks exhaustive matches on `web3id::did::Network` outside this
+    crate. `Network` is also now `#[non_exhaustive]`, so such matches need a wildcard arm, and future variants
+    will not be breaking.
+  - Equality, ordering and hashing of `Network` compare the chain it refers to, so
+    `Network::Testnet == Network::Genesis(GenesisHashPrefix::TESTNET)`, and network checks during verification
+    accept either form for the same chain. For `Testnet` and `Mainnet` on their own this behaves exactly as
+    before.
+  - Existing serializations are unchanged: `testnet`/`mainnet` keep their string, JSON and binary
+    (tags `0`/`1`) forms. The genesis form is serialized as its 32 lowercase hex characters, or as tag `2`
+    followed by the 16 prefix bytes.
+  - The DID parser now rejects a malformed genesis prefix (for example the wrong length or uppercase hex)
+    instead of treating it as a missing network.
+
 ## 11.0.0 (2026-10-09)
 
 - Set minimum supported Rust version to 1.85.
