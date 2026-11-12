@@ -2,7 +2,6 @@ use anyhow::{bail, ensure, Context};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use concordium_contracts_common::{Duration, ExchangeRate};
 use core::cmp;
-use sha2::Digest;
 use std::{
     collections::btree_map::BTreeMap,
     convert::{TryFrom, TryInto},
@@ -29,7 +28,20 @@ pub fn safe_with_capacity<T>(capacity: usize) -> Vec<T> {
 
 /// Trait for types which can be recovered from byte sources.
 pub trait Deserial: Sized {
+    /// Deserialize value from the given reader.
+    ///
+    /// Deserialization is expected to read exactly the
+    /// bytes that defines the serialized value, and no more bytes,
+    /// since following bytes may be the serialization of subsequent values.
+    /// It is as such not an error, that there are bytes left in the reader after
+    /// deserialization. It is up to the caller to decide, if this is considered an error.
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self>;
+}
+
+impl Deserial for () {
+    fn deserial<R: ReadBytesExt>(_source: &mut R) -> ParseResult<Self> {
+        Ok(())
+    }
 }
 
 impl Deserial for u128 {
@@ -287,62 +299,76 @@ impl<T: Deserial> Deserial for Box<T> {
     }
 }
 
-/// Trait for writers which will not fail in normal operation with
-/// small amounts of data, e.g., [`Vec<u8>`](Vec).
-/// Moreover having a special trait allows us to implement it for
-/// other types, such as the SHA Digest.
-pub trait Buffer: Sized + WriteBytesExt {
-    type Result;
-    fn start() -> Self;
-    fn start_hint(_l: usize) -> Self {
-        Self::start()
-    }
-    fn result(self) -> Self::Result;
+/// Trait for writers for which writing will never return an error.
+/// Notice that writing can still panic, writing to `Vec<u8>` can e.g.
+/// result in out of memory.
+///
+/// The trait [`Buffer`] is used in the definition of [`Serial::serial`]. This allows
+/// implementers of [`Serial::serial`] to assume that writing to the given writer
+/// will not return errors.
+pub trait Buffer: Sized + Write {}
+
+impl<T: Buffer> Buffer for &mut T {}
+
+impl Buffer for Vec<u8> {}
+
+/// A slice-backed serialization buffer that records overflow instead of returning write errors.
+/// Writes advance the slice; an oversized write and all subsequent writes are discarded.
+/// Call [`Self::into_result`] after serialization to check whether the output is complete.
+#[must_use = "check into_result after serialization for overflow"]
+pub enum SliceBuffer<'a> {
+    /// Remaining writable bytes.
+    Bytes(&'a mut [u8]),
+    /// A write exceeded the remaining capacity.
+    Overflow,
 }
 
-impl Buffer for Vec<u8> {
-    type Result = Vec<u8>;
+/// Serialization exceeded the slice buffer's capacity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("slice buffer capacity exceeded")]
+pub struct SliceBufferOverflow;
 
-    fn start() -> Vec<u8> {
-        Vec::new()
-    }
-
-    fn start_hint(l: usize) -> Vec<u8> {
-        Vec::with_capacity(l)
-    }
-
-    fn result(self) -> Self::Result {
-        self
-    }
-}
-
-impl Buffer for sha2::Sha256 {
-    type Result = [u8; 32];
-
-    fn start() -> Self {
-        sha2::Sha256::new()
-    }
-
-    fn result(self) -> Self::Result {
-        self.finalize().into()
+impl<'a> SliceBuffer<'a> {
+    /// Return the unused slice, or an error if any write exceeded its capacity.
+    pub fn into_result(self) -> Result<&'a mut [u8], SliceBufferOverflow> {
+        match self {
+            Self::Bytes(bytes) => Ok(bytes),
+            Self::Overflow => Err(SliceBufferOverflow),
+        }
     }
 }
 
-impl Buffer for sha2::Sha512 {
-    type Result = [u8; 64];
-
-    fn start() -> Self {
-        sha2::Sha512::new()
+impl Write for SliceBuffer<'_> {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Self::Bytes(buffer) if bytes.len() <= buffer.len() => {
+                return buffer.write(bytes);
+            }
+            _ => *self = Self::Overflow,
+        }
+        Ok(bytes.len())
     }
 
-    fn result(self) -> Self::Result {
-        self.finalize().into()
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
+
+impl Buffer for SliceBuffer<'_> {}
+
+impl Buffer for sha2::Sha256 {}
+
+impl Buffer for sha2::Sha512 {}
 
 /// Trait implemented by types which can be encoded into byte arrays.
 /// The intention is that the encoding is binary and not human readable.
 pub trait Serial {
+    /// Serialize value to given buffer.
+    ///
+    /// The trait [`Buffer`] is used to signal that the write functions on the given writer
+    /// will never return errors (notice that [`Buffer`] extends [`Write`]).
+    /// This allows implementers of [`Serial::serial`] to handle write errors
+    /// by panicking.
     fn serial<B: Buffer>(&self, out: &mut B);
 }
 
@@ -707,12 +733,12 @@ impl<R: ReadBytesExt, A: Deserial> Get<A> for R {
 /// `sink.put(value)` in contrast to `value.serial(sink)`. It is less important
 /// than `Get`.
 pub trait Put<A> {
-    fn put(&mut self, _v: &A);
+    fn put(&mut self, _v: A);
 }
 
 impl<R: Buffer, A: Serial> Put<A> for R {
     #[inline]
-    fn put(&mut self, v: &A) {
+    fn put(&mut self, v: A) {
         v.serial(self)
     }
 }
@@ -737,6 +763,16 @@ pub fn to_bytes<A: Serial>(x: &A) -> Vec<u8> {
 /// It is here mostly for historical reasons, for backwards compatibility.
 pub fn from_bytes<A: Deserial, R: ReadBytesExt>(source: &mut R) -> ParseResult<A> {
     A::deserial(source)
+}
+
+/// Deserializes the given bytes to a value of the type parameter `A`.
+/// Fails if all bytes are not consumed during deserialization.
+#[inline]
+pub fn from_bytes_complete<A: Deserial>(bytes: impl AsRef<[u8]>) -> ParseResult<A> {
+    let mut bytes = bytes.as_ref();
+    let value = A::deserial(&mut bytes)?;
+    ensure!(bytes.is_empty(), "Bytes remaining after deserialization");
+    Ok(value)
 }
 
 // Some more generic implementations
@@ -897,6 +933,7 @@ impl<T: Serial> Serial for &T {
 
 use hex::{decode, encode};
 use serde::{de, de::Visitor, Deserializer, Serializer};
+use std::io::Write;
 use std::{fmt, io::Cursor};
 
 /// Encode the given value into a byte array using its [Serial] instance, and
@@ -1027,6 +1064,59 @@ mod test {
     use crate::common::{from_bytes, serialize_deserialize, to_bytes};
     use chrono::{DateTime, Utc};
     use concordium_base_derive::Serialize;
+
+    #[test]
+    fn test_slice_buffer_serialization() {
+        #[derive(Debug, PartialEq, Serialize)]
+        struct Value {
+            first: u64,
+            second: u32,
+        }
+
+        let value = Value {
+            first: 0x0102030405060708,
+            second: 0x090a0b0c,
+        };
+        let mut bytes = [0; 13];
+        let mut buffer = SliceBuffer::Bytes(&mut bytes);
+        value.serial(&mut buffer);
+        assert_eq!(buffer.into_result().unwrap().len(), 1);
+        assert_eq!(bytes, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0]);
+        assert_eq!(from_bytes_complete::<Value>(&bytes[..12]).unwrap(), value);
+
+        let mut exact = [0; 12];
+        let mut buffer = SliceBuffer::Bytes(&mut exact);
+        value.serial(&mut buffer);
+        assert!(buffer.into_result().unwrap().is_empty());
+        assert_eq!(exact.as_slice(), &bytes[..12]);
+    }
+
+    #[test]
+    fn test_slice_buffer_serialization_overflow() {
+        let mut bytes = [0; 7];
+        let mut buffer = SliceBuffer::Bytes(&mut bytes);
+        1u64.serial(&mut buffer);
+        assert_eq!(buffer.into_result(), Err(SliceBufferOverflow));
+        assert_eq!(bytes, [0; 7]);
+    }
+
+    #[test]
+    fn test_slice_buffer_overflow_is_sticky() {
+        let mut bytes = [0; 3];
+        let mut buffer = SliceBuffer::Bytes(&mut bytes);
+        assert_eq!(buffer.write(&[1]).unwrap(), 1);
+        assert_eq!(buffer.write(&[2, 3, 4]).unwrap(), 3);
+        assert_eq!(buffer.write(&[5]).unwrap(), 1);
+        buffer.flush().unwrap();
+        assert_eq!(buffer.into_result(), Err(SliceBufferOverflow));
+        assert_eq!(bytes, [1, 0, 0]);
+    }
+
+    #[test]
+    fn test_unit_serialization() {
+        assert!(to_bytes(&()).is_empty());
+        assert_eq!(serialize_deserialize(&()).unwrap(), ());
+    }
 
     #[test]
     fn test_map_serialization() {
@@ -1246,6 +1336,100 @@ mod test {
         assert_eq!(decoded, value);
     }
 
+    #[test]
+    #[should_panic(expected = "container length exceeds its serialized length prefix")]
+    fn test_named_struct_derived_serialization_size_length_overflow() {
+        #[derive(Serialize)]
+        struct TestStruct {
+            #[size_length = 1]
+            value: Vec<u8>,
+        }
+
+        to_bytes(&TestStruct {
+            value: vec![0; 256],
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "container length exceeds its serialized length prefix")]
+    fn test_named_struct_derived_serialization_map_size_length_overflow() {
+        #[derive(Serialize)]
+        struct TestStruct {
+            #[map_size_length = 1]
+            value: BTreeMap<u8, u8>,
+        }
+
+        to_bytes(&TestStruct {
+            value: (0..=u8::MAX).map(|value| (value, value)).collect(),
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "container length exceeds its serialized length prefix")]
+    fn test_named_struct_derived_serialization_set_size_length_overflow() {
+        #[derive(Serialize)]
+        struct TestStruct {
+            #[set_size_length = 1]
+            value: BTreeSet<u8>,
+        }
+
+        to_bytes(&TestStruct {
+            value: (0..=u8::MAX).collect(),
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "container length exceeds its serialized length prefix")]
+    fn test_named_struct_derived_serialization_string_size_length_overflow() {
+        #[derive(Serialize)]
+        struct TestStruct {
+            #[string_size_length = 1]
+            value: String,
+        }
+
+        to_bytes(&TestStruct {
+            value: "a".repeat(256),
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "container length exceeds its serialized length prefix")]
+    fn test_tuple_struct_derived_serialization_size_length_overflow() {
+        #[derive(Serialize)]
+        struct TestStruct(#[size_length = 1] Vec<u8>);
+
+        to_bytes(&TestStruct(vec![0; 256]));
+    }
+
+    #[test]
+    #[should_panic(expected = "container length exceeds its serialized length prefix")]
+    fn test_tuple_struct_derived_serialization_map_size_length_overflow() {
+        #[derive(Serialize)]
+        struct TestStruct(#[map_size_length = 1] BTreeMap<u8, u8>);
+
+        to_bytes(&TestStruct(
+            (0..=u8::MAX).map(|value| (value, value)).collect(),
+        ));
+    }
+
+    #[test]
+    #[should_panic(expected = "container length exceeds its serialized length prefix")]
+    fn test_tuple_struct_derived_serialization_set_size_length_overflow() {
+        #[derive(Serialize)]
+        struct TestStruct(#[set_size_length = 1] BTreeSet<u8>);
+
+        to_bytes(&TestStruct((0..=u8::MAX).collect()));
+    }
+
+    #[test]
+    #[should_panic(expected = "container length exceeds its serialized length prefix")]
+    fn test_tuple_struct_derived_serialization_string_size_length_overflow() {
+        #[derive(Serialize)]
+        struct TestStruct(#[string_size_length = 1] String);
+
+        to_bytes(&TestStruct("a".repeat(256)));
+    }
+
     /// Tests serializing enum with unit variants with derived implementation
     #[test]
     fn test_unit_enum_derived_serialization() {
@@ -1301,5 +1485,33 @@ mod test {
         assert_eq!(hex::encode(&bytes), "0102000000000000000474657374");
         let decoded: TestEnum = from_bytes(&mut bytes.as_slice()).unwrap();
         assert_eq!(decoded, value);
+    }
+
+    /// Tests [`from_bytes`]
+    #[test]
+    fn test_from_bytes() {
+        // Test deserialize bytes that are fully consumed.
+        let bytes = hex::decode("01").unwrap();
+        let value: u8 = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(value, 1);
+
+        // Test deserialize where there are bytes left.
+        let bytes = hex::decode("0101").unwrap();
+        let value: u8 = from_bytes(&mut bytes.as_slice()).unwrap();
+        assert_eq!(value, 1);
+    }
+
+    /// Tests [`from_bytes_complete`]
+    #[test]
+    fn test_from_bytes_complete() {
+        // Test deserialize bytes that are fully consumed.
+        let bytes = hex::decode("01").unwrap();
+        let value: u8 = from_bytes_complete(&mut bytes.as_slice()).unwrap();
+        assert_eq!(value, 1);
+
+        // Test deserialize where there are bytes left. Should fail.
+        let bytes = hex::decode("0101").unwrap();
+        let err = from_bytes_complete::<u8>(&mut bytes.as_slice()).expect_err("deserialize bytes");
+        assert!(err.to_string().contains("Bytes remaining"), "err: {}", err);
     }
 }

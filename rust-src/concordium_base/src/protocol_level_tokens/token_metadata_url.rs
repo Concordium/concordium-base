@@ -27,6 +27,7 @@ pub struct MetadataUrl {
         serde(
             serialize_with = "serialize_hex_bytes",
             deserialize_with = "deserialize_hex_bytes",
+            default,
             skip_serializing_if = "Option::is_none"
         )
     )]
@@ -45,6 +46,16 @@ pub struct MetadataUrl {
     )]
     #[cfg_attr(feature = "serde_deprecated", serde(rename = "_additional"))]
     pub additional: HashMap<String, value::Value>,
+}
+
+impl From<String> for MetadataUrl {
+    fn from(url: String) -> Self {
+        Self {
+            url,
+            checksum_sha_256: None,
+            additional: HashMap::new(),
+        }
+    }
 }
 
 /// Serialize `Bytes` as a hex string.
@@ -127,6 +138,9 @@ mod tests {
             "url": "https://example.com"
         }"#;
 
+        // verify that the minimal json can be deserialized
+        let _: MetadataUrl = serde_json::from_str(expected_json).unwrap();
+
         let expected: serde_json::Value = serde_json::from_str(expected_json).unwrap();
         let actual: serde_json::Value = serde_json::from_str(&serialized).unwrap();
         assert_eq!(actual, expected);
@@ -161,7 +175,7 @@ mod tests {
             additional,
         };
 
-        let cbor_encoded = cbor_encode(&metadata_url).unwrap();
+        let cbor_encoded = cbor_encode(&metadata_url);
 
         let expected_cbor = Vec::from_hex("a4636b65796576616c75656375726c7368747470733a2f2f6578616d706c652e636f6d67616e6f7468657218286e636865636b73756d53686132353658200101010101010101010101010101010101010101010101010101010101010101").unwrap();
         let expected: MetadataUrl = cbor_decode(&expected_cbor).unwrap();

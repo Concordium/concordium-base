@@ -145,6 +145,16 @@ tokenListOperationCost = 50
 tokenPauseUnpauseCost :: Energy
 tokenPauseUnpauseCost = 50
 
+-- | Cost to assign/revoke an admin role of a token.
+--  TODO - this is a placeholder value for now - RBC-26 will investigate the correct energy to use.
+tokenAssignRevokeRolesCost :: Energy
+tokenAssignRevokeRolesCost = 50
+
+-- | Cost to update the token metadata.
+--  TODO - this is a placeholder value for now - RBC-26 will investigate the correct energy to use.
+tokenUpdateTokenMetadataCost :: Energy
+tokenUpdateTokenMetadataCost = 50
+
 -- | C_t for updating account credentials
 updateCredentialsCost ::
     -- | The number of credentials on the account before the update.
@@ -250,6 +260,7 @@ lookupModule SP7 ms = fromIntegral ms `div` 500
 lookupModule SP8 ms = fromIntegral ms `div` 500
 lookupModule SP9 ms = fromIntegral ms `div` 500
 lookupModule SP10 ms = fromIntegral ms `div` 500
+lookupModule SP11 ms = fromIntegral ms `div` 500
 
 -- | The base cost of initializing a contract instance to cover administrative costs.
 -- Even if no code is run and no instance created.

@@ -12,6 +12,7 @@ import qualified ConcordiumTests.Crypto.FFIVerify
 import qualified ConcordiumTests.Crypto.SHA256
 import qualified ConcordiumTests.Crypto.VRF
 import qualified ConcordiumTests.Data.Base58Encoding
+import qualified ConcordiumTests.Data.ULEB128
 import qualified ConcordiumTests.ID.Types
 import qualified ConcordiumTests.MerkleProofs
 import qualified ConcordiumTests.Utils.Encryption
@@ -21,6 +22,7 @@ import qualified Types.AddressesSpec
 import qualified Types.AmountFraction
 import qualified Types.AmountSpec
 import qualified Types.CBOR
+import qualified Types.GRPC2Spec
 import qualified Types.ParametersSpec
 import qualified Types.PayloadSerializationSpec
 import qualified Types.PayloadSpec
@@ -41,6 +43,7 @@ main = hspec $ parallel $ do
     ConcordiumTests.Crypto.VRF.tests
     ConcordiumTests.Crypto.BlsSignature.tests
     ConcordiumTests.Data.Base58Encoding.tests
+    ConcordiumTests.Data.ULEB128.tests
     ConcordiumTests.ID.Types.tests
     ConcordiumTests.Crypto.Ed25519DlogProofs.tests
     ConcordiumTests.Crypto.EncryptedTransfers.tests
@@ -64,3 +67,4 @@ main = hspec $ parallel $ do
     Types.ValidName.tests
     Types.TokensSpec.tests
     Types.CBOR.tests
+    Types.GRPC2Spec.tests
