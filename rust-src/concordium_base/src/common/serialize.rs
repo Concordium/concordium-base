@@ -342,9 +342,7 @@ impl Write for SliceBuffer<'_> {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
         match self {
             Self::Bytes(buffer) if bytes.len() <= buffer.len() => {
-                let (target, remaining) = std::mem::take(buffer).split_at_mut(bytes.len());
-                target.copy_from_slice(bytes);
-                *buffer = remaining;
+                return buffer.write(bytes);
             }
             _ => *self = Self::Overflow,
         }
