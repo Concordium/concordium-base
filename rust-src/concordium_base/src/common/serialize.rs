@@ -312,17 +312,43 @@ impl<T: Buffer> Buffer for &mut T {}
 
 impl Buffer for Vec<u8> {}
 
-/// A slice-backed buffer that panics if a write exceeds its remaining capacity.
-/// The wrapped slice advances past written bytes; an oversized write leaves it unchanged.
-pub struct PanicOnOverflowSlice<'a>(pub &'a mut [u8]);
+/// A slice-backed serialization buffer that records overflow instead of returning write errors.
+/// Writes advance the slice; an oversized write and all subsequent writes are discarded.
+/// Call [`Self::into_result`] after serialization to check whether the output is complete.
+#[must_use = "check into_result after serialization for overflow"]
+pub enum SliceBuffer<'a> {
+    /// Remaining writable bytes.
+    Bytes(&'a mut [u8]),
+    /// A write exceeded the remaining capacity.
+    Overflow,
+}
 
-impl Write for PanicOnOverflowSlice<'_> {
+/// Serialization exceeded the slice buffer's capacity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("slice buffer capacity exceeded")]
+pub struct SliceBufferOverflow;
+
+impl<'a> SliceBuffer<'a> {
+    /// Return the unused slice, or an error if any write exceeded its capacity.
+    pub fn into_result(self) -> Result<&'a mut [u8], SliceBufferOverflow> {
+        match self {
+            Self::Bytes(bytes) => Ok(bytes),
+            Self::Overflow => Err(SliceBufferOverflow),
+        }
+    }
+}
+
+impl Write for SliceBuffer<'_> {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-        assert!(
-            bytes.len() <= self.0.len(),
-            "slice buffer capacity exceeded"
-        );
-        self.0.write(bytes)
+        match self {
+            Self::Bytes(buffer) if bytes.len() <= buffer.len() => {
+                let (target, remaining) = std::mem::take(buffer).split_at_mut(bytes.len());
+                target.copy_from_slice(bytes);
+                *buffer = remaining;
+            }
+            _ => *self = Self::Overflow,
+        }
+        Ok(bytes.len())
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
@@ -330,7 +356,7 @@ impl Write for PanicOnOverflowSlice<'_> {
     }
 }
 
-impl Buffer for PanicOnOverflowSlice<'_> {}
+impl Buffer for SliceBuffer<'_> {}
 
 impl Buffer for sha2::Sha256 {}
 
@@ -1042,7 +1068,7 @@ mod test {
     use concordium_base_derive::Serialize;
 
     #[test]
-    fn test_panic_on_overflow_slice_serialization() {
+    fn test_slice_buffer_serialization() {
         #[derive(Debug, PartialEq, Serialize)]
         struct Value {
             first: u64,
@@ -1054,32 +1080,38 @@ mod test {
             second: 0x090a0b0c,
         };
         let mut bytes = [0; 13];
-        let mut buffer = PanicOnOverflowSlice(&mut bytes);
+        let mut buffer = SliceBuffer::Bytes(&mut bytes);
         value.serial(&mut buffer);
-        assert_eq!(buffer.0.len(), 1);
+        assert_eq!(buffer.into_result().unwrap().len(), 1);
         assert_eq!(bytes, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0]);
         assert_eq!(from_bytes_complete::<Value>(&bytes[..12]).unwrap(), value);
 
         let mut exact = [0; 12];
-        value.serial(&mut PanicOnOverflowSlice(&mut exact));
+        let mut buffer = SliceBuffer::Bytes(&mut exact);
+        value.serial(&mut buffer);
+        assert!(buffer.into_result().unwrap().is_empty());
         assert_eq!(exact.as_slice(), &bytes[..12]);
     }
 
     #[test]
-    #[should_panic(expected = "slice buffer capacity exceeded")]
-    fn test_panic_on_overflow_slice_serialization_panics_when_full() {
+    fn test_slice_buffer_serialization_overflow() {
         let mut bytes = [0; 7];
-        1u64.serial(&mut PanicOnOverflowSlice(&mut bytes));
+        let mut buffer = SliceBuffer::Bytes(&mut bytes);
+        1u64.serial(&mut buffer);
+        assert_eq!(buffer.into_result(), Err(SliceBufferOverflow));
+        assert_eq!(bytes, [0; 7]);
     }
 
     #[test]
-    fn test_panic_on_overflow_slice_write_panics_without_partial_write() {
+    fn test_slice_buffer_overflow_is_sticky() {
         let mut bytes = [0; 3];
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = PanicOnOverflowSlice(&mut bytes).write(&[1, 2, 3, 4]);
-        }));
-        assert!(result.is_err());
-        assert_eq!(bytes, [0; 3]);
+        let mut buffer = SliceBuffer::Bytes(&mut bytes);
+        assert_eq!(buffer.write(&[1]).unwrap(), 1);
+        assert_eq!(buffer.write(&[2, 3, 4]).unwrap(), 3);
+        assert_eq!(buffer.write(&[5]).unwrap(), 1);
+        buffer.flush().unwrap();
+        assert_eq!(buffer.into_result(), Err(SliceBufferOverflow));
+        assert_eq!(bytes, [1, 0, 0]);
     }
 
     #[test]
