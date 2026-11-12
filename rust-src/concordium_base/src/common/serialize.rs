@@ -312,6 +312,26 @@ impl<T: Buffer> Buffer for &mut T {}
 
 impl Buffer for Vec<u8> {}
 
+/// A slice-backed buffer that panics if a write exceeds its remaining capacity.
+/// The wrapped slice advances past written bytes; an oversized write leaves it unchanged.
+pub struct PanicOnOverflowSlice<'a>(pub &'a mut [u8]);
+
+impl Write for PanicOnOverflowSlice<'_> {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        assert!(
+            bytes.len() <= self.0.len(),
+            "slice buffer capacity exceeded"
+        );
+        self.0.write(bytes)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Buffer for PanicOnOverflowSlice<'_> {}
+
 impl Buffer for sha2::Sha256 {}
 
 impl Buffer for sha2::Sha512 {}
@@ -1020,6 +1040,47 @@ mod test {
     use crate::common::{from_bytes, serialize_deserialize, to_bytes};
     use chrono::{DateTime, Utc};
     use concordium_base_derive::Serialize;
+
+    #[test]
+    fn test_panic_on_overflow_slice_serialization() {
+        #[derive(Debug, PartialEq, Serialize)]
+        struct Value {
+            first: u64,
+            second: u32,
+        }
+
+        let value = Value {
+            first: 0x0102030405060708,
+            second: 0x090a0b0c,
+        };
+        let mut bytes = [0; 13];
+        let mut buffer = PanicOnOverflowSlice(&mut bytes);
+        value.serial(&mut buffer);
+        assert_eq!(buffer.0.len(), 1);
+        assert_eq!(bytes, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0]);
+        assert_eq!(from_bytes_complete::<Value>(&bytes[..12]).unwrap(), value);
+
+        let mut exact = [0; 12];
+        value.serial(&mut PanicOnOverflowSlice(&mut exact));
+        assert_eq!(exact.as_slice(), &bytes[..12]);
+    }
+
+    #[test]
+    #[should_panic(expected = "slice buffer capacity exceeded")]
+    fn test_panic_on_overflow_slice_serialization_panics_when_full() {
+        let mut bytes = [0; 7];
+        1u64.serial(&mut PanicOnOverflowSlice(&mut bytes));
+    }
+
+    #[test]
+    fn test_panic_on_overflow_slice_write_panics_without_partial_write() {
+        let mut bytes = [0; 3];
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = PanicOnOverflowSlice(&mut bytes).write(&[1, 2, 3, 4]);
+        }));
+        assert!(result.is_err());
+        assert_eq!(bytes, [0; 3]);
+    }
 
     #[test]
     fn test_unit_serialization() {
