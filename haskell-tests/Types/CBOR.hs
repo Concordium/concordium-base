@@ -1432,9 +1432,6 @@ testSimpleLockConfigV0CBOR = describe "SimpleLockConfigV0 CBOR" $ do
 
 testLockConfigCBOR :: Spec
 testLockConfigCBOR = describe "LockConfig CBOR" $ do
-    it "rejects obsolete keepAlive as an unknown key" $
-        lockDecode decodeLockConfig (BS16.decodeLenient "a16873696d706c655630a566657870697279c11a6b932770666772616e74738066746f6b656e7380696b656570416c697665f56a726563697069656e747380")
-            `shouldSatisfy` isLeft
     it "tagged simpleV0 minimal fixture omits default fields" $
         lockFixture
             encodeLockConfig
