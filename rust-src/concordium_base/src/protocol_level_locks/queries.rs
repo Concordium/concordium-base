@@ -62,7 +62,6 @@ mod tests {
                     ],
                 }],
                 tokens: vec!["tT".parse().unwrap()],
-                keep_alive: false,
                 memo: None,
                 metadata,
             }),
