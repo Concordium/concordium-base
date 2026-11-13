@@ -1202,7 +1202,6 @@ exampleLockInfoDetails =
                       lcsv0Expiry = TransactionTime 1804806000,
                       lcsv0Grants = Seq.singleton LockControllerSimpleV0Grant{lcsv0gAccount = accountTokenHolder acc, lcsv0gRoles = Seq.fromList [LockControllerSimpleV0Fund, LockControllerSimpleV0Send]},
                       lcsv0Tokens = Seq.singleton tokenId,
-                      lcsv0KeepAlive = False,
                       lcsv0Memo = Nothing,
                       lcsv0Metadata = Just (lockMetadataToRawCbor exampleLockMetadata)
                     },
@@ -1409,12 +1408,12 @@ testLockControllerSimpleV0GrantCBOR = describe "LockControllerSimpleV0Grant CBOR
 
 testSimpleLockConfigV0CBOR :: Spec
 testSimpleLockConfigV0CBOR = describe "SimpleLockConfigV0 CBOR" $ do
-    it "full fixture with keepAlive and memo" $
+    it "full fixture with memo" $
         lockFixture
             encodeLockConfig
             decodeLockConfig
             (LockConfigSimpleV0 fullConfig)
-            "a16873696d706c655630a6646d656d6f4301020366657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e7381627454696b656570416c697665f56a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+            "a16873696d706c655630a5646d656d6f4301020366657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e73816274546a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
   where
     fullConfig =
         SimpleLockConfigV0
@@ -1427,13 +1426,15 @@ testSimpleLockConfigV0CBOR = describe "SimpleLockConfigV0 CBOR" $ do
                           lcsv0gRoles = Seq.fromList [LockControllerSimpleV0Fund, LockControllerSimpleV0Cancel]
                         },
               lcsv0Tokens = Seq.singleton lockTokenId,
-              lcsv0KeepAlive = True,
               lcsv0Memo = Just $ UntaggedMemo (Memo $ BSS.pack [0x01, 0x02, 0x03]),
               lcsv0Metadata = Nothing
             }
 
 testLockConfigCBOR :: Spec
 testLockConfigCBOR = describe "LockConfig CBOR" $ do
+    it "rejects obsolete keepAlive as an unknown key" $
+        lockDecode decodeLockConfig (BS16.decodeLenient "a16873696d706c655630a566657870697279c11a6b932770666772616e74738066746f6b656e7380696b656570416c697665f56a726563697069656e747380")
+            `shouldSatisfy` isLeft
     it "tagged simpleV0 minimal fixture omits default fields" $
         lockFixture
             encodeLockConfig
@@ -1447,7 +1448,6 @@ testLockConfigCBOR = describe "LockConfig CBOR" $ do
               lcsv0Expiry = TransactionTime 1804806000,
               lcsv0Grants = Seq.empty,
               lcsv0Tokens = Seq.empty,
-              lcsv0KeepAlive = False,
               lcsv0Memo = Nothing,
               lcsv0Metadata = Nothing
             }

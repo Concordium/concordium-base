@@ -485,9 +485,6 @@ simple-lock-config-v0 = (
     ; Only the specified token types may be held by the lock.
     ; These token IDs must be valid when the lock is created.
     "tokens": [ + token-id ],
-    ; If set, then the lock will not be destroyed before expiry except
-    ; by a cancel operation.
-    ? "keepAlive": bool .default false,
     ; An optional description attached to the lock.
     ; This is handled as a memo (i.e. it may be CBOR or bytes).
     ? "memo": memo,

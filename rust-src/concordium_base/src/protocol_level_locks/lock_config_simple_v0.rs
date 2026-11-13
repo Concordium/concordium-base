@@ -87,6 +87,9 @@ pub struct LockControllerSimpleV0Grant {
 }
 
 /// Configuration for a SimpleV0 lock.
+///
+/// Empty locks remain until cancellation or cleanup after the expiry time has
+/// passed. Cleanup is energy-limited, so there is no maximum retention time.
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
 pub struct LockConfigSimpleV0 {
     /// Accounts that can receive funds from this lock.
@@ -97,10 +100,6 @@ pub struct LockConfigSimpleV0 {
     pub grants: Vec<LockControllerSimpleV0Grant>,
     /// Tokens that may be funded into this lock.
     pub tokens: Vec<TokenId>,
-    /// Whether the lock should be kept alive after all funds are
-    /// released. Interpreted as `false` when omitted from the serialization.
-    #[cbor(default = false)]
-    pub keep_alive: bool,
     /// Optional memo attached to the lock.
     pub memo: Option<CborMemo>,
     /// Optional opaque CBOR-encoded user-facing metadata.
@@ -128,7 +127,6 @@ mod tests {
                 ],
             }],
             tokens: vec!["CCD".parse().unwrap()],
-            keep_alive: true,
             memo: Some(CborMemo::Raw(Memo::try_from(vec![1, 2, 3]).unwrap())),
             metadata: None,
         }
@@ -186,7 +184,6 @@ mod tests {
             expiry: TransactionTime::from_seconds(1804806000),
             grants: vec![],
             tokens: vec![],
-            keep_alive: false,
             memo: None,
             metadata: None,
         };
@@ -200,7 +197,7 @@ mod tests {
 
     #[test]
     fn config_cbor_matches_full_and_minimal_fixtures() {
-        let full = "a6646d656d6f4301020366657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e738163434344696b656570416c697665f56a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
+        let full = "a5646d656d6f4301020366657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e7381634343446a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
         let minimal =
             "a466657870697279c11a6b932770666772616e74738066746f6b656e73806a726563697069656e747380";
         let minimal_config = LockConfigSimpleV0 {
@@ -208,7 +205,6 @@ mod tests {
             expiry: TransactionTime::from_seconds(1804806000),
             grants: vec![],
             tokens: vec![],
-            keep_alive: false,
             memo: None,
             metadata: None,
         };
@@ -222,11 +218,19 @@ mod tests {
     }
 
     #[test]
+    fn config_cbor_ignores_obsolete_keep_alive() {
+        let fixture = "a6646d656d6f4301020366657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e738163434344696b656570416c697665f56a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
+        assert_eq!(
+            cbor::cbor_decode::<LockConfigSimpleV0>(&hex::decode(fixture).unwrap()).unwrap(),
+            full_config()
+        );
+    }
+
+    #[test]
     fn config_cbor_decodes_noncanonical_fixture() {
         let fixture = "a56a726563697069656e74738066746f6b656e738163434344696b656570416c697665f4666772616e747381a2676163636f756e74d99d73a201d99d71a1011a000003970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2065726f6c6573826466756e646663616e63656c66657870697279c11a6b932770";
         let expected = LockConfigSimpleV0 {
             recipients: LockRecipients::Limited(vec![]),
-            keep_alive: false,
             memo: None,
             ..full_config()
         };
