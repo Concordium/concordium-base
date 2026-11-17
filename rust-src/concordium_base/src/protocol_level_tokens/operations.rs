@@ -975,7 +975,6 @@ mod tests {
                     },
                 ],
                 tokens: vec!["testPLT".parse().unwrap(), "TKN".parse().unwrap()],
-                keep_alive: false,
                 memo: None,
                 metadata: None,
             }),

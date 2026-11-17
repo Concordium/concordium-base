@@ -2283,7 +2283,7 @@ pub mod cost {
     /// use concordium_base::common::types::TransactionTime;
     /// let config = LockConfig::SimpleV0(LockConfigSimpleV0 {
     ///     recipients: LockRecipients::Any, expiry: TransactionTime::from_seconds(0),
-    ///     grants: vec![], tokens: vec![], keep_alive: false, memo: None, metadata: None,
+    ///     grants: vec![], tokens: vec![], memo: None, metadata: None,
     /// });
     /// assert_eq!(plt_lock_create(&config).energy, 100);
     /// ```
@@ -3463,7 +3463,6 @@ pub mod construct {
                         expiry: TransactionTime::from_seconds(0),
                         grants: vec![],
                         tokens: vec![],
-                        keep_alive: false,
                         memo: None,
                         metadata: None,
                     }),

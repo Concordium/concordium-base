@@ -216,8 +216,6 @@ data SimpleLockConfigV0 = SimpleLockConfigV0
       lcsv0Grants :: !(Seq.Seq LockControllerSimpleV0Grant),
       -- | Tokens that may be funded into the lock.
       lcsv0Tokens :: !(Seq.Seq TokenId),
-      -- | Whether to retain the lock after all funds are released.
-      lcsv0KeepAlive :: !Bool,
       -- | Optional memo attached to the lock.
       lcsv0Memo :: !(Maybe TaggableMemo),
       -- | Optional opaque raw CBOR user-facing metadata.
@@ -241,7 +239,6 @@ encodeLockConfig (LockConfigSimpleV0 cfg) =
                 & k "metadata" .~ (encodeLockMetadataBytes <$> lcsv0Metadata)
                 & k "recipients" ?~ encodeLockRecipients lcsv0Recipients
                 & k "tokens" ?~ encodeSequence CBOR.encodeTokenId lcsv0Tokens
-                & k "keepAlive" .~ (if lcsv0KeepAlive then Just (encodeBool True) else Nothing)
                 & k "memo" .~ (encodeTaggableMemo <$> lcsv0Memo)
       where
         k = at . makeMapKeyEncoding . encodeString
@@ -251,7 +248,6 @@ data SimpleLockConfigV0Builder = SimpleLockConfigV0Builder
       _lcbExpiry :: !(Maybe TransactionTime),
       _lcbGrants :: !(Maybe (Seq.Seq LockControllerSimpleV0Grant)),
       _lcbTokens :: !(Maybe (Seq.Seq TokenId)),
-      _lcbKeepAlive :: !(Maybe Bool),
       _lcbMemo :: !(Maybe TaggableMemo),
       _lcbMetadata :: !(Maybe RawCbor)
     }
@@ -265,19 +261,17 @@ decodeLockConfig = decodeMap valDecoder build Nothing
     valDecoder _ = Nothing
     build (Just cfg) = Right $ LockConfigSimpleV0 cfg
     build Nothing = Left "Missing \"simpleV0\""
-    decodeSimpleLockConfig = decodeMap simpleVal buildSimple (SimpleLockConfigV0Builder Nothing Nothing Nothing Nothing Nothing Nothing Nothing)
+    decodeSimpleLockConfig = decodeMap simpleVal buildSimple (SimpleLockConfigV0Builder Nothing Nothing Nothing Nothing Nothing Nothing)
     buildSimple SimpleLockConfigV0Builder{..} = do
         lcsv0Recipients <- _lcbRecipients `CBOR.orFail` "Missing \"recipients\""
         lcsv0Expiry <- _lcbExpiry `CBOR.orFail` "Missing \"expiry\""
         lcsv0Grants <- _lcbGrants `CBOR.orFail` "Missing \"grants\""
         lcsv0Tokens <- _lcbTokens `CBOR.orFail` "Missing \"tokens\""
-        let lcsv0KeepAlive = maybe False id _lcbKeepAlive
         return SimpleLockConfigV0{lcsv0Memo = _lcbMemo, lcsv0Metadata = _lcbMetadata, ..}
     simpleVal k@"recipients" = Just $ mapValueDecoder k decodeLockRecipients lcbRecipients
     simpleVal k@"expiry" = Just $ mapValueDecoder k decodeEpochTime lcbExpiry
     simpleVal k@"grants" = Just $ mapValueDecoder k (decodeSequence decodeLockControllerSimpleV0Grant) lcbGrants
     simpleVal k@"tokens" = Just $ mapValueDecoder k (decodeSequence CBOR.decodeTokenId) lcbTokens
-    simpleVal k@"keepAlive" = Just $ mapValueDecoder k decodeBool lcbKeepAlive
     simpleVal k@"memo" = Just $ mapValueDecoder k decodeTaggableMemo lcbMemo
     simpleVal k@"metadata" = Just $ mapValueDecoder k decodeLockMetadataBytes lcbMetadata
     simpleVal _ = Nothing

@@ -10,7 +10,7 @@
 //!   account, its sequence number, and an intra-transaction creation order.
 //! - [`LockConfig`] - Tagged complete lock configuration.
 //! - [`LockConfigSimpleV0`] - Complete simple configuration with recipients,
-//!   expiry, grants, tokens, keep-alive, memo, and opaque metadata.
+//!   expiry, grants, tokens, memo, and opaque metadata.
 //! - [`LockControllerSimpleV0Grant`] - A grant of capabilities to a specific
 //!   account.
 //! - [`LockControllerSimpleV0Capability`] - Individual capability that can be
