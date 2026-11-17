@@ -311,6 +311,11 @@ module Concordium.Types.Parameters (
     -- * Chain parameters
     withCPVConstraints,
     ChainParameters' (..),
+    ChainParametersV3View (..),
+    chainParametersV3ToView,
+    chainParametersV4ToView,
+    chainParametersV3FromView,
+    chainParametersV4FromView,
     -- | Consensus parameters.
     cpConsensusParameters,
     -- | Exchange rates.
@@ -331,7 +336,7 @@ module Concordium.Types.Parameters (
     cpPoolParameters,
     -- | Parameters for validator suspension. Available since P8.
     cpValidatorScoreParameters,
-    -- | Maximum protocol-level token lock duration. Available since P11 as an optional CPV3 field.
+    -- | Maximum protocol-level token lock duration. Required since P11 (CPV4).
     cpMaxLockDuration,
     EChainParameters (..),
     ChainParameters,
@@ -507,6 +512,7 @@ $( singletons
         mintDistributionVersionFor ChainParametersV1 = MintDistributionVersion1
         mintDistributionVersionFor ChainParametersV2 = MintDistributionVersion1
         mintDistributionVersionFor ChainParametersV3 = MintDistributionVersion1
+        mintDistributionVersionFor ChainParametersV4 = MintDistributionVersion1
 
         -- \|Whether a 'MintDistributionVersion' supports the mint-per-slot parameter.
         supportsMintPerSlot :: MintDistributionVersion -> Bool
@@ -524,6 +530,7 @@ $( singletons
         gasRewardsVersionFor ChainParametersV1 = GASRewardsVersion0
         gasRewardsVersionFor ChainParametersV2 = GASRewardsVersion1
         gasRewardsVersionFor ChainParametersV3 = GASRewardsVersion1
+        gasRewardsVersionFor ChainParametersV4 = GASRewardsVersion1
 
         -- \|Whether a 'GASRewardsVersion' supports GAS rewards for finalization proofs.
         supportsGASFinalizationProof :: GASRewardsVersion -> Bool
@@ -541,6 +548,7 @@ $( singletons
         cooldownParametersVersionFor ChainParametersV1 = CooldownParametersVersion1
         cooldownParametersVersionFor ChainParametersV2 = CooldownParametersVersion1
         cooldownParametersVersionFor ChainParametersV3 = CooldownParametersVersion1
+        cooldownParametersVersionFor ChainParametersV4 = CooldownParametersVersion1
 
         -- \|Pool parameters version.
         data PoolParametersVersion
@@ -553,6 +561,7 @@ $( singletons
         poolParametersVersionFor ChainParametersV1 = PoolParametersVersion1
         poolParametersVersionFor ChainParametersV2 = PoolParametersVersion1
         poolParametersVersionFor ChainParametersV3 = PoolParametersVersion1
+        poolParametersVersionFor ChainParametersV4 = PoolParametersVersion1
 
         -- \|Consensus parameters version.
         data ConsensusParametersVersion
@@ -565,6 +574,7 @@ $( singletons
         consensusParametersVersionFor ChainParametersV1 = ConsensusParametersVersion0
         consensusParametersVersionFor ChainParametersV2 = ConsensusParametersVersion1
         consensusParametersVersionFor ChainParametersV3 = ConsensusParametersVersion1
+        consensusParametersVersionFor ChainParametersV4 = ConsensusParametersVersion1
 
         -- \|Whether cooldown parameters are updatable for an 'AuthorizationsVersion'.
         supportsCooldownParametersAccessStructure :: AuthorizationsVersion -> Bool
@@ -629,6 +639,7 @@ $( singletons
         isSupported PTTimeParameters ChainParametersV1 = True
         isSupported PTTimeParameters ChainParametersV2 = True
         isSupported PTTimeParameters ChainParametersV3 = True
+        isSupported PTTimeParameters ChainParametersV4 = True
         isSupported PTMintPerSlot cpv = supportsMintPerSlot (mintDistributionVersionFor cpv)
         isSupported PTTimeoutParameters cpv = case consensusParametersVersionFor cpv of
             ConsensusParametersVersion0 -> False
@@ -643,22 +654,27 @@ $( singletons
         isSupported PTCooldownParametersAccessStructure ChainParametersV1 = True
         isSupported PTCooldownParametersAccessStructure ChainParametersV2 = True
         isSupported PTCooldownParametersAccessStructure ChainParametersV3 = True
+        isSupported PTCooldownParametersAccessStructure ChainParametersV4 = True
         isSupported PTFinalizationProof ChainParametersV0 = True
         isSupported PTFinalizationProof ChainParametersV1 = True
         isSupported PTFinalizationProof ChainParametersV2 = False
         isSupported PTFinalizationProof ChainParametersV3 = False
+        isSupported PTFinalizationProof ChainParametersV4 = False
         isSupported PTFinalizationCommitteeParameters ChainParametersV0 = False
         isSupported PTFinalizationCommitteeParameters ChainParametersV1 = False
         isSupported PTFinalizationCommitteeParameters ChainParametersV2 = True
         isSupported PTFinalizationCommitteeParameters ChainParametersV3 = True
+        isSupported PTFinalizationCommitteeParameters ChainParametersV4 = True
         isSupported PTValidatorScoreParameters ChainParametersV0 = False
         isSupported PTValidatorScoreParameters ChainParametersV1 = False
         isSupported PTValidatorScoreParameters ChainParametersV2 = False
         isSupported PTValidatorScoreParameters ChainParametersV3 = True
+        isSupported PTValidatorScoreParameters ChainParametersV4 = True
         isSupported PTMaxLockDuration ChainParametersV0 = False
         isSupported PTMaxLockDuration ChainParametersV1 = False
         isSupported PTMaxLockDuration ChainParametersV2 = False
-        isSupported PTMaxLockDuration ChainParametersV3 = True
+        isSupported PTMaxLockDuration ChainParametersV3 = False
+        isSupported PTMaxLockDuration ChainParametersV4 = True
         |]
  )
 
@@ -1810,10 +1826,110 @@ data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
       --  These parameters are introduced as part of protocol 8 (cpv3).
       _cpValidatorScoreParameters :: !(OParam 'PTValidatorScoreParameters cpv ValidatorScoreParameters),
       -- | Maximum relative duration for protocol-level token locks.
-      --  This is an optional CPV3 field: absent for P10 and present for P11-and-onwards states.
-      _cpMaxLockDuration :: !(OParam 'PTMaxLockDuration cpv (Maybe Duration))
+      --  This parameter is required in CPV4 and unsupported in earlier versions.
+      _cpMaxLockDuration :: !(OParam 'PTMaxLockDuration cpv Duration)
     }
     deriving (Eq, Show)
+
+-- | The external version-3 parameter shape shared by CPV3 and CPV4.
+--
+--  Addresses and update keys are separate adapter inputs.
+--  Store reward components separately to avoid coupling this view to an internal chain-parameter version.
+data ChainParametersV3View = ChainParametersV3View
+    { v3ConsensusParameters :: !(ConsensusParameters' 'ConsensusParametersVersion1),
+      v3ExchangeRates :: !ExchangeRates,
+      v3CooldownParameters :: !(CooldownParameters' 'CooldownParametersVersion1),
+      v3TimeParameters :: !TimeParameters,
+      v3AccountCreationLimit :: !CredentialsPerBlockLimit,
+      v3MintDistribution :: !(MintDistribution 'MintDistributionVersion1),
+      v3TransactionFeeDistribution :: !TransactionFeeDistribution,
+      v3GASRewards :: !(GASRewards 'GASRewardsVersion1),
+      v3FoundationAccount :: !AccountIndex,
+      v3PoolParameters :: !(PoolParameters' 'PoolParametersVersion1),
+      v3FinalizationCommitteeParameters :: !FinalizationCommitteeParameters,
+      v3ValidatorScoreParameters :: !ValidatorScoreParameters,
+      -- | Absent for CPV3. Required for CPV4.
+      v3MaxLockDuration :: !(Maybe Duration)
+    }
+    deriving (Eq, Show)
+
+-- | Convert CPV3 to the external view without a lock duration.
+chainParametersV3ToView :: ChainParameters' 'ChainParametersV3 -> ChainParametersV3View
+chainParametersV3ToView ChainParameters{..} =
+    ChainParametersV3View
+        { v3ConsensusParameters = _cpConsensusParameters,
+          v3ExchangeRates = _cpExchangeRates,
+          v3CooldownParameters = _cpCooldownParameters,
+          v3TimeParameters = unOParam _cpTimeParameters,
+          v3AccountCreationLimit = _cpAccountCreationLimit,
+          v3MintDistribution = _rpMintDistribution _cpRewardParameters,
+          v3TransactionFeeDistribution = _rpTransactionFeeDistribution _cpRewardParameters,
+          v3GASRewards = _rpGASRewards _cpRewardParameters,
+          v3FoundationAccount = _cpFoundationAccount,
+          v3PoolParameters = _cpPoolParameters,
+          v3FinalizationCommitteeParameters = unOParam _cpFinalizationCommitteeParameters,
+          v3ValidatorScoreParameters = unOParam _cpValidatorScoreParameters,
+          v3MaxLockDuration = Nothing
+        }
+
+-- | Convert CPV4 to the external view with its lock duration.
+chainParametersV4ToView :: ChainParameters' 'ChainParametersV4 -> ChainParametersV3View
+chainParametersV4ToView ChainParameters{..} =
+    ChainParametersV3View
+        { v3ConsensusParameters = _cpConsensusParameters,
+          v3ExchangeRates = _cpExchangeRates,
+          v3CooldownParameters = _cpCooldownParameters,
+          v3TimeParameters = unOParam _cpTimeParameters,
+          v3AccountCreationLimit = _cpAccountCreationLimit,
+          v3MintDistribution = _rpMintDistribution _cpRewardParameters,
+          v3TransactionFeeDistribution = _rpTransactionFeeDistribution _cpRewardParameters,
+          v3GASRewards = _rpGASRewards _cpRewardParameters,
+          v3FoundationAccount = _cpFoundationAccount,
+          v3PoolParameters = _cpPoolParameters,
+          v3FinalizationCommitteeParameters = unOParam _cpFinalizationCommitteeParameters,
+          v3ValidatorScoreParameters = unOParam _cpValidatorScoreParameters,
+          v3MaxLockDuration = Just (unOParam _cpMaxLockDuration)
+        }
+
+-- | Convert to CPV3. Reject a supplied lock duration.
+chainParametersV3FromView :: ChainParametersV3View -> Either String (ChainParameters' 'ChainParametersV3)
+chainParametersV3FromView ChainParametersV3View{..} = do
+    case v3MaxLockDuration of
+        Nothing -> Right ()
+        Just _ -> Left "CPV3 does not support maxLockDuration"
+    return
+        ChainParameters
+            { _cpConsensusParameters = v3ConsensusParameters,
+              _cpExchangeRates = v3ExchangeRates,
+              _cpCooldownParameters = v3CooldownParameters,
+              _cpTimeParameters = SomeParam v3TimeParameters,
+              _cpAccountCreationLimit = v3AccountCreationLimit,
+              _cpRewardParameters = RewardParameters v3MintDistribution v3TransactionFeeDistribution v3GASRewards,
+              _cpFoundationAccount = v3FoundationAccount,
+              _cpPoolParameters = v3PoolParameters,
+              _cpFinalizationCommitteeParameters = SomeParam v3FinalizationCommitteeParameters,
+              _cpValidatorScoreParameters = SomeParam v3ValidatorScoreParameters,
+              _cpMaxLockDuration = NoParam
+            }
+
+-- | Convert to CPV4. Require a lock duration.
+chainParametersV4FromView :: ChainParametersV3View -> Either String (ChainParameters' 'ChainParametersV4)
+chainParametersV4FromView ChainParametersV3View{..} = do
+    duration <- maybe (Left "CPV4 requires maxLockDuration") Right v3MaxLockDuration
+    return
+        ChainParameters
+            { _cpConsensusParameters = v3ConsensusParameters,
+              _cpExchangeRates = v3ExchangeRates,
+              _cpCooldownParameters = v3CooldownParameters,
+              _cpTimeParameters = SomeParam v3TimeParameters,
+              _cpAccountCreationLimit = v3AccountCreationLimit,
+              _cpRewardParameters = RewardParameters v3MintDistribution v3TransactionFeeDistribution v3GASRewards,
+              _cpFoundationAccount = v3FoundationAccount,
+              _cpPoolParameters = v3PoolParameters,
+              _cpFinalizationCommitteeParameters = SomeParam v3FinalizationCommitteeParameters,
+              _cpValidatorScoreParameters = SomeParam v3ValidatorScoreParameters,
+              _cpMaxLockDuration = SomeParam duration
+            }
 
 makeLenses ''ChainParameters'
 
@@ -1831,7 +1947,7 @@ instance HasExchangeRates (ChainParameters' cpv) where
 instance HasRewardParameters (ChainParameters' cpv) cpv where
     rewardParameters = cpRewardParameters
 
--- | Serialize a 'ChainParameters''.
+-- | Serialize all fields supported by the chain-parameter version.
 putChainParameters :: forall cpv. (IsChainParametersVersion cpv) => Putter (ChainParameters' cpv)
 putChainParameters ChainParameters{..} = do
     withIsConsensusParametersVersionFor (chainParametersVersion @cpv) $ put _cpConsensusParameters
@@ -1846,7 +1962,7 @@ putChainParameters ChainParameters{..} = do
     put _cpValidatorScoreParameters
     put _cpMaxLockDuration
 
--- | Deserialize a 'ChainParameters''.
+-- | Deserialize all fields supported by the chain-parameter version.
 getChainParameters :: forall cpv. (IsChainParametersVersion cpv) => Get (ChainParameters' cpv)
 getChainParameters = do
     _cpConsensusParameters <- withIsConsensusParametersVersionFor (chainParametersVersion @cpv) get
@@ -1977,14 +2093,19 @@ parseJSONForCPV2 =
         return ChainParameters{..}
 
 parseJSONForCPV3 :: Value -> Parser (ChainParameters' 'ChainParametersV3)
-parseJSONForCPV3 =
-    withObject "ChainParametersV3" $ \v -> do
+parseJSONForCPV3 value = parseJSON value >>= either fail pure . chainParametersV3FromView
+
+instance FromJSON ChainParametersV3View where
+    parseJSON = withObject "ChainParametersV3View" $ \v -> do
         _cpEuroPerEnergy <- v .: "euroPerEnergy"
         _cpMicroGTUPerEuro <- v .: "microGTUPerEuro"
         _cpPoolOwnerCooldown <- v .: "poolOwnerCooldown"
         _cpDelegatorCooldown <- v .: "delegatorCooldown"
         _cpAccountCreationLimit <- v .: "accountCreationLimit"
-        _cpRewardParameters <- v .: "rewardParameters"
+        rewards <- v .: "rewardParameters"
+        v3MintDistribution <- rewards .: "mintDistribution"
+        v3TransactionFeeDistribution <- rewards .: "transactionFeeDistribution"
+        v3GASRewards <- rewards .: "gASRewards"
         _cpFoundationAccount <- v .: "foundationAccountIndex"
         _finalizationCommission <- v .: "passiveFinalizationCommission"
         _bakingCommission <- v .: "passiveBakingCommission"
@@ -2008,20 +2129,30 @@ parseJSONForCPV3 =
 
         _fcpFinalizerRelativeStakeThreshold <- v .: "finalizerRelativeStakeThreshold"
         let _cpCooldownParameters = CooldownParametersV1{..}
-            _cpTimeParameters = SomeParam TimeParametersV1{..}
             _cpPoolParameters = PoolParametersV1{..}
             _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
-            _cpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
             _cpConsensusParameters = ConsensusParametersV1{..}
 
         _vspMaxMissedRounds <- v .: "maximumMissedRounds"
-        _maxLockDuration <- v .:? "maxLockDuration"
-        let _cpValidatorScoreParameters = SomeParam ValidatorScoreParameters{..}
-            _cpMaxLockDuration = SomeParam _maxLockDuration
+        v3MaxLockDuration <- v .:? "maxLockDuration"
+        return
+            ChainParametersV3View
+                { v3ConsensusParameters = _cpConsensusParameters,
+                  v3ExchangeRates = _cpExchangeRates,
+                  v3CooldownParameters = _cpCooldownParameters,
+                  v3TimeParameters = TimeParametersV1{..},
+                  v3AccountCreationLimit = _cpAccountCreationLimit,
+                  v3FoundationAccount = _cpFoundationAccount,
+                  v3PoolParameters = _cpPoolParameters,
+                  v3FinalizationCommitteeParameters = FinalizationCommitteeParameters{..},
+                  v3ValidatorScoreParameters = ValidatorScoreParameters{..},
+                  ..
+                }
 
-        return ChainParameters{..}
+parseJSONForCPV4 :: Value -> Parser (ChainParameters' 'ChainParametersV4)
+parseJSONForCPV4 value = parseJSON value >>= either fail pure . chainParametersV4FromView
 
 instance forall cpv. (IsChainParametersVersion cpv) => FromJSON (ChainParameters' cpv) where
     parseJSON = case chainParametersVersion @cpv of
@@ -2029,9 +2160,10 @@ instance forall cpv. (IsChainParametersVersion cpv) => FromJSON (ChainParameters
         SChainParametersV1 -> parseJSONForCPV1
         SChainParametersV2 -> parseJSONForCPV2
         SChainParametersV3 -> parseJSONForCPV3
+        SChainParametersV4 -> parseJSONForCPV4
 
 instance forall cpv. (IsChainParametersVersion cpv) => ToJSON (ChainParameters' cpv) where
-    toJSON ChainParameters{..} = case chainParametersVersion @cpv of
+    toJSON parameters@ChainParameters{..} = case chainParametersVersion @cpv of
         SChainParametersV0 ->
             object
                 [ "electionDifficulty" AE..= _cpElectionDifficulty _cpConsensusParameters,
@@ -2094,37 +2226,46 @@ instance forall cpv. (IsChainParametersVersion cpv) => ToJSON (ChainParameters' 
                   "maximumFinalizers" AE..= _fcpMaxFinalizers (unOParam _cpFinalizationCommitteeParameters),
                   "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam _cpFinalizationCommitteeParameters)
                 ]
-        SChainParametersV3 ->
-            object $
-                [ "euroPerEnergy" AE..= _erEuroPerEnergy _cpExchangeRates,
-                  "microGTUPerEuro" AE..= _erMicroGTUPerEuro _cpExchangeRates,
-                  "poolOwnerCooldown" AE..= _cpPoolOwnerCooldown _cpCooldownParameters,
-                  "delegatorCooldown" AE..= _cpDelegatorCooldown _cpCooldownParameters,
-                  "accountCreationLimit" AE..= _cpAccountCreationLimit,
-                  "rewardParameters" AE..= _cpRewardParameters,
-                  "foundationAccountIndex" AE..= _cpFoundationAccount,
-                  "passiveFinalizationCommission" AE..= _finalizationCommission (_ppPassiveCommissions _cpPoolParameters),
-                  "passiveBakingCommission" AE..= _bakingCommission (_ppPassiveCommissions _cpPoolParameters),
-                  "passiveTransactionCommission" AE..= _transactionCommission (_ppPassiveCommissions _cpPoolParameters),
-                  "finalizationCommissionRange" AE..= _finalizationCommissionRange (_ppCommissionBounds _cpPoolParameters),
-                  "bakingCommissionRange" AE..= _bakingCommissionRange (_ppCommissionBounds _cpPoolParameters),
-                  "transactionCommissionRange" AE..= _transactionCommissionRange (_ppCommissionBounds _cpPoolParameters),
-                  "minimumEquityCapital" AE..= _ppMinimumEquityCapital _cpPoolParameters,
-                  "capitalBound" AE..= _ppCapitalBound _cpPoolParameters,
-                  "leverageBound" AE..= _ppLeverageBound _cpPoolParameters,
-                  "rewardPeriodLength" AE..= _tpRewardPeriodLength (unOParam _cpTimeParameters),
-                  "mintPerPayday" AE..= _tpMintPerPayday (unOParam _cpTimeParameters),
-                  "timeoutBase" AE..= _tpTimeoutBase (_cpTimeoutParameters _cpConsensusParameters),
-                  "timeoutIncrease" AE..= _tpTimeoutIncrease (_cpTimeoutParameters _cpConsensusParameters),
-                  "timeoutDecrease" AE..= _tpTimeoutDecrease (_cpTimeoutParameters _cpConsensusParameters),
-                  "minBlockTime" AE..= _cpMinBlockTime _cpConsensusParameters,
-                  "blockEnergyLimit" AE..= _cpBlockEnergyLimit _cpConsensusParameters,
-                  "minimumFinalizers" AE..= _fcpMinFinalizers (unOParam _cpFinalizationCommitteeParameters),
-                  "maximumFinalizers" AE..= _fcpMaxFinalizers (unOParam _cpFinalizationCommitteeParameters),
-                  "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam _cpFinalizationCommitteeParameters),
-                  "maximumMissedRounds" AE..= _vspMaxMissedRounds (unOParam _cpValidatorScoreParameters)
-                ]
-                    ++ maybe [] (\d -> ["maxLockDuration" AE..= d]) (unOParam _cpMaxLockDuration)
+        SChainParametersV3 -> toJSON (chainParametersV3ToView parameters)
+        SChainParametersV4 -> toJSON (chainParametersV4ToView parameters)
+
+instance ToJSON ChainParametersV3View where
+    toJSON ChainParametersV3View{..} =
+        object $
+            [ "euroPerEnergy" AE..= _erEuroPerEnergy v3ExchangeRates,
+              "microGTUPerEuro" AE..= _erMicroGTUPerEuro v3ExchangeRates,
+              "poolOwnerCooldown" AE..= _cpPoolOwnerCooldown v3CooldownParameters,
+              "delegatorCooldown" AE..= _cpDelegatorCooldown v3CooldownParameters,
+              "accountCreationLimit" AE..= v3AccountCreationLimit,
+              "rewardParameters"
+                AE..= object
+                    [ "mintDistribution" AE..= v3MintDistribution,
+                      "transactionFeeDistribution" AE..= v3TransactionFeeDistribution,
+                      "gASRewards" AE..= v3GASRewards
+                    ],
+              "foundationAccountIndex" AE..= v3FoundationAccount,
+              "passiveFinalizationCommission" AE..= _finalizationCommission (_ppPassiveCommissions v3PoolParameters),
+              "passiveBakingCommission" AE..= _bakingCommission (_ppPassiveCommissions v3PoolParameters),
+              "passiveTransactionCommission" AE..= _transactionCommission (_ppPassiveCommissions v3PoolParameters),
+              "finalizationCommissionRange" AE..= _finalizationCommissionRange (_ppCommissionBounds v3PoolParameters),
+              "bakingCommissionRange" AE..= _bakingCommissionRange (_ppCommissionBounds v3PoolParameters),
+              "transactionCommissionRange" AE..= _transactionCommissionRange (_ppCommissionBounds v3PoolParameters),
+              "minimumEquityCapital" AE..= _ppMinimumEquityCapital v3PoolParameters,
+              "capitalBound" AE..= _ppCapitalBound v3PoolParameters,
+              "leverageBound" AE..= _ppLeverageBound v3PoolParameters,
+              "rewardPeriodLength" AE..= _tpRewardPeriodLength v3TimeParameters,
+              "mintPerPayday" AE..= _tpMintPerPayday v3TimeParameters,
+              "timeoutBase" AE..= _tpTimeoutBase (_cpTimeoutParameters v3ConsensusParameters),
+              "timeoutIncrease" AE..= _tpTimeoutIncrease (_cpTimeoutParameters v3ConsensusParameters),
+              "timeoutDecrease" AE..= _tpTimeoutDecrease (_cpTimeoutParameters v3ConsensusParameters),
+              "minBlockTime" AE..= _cpMinBlockTime v3ConsensusParameters,
+              "blockEnergyLimit" AE..= _cpBlockEnergyLimit v3ConsensusParameters,
+              "minimumFinalizers" AE..= _fcpMinFinalizers v3FinalizationCommitteeParameters,
+              "maximumFinalizers" AE..= _fcpMaxFinalizers v3FinalizationCommitteeParameters,
+              "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold v3FinalizationCommitteeParameters,
+              "maximumMissedRounds" AE..= _vspMaxMissedRounds v3ValidatorScoreParameters
+            ]
+                ++ maybe [] (\duration -> ["maxLockDuration" AE..= duration]) v3MaxLockDuration
 
 -- | Parameters that affect finalization.
 data FinalizationParameters = FinalizationParameters
