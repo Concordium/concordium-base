@@ -7,17 +7,17 @@ use crate::{
     protocol_level_locks::LockRecipients,
     protocol_level_tokens::{CborHolderAccount, CborMemo, RawCbor, TokenId},
 };
-use concordium_base_derive::{CborDeserialize, CborSerialize, Serialize};
+use concordium_base_derive::{CborDeserialize, CborSerialize};
 
 /// Capability that can be granted to an account for a SimpleV0 lock
 /// controller.
 ///
 /// Each capability authorizes the grantee to perform the corresponding lock
 /// operation.
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum LockControllerSimpleV0Capability {
     /// Authorizes funding the lock with a permitted token.
-    Fund,
+    Hold,
     /// Authorizes releasing funds from the lock.
     Release,
     /// Authorizes sending funds from the lock to a recipient. This is subject to individual token
@@ -30,7 +30,7 @@ pub enum LockControllerSimpleV0Capability {
 impl LockControllerSimpleV0Capability {
     fn as_str(&self) -> &'static str {
         match self {
-            Self::Fund => "fund",
+            Self::Hold => "hold",
             Self::Release => "release",
             Self::Send => "send",
             Self::Cancel => "cancel",
@@ -39,7 +39,7 @@ impl LockControllerSimpleV0Capability {
 
     fn from_str(s: &str) -> Result<Self, CborSerializationError> {
         match s {
-            "fund" => Ok(Self::Fund),
+            "hold" => Ok(Self::Hold),
             "release" => Ok(Self::Release),
             "send" => Ok(Self::Send),
             "cancel" => Ok(Self::Cancel),
@@ -109,11 +109,7 @@ pub struct LockConfigSimpleV0 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        common::{cbor, serialize_deserialize, to_bytes},
-        protocol_level_tokens::test_fixtures::ADDRESS,
-        transactions::Memo,
-    };
+    use crate::{common::cbor, protocol_level_tokens::test_fixtures::ADDRESS, transactions::Memo};
 
     fn full_config() -> LockConfigSimpleV0 {
         LockConfigSimpleV0 {
@@ -122,7 +118,7 @@ mod tests {
             grants: vec![LockControllerSimpleV0Grant {
                 account: CborHolderAccount::from(ADDRESS),
                 roles: vec![
-                    LockControllerSimpleV0Capability::Fund,
+                    LockControllerSimpleV0Capability::Hold,
                     LockControllerSimpleV0Capability::Cancel,
                 ],
             }],
@@ -135,7 +131,7 @@ mod tests {
     #[test]
     fn capability_cbor_round_trips_and_matches_fixtures() {
         let fixtures = [
-            (LockControllerSimpleV0Capability::Fund, "6466756e64"),
+            (LockControllerSimpleV0Capability::Hold, "64686f6c64"),
             (
                 LockControllerSimpleV0Capability::Release,
                 "6772656c65617365",
@@ -160,11 +156,11 @@ mod tests {
         let grant = LockControllerSimpleV0Grant {
             account: CborHolderAccount::from(ADDRESS),
             roles: vec![
-                LockControllerSimpleV0Capability::Fund,
+                LockControllerSimpleV0Capability::Hold,
                 LockControllerSimpleV0Capability::Cancel,
             ],
         };
-        let fixture = "a265726f6c6573826466756e646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
+        let fixture = "a265726f6c65738264686f6c646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
         assert_eq!(
             cbor::cbor_decode::<LockControllerSimpleV0Grant>(&cbor::cbor_encode(&grant)).unwrap(),
             grant
@@ -197,7 +193,7 @@ mod tests {
 
     #[test]
     fn config_cbor_matches_full_and_minimal_fixtures() {
-        let full = "a5646d656d6f4301020366657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e7381634343446a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
+        let full = "a5646d656d6f4301020366657870697279c11a6b932770666772616e747381a265726f6c65738264686f6c646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e7381634343446a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
         let minimal =
             "a466657870697279c11a6b932770666772616e74738066746f6b656e73806a726563697069656e747380";
         let minimal_config = LockConfigSimpleV0 {
@@ -219,7 +215,7 @@ mod tests {
 
     #[test]
     fn config_cbor_decodes_noncanonical_fixture() {
-        let fixture = "a56a726563697069656e74738066746f6b656e738163434344696b656570416c697665f4666772616e747381a2676163636f756e74d99d73a201d99d71a1011a000003970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2065726f6c6573826466756e646663616e63656c66657870697279c11a6b932770";
+        let fixture = "a56a726563697069656e74738066746f6b656e738163434344696b656570416c697665f4666772616e747381a2676163636f756e74d99d73a201d99d71a1011a000003970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2065726f6c65738264686f6c646663616e63656c66657870697279c11a6b932770";
         let expected = LockConfigSimpleV0 {
             recipients: LockRecipients::Limited(vec![]),
             memo: None,
@@ -229,19 +225,5 @@ mod tests {
             cbor::cbor_decode::<LockConfigSimpleV0>(&hex::decode(fixture).unwrap()).unwrap(),
             expected
         );
-    }
-
-    #[test]
-    fn capability_serial_round_trips_and_matches_tag_fixtures() {
-        let fixtures = [
-            (LockControllerSimpleV0Capability::Fund, "00"),
-            (LockControllerSimpleV0Capability::Release, "01"),
-            (LockControllerSimpleV0Capability::Send, "02"),
-            (LockControllerSimpleV0Capability::Cancel, "03"),
-        ];
-        for (capability, fixture) in fixtures {
-            assert_eq!(serialize_deserialize(&capability).unwrap(), capability);
-            assert_eq!(hex::encode(to_bytes(&capability)), fixture);
-        }
     }
 }

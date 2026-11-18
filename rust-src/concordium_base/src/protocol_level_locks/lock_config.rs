@@ -123,17 +123,17 @@ pub(crate) struct LockComplexityParameters {
 }
 
 impl LockConfig {
-    /// Canonical (Fund-authorized accounts, distinct tokens, account grants).
+    /// Canonical (Hold-authorized accounts, distinct tokens, account grants).
     /// Mirrors persistent grant union/empty-grant retention without resolving accounts.
     pub(crate) fn get_creation_complexity_parameters(&self) -> LockComplexityParameters {
-        use super::LockControllerSimpleV0Capability::Fund;
+        use super::LockControllerSimpleV0Capability::Hold;
         use crate::base::AccountAddressEq;
         use std::collections::HashSet;
 
         let Self::SimpleV0(config) = self;
         let mut grants = HashMap::<AccountAddressEq, bool>::new();
         for grant in &config.grants {
-            *grants.entry(grant.account.address.into()).or_default() |= grant.roles.contains(&Fund);
+            *grants.entry(grant.account.address.into()).or_default() |= grant.roles.contains(&Hold);
         }
         let tokens: HashSet<_> = config
             .tokens
@@ -141,7 +141,7 @@ impl LockConfig {
             .map(|token| token.as_ref().to_ascii_lowercase())
             .collect();
         LockComplexityParameters {
-            token_holders: grants.values().filter(|&&fund| fund).count() as u64,
+            token_holders: grants.values().filter(|&&hold| hold).count() as u64,
             tokens: tokens.len() as u64,
             grants: grants.len() as u64,
         }
@@ -176,7 +176,7 @@ mod tests {
             grants: vec![LockControllerSimpleV0Grant {
                 account: CborHolderAccount::from(ADDRESS),
                 roles: vec![
-                    LockControllerSimpleV0Capability::Fund,
+                    LockControllerSimpleV0Capability::Hold,
                     LockControllerSimpleV0Capability::Send,
                 ],
             }],
@@ -196,7 +196,7 @@ mod tests {
             roles,
         };
         // Same grant pattern as persistent grants_normalize_union_lookup_and_hash_deterministically:
-        // account 9 is split, account 5 has no roles, and account 1 can Fund.
+        // account 9 is split, account 5 has no roles, and account 1 has Hold.
         let mut alias = address(9);
         alias.0[31] = 42;
         let mut simple = match config(LockRecipients::Any, None) {
@@ -204,8 +204,8 @@ mod tests {
         };
         simple.grants = vec![
             grant(address(9), vec![Send]),
-            grant(address(1), vec![Fund, Fund]),
-            grant(alias, vec![Release, Fund]),
+            grant(address(1), vec![Hold, Hold]),
+            grant(alias, vec![Release, Hold]),
             grant(address(5), vec![]),
             grant(address(5), vec![]),
         ];
@@ -236,9 +236,9 @@ mod tests {
         );
         // Equivalent canonical grants, including the retained empty grant.
         simple.grants = vec![
-            grant(address(1), vec![Fund]),
+            grant(address(1), vec![Hold]),
             grant(address(5), vec![]),
-            grant(address(9), vec![Send, Release, Fund]),
+            grant(address(9), vec![Send, Release, Hold]),
         ];
         simple.tokens.pop();
         assert_eq!(
@@ -267,7 +267,7 @@ mod tests {
             LockRecipients::Limited(vec![CborHolderAccount::from(ADDRESS)]),
             None,
         );
-        let expected = "a16873696d706c655630a5646d656d6f4301020366657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646473656e64676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e73816274546a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
+        let expected = "a16873696d706c655630a5646d656d6f4301020366657870697279c11a6b932770666772616e747381a265726f6c65738264686f6c646473656e64676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e73816274546a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
         assert_eq!(hex::encode(cbor::cbor_encode(&config)), expected);
         assert_eq!(
             cbor::cbor_decode::<LockConfig>(&hex::decode(expected).unwrap()).unwrap(),
@@ -278,7 +278,7 @@ mod tests {
     #[test]
     fn lock_config_fixture_any_recipients_with_metadata_round_trips() {
         let config = config(LockRecipients::Any, Some(metadata().encode_raw_cbor()));
-        let expected = "a16873696d706c655630a6646d656d6f4301020366657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646473656e64676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e7381627454686d65746164617461585da4646e616d656c56657374696e67206c6f636b666973737565726a436f6e636f726469756d6776657273696f6e016b6465736372697074696f6e7821546f6b656e73206c6f636b65642062792076657374696e67207363686564756c656a726563697069656e747363616e79";
+        let expected = "a16873696d706c655630a6646d656d6f4301020366657870697279c11a6b932770666772616e747381a265726f6c65738264686f6c646473656e64676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e7381627454686d65746164617461585da4646e616d656c56657374696e67206c6f636b666973737565726a436f6e636f726469756d6776657273696f6e016b6465736372697074696f6e7821546f6b656e73206c6f636b65642062792076657374696e67207363686564756c656a726563697069656e747363616e79";
         assert_eq!(hex::encode(cbor::cbor_encode(&config)), expected);
         assert_eq!(
             cbor::cbor_decode::<LockConfig>(&hex::decode(expected).unwrap()).unwrap(),

@@ -1200,7 +1200,7 @@ exampleLockInfoDetails =
                 SimpleLockConfigV0
                     { lcsv0Recipients = LockRecipientsLimited . Seq.singleton $ accountTokenHolder acc,
                       lcsv0Expiry = TransactionTime 1804806000,
-                      lcsv0Grants = Seq.singleton LockControllerSimpleV0Grant{lcsv0gAccount = accountTokenHolder acc, lcsv0gRoles = Seq.fromList [LockControllerSimpleV0Fund, LockControllerSimpleV0Send]},
+                      lcsv0Grants = Seq.singleton LockControllerSimpleV0Grant{lcsv0gAccount = accountTokenHolder acc, lcsv0gRoles = Seq.fromList [LockControllerSimpleV0Hold, LockControllerSimpleV0Send]},
                       lcsv0Tokens = Seq.singleton tokenId,
                       lcsv0Memo = Nothing,
                       lcsv0Metadata = Just (lockMetadataToRawCbor exampleLockMetadata)
@@ -1224,7 +1224,7 @@ exampleLockInfoDetails =
         Right tid -> tid
 
 exampleLockInfoDetailsCBOR :: BS.ByteString
-exampleLockInfoDetailsCBOR = "a3646c6f636bd99fd88319271105006566756e647381a2676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2067616d6f756e747381a265746f6b656e62745466616d6f756e74c4822219300c66636f6e666967a16873696d706c655630a566657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646473656e64676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e7381627454686d657461646174615848a4646e616d656c56657374696e67206c6f636b666973737565726a436f6e636f726469756d6776657273696f6e016b6465736372697074696f6e6d546f6b656e73206c6f636b65646a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+exampleLockInfoDetailsCBOR = "a3646c6f636bd99fd88319271105006566756e647381a2676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2067616d6f756e747381a265746f6b656e62745466616d6f756e74c4822219300c66636f6e666967a16873696d706c655630a566657870697279c11a6b932770666772616e747381a265726f6c65738264686f6c646473656e64676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e7381627454686d657461646174615848a4646e616d656c56657374696e67206c6f636b666973737565726a436f6e636f726469756d6776657273696f6e016b6465736372697074696f6e6d546f6b656e73206c6f636b65646a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
 
 -- | Test the CBOR encoding and decoding of 'LockInfoDetails'.
 testLockInfoDetailsCBOR :: Spec
@@ -1236,7 +1236,7 @@ testLockInfoDetailsCBOR = describe "LockInfoDetails CBOR" $ do
             `shouldBe` Right exampleLockInfoDetails
     it "any recipients fixture" $ do
         let lockInfoAny = exampleLockInfoDetails{lipConfig = case lipConfig exampleLockInfoDetails of LockConfigSimpleV0 cfg -> LockConfigSimpleV0 cfg{lcsv0Recipients = LockRecipientsAny}}
-            lockInfoAnyCBOR = "a3646c6f636bd99fd88319271105006566756e647381a2676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2067616d6f756e747381a265746f6b656e62745466616d6f756e74c4822219300c66636f6e666967a16873696d706c655630a566657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646473656e64676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e7381627454686d657461646174615848a4646e616d656c56657374696e67206c6f636b666973737565726a436f6e636f726469756d6776657273696f6e016b6465736372697074696f6e6d546f6b656e73206c6f636b65646a726563697069656e747363616e79"
+            lockInfoAnyCBOR = "a3646c6f636bd99fd88319271105006566756e647381a2676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2067616d6f756e747381a265746f6b656e62745466616d6f756e74c4822219300c66636f6e666967a16873696d706c655630a566657870697279c11a6b932770666772616e747381a265726f6c65738264686f6c646473656e64676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e7381627454686d657461646174615848a4646e616d656c56657374696e67206c6f636b666973737565726a436f6e636f726469756d6776657273696f6e016b6465736372697074696f6e6d546f6b656e73206c6f636b65646a726563697069656e747363616e79"
         lockInfoFromBytes (B8.fromStrict $ BS16.decodeLenient lockInfoAnyCBOR) `shouldBe` Right lockInfoAny
         BS16.encode (lockInfoToBytes lockInfoAny) `shouldBe` lockInfoAnyCBOR
     it "metadata round-trip" $ do
@@ -1357,12 +1357,12 @@ testLockRecipientsCBOR = describe "LockRecipients CBOR" $ do
 
 testLockControllerSimpleV0CapabilityCBOR :: Spec
 testLockControllerSimpleV0CapabilityCBOR = describe "LockControllerSimpleV0Capability CBOR" $ do
-    it "fund" $
+    it "hold" $
         lockFixture
             encodeLockControllerSimpleV0Capability
             decodeLockControllerSimpleV0Capability
-            LockControllerSimpleV0Fund
-            "6466756e64"
+            LockControllerSimpleV0Hold
+            "64686f6c64"
     it "release" $
         lockFixture
             encodeLockControllerSimpleV0Capability
@@ -1393,7 +1393,7 @@ testLockControllerSimpleV0GrantCBOR = describe "LockControllerSimpleV0Grant CBOR
                 [ "a2",
                   "65726f6c6573",
                   "82",
-                  "6466756e64",
+                  "64686f6c64",
                   "6473656e64",
                   "676163636f756e74",
                   lockTestAccHex
@@ -1403,7 +1403,7 @@ testLockControllerSimpleV0GrantCBOR = describe "LockControllerSimpleV0Grant CBOR
     exampleGrant =
         LockControllerSimpleV0Grant
             { lcsv0gAccount = accountTokenHolder lockTestAcc,
-              lcsv0gRoles = Seq.fromList [LockControllerSimpleV0Fund, LockControllerSimpleV0Send]
+              lcsv0gRoles = Seq.fromList [LockControllerSimpleV0Hold, LockControllerSimpleV0Send]
             }
 
 testSimpleLockConfigV0CBOR :: Spec
@@ -1413,7 +1413,7 @@ testSimpleLockConfigV0CBOR = describe "SimpleLockConfigV0 CBOR" $ do
             encodeLockConfig
             decodeLockConfig
             (LockConfigSimpleV0 fullConfig)
-            "a16873696d706c655630a5646d656d6f4301020366657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e73816274546a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+            "a16873696d706c655630a5646d656d6f4301020366657870697279c11a6b932770666772616e747381a265726f6c65738264686f6c646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e73816274546a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
   where
     fullConfig =
         SimpleLockConfigV0
@@ -1423,7 +1423,7 @@ testSimpleLockConfigV0CBOR = describe "SimpleLockConfigV0 CBOR" $ do
                 Seq.singleton
                     LockControllerSimpleV0Grant
                         { lcsv0gAccount = accountTokenHolder lockTestAcc,
-                          lcsv0gRoles = Seq.fromList [LockControllerSimpleV0Fund, LockControllerSimpleV0Cancel]
+                          lcsv0gRoles = Seq.fromList [LockControllerSimpleV0Hold, LockControllerSimpleV0Cancel]
                         },
               lcsv0Tokens = Seq.singleton lockTokenId,
               lcsv0Memo = Just $ UntaggedMemo (Memo $ BSS.pack [0x01, 0x02, 0x03]),

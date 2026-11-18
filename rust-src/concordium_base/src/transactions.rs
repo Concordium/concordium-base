@@ -2274,7 +2274,7 @@ pub mod cost {
     /// # Arguments
     /// * `config` - Decoded configuration; aliases and duplicate grants are merged,
     ///   empty grants retained, and token IDs counted distinctly after ASCII lowercasing.
-    ///   `H` counts Fund-authorized holders, `T` tokens and `G` grants.
+    ///   `H` counts Hold-authorized holders, `T` tokens and `G` grants.
     ///
     /// # Example
     /// ```

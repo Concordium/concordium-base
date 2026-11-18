@@ -97,7 +97,7 @@ decodeLockId = do
 
 -- | Capabilities supported by the simple lock controller.
 data LockControllerSimpleV0Capability
-    = LockControllerSimpleV0Fund
+    = LockControllerSimpleV0Hold
     | LockControllerSimpleV0Release
     | LockControllerSimpleV0Send
     | LockControllerSimpleV0Cancel
@@ -106,7 +106,7 @@ data LockControllerSimpleV0Capability
 encodeLockControllerSimpleV0Capability :: LockControllerSimpleV0Capability -> Encoding
 encodeLockControllerSimpleV0Capability =
     encodeString . \case
-        LockControllerSimpleV0Fund -> "fund"
+        LockControllerSimpleV0Hold -> "hold"
         LockControllerSimpleV0Release -> "release"
         LockControllerSimpleV0Send -> "send"
         LockControllerSimpleV0Cancel -> "cancel"
@@ -115,7 +115,7 @@ decodeLockControllerSimpleV0Capability :: Decoder s LockControllerSimpleV0Capabi
 decodeLockControllerSimpleV0Capability = do
     role <- decodeString
     case role of
-        "fund" -> return LockControllerSimpleV0Fund
+        "hold" -> return LockControllerSimpleV0Hold
         "release" -> return LockControllerSimpleV0Release
         "send" -> return LockControllerSimpleV0Send
         "cancel" -> return LockControllerSimpleV0Cancel

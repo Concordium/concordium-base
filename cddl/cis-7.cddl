@@ -480,7 +480,7 @@ simple-lock-config-v0 = (
     ; The expiry time for the lock.
     "expiry": epoch-time,
     ; The set of capability grants for the simple lock.
-    ; At least one account must be granted the "fund" capability.
+    ; At least one account must be granted the "hold" capability.
     "grants": [ + lock-controller-simple-grant ],
     ; Only the specified token types may be held by the lock.
     ; These token IDs must be valid when the lock is created.
@@ -502,7 +502,7 @@ lock-metadata = {
 
 ; A capability to perform a certain operation on a lock.
 lock-controller-simple-capability =
-    "fund"      ; Capability to perform "lockFund"
+    "hold"      ; Capability to perform "lockFund"
     / "release" ; Capability to perform "lockRelease"
     / "send"    ; Capability to perform "lockSend"
     / "cancel"  ; Capability to perform "lockCancel" (before expiry)
