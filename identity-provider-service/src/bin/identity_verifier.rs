@@ -18,8 +18,34 @@ use warp::{
     Filter,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IdentityType {
+    Personal,
+    Company,
+}
+
+impl std::str::FromStr for IdentityType {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "personal" => Ok(Self::Personal),
+            "company" => Ok(Self::Company),
+            _ => Err("identity type must be personal or company"),
+        }
+    }
+}
+
 #[derive(Debug, StructOpt)]
 struct Config {
+    #[structopt(
+        long = "identity-type",
+        default_value = "personal",
+        env = "IDENTITY_VERIFIER_IDENTITY_TYPE",
+        possible_values = &["personal", "company"],
+        help = "Attribute form to serve. This does not restrict submitted attributes."
+    )]
+    identity_type: IdentityType,
     #[structopt(
         long = "port",
         default_value = "8101",
@@ -69,10 +95,34 @@ struct Config {
 #[folder = "html/"]
 struct Asset;
 
+/// Assemble trusted HTML fragments once, before inserting request-specific values.
+fn render_attribute_form(
+    identity_type: IdentityType,
+    require_login: bool,
+) -> anyhow::Result<String> {
+    let read_template = |name: &str| -> anyhow::Result<String> {
+        let asset =
+            Asset::get(name).ok_or_else(|| anyhow::anyhow!("Missing HTML template: {}", name))?;
+        Ok(std::str::from_utf8(&asset.data)?.to_owned())
+    };
+    let attributes = read_template(match identity_type {
+        IdentityType::Personal => "personal_attributes.html",
+        IdentityType::Company => "company_attributes.html",
+    })?;
+    let login = if require_login {
+        read_template("login.html")?
+    } else {
+        String::new()
+    };
+    Ok(read_template("attribute_form.html")?
+        .replace("$login_fields$", &login)
+        .replace("$attribute_fields$", &attributes))
+}
+
 /// A small binary that simulates an identity verifier that always verifies an
 /// identity, and returns a verified attribute list.
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
     let app = Config::clap()
@@ -85,16 +135,7 @@ async fn main() {
     let login_username = opt.login_username;
     let require_login = opt.require_login;
 
-    let attribute_form = if opt.require_login {
-        Asset::get("attribute_form_with_login.html")
-    } else {
-        Asset::get("attribute_form.html")
-    }
-    .unwrap();
-
-    let attribute_form_html = std::str::from_utf8(&attribute_form.data)
-        .unwrap()
-        .to_string();
+    let attribute_form_html = render_attribute_form(opt.identity_type, require_login)?;
 
     let ip_data_contents = fs::read_to_string(&opt.identity_provider_pub_file).unwrap();
     let versioned_ip_data: Versioned<IpInfo<IpPairing>> = from_str(&ip_data_contents).unwrap();
@@ -347,4 +388,37 @@ async fn main() {
     )
     .run(([0, 0, 0, 0], opt.port))
     .await;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn forms_contain_only_the_configured_attributes_and_optional_login() -> anyhow::Result<()> {
+        for identity_type in &[IdentityType::Personal, IdentityType::Company] {
+            for require_login in &[false, true] {
+                let html = render_attribute_form(*identity_type, *require_login)?;
+                let is_company = *identity_type == IdentityType::Company;
+                assert_eq!(html.contains("name=\"legalName\""), is_company);
+                assert_eq!(html.contains("name=\"firstName\""), !is_company);
+                assert_eq!(html.contains("function validateCompany()"), is_company);
+                assert_eq!(html.contains("name=\"username\""), *require_login);
+                assert_eq!(html.contains("name=\"password\""), *require_login);
+                assert!(html.contains("name=\"expiry\""));
+                assert!(!html.contains("identityType"));
+                assert!(!html.contains("$login_fields$"));
+                assert!(!html.contains("$attribute_fields$"));
+                for placeholder in &[
+                    "$id_cred_pub$",
+                    "$id_cred_pub_signature$",
+                    "$endpoint_version$",
+                ] {
+                    assert!(html.contains(placeholder));
+                }
+            }
+        }
+        Ok(())
+    }
 }
