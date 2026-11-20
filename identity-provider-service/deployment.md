@@ -24,6 +24,9 @@ This has the following parameters
   `IDENTITY_PROVIDER_PUBLIC`.
 
   This should point to `ip_private_keys/identity_provider-1.pub.json` in genesis-data.
+- `--identity-type personal|company` selects the attribute form for this instance.
+  It can also be set with `IDENTITY_VERIFIER_IDENTITY_TYPE`. The default is
+  `personal`.
 
 # identity-provider-service
 

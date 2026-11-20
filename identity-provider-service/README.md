@@ -45,6 +45,8 @@ The identity verifier can be run by using:
 cargo run --release --bin identity-verifier -- --id-provider-url url-for-identity-provider-service --identity-provider-public data/identity_provider.pub.json
 ```
 
+By default it serves the form for personal ID attributes, for showing company attribute form add `--identity-type company`.
+
 Optionally, a username/password combination can be included on the attribute form by running with the three options:
 * `--require-login=true`
 * `--login-username=username`

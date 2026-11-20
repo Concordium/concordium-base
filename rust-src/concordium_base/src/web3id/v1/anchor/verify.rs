@@ -704,6 +704,64 @@ mod tests {
         );
     }
 
+    /// Test [`verify_presentation_with_request_anchor`] when the verifier names the network by
+    /// its genesis hash prefix while the presentation uses the `testnet` name. Both forms
+    /// refer to the same chain, so verification succeeds; a different chain still fails.
+    #[test]
+    fn test_verify_network_genesis_prefix() {
+        use crate::web3id::did::GenesisHashPrefix;
+
+        let global_context = GlobalContext::generate("Test".into());
+        let (request, vra) = fixtures::verification_request_data_to_request_and_anchor(
+            fixtures::verification_request_data_fixture(),
+        );
+        let id_cred =
+            fixtures::identity_credentials_fixture(fixtures::default_attributes(), &global_context);
+        let presentation = fixtures::generate_and_prove_presentation_identity(
+            &id_cred,
+            fixtures::verification_request_to_verifiable_presentation_request_identity(
+                &id_cred, &request,
+            ),
+        );
+
+        let anchor = VerificationRequestAnchorAndBlockHash {
+            verification_request_anchor: vra,
+            block_hash: *fixtures::VRA_BLOCK_HASH,
+        };
+
+        let material = VerificationMaterialWithValidity {
+            verification_material: id_cred.verification_material.clone(),
+            validity: validity(),
+        };
+
+        let mut verification_context = verification_context();
+        verification_context.network = Network::Genesis(GenesisHashPrefix::TESTNET);
+        assert_eq!(
+            verify_presentation_with_request_anchor(
+                &global_context,
+                &verification_context,
+                &request,
+                &presentation,
+                &anchor,
+                &[material.clone()],
+            ),
+            PresentationVerificationResult::Verified
+        );
+
+        verification_context.network = Network::Genesis(GenesisHashPrefix([7u8; 16]));
+        assert_eq!(
+            verify_presentation_with_request_anchor(
+                &global_context,
+                &verification_context,
+                &request,
+                &presentation,
+                &anchor,
+                &[material],
+            ),
+            PresentationVerificationResult::Failed(PresentationVerifyFailure::Network)
+        );
+    }
+
     /// Test [`verify_presentation_with_request_anchor`] in case where verification fails.
     /// Test that credential validity is checked.
     #[test]
