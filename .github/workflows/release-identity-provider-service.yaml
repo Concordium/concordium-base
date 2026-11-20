@@ -1,15 +1,64 @@
+name: Release identity provider service
+
 on:
   push:
     tags:
       - identity-provider-service/*
 
+permissions:
+  contents: read
+
+concurrency:
+  group: release-identity-provider-service-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release-identity-provider-service:
-    uses: concordium/.github/.github/workflows/docker-release-workflow.yaml@v1
-    with:
-      SERVICE_NAME: "identity-provider-service"
-      BUILD_ARGS: |
-        base_image_tag=rust-1.82_ghc-9.10.2-1
-      DOCKER_FILE_PATH: scripts/identity-provider-service.Dockerfile
-      CARGO_FILE_PATH: identity-provider-service/Cargo.toml
-    secrets: inherit
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Validate release version
+        id: release
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(yq -p toml -r '.package.version' identity-provider-service/Cargo.toml)
+          tag_version=${TAG#identity-provider-service/}
+          if [ "$tag_version" != "$version" ]; then
+            echo "::error::Cargo version $version does not match tag version $tag_version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: concordium
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Check that image does not exist
+        env:
+          IMAGE: concordium/identity-provider-service:${{ steps.release.outputs.version }}
+        run: |
+          if output=$(docker manifest inspect "$IMAGE" 2>&1); then
+            echo "::error::Image $IMAGE already exists"
+            exit 1
+          elif ! grep -q 'no such manifest' <<< "$output"; then
+            printf '%s\n' "$output"
+            echo "::error::Could not determine whether $IMAGE exists"
+            exit 1
+          fi
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: identity-provider-service/Dockerfile
+          tags: concordium/identity-provider-service:${{ steps.release.outputs.version }}
+          no-cache: true
+          push: true
