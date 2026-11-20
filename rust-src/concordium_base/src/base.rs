@@ -330,7 +330,9 @@ pub struct Round {
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, FromStr, Display, From, Into,
+)]
 /// A sequence number ordering transactions from a specific account. The initial
 /// sequence number is `1`, and a transaction with sequence number `m` must be
 /// followed by a transaction with sequence number `m+1`.
@@ -464,6 +466,8 @@ pub enum ProtocolVersion {
     /// Protocol `P10` introduces protocol-level sponsored transactions and
     /// additional PLT functionality.
     P10,
+    #[display(fmt = "P11")]
+    P11,
 }
 
 #[derive(Debug, Error, Display)]
@@ -489,6 +493,7 @@ impl TryFrom<u64> for ProtocolVersion {
             8 => Ok(ProtocolVersion::P8),
             9 => Ok(ProtocolVersion::P9),
             10 => Ok(ProtocolVersion::P10),
+            11 => Ok(ProtocolVersion::P11),
             version => Err(UnknownProtocolVersion { version }),
         }
     }
@@ -507,6 +512,7 @@ impl From<ProtocolVersion> for u64 {
             ProtocolVersion::P8 => 8,
             ProtocolVersion::P9 => 9,
             ProtocolVersion::P10 => 10,
+            ProtocolVersion::P11 => 11,
         }
     }
 }
@@ -548,7 +554,9 @@ impl AbsoluteBlockHeight {
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, FromStr, Display, From, Into,
+)]
 /// Index of the account in the account table. These are assigned sequentially
 /// in the order of creation of accounts. The first account has index 0.
 pub struct AccountIndex {
