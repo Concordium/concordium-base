@@ -1,9 +1,13 @@
 # Build binaries in builder image.
-ARG base_image_tag
-FROM concordium/base:${base_image_tag} as builder
+FROM rust:1.85.1-bookworm AS builder
+RUN apt-get update && \
+    apt-get -y install --no-install-recommends \
+      pkg-config \
+      libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 COPY . /build
 WORKDIR /build/identity-provider-service
-RUN cargo build --release
+RUN cargo build --release --locked
 
 # Collect build artifacts in fresh image.
 FROM ubuntu:24.04
@@ -13,9 +17,6 @@ RUN apt-get update && \
       ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-LABEL base_image_tag=${base_image_tag}
-
 COPY --from=builder /build/identity-provider-service/target/release/identity-provider-service /identity-provider-service
 COPY --from=builder /build/identity-provider-service/target/release/identity-verifier /identity-verifier
-COPY --from=builder /build/scripts/start.sh /start.sh
-ENTRYPOINT ["/start.sh"]
+ENTRYPOINT ["/bin/sh", "-c", "case \"$MODE\" in identity-verifier|identity-provider-service) exec /\"$MODE\" ;; *) echo \"Unsupported mode '$MODE'\" >&2; exit 1 ;; esac"]

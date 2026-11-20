@@ -11,6 +11,21 @@ To build the executables move to the identity-provider-service directory and run
 
 ```cargo build --release```
 
+## Docker build
+
+From the repository root, run:
+
+```console
+docker build \
+  -f identity-provider-service/Dockerfile \
+  -t concordium/identity-provider-service:local \
+  .
+```
+
+The repository root must be the build context because the service depends on
+other crates in this repository. The image contains both binaries; set `MODE`
+to `identity-provider-service` or `identity-verifier` when running a container.
+
 ## Identity provider service
 
 Navigate next to the generated binary and run (remember to update paths to your files):
