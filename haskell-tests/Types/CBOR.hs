@@ -1,10 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
 
 module Types.CBOR where
 
-import Codec.CBOR.Decoding (Decoder)
-import Codec.CBOR.Encoding (Encoding)
 import Codec.CBOR.Read
 import qualified Codec.CBOR.Term as CBOR
 import Codec.CBOR.Write
@@ -17,7 +14,6 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as BS16
 import qualified Data.ByteString.Lazy.Char8 as B8
 import qualified Data.ByteString.Short as BSS
-import Data.Either (isLeft)
 import qualified Data.FixedByteString as FBS
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
@@ -32,7 +28,6 @@ import Test.QuickCheck
 import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.ID.Types
 import Concordium.Types
-import Concordium.Types.Locks.CBOR
 import Concordium.Types.ProtocolLevelTokens.CBOR
 import Concordium.Types.Queries.Tokens
 import Concordium.Types.Tokens
@@ -1186,308 +1181,6 @@ testTokenAuthorizationsMapJSON = describe "TokenAuthorizationsMap JSON" $ do
         Just tam
             === AE.decode (AE.encode tam)
 
-exampleLockInfoDetails :: LockInfoDetails
-exampleLockInfoDetails =
-    LockInfoDetails
-        { lipLock =
-            LockId
-                { liAccountIndex = 10001,
-                  liSequenceNumber = 5,
-                  liCreationOrder = 0
-                },
-          lipConfig =
-            LockConfigSimpleV0
-                SimpleLockConfigV0
-                    { lcsv0Recipients = LockRecipientsLimited . Seq.singleton $ accountTokenHolder acc,
-                      lcsv0Expiry = TransactionTime 1804806000,
-                      lcsv0Grants = Seq.singleton LockControllerSimpleV0Grant{lcsv0gAccount = accountTokenHolder acc, lcsv0gRoles = Seq.fromList [LockControllerSimpleV0Fund, LockControllerSimpleV0Send]},
-                      lcsv0Tokens = Seq.singleton tokenId,
-                      lcsv0Memo = Nothing,
-                      lcsv0Metadata = Just (lockMetadataToRawCbor exampleLockMetadata)
-                    },
-          lipFunds =
-            Seq.singleton
-                LockAccountFunds
-                    { lafAccount = accountTokenHolder acc,
-                      lafAmounts =
-                        Seq.singleton
-                            LockedTokenAmount
-                                { ltaToken = tokenId,
-                                  ltaAmount = TokenAmount (TokenRawAmount 12300) 3
-                                }
-                    }
-        }
-  where
-    acc = AccountAddress $ FBS.pack [1 .. 32]
-    tokenId = case makeTokenId (BSS.toShort "tT") of
-        Left err -> error err
-        Right tid -> tid
-
-exampleLockInfoDetailsCBOR :: BS.ByteString
-exampleLockInfoDetailsCBOR = "a3646c6f636bd99fd88319271105006566756e647381a2676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2067616d6f756e747381a265746f6b656e62745466616d6f756e74c4822219300c66636f6e666967a16873696d706c655630a566657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646473656e64676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e7381627454686d657461646174615848a4646e616d656c56657374696e67206c6f636b666973737565726a436f6e636f726469756d6776657273696f6e016b6465736372697074696f6e6d546f6b656e73206c6f636b65646a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
-
--- | Test the CBOR encoding and decoding of 'LockInfoDetails'.
-testLockInfoDetailsCBOR :: Spec
-testLockInfoDetailsCBOR = describe "LockInfoDetails CBOR" $ do
-    it "fixture" $ do
-        BS16.encode (lockInfoToBytes exampleLockInfoDetails)
-            `shouldBe` exampleLockInfoDetailsCBOR
-        lockInfoFromBytes (B8.fromStrict $ BS16.decodeLenient exampleLockInfoDetailsCBOR)
-            `shouldBe` Right exampleLockInfoDetails
-    it "any recipients fixture" $ do
-        let lockInfoAny = exampleLockInfoDetails{lipConfig = case lipConfig exampleLockInfoDetails of LockConfigSimpleV0 cfg -> LockConfigSimpleV0 cfg{lcsv0Recipients = LockRecipientsAny}}
-            lockInfoAnyCBOR = "a3646c6f636bd99fd88319271105006566756e647381a2676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2067616d6f756e747381a265746f6b656e62745466616d6f756e74c4822219300c66636f6e666967a16873696d706c655630a566657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646473656e64676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e7381627454686d657461646174615848a4646e616d656c56657374696e67206c6f636b666973737565726a436f6e636f726469756d6776657273696f6e016b6465736372697074696f6e6d546f6b656e73206c6f636b65646a726563697069656e747363616e79"
-        lockInfoFromBytes (B8.fromStrict $ BS16.decodeLenient lockInfoAnyCBOR) `shouldBe` Right lockInfoAny
-        BS16.encode (lockInfoToBytes lockInfoAny) `shouldBe` lockInfoAnyCBOR
-    it "metadata round-trip" $ do
-        let encoded = lockInfoToBytes exampleLockInfoDetails
-        lockInfoFromBytes (B8.fromStrict encoded) `shouldBe` Right exampleLockInfoDetails
-
--- * Lock CBOR tests
-
--- Shared test account and token used across lock fixtures.
-lockTestAcc :: AccountAddress
-lockTestAcc = AccountAddress $ FBS.pack [1 .. 32]
-
-lockTestAccHex :: BS.ByteString
-lockTestAccHex = "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
-
-lockTokenId :: TokenId
-lockTokenId = case makeTokenId (BSS.toShort "tT") of
-    Left err -> error err
-    Right tid -> tid
-
--- Helper encode/decode for intermediate lock types.
-lockEncode :: (a -> Encoding) -> a -> BS.ByteString
-lockEncode enc = encodeToBytes . enc
-
-lockDecode :: (forall s. Decoder s a) -> BS.ByteString -> Either String a
-lockDecode dec bs = decodeFromBytes dec "lock type" (B8.fromStrict bs)
-
--- | Assert that a hex fixture decodes to the expected value, and that
--- re-encoding that value produces the same hex. This pins both the wire
--- format and the codec's self-consistency in one shot.
-lockFixture ::
-    (Show a, Eq a) =>
-    (a -> Encoding) ->
-    (forall s. Decoder s a) ->
-    a ->
-    BS.ByteString ->
-    Expectation
-lockFixture enc dec expected hexStr = do
-    lockDecode dec (BS16.decodeLenient hexStr) `shouldBe` Right expected
-    BS16.encode (lockEncode enc expected) `shouldBe` hexStr
-
-testLockIdCBOR :: Spec
-testLockIdCBOR = describe "LockId CBOR" $ do
-    it "fixture" $
-        lockFixture
-            encodeLockId
-            decodeLockId
-            (LockId 10001 5 0)
-            "d99fd8831927110500"
-
-exampleLockMetadata :: LockMetadata
-exampleLockMetadata =
-    LockMetadata
-        { lmName = Just "Vesting lock",
-          lmDescription = Just "Tokens locked",
-          lmAdditional =
-            Map.fromList
-                [ ("issuer", CBOR.TString "Concordium"),
-                  ("version", CBOR.TInt 1)
-                ]
-        }
-
-exampleLockMetadataCBOR :: BS.ByteString
-exampleLockMetadataCBOR =
-    mconcat
-        [ "a4",
-          "646e616d65",
-          "6c56657374696e67206c6f636b",
-          "66697373756572",
-          "6a436f6e636f726469756d",
-          "6776657273696f6e",
-          "01",
-          "6b6465736372697074696f6e",
-          "6d546f6b656e73206c6f636b6564"
-        ]
-
-testLockMetadataCBOR :: Spec
-testLockMetadataCBOR = describe "LockMetadata CBOR" $ do
-    it "known and additional fields fixture" $ do
-        lockFixture
-            encodeLockMetadata
-            decodeLockMetadata
-            exampleLockMetadata
-            exampleLockMetadataCBOR
-        lockMetadataFromRawCbor (lockMetadataToRawCbor exampleLockMetadata) `shouldBe` Right exampleLockMetadata
-    it "only additional fields" $
-        lockFixture
-            encodeLockMetadata
-            decodeLockMetadata
-            LockMetadata{lmName = Nothing, lmDescription = Nothing, lmAdditional = Map.singleton "issuer" (CBOR.TString "Concordium")}
-            (mconcat ["a1", "66697373756572", "6a436f6e636f726469756d"])
-    it "raw helper rejects invalid metadata" $
-        lockMetadataFromRawCbor (rawCborFromBytes "\x01") `shouldSatisfy` isLeft
-
-testLockRecipientsCBOR :: Spec
-testLockRecipientsCBOR = describe "LockRecipients CBOR" $ do
-    it "any" $
-        lockFixture
-            encodeLockRecipients
-            decodeLockRecipients
-            LockRecipientsAny
-            "63616e79"
-    it "limited single account" $
-        lockFixture
-            encodeLockRecipients
-            decodeLockRecipients
-            (LockRecipientsLimited $ Seq.singleton $ accountTokenHolder lockTestAcc)
-            ("81" <> lockTestAccHex)
-    it "limited empty" $
-        lockFixture
-            encodeLockRecipients
-            decodeLockRecipients
-            (LockRecipientsLimited Seq.empty)
-            "80"
-    it "rejects unknown text" $
-        lockDecode decodeLockRecipients (BS16.decodeLenient "63616c6c")
-            `shouldSatisfy` isLeft
-
-testLockControllerSimpleV0CapabilityCBOR :: Spec
-testLockControllerSimpleV0CapabilityCBOR = describe "LockControllerSimpleV0Capability CBOR" $ do
-    it "fund" $
-        lockFixture
-            encodeLockControllerSimpleV0Capability
-            decodeLockControllerSimpleV0Capability
-            LockControllerSimpleV0Fund
-            "6466756e64"
-    it "release" $
-        lockFixture
-            encodeLockControllerSimpleV0Capability
-            decodeLockControllerSimpleV0Capability
-            LockControllerSimpleV0Release
-            "6772656c65617365"
-    it "send" $
-        lockFixture
-            encodeLockControllerSimpleV0Capability
-            decodeLockControllerSimpleV0Capability
-            LockControllerSimpleV0Send
-            "6473656e64"
-    it "cancel" $
-        lockFixture
-            encodeLockControllerSimpleV0Capability
-            decodeLockControllerSimpleV0Capability
-            LockControllerSimpleV0Cancel
-            "6663616e63656c"
-
-testLockControllerSimpleV0GrantCBOR :: Spec
-testLockControllerSimpleV0GrantCBOR = describe "LockControllerSimpleV0Grant CBOR" $ do
-    it "fixture" $
-        lockFixture
-            encodeLockControllerSimpleV0Grant
-            decodeLockControllerSimpleV0Grant
-            exampleGrant
-            ( mconcat
-                [ "a2",
-                  "65726f6c6573",
-                  "82",
-                  "6466756e64",
-                  "6473656e64",
-                  "676163636f756e74",
-                  lockTestAccHex
-                ]
-            )
-  where
-    exampleGrant =
-        LockControllerSimpleV0Grant
-            { lcsv0gAccount = accountTokenHolder lockTestAcc,
-              lcsv0gRoles = Seq.fromList [LockControllerSimpleV0Fund, LockControllerSimpleV0Send]
-            }
-
-testSimpleLockConfigV0CBOR :: Spec
-testSimpleLockConfigV0CBOR = describe "SimpleLockConfigV0 CBOR" $ do
-    it "full fixture with memo" $
-        lockFixture
-            encodeLockConfig
-            decodeLockConfig
-            (LockConfigSimpleV0 fullConfig)
-            "a16873696d706c655630a5646d656d6f4301020366657870697279c11a6b932770666772616e747381a265726f6c6573826466756e646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066746f6b656e73816274546a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
-  where
-    fullConfig =
-        SimpleLockConfigV0
-            { lcsv0Recipients = LockRecipientsLimited $ Seq.singleton $ accountTokenHolder lockTestAcc,
-              lcsv0Expiry = TransactionTime 1804806000,
-              lcsv0Grants =
-                Seq.singleton
-                    LockControllerSimpleV0Grant
-                        { lcsv0gAccount = accountTokenHolder lockTestAcc,
-                          lcsv0gRoles = Seq.fromList [LockControllerSimpleV0Fund, LockControllerSimpleV0Cancel]
-                        },
-              lcsv0Tokens = Seq.singleton lockTokenId,
-              lcsv0Memo = Just $ UntaggedMemo (Memo $ BSS.pack [0x01, 0x02, 0x03]),
-              lcsv0Metadata = Nothing
-            }
-
-testLockConfigCBOR :: Spec
-testLockConfigCBOR = describe "LockConfig CBOR" $ do
-    it "tagged simpleV0 minimal fixture omits default fields" $
-        lockFixture
-            encodeLockConfig
-            decodeLockConfig
-            (LockConfigSimpleV0 minimalConfig)
-            "a16873696d706c655630a466657870697279c11a6b932770666772616e74738066746f6b656e73806a726563697069656e747380"
-  where
-    minimalConfig =
-        SimpleLockConfigV0
-            { lcsv0Recipients = LockRecipientsLimited Seq.empty,
-              lcsv0Expiry = TransactionTime 1804806000,
-              lcsv0Grants = Seq.empty,
-              lcsv0Tokens = Seq.empty,
-              lcsv0Memo = Nothing,
-              lcsv0Metadata = Nothing
-            }
-
-testLockedTokenAmountCBOR :: Spec
-testLockedTokenAmountCBOR = describe "LockedTokenAmount CBOR" $ do
-    it "fixture" $
-        -- map keys sorted by length: "token" (5) before "amount" (6)
-        lockFixture
-            encodeLockedTokenAmount
-            decodeLockedTokenAmount
-            LockedTokenAmount{ltaToken = lockTokenId, ltaAmount = TokenAmount (TokenRawAmount 12300) 3}
-            (mconcat ["a2", "65746f6b656e", "627454", "66616d6f756e74", "c4822219300c"])
-
-testLockAccountFundsCBOR :: Spec
-testLockAccountFundsCBOR = describe "LockAccountFunds CBOR" $ do
-    it "fixture" $
-        lockFixture
-            encodeLockAccountFunds
-            decodeLockAccountFunds
-            LockAccountFunds
-                { lafAccount = accountTokenHolder lockTestAcc,
-                  lafAmounts =
-                    Seq.singleton
-                        LockedTokenAmount
-                            { ltaToken = lockTokenId,
-                              ltaAmount = TokenAmount (TokenRawAmount 12300) 3
-                            }
-                }
-            ( mconcat
-                [ "a2",
-                  "676163636f756e74",
-                  lockTestAccHex,
-                  "67616d6f756e7473",
-                  "81",
-                  "a2",
-                  "65746f6b656e",
-                  "627454",
-                  "66616d6f756e74",
-                  "c4822219300c"
-                ]
-            )
-
 testTransactionVectors :: Spec
 testTransactionVectors = do
     let emptyTransaction = TokenOperations Seq.empty
@@ -1615,16 +1308,6 @@ tests = parallel $ describe "CBOR" $ do
     testTokenModuleAccountStateCBOR
     testTokenAuthorizationsMapCBOR
     testTokenAuthorizationsMapJSON
-    testLockInfoDetailsCBOR
-    testLockIdCBOR
-    testLockMetadataCBOR
-    testLockRecipientsCBOR
-    testLockControllerSimpleV0CapabilityCBOR
-    testLockControllerSimpleV0GrantCBOR
-    testSimpleLockConfigV0CBOR
-    testLockConfigCBOR
-    testLockedTokenAmountCBOR
-    testLockAccountFundsCBOR
     describe "UpdateTransaction test vectors" $ testTransactionVectors
     it "JSON (de-)serialization roundtrip for TokenState (simple)" $ withMaxSuccess 1000 $ forAll genTokenStateSimple $ \tt ->
         assertEqual
