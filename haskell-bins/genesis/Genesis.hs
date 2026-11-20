@@ -437,7 +437,12 @@ printInitial spv gh vcgp GDBase.GenesisState{..} = do
                 Just acc -> show (gaAddress acc) ++ " (index " ++ show _cpFoundationAccount ++ ")"
         putStrLn $ "  - foundation account: " ++ foundAcc
 
-    printInitialChainParametersV3 :: ChainParameters' 'ChainParametersV3 -> IO ()
+    printInitialChainParametersV3 ::
+        ( CooldownParametersVersionFor cpv ~ 'CooldownParametersVersion1,
+          PoolParametersVersionFor cpv ~ 'PoolParametersVersion1,
+          ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion1
+        ) =>
+        ChainParameters' cpv -> IO ()
     printInitialChainParametersV3 ChainParameters{..} = do
         putStrLn ""
         putStrLn "Chain parameters: "
@@ -473,6 +478,9 @@ printInitial spv gh vcgp GDBase.GenesisState{..} = do
             SChainParametersV1 -> printInitialChainParametersV1 genesisChainParameters
             SChainParametersV2 -> printInitialChainParametersV2 genesisChainParameters
             SChainParametersV3 -> printInitialChainParametersV3 genesisChainParameters
+            SChainParametersV4 -> do
+                printInitialChainParametersV3 genesisChainParameters
+                putStrLn $ "  - maximum lock duration: " ++ show (unOParam (_cpMaxLockDuration genesisChainParameters))
 
 printCooldownParametersV1 ::
     CooldownParameters' 'CooldownParametersVersion1 ->

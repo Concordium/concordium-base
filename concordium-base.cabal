@@ -16,6 +16,10 @@ build-type:     Custom
 extra-source-files:
     README.md
     LICENSE
+    testdata/p10-genesis.dat
+    testdata/p11-genesis.dat
+    testdata/p8-genesis.dat
+    testdata/p9-genesis.dat
     ./concordium-grpc-api/v2/concordium/kernel.proto
     ./concordium-grpc-api/v2/concordium/protocol-level-tokens.proto
     ./concordium-grpc-api/v2/concordium/types.proto
@@ -327,6 +331,8 @@ test-suite test
       ConcordiumTests.MerkleProofs
       ConcordiumTests.Utils.Encryption
       ConcordiumTests.Utils.InterpolationSearch
+      Examples.ChainParameters
+      Examples.Genesis
       Generators
       Genesis.ParametersSpec
       Types.AccountEncryptedAmountSpec

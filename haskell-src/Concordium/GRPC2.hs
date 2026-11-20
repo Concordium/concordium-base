@@ -2387,6 +2387,25 @@ instance ToProto CredentialsPerBlockLimit where
     type Output CredentialsPerBlockLimit = Proto.CredentialsPerBlockLimit
     toProto = mkWord16
 
+-- | Convert the shared external-v3 fields. The enclosing adapter supplies keys.
+instance ToProto (AccountAddress, Parameters.ChainParametersV3View) where
+    type Output (AccountAddress, Parameters.ChainParametersV3View) = Proto.ChainParametersV3
+    toProto (foundationAddr, Parameters.ChainParametersV3View{..}) = Proto.make $ do
+        ProtoFields.consensusParameters .= toProto v3ConsensusParameters
+        ProtoFields.euroPerEnergy .= toProto (Parameters._erEuroPerEnergy v3ExchangeRates)
+        ProtoFields.microCcdPerEuro .= toProto (Parameters._erMicroGTUPerEuro v3ExchangeRates)
+        ProtoFields.cooldownParameters .= toProto v3CooldownParameters
+        ProtoFields.timeParameters .= toProto v3TimeParameters
+        ProtoFields.accountCreationLimit .= toProto v3AccountCreationLimit
+        ProtoFields.mintDistribution .= toProto v3MintDistribution
+        ProtoFields.transactionFeeDistribution .= toProto v3TransactionFeeDistribution
+        ProtoFields.gasRewards .= toProto v3GASRewards
+        ProtoFields.foundationAccount .= toProto foundationAddr
+        ProtoFields.poolParameters .= toProto v3PoolParameters
+        ProtoFields.finalizationCommitteeParameters .= toProto v3FinalizationCommitteeParameters
+        ProtoFields.validatorScoreParameters .= toProto v3ValidatorScoreParameters
+        ProtoFields.maybe'maxLockDuration .= fmap toProto v3MaxLockDuration
+
 instance ToProto (AccountAddress, EChainParametersAndKeys) where
     type Output (AccountAddress, EChainParametersAndKeys) = Proto.ChainParameters
 
@@ -2460,77 +2479,29 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
                                 )
             (SChainParametersV3, SAuthorizationsVersion1) ->
-                let Parameters.ChainParameters{..} = params
-                in  Proto.make $
-                        ProtoFields.v3
-                            .= Proto.make
-                                ( do
-                                    ProtoFields.consensusParameters .= toProto _cpConsensusParameters
-                                    ProtoFields.euroPerEnergy .= toProto (Parameters._erEuroPerEnergy _cpExchangeRates)
-                                    ProtoFields.microCcdPerEuro .= toProto (Parameters._erMicroGTUPerEuro _cpExchangeRates)
-                                    ProtoFields.cooldownParameters .= toProto _cpCooldownParameters
-                                    ProtoFields.timeParameters .= toProto (Parameters.unOParam _cpTimeParameters)
-                                    ProtoFields.accountCreationLimit .= toProto _cpAccountCreationLimit
-                                    ProtoFields.mintDistribution .= toProto (Parameters._rpMintDistribution _cpRewardParameters)
-                                    ProtoFields.transactionFeeDistribution .= toProto (Parameters._rpTransactionFeeDistribution _cpRewardParameters)
-                                    ProtoFields.gasRewards .= toProto (Parameters._rpGASRewards _cpRewardParameters)
-                                    ProtoFields.foundationAccount .= toProto foundationAddr
-                                    ProtoFields.poolParameters .= toProto _cpPoolParameters
-                                    ProtoFields.rootKeys .= toProto (Updates.rootKeys keys)
-                                    ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
-                                    ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
-                                    ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
-                                    ProtoFields.validatorScoreParameters .= toProto (Parameters.unOParam _cpValidatorScoreParameters)
-                                    ProtoFields.maybe'maxLockDuration .= fmap toProto (Parameters.unOParam _cpMaxLockDuration)
-                                )
+                Proto.make $
+                    ProtoFields.v3
+                        .= ( toProto (foundationAddr, Parameters.chainParametersV3ToView params)
+                                & ProtoFields.rootKeys .~ toProto (Updates.rootKeys keys)
+                                & ProtoFields.level1Keys .~ toProto (Updates.level1Keys keys)
+                                & ProtoFields.level2Keys .~ toProto (Updates.level2Keys keys)
+                           )
             (SChainParametersV3, SAuthorizationsVersion2) ->
-                let Parameters.ChainParameters{..} = params
-                in  Proto.make $
-                        ProtoFields.v3
-                            .= Proto.make
-                                ( do
-                                    ProtoFields.consensusParameters .= toProto _cpConsensusParameters
-                                    ProtoFields.euroPerEnergy .= toProto (Parameters._erEuroPerEnergy _cpExchangeRates)
-                                    ProtoFields.microCcdPerEuro .= toProto (Parameters._erMicroGTUPerEuro _cpExchangeRates)
-                                    ProtoFields.cooldownParameters .= toProto _cpCooldownParameters
-                                    ProtoFields.timeParameters .= toProto (Parameters.unOParam _cpTimeParameters)
-                                    ProtoFields.accountCreationLimit .= toProto _cpAccountCreationLimit
-                                    ProtoFields.mintDistribution .= toProto (Parameters._rpMintDistribution _cpRewardParameters)
-                                    ProtoFields.transactionFeeDistribution .= toProto (Parameters._rpTransactionFeeDistribution _cpRewardParameters)
-                                    ProtoFields.gasRewards .= toProto (Parameters._rpGASRewards _cpRewardParameters)
-                                    ProtoFields.foundationAccount .= toProto foundationAddr
-                                    ProtoFields.poolParameters .= toProto _cpPoolParameters
-                                    ProtoFields.rootKeys .= toProto (Updates.rootKeys keys)
-                                    ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
-                                    ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
-                                    ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
-                                    ProtoFields.validatorScoreParameters .= toProto (Parameters.unOParam _cpValidatorScoreParameters)
-                                    ProtoFields.maybe'maxLockDuration .= fmap toProto (Parameters.unOParam _cpMaxLockDuration)
-                                )
-            (SChainParametersV3, SAuthorizationsVersion3) ->
-                let Parameters.ChainParameters{..} = params
-                in  Proto.make $
-                        ProtoFields.v3
-                            .= Proto.make
-                                ( do
-                                    ProtoFields.consensusParameters .= toProto _cpConsensusParameters
-                                    ProtoFields.euroPerEnergy .= toProto (Parameters._erEuroPerEnergy _cpExchangeRates)
-                                    ProtoFields.microCcdPerEuro .= toProto (Parameters._erMicroGTUPerEuro _cpExchangeRates)
-                                    ProtoFields.cooldownParameters .= toProto _cpCooldownParameters
-                                    ProtoFields.timeParameters .= toProto (Parameters.unOParam _cpTimeParameters)
-                                    ProtoFields.accountCreationLimit .= toProto _cpAccountCreationLimit
-                                    ProtoFields.mintDistribution .= toProto (Parameters._rpMintDistribution _cpRewardParameters)
-                                    ProtoFields.transactionFeeDistribution .= toProto (Parameters._rpTransactionFeeDistribution _cpRewardParameters)
-                                    ProtoFields.gasRewards .= toProto (Parameters._rpGASRewards _cpRewardParameters)
-                                    ProtoFields.foundationAccount .= toProto foundationAddr
-                                    ProtoFields.poolParameters .= toProto _cpPoolParameters
-                                    ProtoFields.rootKeys .= toProto (Updates.rootKeys keys)
-                                    ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
-                                    ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
-                                    ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
-                                    ProtoFields.validatorScoreParameters .= toProto (Parameters.unOParam _cpValidatorScoreParameters)
-                                    ProtoFields.maybe'maxLockDuration .= fmap toProto (Parameters.unOParam _cpMaxLockDuration)
-                                )
+                Proto.make $
+                    ProtoFields.v3
+                        .= ( toProto (foundationAddr, Parameters.chainParametersV3ToView params)
+                                & ProtoFields.rootKeys .~ toProto (Updates.rootKeys keys)
+                                & ProtoFields.level1Keys .~ toProto (Updates.level1Keys keys)
+                                & ProtoFields.level2Keys .~ toProto (Updates.level2Keys keys)
+                           )
+            (SChainParametersV4, SAuthorizationsVersion3) ->
+                Proto.make $
+                    ProtoFields.v3
+                        .= ( toProto (foundationAddr, Parameters.chainParametersV4ToView params)
+                                & ProtoFields.rootKeys .~ toProto (Updates.rootKeys keys)
+                                & ProtoFields.level1Keys .~ toProto (Updates.level1Keys keys)
+                                & ProtoFields.level2Keys .~ toProto (Updates.level2Keys keys)
+                           )
 
 instance ToProto FinalizationIndex where
     type Output FinalizationIndex = Proto.FinalizationIndex
