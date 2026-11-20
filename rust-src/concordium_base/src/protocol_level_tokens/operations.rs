@@ -1,6 +1,6 @@
 use crate::{
     common::cbor::{self, CborSerializationResult},
-    protocol_level_locks::{LockConfig, LockId},
+    protocol_level_locks::{LockCreateConfig, LockId},
     protocol_level_tokens::{
         token_operations, CborHolderAccount, CborMemo, RawCbor, TokenAdminRole, TokenAmount,
         TokenId, TokenMetadataUrlDetails, TokenOperation,
@@ -272,7 +272,7 @@ pub mod operations {
     }
 
     /// Construct an operation to create a lock.
-    pub fn create_lock(config: LockConfig) -> OperationInput {
+    pub fn create_lock(config: LockCreateConfig) -> OperationInput {
         OperationInput::LockCreate(LockCreateDetails { config })
     }
 
@@ -687,7 +687,7 @@ pub struct LockReleaseDetails {
 #[cbor(transparent)]
 pub struct LockCreateDetails {
     /// The configuration for the new lock.
-    pub config: LockConfig,
+    pub config: LockCreateConfig,
 }
 
 /// Cancel a lock, returning funds to their owners and destroying the lock.
@@ -706,8 +706,7 @@ mod tests {
     use crate::common::cbor;
     use crate::common::types::TransactionTime;
     use crate::protocol_level_locks::{
-        LockConfig, LockConfigSimpleV0, LockControllerSimpleV0Capability,
-        LockControllerSimpleV0Grant, LockRecipients,
+        LockCreateCapability, LockCreateConfigSimpleV0, LockCreateRole, LockRecipients,
     };
     use crate::protocol_level_tokens::{test_fixtures::ADDRESS, TokenAdminRole};
     use crate::transactions::Memo;
@@ -958,31 +957,28 @@ mod tests {
     #[test]
     fn test_operation_cbor_lock_create() {
         let operation = Operation::LockCreate(LockCreateDetails {
-            config: LockConfig::SimpleV0(LockConfigSimpleV0 {
+            config: LockCreateConfig::SimpleV0(LockCreateConfigSimpleV0 {
                 recipients: LockRecipients::Limited(vec![CborHolderAccount::from(ADDRESS)]),
+                holders: vec![CborHolderAccount::from(ADDRESS)],
                 expiry: TransactionTime::from_seconds(1_000_000),
-                grants: vec![
-                    LockControllerSimpleV0Grant {
+                roles: vec![
+                    LockCreateRole {
                         account: CborHolderAccount::from(ADDRESS),
-                        roles: vec![
-                            LockControllerSimpleV0Capability::Fund,
-                            LockControllerSimpleV0Capability::Cancel,
-                        ],
+                        roles: vec![LockCreateCapability::Cancel],
                     },
-                    LockControllerSimpleV0Grant {
+                    LockCreateRole {
                         account: CborHolderAccount::from(AccountAddress([0x11; 32])),
-                        roles: vec![LockControllerSimpleV0Capability::Send],
+                        roles: vec![LockCreateCapability::Send],
                     },
                 ],
                 tokens: vec!["testPLT".parse().unwrap(), "TKN".parse().unwrap()],
-                memo: None,
                 metadata: None,
             }),
         });
         let cbor = cbor::cbor_encode(&operation);
         assert_eq!(
             hex::encode(&cbor),
-            "a16a6c6f636b437265617465a16873696d706c655630a466657870697279c11a000f4240666772616e747382a265726f6c6573826466756e646663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20a265726f6c6573816473656e64676163636f756e74d99d73a201d99d71a101190397035820111111111111111111111111111111111111111111111111111111111111111166746f6b656e73826774657374504c5463544b4e6a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+            "a16a6c6f636b437265617465a16873696d706c655630a565726f6c657382a265726f6c6573816663616e63656c676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20a265726f6c6573816473656e64676163636f756e74d99d73a201d99d71a101190397035820111111111111111111111111111111111111111111111111111111111111111166657870697279c11a000f424066746f6b656e73826774657374504c5463544b4e67686f6c6465727381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f206a726563697069656e747381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
         );
         let operation_decoded: Operation = cbor::cbor_decode(&cbor).expect("CBOR deserialize");
         assert_eq!(operation_decoded, operation);
