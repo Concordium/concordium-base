@@ -1,0 +1,70 @@
+<section id="companyFields">
+    <label for="legalName">Legal name</label>
+    <input type="text" id="legalName" name="legalName" value="Totally Fictional Test Company" required>
+
+    <label for="legalCountry">Legal jurisdiction country (ISO 3166-1 alpha-2)</label>
+    <select id="legalCountry" name="legalCountry" required>
+        <option value="">Select a country</option>
+    </select>
+
+    <p>Enter at least one of a business number or an LEI. You can enter both.</p>
+    <label for="businessNumber">Business number</label>
+    <input type="text" id="businessNumber" name="businessNumber" value="FAKE-BUSINESS-000123">
+
+    <label for="lei">LEI (ISO 17442)</label>
+    <input type="text" id="lei" name="lei">
+
+    <label for="registrationAuth">Registration authority (optional)</label>
+    <input type="text" id="registrationAuth" name="registrationAuth" value="Imaginary Company Registry">
+</section>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const companyFields = document.getElementById('companyFields');
+        const countryCodes = 'AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW'.split(' ');
+        const countryNames = new Intl.DisplayNames(['en'], {type: 'region'});
+        const countrySelect = document.getElementById('legalCountry');
+        countryCodes.map(code => ({code, name: countryNames.of(code)}))
+            .sort((left, right) => left.name.localeCompare(right.name))
+            .forEach(country => countrySelect.add(new Option(`${country.name} (${country.code})`, country.code)));
+        countrySelect.value = 'DK';
+
+        const legalName = document.getElementById('legalName');
+        const businessNumber = document.getElementById('businessNumber');
+        const lei = document.getElementById('lei');
+        function validateCompany() {
+            legalName.setCustomValidity(legalName.value.trim() ? '' : 'Enter the legal name.');
+            businessNumber.setCustomValidity(businessNumber.value.trim() || lei.value.trim()
+                ? '' : 'Enter a business number or an LEI.');
+            const normalizedLei = lei.value.trim().toUpperCase();
+            let validLei = !normalizedLei;
+            // ISO 17442 reserves positions 5 and 6 as zero and ends with two check digits.
+            if (/^[A-Z0-9]{4}00[A-Z0-9]{12}[0-9]{2}$/.test(normalizedLei)) {
+                let remainder = 0;
+                for (const character of normalizedLei) {
+                    const digits = /[A-Z]/.test(character) ? String(character.charCodeAt(0) - 55) : character;
+                    for (const digit of digits) {
+                        remainder = (remainder * 10 + Number(digit)) % 97;
+                    }
+                }
+                validLei = remainder === 1;
+            }
+            lei.setCustomValidity(validLei ? '' : 'Enter a valid 20-character LEI with a valid checksum.');
+        }
+        companyFields.addEventListener('input', validateCompany);
+        companyFields.addEventListener('focusout', function() {
+            companyFields.querySelectorAll('input').forEach(input => {
+                input.value = input.value.trim();
+            });
+            lei.value = lei.value.toUpperCase();
+            validateCompany();
+        });
+        // Normalize submitted values even if the active field has not lost focus.
+        document.querySelector('form').addEventListener('formdata', function(event) {
+            companyFields.querySelectorAll('input').forEach(input => {
+                const value = input.value.trim();
+                event.formData.set(input.name, input === lei ? value.toUpperCase() : value);
+            });
+        });
+        validateCompany();
+    });
+</script>
