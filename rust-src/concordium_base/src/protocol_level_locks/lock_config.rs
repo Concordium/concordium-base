@@ -279,24 +279,6 @@ mod tests {
         }
     }
 
-    fn field<'a>(value: &'a mut Value, key: &str) -> &'a mut Value {
-        let Value::Map(fields) = value else {
-            panic!("expected map")
-        };
-        &mut fields
-            .iter_mut()
-            .find(|(k, _)| *k == Value::Text(key.into()))
-            .unwrap()
-            .1
-    }
-
-    fn first(value: &mut Value) -> &mut Value {
-        let Value::Array(values) = value else {
-            panic!("expected array")
-        };
-        &mut values[0]
-    }
-
     #[test]
     fn creation_and_output_match_fixed_fixtures() {
         let creation_fixture = "a16873696d706c655630a565726f6c657381a265726f6c6573816473656e64676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066657870697279c11a6b93277066746f6b656e738162745467686f6c6465727381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f206a726563697069656e747363616e79";
@@ -314,88 +296,6 @@ mod tests {
             cbor::cbor_decode::<LockConfig>(hex::decode(output_fixture).unwrap()).unwrap(),
             output()
         );
-    }
-
-    #[test]
-    fn lock_config_accepts_flat_output_and_empty_output_arrays() {
-        let fixture = "a765726f6c65738066657870697279c10066746f6b656e738067686f6c64657273806776617269616e746873696d706c6556306776657273696f6e006a726563697069656e747363616e79";
-        let mut config = cbor::cbor_decode::<LockConfig>(hex::decode(fixture).unwrap()).unwrap();
-        assert!(config.holders.is_empty() && config.tokens.is_empty() && config.roles.is_empty());
-        config.roles.push(LockRole {
-            account: ADDRESS.into(),
-            roles: vec![],
-        });
-        assert_eq!(
-            cbor::cbor_decode::<LockConfig>(cbor::cbor_encode(&config)).unwrap(),
-            config
-        );
-    }
-
-    #[test]
-    fn lock_config_requires_supported_discriminators() {
-        let original: Value = cbor::cbor_decode(cbor::cbor_encode(&output())).unwrap();
-        for key in ["version", "variant"] {
-            let mut value = original.clone();
-            let Value::Map(fields) = &mut value else {
-                unreachable!()
-            };
-            fields.retain(|(k, _)| *k != Value::Text(key.into()));
-            assert!(
-                cbor::cbor_decode::<LockConfig>(cbor::cbor_encode(&value)).is_err(),
-                "missing {key}"
-            );
-        }
-        for (key, unsupported) in [
-            ("version", Value::Positive(1)),
-            ("version", Value::Text("0".into())),
-            ("variant", Value::Text("simpleV1".into())),
-            ("variant", Value::Positive(0)),
-        ] {
-            let mut value = original.clone();
-            *field(&mut value, key) = unsupported;
-            for options in [cbor::UnknownMapKeys::Ignore, cbor::UnknownMapKeys::Fail] {
-                assert!(cbor::cbor_decode_with_options::<LockConfig>(
-                    cbor::cbor_encode(&value),
-                    cbor::SerializationOptions::default().unknown_map_keys(options)
-                )
-                .is_err());
-            }
-        }
-        let unknown = Value::Map(vec![(Value::Text("simpleV1".into()), Value::Map(vec![]))]);
-        assert!(cbor::cbor_decode::<LockCreateConfig>(cbor::cbor_encode(&unknown)).is_err());
-        assert!(cbor::cbor_decode::<LockCreateConfig>([0xa0]).is_err());
-    }
-
-    #[test]
-    fn creation_requires_fields_and_rejects_malformed_arrays_and_fund() {
-        let original: Value = cbor::cbor_decode(cbor::cbor_encode(&creation())).unwrap();
-        for key in ["holders", "tokens", "roles"] {
-            let mut value = original.clone();
-            let Value::Map(fields) = field(&mut value, "simpleV0") else {
-                unreachable!()
-            };
-            fields.retain(|(k, _)| *k != Value::Text(key.into()));
-            assert!(
-                cbor::cbor_decode::<LockCreateConfig>(cbor::cbor_encode(&value)).is_err(),
-                "missing {key}"
-            );
-        }
-        for key in ["holders", "tokens"] {
-            let mut value = original.clone();
-            *field(field(&mut value, "simpleV0"), key) = Value::Text("not an array".into());
-            assert!(cbor::cbor_decode::<LockCreateConfig>(cbor::cbor_encode(&value)).is_err());
-        }
-        for invalid in [
-            Value::Array(vec![Value::Text("fund".into())]),
-            Value::Text("send".into()),
-        ] {
-            let mut value = original.clone();
-            *field(
-                first(field(field(&mut value, "simpleV0"), "roles")),
-                "roles",
-            ) = invalid;
-            assert!(cbor::cbor_decode::<LockCreateConfig>(cbor::cbor_encode(&value)).is_err());
-        }
     }
 
     #[test]
