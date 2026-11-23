@@ -706,7 +706,7 @@ mod tests {
     use crate::common::cbor;
     use crate::common::types::TransactionTime;
     use crate::protocol_level_locks::{
-        LockCreateCapability, LockCreateConfigSimpleV0, LockCreateRole, LockRecipients,
+        LockRecipients, SimpleLockConfigCapability, SimpleLockConfigRoles, SimpleLockConfigV0,
     };
     use crate::protocol_level_tokens::{test_fixtures::ADDRESS, TokenAdminRole};
     use crate::transactions::Memo;
@@ -957,18 +957,18 @@ mod tests {
     #[test]
     fn test_operation_cbor_lock_create() {
         let operation = Operation::LockCreate(LockCreateDetails {
-            config: LockCreateConfig::SimpleV0(LockCreateConfigSimpleV0 {
+            config: LockCreateConfig::SimpleV0(SimpleLockConfigV0 {
                 recipients: LockRecipients::Limited(vec![CborHolderAccount::from(ADDRESS)]),
                 holders: vec![CborHolderAccount::from(ADDRESS)],
                 expiry: TransactionTime::from_seconds(1_000_000),
                 roles: vec![
-                    LockCreateRole {
+                    SimpleLockConfigRoles {
                         account: CborHolderAccount::from(ADDRESS),
-                        roles: vec![LockCreateCapability::Cancel],
+                        roles: vec![SimpleLockConfigCapability::Cancel],
                     },
-                    LockCreateRole {
+                    SimpleLockConfigRoles {
                         account: CborHolderAccount::from(AccountAddress([0x11; 32])),
-                        roles: vec![LockCreateCapability::Send],
+                        roles: vec![SimpleLockConfigCapability::Send],
                     },
                 ],
                 tokens: vec!["testPLT".parse().unwrap(), "TKN".parse().unwrap()],

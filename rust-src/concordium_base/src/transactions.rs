@@ -2269,18 +2269,19 @@ pub mod cost {
     /// Storage cost per effective role account, in NRG.
     const PLT_LOCK_ROLE_ACCOUNT: u64 = 10;
 
-    /// Lock creation cost: `100 + 500 * H * T + 10 * G` NRG.
+    /// Lock creation cost: `100 + 500 * H * T + 10 * R` NRG.
     ///
-    /// `H` counts unique holders, `T` case-insensitive token IDs, and `G` the union
-    /// of holders and explicit role accounts. Account aliases compare equal;
+    /// `H` is the number of unique holders. `T` is the number of unique token identifiers,
+    /// compared case-insensitively. `R` is the number of unique accounts that are holders,
+    /// have explicit roles, or both. Account aliases compare equal;
     /// recipient-only accounts do not contribute.
     ///
     /// # Example
     /// ```
     /// use concordium_base::transactions::cost::plt_lock_create;
-    /// use concordium_base::protocol_level_locks::{LockCreateConfig, LockCreateConfigSimpleV0, LockRecipients};
+    /// use concordium_base::protocol_level_locks::{LockCreateConfig, LockRecipients, SimpleLockConfigV0};
     /// use concordium_base::{common::types::TransactionTime, contracts_common::AccountAddress};
-    /// let config = LockCreateConfig::SimpleV0(LockCreateConfigSimpleV0 {
+    /// let config = LockCreateConfig::SimpleV0(SimpleLockConfigV0 {
     ///     recipients: LockRecipients::Any, expiry: TransactionTime::from_seconds(0),
     ///     holders: vec![AccountAddress([0; 32]).into()],
     ///     roles: vec![], tokens: vec!["TOKEN".parse()?], metadata: None,
@@ -3438,7 +3439,7 @@ pub mod construct {
     mod operation_energy_tests {
         use super::*;
         use crate::protocol_level_locks::{
-            LockCreateConfig, LockCreateConfigSimpleV0, LockId, LockRecipients,
+            LockCreateConfig, LockId, LockRecipients, SimpleLockConfigV0,
         };
         use crate::protocol_level_tokens::{
             LockCancelDetails, LockCreateDetails, LockFundDetails, LockReleaseDetails,
@@ -3461,7 +3462,7 @@ pub mod construct {
             let amount = crate::protocol_level_tokens::TokenAmount::from_raw(1, 0);
             let ops = vec![
                 OperationInput::LockCreate(LockCreateDetails {
-                    config: LockCreateConfig::SimpleV0(LockCreateConfigSimpleV0 {
+                    config: LockCreateConfig::SimpleV0(SimpleLockConfigV0 {
                         recipients: LockRecipients::Any,
                         holders: vec![account.clone()],
                         expiry: TransactionTime::from_seconds(0),

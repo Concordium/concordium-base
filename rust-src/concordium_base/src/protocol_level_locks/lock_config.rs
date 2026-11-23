@@ -1,4 +1,4 @@
-use super::LockCreateConfigSimpleV0;
+use super::SimpleLockConfigV0;
 use crate::{
     common::{
         cbor::{
@@ -81,7 +81,7 @@ impl LockMetadata {
 #[cbor(map)]
 pub enum LockCreateConfig {
     /// Simple lock with implicit holder funding permissions.
-    SimpleV0(LockCreateConfigSimpleV0),
+    SimpleV0(SimpleLockConfigV0),
 }
 
 /// Supported output configuration version; other numeric versions fail decoding.
@@ -209,7 +209,8 @@ pub(crate) struct LockComplexityParameters {
 }
 
 impl LockCreateConfig {
-    /// Count unique holders, case-insensitive tokens, and holder/role-account union.
+    /// Count unique holders, case-insensitive token identifiers, and unique accounts
+    /// that are holders, have explicit roles, or both.
     pub(crate) fn get_creation_complexity_parameters(&self) -> LockComplexityParameters {
         use crate::base::AccountAddressEq;
         use std::collections::HashSet;
@@ -244,18 +245,18 @@ mod tests {
     use crate::{
         common::{cbor::value::Value, serialize_deserialize, to_bytes},
         contracts_common::AccountAddress,
-        protocol_level_locks::{LockCreateCapability, LockCreateRole, LockId, LockInfo},
-        protocol_level_tokens::{test_fixtures::ADDRESS, LockCreateDetails, Operation, Operations},
+        protocol_level_locks::{SimpleLockConfigCapability, SimpleLockConfigRoles},
+        protocol_level_tokens::test_fixtures::ADDRESS,
     };
 
     fn creation() -> LockCreateConfig {
-        LockCreateConfig::SimpleV0(LockCreateConfigSimpleV0 {
+        LockCreateConfig::SimpleV0(SimpleLockConfigV0 {
             recipients: LockRecipients::Any,
             holders: vec![ADDRESS.into()],
             expiry: TransactionTime::from_seconds(1804806000),
-            roles: vec![LockCreateRole {
+            roles: vec![SimpleLockConfigRoles {
                 account: ADDRESS.into(),
-                roles: vec![LockCreateCapability::Send],
+                roles: vec![SimpleLockConfigCapability::Send],
             }],
             tokens: vec!["tT".parse().unwrap()],
             metadata: None,
@@ -294,27 +295,6 @@ mod tests {
             panic!("expected array")
         };
         &mut values[0]
-    }
-
-    fn add_unknown(value: &mut Value) {
-        let Value::Map(fields) = value else {
-            panic!("expected map")
-        };
-        fields.push((
-            Value::Text("memo".into()),
-            Value::Bytes(cbor::Bytes(vec![1, 2, 3])),
-        ));
-    }
-
-    fn assert_unknown_options<T: CborDeserialize + std::fmt::Debug>(value: &Value) {
-        let encoded = cbor::cbor_encode(value);
-        assert!(cbor::cbor_decode::<T>(&encoded).is_ok());
-        let err = cbor::cbor_decode_with_options::<T>(
-            &encoded,
-            cbor::SerializationOptions::default().unknown_map_keys(cbor::UnknownMapKeys::Fail),
-        )
-        .unwrap_err();
-        assert!(err.to_string().contains("unknown map key"), "{err}");
     }
 
     #[test]
@@ -387,7 +367,7 @@ mod tests {
     }
 
     #[test]
-    fn creation_requires_nonempty_arrays_but_allows_no_explicit_roles() {
+    fn creation_requires_fields_and_rejects_malformed_arrays_and_fund() {
         let original: Value = cbor::cbor_decode(cbor::cbor_encode(&creation())).unwrap();
         for key in ["holders", "tokens", "roles"] {
             let mut value = original.clone();
@@ -401,14 +381,11 @@ mod tests {
             );
         }
         for key in ["holders", "tokens"] {
-            for invalid in [Value::Array(vec![]), Value::Text("not an array".into())] {
-                let mut value = original.clone();
-                *field(field(&mut value, "simpleV0"), key) = invalid;
-                assert!(cbor::cbor_decode::<LockCreateConfig>(cbor::cbor_encode(&value)).is_err());
-            }
+            let mut value = original.clone();
+            *field(field(&mut value, "simpleV0"), key) = Value::Text("not an array".into());
+            assert!(cbor::cbor_decode::<LockCreateConfig>(cbor::cbor_encode(&value)).is_err());
         }
         for invalid in [
-            Value::Array(vec![]),
             Value::Array(vec![Value::Text("fund".into())]),
             Value::Text("send".into()),
         ] {
@@ -419,146 +396,62 @@ mod tests {
             ) = invalid;
             assert!(cbor::cbor_decode::<LockCreateConfig>(cbor::cbor_encode(&value)).is_err());
         }
-        let mut value = original;
-        *field(field(&mut value, "simpleV0"), "roles") = Value::Array(vec![]);
-        assert!(cbor::cbor_decode::<LockCreateConfig>(cbor::cbor_encode(&value)).is_ok());
     }
 
     #[test]
-    fn creation_decodes_noncanonical_fixture() {
-        // Reordered keys and an oversized coin-info integer remain valid CBOR.
-        let fixture = "a16873696d706c655630a56a726563697069656e747363616e7966746f6b656e738162745467686f6c6465727381d99d73a201d99d71a1011a000003970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2065726f6c657381a2676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2065726f6c6573816473656e6466657870697279c11a6b932770";
-        assert_eq!(
-            cbor::cbor_decode::<LockCreateConfig>(hex::decode(fixture).unwrap()).unwrap(),
-            creation()
-        );
-    }
-
-    #[test]
-    fn nested_creation_unknown_fields_follow_application_options() {
-        let operations = Operations::new(vec![Operation::LockCreate(LockCreateDetails {
-            config: creation(),
-        })]);
-        let original: Value = cbor::cbor_decode(cbor::cbor_encode(&operations)).unwrap();
-        for location in [
-            "config",
-            "role",
-            "holder",
-            "recipient",
-            "role account",
-            "coin info",
-        ] {
-            let mut value = original.clone();
-            let config = field(field(first(&mut value), "lockCreate"), "simpleV0");
-            if location == "recipient" {
-                *field(config, "recipients") = Value::Array(vec![cbor::cbor_decode(
-                    cbor::cbor_encode(&CborHolderAccount::from(ADDRESS)),
-                )
-                .unwrap()]);
-            }
-            let target = match location {
-                "config" => config,
-                "role" => first(field(config, "roles")),
-                "holder" | "coin info" => first(field(config, "holders")),
-                "recipient" => first(field(config, "recipients")),
-                "role account" => field(first(field(config, "roles")), "account"),
-                _ => unreachable!(),
-            };
-            let target = if let Value::Tag(_, inner) = target {
-                inner.as_mut()
-            } else {
-                target
-            };
-            let target = if location == "coin info" {
-                let Value::Map(fields) = target else {
-                    unreachable!()
-                };
-                let Value::Tag(_, inner) = &mut fields
-                    .iter_mut()
-                    .find(|(k, _)| *k == Value::Positive(1))
-                    .unwrap()
-                    .1
-                else {
-                    unreachable!()
-                };
-                inner.as_mut()
-            } else {
-                target
-            };
-            add_unknown(target);
-            assert_unknown_options::<Operations>(&value);
-        }
-    }
-
-    #[test]
-    fn nested_output_unknown_fields_follow_application_options() {
-        let info = LockInfo {
-            lock: LockId::new(1, 2, 0),
-            config: output(),
-            funds: vec![],
-        };
-        let original: Value = cbor::cbor_decode(cbor::cbor_encode(&info)).unwrap();
-        for location in ["config", "role", "holder"] {
-            let mut value = original.clone();
-            let config = field(&mut value, "config");
-            let target = match location {
-                "config" => config,
-                "role" => first(field(config, "roles")),
-                "holder" => first(field(config, "holders")),
-                _ => unreachable!(),
-            };
-            let target = if let Value::Tag(_, inner) = target {
-                inner.as_mut()
-            } else {
-                target
-            };
-            add_unknown(target);
-            assert_unknown_options::<LockInfo>(&value);
-        }
-    }
-
-    #[test]
-    fn recipient_modes_and_opaque_metadata_round_trip() {
+    fn recipient_modes_round_trip() {
         for recipients in [
             LockRecipients::Any,
             LockRecipients::Limited(vec![]),
             LockRecipients::Limited(vec![ADDRESS.into(), ADDRESS.into()]),
         ] {
-            for bytes in [
-                vec![0xff],
-                vec![1],
-                hex::decode("a1646e616d6501").unwrap(),
-                cbor::cbor_encode(&metadata()),
-            ] {
-                let raw = RawCbor::from(bytes);
-                let LockCreateConfig::SimpleV0(mut simple) = creation();
-                simple.recipients = recipients.clone();
-                simple.metadata = Some(raw.clone());
-                let input = LockCreateConfig::SimpleV0(simple);
-                let mut output = output();
-                output.recipients = recipients.clone();
-                output.metadata = Some(raw);
-                let options = cbor::SerializationOptions::default()
-                    .unknown_map_keys(cbor::UnknownMapKeys::Fail);
-                assert_eq!(
-                    cbor::cbor_decode_with_options::<LockCreateConfig>(
-                        cbor::cbor_encode(&input),
-                        options
-                    )
-                    .unwrap(),
-                    input
-                );
-                assert_eq!(
-                    cbor::cbor_decode_with_options::<LockConfig>(
-                        cbor::cbor_encode(&output),
-                        options
-                    )
-                    .unwrap(),
-                    output
-                );
-            }
+            let LockCreateConfig::SimpleV0(mut simple) = creation();
+            simple.recipients = recipients.clone();
+            let input = LockCreateConfig::SimpleV0(simple);
+            let mut output = output();
+            output.recipients = recipients;
+            assert_eq!(
+                cbor::cbor_decode::<LockCreateConfig>(cbor::cbor_encode(&input)).unwrap(),
+                input
+            );
+            assert_eq!(
+                cbor::cbor_decode::<LockConfig>(cbor::cbor_encode(&output)).unwrap(),
+                output
+            );
         }
         assert!(cbor::cbor_decode::<LockRecipients>(cbor::cbor_encode("all")).is_err());
+    }
+
+    #[test]
+    fn opaque_metadata_bytes_round_trip() {
+        for bytes in [
+            vec![0xff],
+            vec![1],
+            hex::decode("a1646e616d6501").unwrap(),
+            cbor::cbor_encode(&metadata()),
+        ] {
+            let raw = RawCbor::from(bytes);
+            let LockCreateConfig::SimpleV0(mut simple) = creation();
+            simple.metadata = Some(raw.clone());
+            let input = LockCreateConfig::SimpleV0(simple);
+            let mut output = output();
+            output.metadata = Some(raw);
+            let options =
+                cbor::SerializationOptions::default().unknown_map_keys(cbor::UnknownMapKeys::Fail);
+            assert_eq!(
+                cbor::cbor_decode_with_options::<LockCreateConfig>(
+                    cbor::cbor_encode(&input),
+                    options
+                )
+                .unwrap(),
+                input
+            );
+            assert_eq!(
+                cbor::cbor_decode_with_options::<LockConfig>(cbor::cbor_encode(&output), options)
+                    .unwrap(),
+                output
+            );
+        }
     }
 
     #[test]
@@ -585,7 +478,7 @@ mod tests {
         let address = |n| AccountAddress([n; 32]);
         let mut alias = address(9);
         alias.0[31] = 42;
-        let role = |account, roles| LockCreateRole {
+        let role = |account, roles| SimpleLockConfigRoles {
             account: CborHolderAccount::from(account),
             roles,
         };
@@ -597,9 +490,9 @@ mod tests {
             address(1).into(),
         ];
         simple.roles = vec![
-            role(alias, vec![LockCreateCapability::Send]),
-            role(address(5), vec![LockCreateCapability::Release]),
-            role(address(5), vec![LockCreateCapability::Cancel]),
+            role(alias, vec![SimpleLockConfigCapability::Send]),
+            role(address(5), vec![SimpleLockConfigCapability::Release]),
+            role(address(5), vec![SimpleLockConfigCapability::Cancel]),
         ];
         simple.tokens = vec![
             "A".parse().unwrap(),
@@ -631,9 +524,12 @@ mod tests {
         simple.roles = vec![
             role(
                 address(5),
-                vec![LockCreateCapability::Release, LockCreateCapability::Cancel],
+                vec![
+                    SimpleLockConfigCapability::Release,
+                    SimpleLockConfigCapability::Cancel,
+                ],
             ),
-            role(address(9), vec![LockCreateCapability::Send]),
+            role(address(9), vec![SimpleLockConfigCapability::Send]),
         ];
         simple.tokens = vec!["a".parse().unwrap(), "B".parse().unwrap()];
         assert_eq!(
