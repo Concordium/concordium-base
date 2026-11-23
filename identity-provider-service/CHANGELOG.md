@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0
+
+- Expand attribute form with support Company attributes.
+
 ## 0.6.1
 
 - Namespace environment variable names for basic authentication.
