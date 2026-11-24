@@ -2,8 +2,8 @@ use super::SimpleLockConfigV0;
 use crate::{
     common::{
         cbor::{
-            self, value, CborDecoder, CborDeserialize, CborEncoder, CborSerializationError,
-            CborSerializationResult, CborSerialize, DataItemHeader,
+            self, value, CborDecoder, CborDeserialize, CborEncoder, CborMapEncoder,
+            CborSerializationError, CborSerializationResult, CborSerialize, DataItemHeader,
         },
         types::TransactionTime,
     },
@@ -84,30 +84,6 @@ pub enum LockCreateConfig {
     SimpleV0(SimpleLockConfigV0),
 }
 
-/// Supported output configuration version; other numeric versions fail decoding.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum LockConfigVersion {
-    /// Version zero.
-    V0,
-}
-
-impl CborSerialize for LockConfigVersion {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
-        encoder.encode_positive(0)
-    }
-}
-
-impl CborDeserialize for LockConfigVersion {
-    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self> {
-        match u64::deserialize(decoder)? {
-            0 => Ok(Self::V0),
-            version => Err(CborSerializationError::invalid_data(format_args!(
-                "unsupported lock configuration version {version}"
-            ))),
-        }
-    }
-}
-
 /// Known creation variant reported by an output configuration.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum LockVariant {
@@ -179,11 +155,16 @@ pub struct LockRole {
     pub roles: Vec<LockCapability>,
 }
 
-/// Flat output configuration with required, strict version and variant fields.
-#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-pub struct LockConfig {
-    /// Output format version.
-    pub version: LockConfigVersion,
+/// Versioned output configuration encoded as a flat CBOR map with a required numeric version.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum LockConfig {
+    /// Version zero with a required `simpleV0` variant on the wire.
+    V0(LockConfigV0),
+}
+
+/// Version-zero output configuration with effective operation permissions.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct LockConfigV0 {
     /// Variant specified at creation.
     pub variant: LockVariant,
     /// Accounts permitted to receive locked funds.
@@ -198,6 +179,57 @@ pub struct LockConfig {
     pub tokens: Vec<TokenId>,
     /// Opaque metadata bytes, not checked for nested CBOR validity.
     pub metadata: Option<RawCbor>,
+}
+
+impl CborSerialize for LockConfig {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
+        let Self::V0(config) = self;
+        let mut map = encoder.encode_map()?;
+        map.serialize_entry("version", &0u64)?;
+        map.serialize_entry("variant", &config.variant)?;
+        map.serialize_entry("recipients", &config.recipients)?;
+        map.serialize_entry("holders", &config.holders)?;
+        map.serialize_entry("expiry", &config.expiry)?;
+        map.serialize_entry("roles", &config.roles)?;
+        map.serialize_entry("tokens", &config.tokens)?;
+        if let Some(metadata) = &config.metadata {
+            map.serialize_entry("metadata", metadata)?;
+        }
+        map.end()
+    }
+}
+
+impl CborDeserialize for LockConfig {
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self> {
+        // Keep the wire map flat and pass decoder options through to all nested fields.
+        #[derive(CborDeserialize)]
+        struct WireConfig {
+            version: u64,
+            variant: LockVariant,
+            recipients: LockRecipients,
+            holders: Vec<CborHolderAccount>,
+            expiry: TransactionTime,
+            roles: Vec<LockRole>,
+            tokens: Vec<TokenId>,
+            metadata: Option<RawCbor>,
+        }
+
+        let wire = WireConfig::deserialize(decoder)?;
+        match wire.version {
+            0 => Ok(Self::V0(LockConfigV0 {
+                variant: wire.variant,
+                recipients: wire.recipients,
+                holders: wire.holders,
+                expiry: wire.expiry,
+                roles: wire.roles,
+                tokens: wire.tokens,
+                metadata: wire.metadata,
+            })),
+            version => Err(CborSerializationError::invalid_data(format_args!(
+                "unsupported lock configuration version {version}"
+            ))),
+        }
+    }
 }
 
 /// Canonical parameters used to price lock creation.
@@ -264,8 +296,7 @@ mod tests {
     }
 
     fn output() -> LockConfig {
-        LockConfig {
-            version: LockConfigVersion::V0,
+        LockConfig::V0(LockConfigV0 {
             variant: LockVariant::SimpleV0,
             recipients: LockRecipients::Any,
             holders: vec![ADDRESS.into()],
@@ -276,7 +307,7 @@ mod tests {
             }],
             tokens: vec!["tT".parse().unwrap()],
             metadata: None,
-        }
+        })
     }
 
     #[test]
@@ -309,7 +340,8 @@ mod tests {
             simple.recipients = recipients.clone();
             let input = LockCreateConfig::SimpleV0(simple);
             let mut output = output();
-            output.recipients = recipients;
+            let LockConfig::V0(config) = &mut output;
+            config.recipients = recipients;
             assert_eq!(
                 cbor::cbor_decode::<LockCreateConfig>(cbor::cbor_encode(&input)).unwrap(),
                 input
@@ -335,7 +367,8 @@ mod tests {
             simple.metadata = Some(raw.clone());
             let input = LockCreateConfig::SimpleV0(simple);
             let mut output = output();
-            output.metadata = Some(raw);
+            let LockConfig::V0(config) = &mut output;
+            config.metadata = Some(raw);
             let options =
                 cbor::SerializationOptions::default().unknown_map_keys(cbor::UnknownMapKeys::Fail);
             assert_eq!(

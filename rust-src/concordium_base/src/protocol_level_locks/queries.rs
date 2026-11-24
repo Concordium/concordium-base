@@ -37,7 +37,7 @@ mod tests {
     use crate::{
         common::{cbor, cbor::value::Value, types::TransactionTime},
         protocol_level_locks::{
-            LockCapability, LockConfigVersion, LockMetadata, LockRecipients, LockRole, LockVariant,
+            LockCapability, LockConfigV0, LockMetadata, LockRecipients, LockRole, LockVariant,
         },
         protocol_level_tokens::{test_fixtures::ADDRESS, RawCbor},
     };
@@ -50,8 +50,7 @@ mod tests {
                 sequence_number: 5,
                 creation_order: 0,
             },
-            config: LockConfig {
-                version: LockConfigVersion::V0,
+            config: LockConfig::V0(LockConfigV0 {
                 variant: LockVariant::SimpleV0,
                 recipients,
                 holders: vec![CborHolderAccount::from(ADDRESS)],
@@ -62,7 +61,7 @@ mod tests {
                 }],
                 tokens: vec!["tT".parse().unwrap()],
                 metadata,
-            },
+            }),
             funds: vec![LockAccountFunds {
                 account: CborHolderAccount::from(ADDRESS),
                 amounts: vec![LockedTokenAmount {
