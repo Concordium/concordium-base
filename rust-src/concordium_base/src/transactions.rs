@@ -2266,28 +2266,30 @@ pub mod cost {
     /// Cost per lock balance reference, prepaid at creation and charged on manual cancellation, in NRG.
     const PLT_LOCK_BALANCE_REFERENCE: u64 = 500;
 
-    /// Storage cost per canonical lock grant, in NRG.
-    const PLT_LOCK_GRANT: u64 = 10;
+    /// Storage cost per effective role account, in NRG.
+    const PLT_LOCK_ROLE_ACCOUNT: u64 = 10;
 
-    /// Lock creation cost: `100 + 500 * H * T + 10 * G` NRG.
+    /// Lock creation cost: `100 + 500 * H * T + 10 * R` NRG.
     ///
-    /// # Arguments
-    /// * `config` - Decoded configuration; aliases and duplicate grants are merged,
-    ///   empty grants retained, and token IDs counted distinctly after ASCII lowercasing.
-    ///   `H` counts Fund-authorized holders, `T` tokens and `G` grants.
+    /// `H` is the number of unique holders. `T` is the number of unique token identifiers,
+    /// compared case-insensitively. `R` is the number of unique accounts that are holders,
+    /// have explicit roles, or both. Account aliases compare equal;
+    /// recipient-only accounts do not contribute.
     ///
     /// # Example
     /// ```
     /// use concordium_base::transactions::cost::plt_lock_create;
-    /// use concordium_base::protocol_level_locks::{LockConfig, LockConfigSimpleV0, LockRecipients};
-    /// use concordium_base::common::types::TransactionTime;
-    /// let config = LockConfig::SimpleV0(LockConfigSimpleV0 {
+    /// use concordium_base::protocol_level_locks::{LockCreateConfig, LockRecipients, SimpleLockConfigV0};
+    /// use concordium_base::{common::types::TransactionTime, contracts_common::AccountAddress};
+    /// let config = LockCreateConfig::SimpleV0(SimpleLockConfigV0 {
     ///     recipients: LockRecipients::Any, expiry: TransactionTime::from_seconds(0),
-    ///     grants: vec![], tokens: vec![], memo: None, metadata: None,
+    ///     holders: vec![AccountAddress([0; 32]).into()],
+    ///     roles: vec![], tokens: vec!["TOKEN".parse()?], metadata: None,
     /// });
-    /// assert_eq!(plt_lock_create(&config).energy, 100);
+    /// assert_eq!(plt_lock_create(&config).energy, 610);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    pub fn plt_lock_create(config: &crate::protocol_level_locks::LockConfig) -> Energy {
+    pub fn plt_lock_create(config: &crate::protocol_level_locks::LockCreateConfig) -> Energy {
         let parameters = config.get_creation_complexity_parameters();
         Energy::from(
             PLT_LOCK_CREATE_BASE
@@ -2296,7 +2298,7 @@ pub mod cost {
                         .saturating_mul(parameters.token_holders)
                         .saturating_mul(parameters.tokens),
                 )
-                .saturating_add(PLT_LOCK_GRANT.saturating_mul(parameters.grants)),
+                .saturating_add(PLT_LOCK_ROLE_ACCOUNT.saturating_mul(parameters.role_accounts)),
         )
     }
 
@@ -3436,7 +3438,9 @@ pub mod construct {
     #[cfg(test)]
     mod operation_energy_tests {
         use super::*;
-        use crate::protocol_level_locks::{LockConfig, LockConfigSimpleV0, LockId, LockRecipients};
+        use crate::protocol_level_locks::{
+            LockCreateConfig, LockId, LockRecipients, SimpleLockConfigV0,
+        };
         use crate::protocol_level_tokens::{
             LockCancelDetails, LockCreateDetails, LockFundDetails, LockReleaseDetails,
             LockSendDetails, TokenPauseDetailsWithId,
@@ -3458,12 +3462,12 @@ pub mod construct {
             let amount = crate::protocol_level_tokens::TokenAmount::from_raw(1, 0);
             let ops = vec![
                 OperationInput::LockCreate(LockCreateDetails {
-                    config: LockConfig::SimpleV0(LockConfigSimpleV0 {
+                    config: LockCreateConfig::SimpleV0(SimpleLockConfigV0 {
                         recipients: LockRecipients::Any,
+                        holders: vec![account.clone()],
                         expiry: TransactionTime::from_seconds(0),
-                        grants: vec![],
-                        tokens: vec![],
-                        memo: None,
+                        roles: vec![],
+                        tokens: vec![token.clone()],
                         metadata: None,
                     }),
                 }),
@@ -3491,7 +3495,7 @@ pub mod construct {
             ];
             assert_eq!(
                 operations_txn_energy(&ops),
-                cost::PLT_OPERATIONS_TRANSACTIONS + Energy::from(850)
+                cost::PLT_OPERATIONS_TRANSACTIONS + Energy::from(1360)
             );
 
             assert_eq!(

@@ -30,13 +30,13 @@
 - Removed `Buffer::start`, `Buffer::start_hint` and `Buffer::result` from the trait `concordium_base::common::Buffer`. 
 - Added `protocol_level_locks` module with types for PLT locks:
   - `LockId`
-  - `LockConfig`
-  - `LockConfigSimpleV0`
-  - `LockControllerSimpleV0Grant`
-  - `LockControllerSimpleV0Capability`
+  - `LockCreateConfig` for creation.
+  - `LockConfig` for output.
   - `LockInfo`
   - `LockAccountFunds`
   - `LockedTokenAmount`
+  Events and queries use flat configurations with required `version: 0` and `variant: "simpleV0"`.
+  Creation `memo` is removed; metadata remains opaque. Empty holder, token, and role-capability lists decode so the node can reject them after charging creation energy.
 - Added CBOR serialization for `TransactionTime` and `TokenId`.
 - Dynamic CBOR `Value` decoding and skipped-item traversal now default to a maximum nesting depth of 128;
   the finite limit is configurable through `SerializationOptions`, and exceeding it returns an error.
