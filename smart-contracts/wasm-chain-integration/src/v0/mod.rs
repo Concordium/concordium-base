@@ -1053,22 +1053,22 @@ pub struct InitInvocation<'a> {
 }
 
 /// For V0 contracts, we enable copy metering from P10 (to avoid having to test a full catchup from genesis).
+/// Copy metering is only enabled if it is also supported by the protocol version, see the
+/// `enable_copy_metering` argument of [`invoke_init`] and [`invoke_receive`].
 const P10_SLOT_TIME_MAINNET: u64 = 1773136816915;
 
 /// Invokes an init-function from a given artifact.
+///
+/// `enable_copy_metering` indicates whether runtime copy metering is supported in the
+/// protocol version. It is not supported from P11, where the cost of copies is
+/// accounted for by the cost configuration instead.
 pub fn invoke_init<C: RunnableCode, Ctx: HasInitContext>(
     artifact: &Artifact<ProcessedImports, C>,
     init_ctx: Ctx,
     init_invocation: InitInvocation,
     limit_logs_and_return_values: bool,
+    copy_metering_enabled: CopyMeteringEnabled,
 ) -> ExecResult<InitResult> {
-    let copy_metering_enabled = if init_ctx.metadata().slot_time()?.millis >= P10_SLOT_TIME_MAINNET
-    {
-        CopyMeteringEnabled::True
-    } else {
-        CopyMeteringEnabled::False
-    };
-
     let mut host = InitHost {
         energy: init_invocation.energy,
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
@@ -1120,6 +1120,7 @@ pub fn invoke_init<C: RunnableCode, Ctx: HasInitContext>(
 
 /// Invokes an init-function from a given artifact *bytes*
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+#[allow(clippy::too_many_arguments)]
 pub fn invoke_init_from_artifact<Ctx: HasInitContext>(
     artifact_bytes: &[u8],
     amount: u64,
@@ -1127,6 +1128,7 @@ pub fn invoke_init_from_artifact<Ctx: HasInitContext>(
     init_name: &str,
     parameter: Parameter,
     limit_logs_and_return_values: bool,
+    copy_metering_enabled: CopyMeteringEnabled,
     energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
@@ -1140,11 +1142,13 @@ pub fn invoke_init_from_artifact<Ctx: HasInitContext>(
             energy,
         },
         limit_logs_and_return_values,
+        copy_metering_enabled,
     )
 }
 
 /// Invokes an init-function from Wasm module bytes
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+#[allow(clippy::too_many_arguments)]
 pub fn invoke_init_from_source<Ctx: HasInitContext>(
     source_bytes: &[u8],
     amount: u64,
@@ -1152,6 +1156,7 @@ pub fn invoke_init_from_source<Ctx: HasInitContext>(
     init_name: &str,
     parameter: Parameter,
     limit_logs_and_return_values: bool,
+    copy_metering_enabled: CopyMeteringEnabled,
     energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate(
@@ -1170,6 +1175,7 @@ pub fn invoke_init_from_source<Ctx: HasInitContext>(
             energy,
         },
         limit_logs_and_return_values,
+        copy_metering_enabled,
     )
 }
 
@@ -1184,6 +1190,7 @@ pub fn invoke_init_with_metering_from_source<Ctx: HasInitContext>(
     init_name: &str,
     parameter: Parameter,
     limit_logs_and_return_values: bool,
+    copy_metering_enabled: CopyMeteringEnabled,
     cost_config: impl CostConfiguration,
     energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
@@ -1204,6 +1211,7 @@ pub fn invoke_init_with_metering_from_source<Ctx: HasInitContext>(
             energy,
         },
         limit_logs_and_return_values,
+        copy_metering_enabled,
     )
 }
 
@@ -1221,6 +1229,10 @@ pub struct ReceiveInvocation<'a> {
 }
 
 /// Invokes a receive-function from a given artifact
+///
+/// `enable_copy_metering` indicates whether runtime copy metering is supported in the
+/// protocol version. It is not supported from P11, where the cost of copies is
+/// accounted for by the cost configuration instead.
 pub fn invoke_receive<C: RunnableCode, Ctx: HasReceiveContext>(
     artifact: &Artifact<ProcessedImports, C>,
     receive_ctx: Ctx,
@@ -1228,10 +1240,11 @@ pub fn invoke_receive<C: RunnableCode, Ctx: HasReceiveContext>(
     current_state: &[u8],
     max_parameter_size: usize,
     limit_logs_and_return_values: bool,
+    copy_metering_enabled: CopyMeteringEnabled,
 ) -> ExecResult<ReceiveResult> {
     let copy_metering_enabled =
         if receive_ctx.metadata().slot_time()?.millis >= P10_SLOT_TIME_MAINNET {
-            CopyMeteringEnabled::True
+            copy_metering_enabled
         } else {
             CopyMeteringEnabled::False
         };
@@ -1314,6 +1327,7 @@ pub fn invoke_receive_from_artifact<Ctx: HasReceiveContext>(
     current_state: &[u8],
     max_parameter_size: usize,
     limit_logs_and_return_values: bool,
+    copy_metering_enabled: CopyMeteringEnabled,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
     invoke_receive(
@@ -1323,6 +1337,7 @@ pub fn invoke_receive_from_artifact<Ctx: HasReceiveContext>(
         current_state,
         max_parameter_size,
         limit_logs_and_return_values,
+        copy_metering_enabled,
     )
 }
 
@@ -1335,6 +1350,7 @@ pub fn invoke_receive_from_source<Ctx: HasReceiveContext>(
     current_state: &[u8],
     max_parameter_size: usize,
     limit_logs_and_return_values: bool,
+    copy_metering_enabled: CopyMeteringEnabled,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::instantiate(
         ValidationConfig::V0,
@@ -1349,12 +1365,14 @@ pub fn invoke_receive_from_source<Ctx: HasReceiveContext>(
         current_state,
         max_parameter_size,
         limit_logs_and_return_values,
+        copy_metering_enabled,
     )
 }
 
 /// Invokes a receive-function from Wasm module bytes, injects the module with
 /// metering.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+#[allow(clippy::too_many_arguments)]
 pub fn invoke_receive_with_metering_from_source<Ctx: HasReceiveContext>(
     source_bytes: &[u8],
     receive_ctx: Ctx,
@@ -1362,6 +1380,7 @@ pub fn invoke_receive_with_metering_from_source<Ctx: HasReceiveContext>(
     current_state: &[u8],
     max_parameter_size: usize,
     limit_logs_and_return_values: bool,
+    copy_metering_enabled: CopyMeteringEnabled,
     cost_config: impl CostConfiguration,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::instantiate_with_metering(
@@ -1378,5 +1397,6 @@ pub fn invoke_receive_with_metering_from_source<Ctx: HasReceiveContext>(
         current_state,
         max_parameter_size,
         limit_logs_and_return_values,
+        copy_metering_enabled,
     )
 }

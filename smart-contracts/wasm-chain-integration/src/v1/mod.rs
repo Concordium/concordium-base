@@ -1677,11 +1677,16 @@ pub struct InitInvocation<'a> {
 }
 
 /// Invokes an init-function from a given artifact
+///
+/// `enable_copy_metering` indicates whether runtime copy metering is supported in the
+/// protocol version. It is not supported from P11, where the cost of copies is
+/// accounted for by the cost configuration instead.
 pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode, A: DebugInfo>(
     artifact: impl Borrow<Artifact<ProcessedImports, R>>,
     init_ctx: impl v0::HasInitContext,
     init_invocation: InitInvocation,
     limit_logs_and_return_values: bool,
+    copy_metering_enabled: CopyMeteringEnabled,
     mut loader: BackingStore,
 ) -> InvokeResult<InitResult<A>, A> {
     let mut initial_state = trie::MutableState::initial_state();
@@ -1702,7 +1707,7 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode, A: DebugInfo
         &mut host,
         init_invocation.init_name,
         &[Value::I64(init_invocation.amount.micro_ccd() as i64)],
-        CopyMeteringEnabled::True,
+        copy_metering_enabled,
     );
     let return_value = std::mem::take(&mut host.return_value);
     let remaining_energy = host.energy.energy;
@@ -1903,6 +1908,7 @@ pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad, A: DebugInfo>(
     init_name: &str,
     loader: BackingStore,
     limit_logs_and_return_values: bool,
+    copy_metering_enabled: CopyMeteringEnabled,
 ) -> ExecResult<InitResult<A>> {
     let artifact = utils::parse_artifact(ctx.artifact)?;
     let r = invoke_init(
@@ -1915,6 +1921,7 @@ pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad, A: DebugInfo>(
             energy: ctx.energy,
         },
         limit_logs_and_return_values,
+        copy_metering_enabled,
         loader,
     )?;
     Ok(r)
@@ -1947,6 +1954,7 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad, A: DebugInfo>(
     loader: BackingStore,
     validation_config: ValidationConfig,
     limit_logs_and_return_values: bool,
+    copy_metering_enabled: CopyMeteringEnabled,
 ) -> ExecResult<InitResult<A>> {
     let artifact = utils::instantiate(
         validation_config,
@@ -1967,6 +1975,7 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad, A: DebugInfo>(
             energy: ctx.energy,
         },
         limit_logs_and_return_values,
+        copy_metering_enabled,
         loader,
     )?;
     Ok(r)
@@ -1975,6 +1984,7 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad, A: DebugInfo>(
 /// Same as `invoke_init_from_source`, except that the module has cost
 /// accounting instructions inserted before the init function is called.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+#[allow(clippy::too_many_arguments)]
 pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad, A: DebugInfo>(
     ctx: InvokeFromSourceCtx,
     init_ctx: impl v0::HasInitContext,
@@ -1983,6 +1993,7 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad, A: 
     validation_config: ValidationConfig,
     cost_config: impl CostConfiguration,
     limit_logs_and_return_values: bool,
+    copy_metering_enabled: CopyMeteringEnabled,
 ) -> ExecResult<InitResult<A>> {
     let artifact = utils::instantiate_with_metering(
         validation_config,
@@ -2004,6 +2015,7 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad, A: 
             energy: ctx.energy,
         },
         limit_logs_and_return_values,
+        copy_metering_enabled,
         loader,
     )?;
     Ok(r)
@@ -2154,8 +2166,19 @@ impl ReceiveParams {
         }
     }
 
-    /// Parameters that are in effect in protocol version 7 and up.
+    /// Parameters that are in effect in protocol versions 7 to 10.
     pub fn new_p7() -> Self {
+        Self {
+            max_parameter_size: u16::MAX.into(),
+            limit_logs_and_return_values: false,
+            support_queries: true,
+            support_account_signature_checks: true,
+            support_contract_inspection_queries: true,
+        }
+    }
+
+    /// Parameters that are in effect in protocol version 11 and up.
+    pub fn new_p11() -> Self {
         Self {
             max_parameter_size: u16::MAX.into(),
             limit_logs_and_return_values: false,
@@ -2194,6 +2217,7 @@ pub fn invoke_receive<
     receive_invocation: ReceiveInvocation,
     instance_state: InstanceState<BackingStore>,
     params: ReceiveParams,
+    copy_metering_enabled: CopyMeteringEnabled,
 ) -> InvokeResult<ReceiveResult<R2, A, Ctx2>, A> {
     let mut host = ReceiveHost {
         energy: receive_invocation.energy,
@@ -2213,7 +2237,7 @@ pub fn invoke_receive<
         &mut host,
         receive_invocation.receive_name.get_chain_name(),
         &[Value::I64(receive_invocation.amount.micro_ccd() as i64)],
-        CopyMeteringEnabled::True,
+        copy_metering_enabled,
     );
     process_receive_result(artifact, host, result)
 }
@@ -2355,6 +2379,7 @@ pub fn invoke_receive_from_artifact<
     receive_name: ReceiveName,
     instance_state: InstanceState<BackingStore>,
     params: ReceiveParams,
+    copy_metering_enabled: CopyMeteringEnabled,
 ) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>, A, Ctx2>> {
     let artifact = utils::parse_artifact(ctx.artifact)?;
     let r = invoke_receive(
@@ -2368,6 +2393,7 @@ pub fn invoke_receive_from_artifact<
         },
         instance_state,
         params,
+        copy_metering_enabled,
     )?;
     Ok(r)
 }
@@ -2386,6 +2412,7 @@ pub fn invoke_receive_from_source<
     receive_name: ReceiveName,
     instance_state: InstanceState<BackingStore>,
     params: ReceiveParams,
+    copy_metering_enabled: CopyMeteringEnabled,
 ) -> ExecResult<ReceiveResult<CompiledFunction, A, Ctx2>> {
     let artifact = utils::instantiate(
         validation_config,
@@ -2407,6 +2434,7 @@ pub fn invoke_receive_from_source<
         },
         instance_state,
         params,
+        copy_metering_enabled,
     )?;
     Ok(r)
 }
@@ -2427,6 +2455,7 @@ pub fn invoke_receive_with_metering_from_source<
     receive_name: ReceiveName,
     instance_state: InstanceState<BackingStore>,
     params: ReceiveParams,
+    copy_metering_enabled: CopyMeteringEnabled,
 ) -> ExecResult<ReceiveResult<CompiledFunction, A, Ctx2>> {
     let artifact = utils::instantiate_with_metering(
         validation_config,
@@ -2449,6 +2478,7 @@ pub fn invoke_receive_with_metering_from_source<
         },
         instance_state,
         params,
+        copy_metering_enabled,
     )?;
     Ok(r)
 }

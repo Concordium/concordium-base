@@ -120,6 +120,7 @@ unsafe extern "C" fn call_init_v1(
     output_return_value: *mut *mut ReturnValue,
     output_len: *mut size_t,
     output_state_ptr: *mut *mut MutableState,
+    enable_copy_metering: u8, // non-zero if runtime copy metering should be enabled.
 ) -> *mut u8 {
     let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len);
     let artifact: BorrowedArtifactV1 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
@@ -136,6 +137,11 @@ unsafe extern "C" fn call_init_v1(
         let init_ctx =
             v0::deserial_init_context(slice_from_c_bytes!(init_ctx_bytes, init_ctx_bytes_len))
                 .expect("Precondition violation: invalid init ctx given by host.");
+        let copy_metering_enabled = if enable_copy_metering != 0 {
+            CopyMeteringEnabled::True
+        } else {
+            CopyMeteringEnabled::False
+        };
         match std::str::from_utf8(init_name) {
             Ok(name) => {
                 let res = invoke_init(
@@ -148,6 +154,7 @@ unsafe extern "C" fn call_init_v1(
                         energy,
                     },
                     limit_logs_and_return_values,
+                    copy_metering_enabled,
                     BackingStoreLoadCallback::new(loader, load_length, load_range),
                 );
                 match res {
@@ -248,6 +255,7 @@ unsafe extern "C" fn call_receive_v1(
                               * and checking signatures */
     support_contract_inspection_queries: u8, /* non-zero to enable support for querying contract
                                               * module reference and name */
+    enable_copy_metering: u8, // non-zero if runtime copy metering is supported.
 ) -> *mut u8 {
     let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len);
     let artifact: BorrowedArtifactV1 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
@@ -303,6 +311,12 @@ unsafe extern "C" fn call_receive_v1(
                     support_contract_inspection_queries,
                 };
 
+                let copy_metering_enabled = if enable_copy_metering != 0 {
+                    CopyMeteringEnabled::True
+                } else {
+                    CopyMeteringEnabled::False
+                };
+
                 let res = invoke_receive(
                     artifact,
                     receive_ctx,
@@ -314,6 +328,7 @@ unsafe extern "C" fn call_receive_v1(
                     },
                     instance_state,
                     params,
+                    copy_metering_enabled,
                 );
                 match res {
                     Ok(result) => {
