@@ -182,6 +182,7 @@ import Concordium.Utils.Serialization
 -- | Version of the cost semantics to assign to modules. This cost assignment is
 -- indepenent of the module version below. It is defined by a protocol version.
 -- The new, reduced cost assignment @CSV1@ is introduced in protocol 7.
+-- In protocol 11 the cost assignment @CSV2@ makes adjustments to @CSV1@.
 data CostSemanticsVersion = CSV0 | CSV1 | CSV2
 
 pvCostSemanticsVersion :: SProtocolVersion pv -> CostSemanticsVersion
