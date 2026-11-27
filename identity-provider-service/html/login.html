@@ -1,8 +1,39 @@
-<div id="login">
-    <label for="username">Username</label>
-    <input type="text" id="username" name="username">
-
-    <label for="password">Password</label>
-    <input type="password" id="password" name="password">
-    <br/>
-</div>
+<section class="form-section" data-section="credentials">
+  <h2>Test-service login</h2>
+  <p class="section-help">
+    On closed test networks, identity issuance is restricted to invited
+    participants. Sign in with the credentials provided with your invitation.
+    These are not your wallet keys.
+  </p>
+  <div class="fields">
+    <div class="field">
+      <label for="username">Username</label
+      ><input
+        type="text"
+        id="username"
+        name="username"
+        required
+        autocomplete="username"
+        aria-describedby="username-hint username-error"
+      /><span class="helper" id="username-hint"
+        >The username provided with your invitation.</span
+      >
+      <p class="error" id="username-error" hidden></p>
+    </div>
+    <div class="field">
+      <label for="password">Password</label
+      ><input
+        type="password"
+        id="password"
+        name="password"
+        required
+        autocomplete="current-password"
+        aria-describedby="password-hint password-error"
+      /><span class="helper" id="password-hint"
+        >The test-network password provided with your invitation, not your
+        wallet password.</span
+      >
+      <p class="error" id="password-error" hidden></p>
+    </div>
+  </div>
+</section>

@@ -1,72 +1,652 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta charset="utf-8">
-  <style>
-    input[type=text]:not([id=username]), input[type=number], input[type=month], select {
-      width: 100%;
-      padding: 12px 20px;
-      margin: 8px 0;
-      display: inline-block;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      box-sizing: border-box;
-    }
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Test Identity Provider — Concordium</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Work+Sans:wght@400;500;600&display=swap");
 
-    input[type=submit] {
-      width: 100%;
-      background-color: #4CAF50;
-      color: white;
-      padding: 14px 20px;
-      margin: 8px 0;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-
-    input[type=submit]:hover {
-      background-color: #45a049;
-    }
-
-    div {
-      border-radius: 5px;
-      background-color: #f2f2f2;
-      padding: 20px;
-    }
-  </style>
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      const date = new Date();
-      const month = `${date.getMonth() + 1}`.padStart(2, '0');
-      const year = date.getFullYear() + 1;
-      document.getElementById('expiry').value = `${year}-${month}`;
-    });
-  </script>
-</head>
-<body>
-  <div>
-    <h1>Concordium Identity Verification</h1>
-    <form action="/api/submit" method="post" accept-charset="utf-8">
-      <input type="hidden" id="idcredpub" name="id_cred_pub" value="$id_cred_pub$">
-      <input type="hidden" id="endpointversion" name="endpoint_version" value="$endpoint_version$">
-      <input type="hidden" id="idcredpubsignature" name="id_cred_pub_signature" value="$id_cred_pub_signature$">
-
-      $login_fields$
-
-      <label for="fail">Fail identity</label>
-      <input type="checkbox" id="fail" name="fail" value="True">
-      <br/>
-      <label for="fail_delay">Seconds to delay before failing identity</label>
-      <input type="number" id="fail_delay" name="fail_delay" value="10">
-
-      <label for="expiry">Identity expiry</label>
-      <input type="month" id="expiry" name="expiry" required="required">
-
-      $attribute_fields$
-
-      <input type="submit" value="Submit">
-    </form>
-  </div>
-</body>
+      :root {
+        color-scheme: light;
+        --ink: #1b2735;
+        --muted: #526174;
+        --accent: #235dcc;
+        --line: #d7dfe9;
+        --paper: #f5f7fa;
+        --soft: #e8effb;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font:
+          16px/1.6 "Work Sans",
+          system-ui,
+          sans-serif;
+      }
+      a {
+        color: var(--accent);
+        text-underline-offset: 4px;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+      button,
+      a,
+      input,
+      select,
+      summary {
+        -webkit-tap-highlight-color: transparent;
+      }
+      :focus-visible {
+        outline: 3px solid var(--accent);
+        outline-offset: 4px;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .masthead {
+        min-height: 100px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 24px 5vw;
+      }
+      .wordmark {
+        display: inline-flex;
+        align-items: center;
+      }
+      .wordmark svg {
+        display: block;
+        width: 240px;
+        max-width: 100%;
+        height: auto;
+      }
+      .lab-label,
+      .eyebrow,
+      .section-number,
+      .meta {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 1.6px;
+      }
+      .lab-label span {
+        color: var(--muted);
+        margin: 0 12px;
+      }
+      main {
+        max-width: 1400px;
+        margin: auto;
+        padding: 64px 5vw 96px;
+        min-height: 70dvh;
+      }
+      h1,
+      h2,
+      h3 {
+        font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+        line-height: 1.2;
+        letter-spacing: -1px;
+      }
+      h1 {
+        font-size: clamp(32px, 3.8vw, 50px);
+        max-width: 700px;
+        font-weight: 600;
+        margin: 20px 0 24px;
+      }
+      h2 {
+        font-size: 25px;
+        font-weight: 600;
+        margin: 0 0 12px;
+      }
+      h3 {
+        font-size: 18px;
+        letter-spacing: -0.4px;
+      }
+      p {
+        max-width: 65ch;
+      }
+      .eyebrow {
+        color: var(--accent);
+      }
+      .lede {
+        font-size: 19px;
+        color: var(--muted);
+        max-width: 58ch;
+      }
+      .notice {
+        border-left: 3px solid var(--accent);
+        background: var(--soft);
+        padding: 16px 20px;
+        font-size: 14px;
+      }
+      .button {
+        border: 1px solid var(--accent);
+        border-radius: 6px;
+        padding: 13px 22px;
+        background: var(--accent);
+        color: white;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        font-weight: 500;
+        cursor: pointer;
+        transition:
+          transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+          background 0.2s;
+      }
+      .button:hover {
+        background: #194cae;
+      }
+      .button:active {
+        transform: scale(0.98);
+      }
+      .button:disabled {
+        opacity: 0.65;
+        cursor: wait;
+      }
+      .button.secondary {
+        background: transparent;
+        color: var(--ink);
+        border-color: var(--line);
+      }
+      .button.secondary:hover {
+        background: var(--soft);
+      }
+      .toolbar {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        flex-wrap: wrap;
+        padding-bottom: 24px;
+        margin-bottom: 40px;
+        border-bottom: 1px solid var(--line);
+        font-size: 14px;
+      }
+      .toolbar nav {
+        display: flex;
+        gap: 24px;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(230px, 0.8fr) minmax(0, 1.6fr);
+        gap: clamp(40px, 7vw, 110px);
+        align-items: start;
+      }
+      .context h1 {
+        font-size: 38px;
+      }
+      .context > p {
+        color: var(--muted);
+      }
+      .journey {
+        list-style: none;
+        padding: 24px 0;
+        margin: 28px 0 0;
+        border-top: 1px solid var(--line);
+      }
+      .journey li {
+        display: grid;
+        grid-template-columns: 24px 1fr;
+        gap: 12px;
+        margin-bottom: 22px;
+        font-size: 14px;
+      }
+      .journey b {
+        display: block;
+        font-weight: 500;
+      }
+      .journey small {
+        color: var(--muted);
+        display: block;
+        margin-top: 4px;
+        font-size: 13px;
+      }
+      .journey .ordinal {
+        color: var(--accent);
+        font-size: 12px;
+        padding-top: 3px;
+      }
+      .context details {
+        font-size: 14px;
+        border-top: 1px solid var(--line);
+        padding: 18px 0;
+      }
+      summary {
+        cursor: pointer;
+        font-weight: 500;
+      }
+      .details-copy {
+        color: var(--muted);
+      }
+      .form-surface {
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: clamp(20px, 3vw, 42px);
+        box-shadow: 0 18px 50px -35px #1b273533;
+      }
+      .form-heading {
+        margin-bottom: 32px;
+      }
+      .form-heading p {
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .single-page .form-section + .form-section {
+        margin-top: 36px;
+        border-top: 1px solid var(--line);
+        padding-top: 36px;
+      }
+      .section-heading {
+        display: flex;
+        gap: 16px;
+        align-items: baseline;
+        margin-bottom: 16px;
+      }
+      .section-heading h2 {
+        font-size: 22px;
+      }
+      .section-number {
+        color: var(--accent);
+      }
+      .section-help {
+        color: var(--muted);
+        font-size: 14px;
+        margin-bottom: 24px;
+      }
+      .expiry-field {
+        grid-column: 1/-1;
+        border: 0;
+        padding: 0;
+        margin: 28px 0 0;
+        min-width: 0;
+      }
+      .expiry-field legend {
+        font-size: 14px;
+        font-weight: 500;
+        padding: 0;
+      }
+      .expiry-field > .helper {
+        margin: 8px 0 16px;
+      }
+      .attribute-tools {
+        margin-bottom: 24px;
+      }
+      .attribute-tools .helper {
+        margin: 8px 0 0;
+      }
+      .fields {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 22px 20px;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 0;
+      }
+      .field.wide {
+        grid-column: 1/-1;
+      }
+      label {
+        font-size: 14px;
+        font-weight: 500;
+      }
+      input:not([type="checkbox"]),
+      select {
+        width: 100%;
+        min-height: 48px;
+        border: 1px solid #aebaca;
+        border-radius: 5px;
+        background: #fff;
+        color: var(--ink);
+        padding: 11px 12px;
+      }
+      input:hover,
+      select:hover {
+        border-color: var(--muted);
+      }
+      input[aria-invalid="true"],
+      select[aria-invalid="true"] {
+        border: 2px solid #a52c34;
+      }
+      .helper {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .error {
+        color: #9e2830;
+        font-size: 13px;
+        margin: 0;
+      }
+      .test-scenarios {
+        margin-top: 28px;
+        padding: 20px 0;
+        border-block: 1px solid var(--line);
+      }
+      .test-scenarios .field {
+        margin-top: 20px;
+      }
+      .checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 18px;
+      }
+      input[type="checkbox"] {
+        width: 19px;
+        height: 19px;
+        accent-color: var(--accent);
+      }
+      .actions {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        margin-top: 32px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .actions small {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      footer {
+        border-top: 1px solid var(--line);
+        padding: 24px 5vw;
+        font-size: 12px;
+        color: var(--muted);
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+      .enter {
+        animation: enter 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      @keyframes enter {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @media (max-width: 767px) {
+        .masthead {
+          padding: 24px 16px;
+          min-height: 80px;
+          flex-wrap: wrap;
+        }
+        .wordmark svg {
+          width: 200px;
+        }
+        .lab-label {
+          font-size: 9px;
+        }
+        main {
+          padding: 32px 16px 48px;
+        }
+        .layout {
+          grid-template-columns: 1fr;
+          gap: 32px;
+        }
+        .context h1 {
+          font-size: 32px;
+        }
+        .journey {
+          margin-top: 20px;
+        }
+        .fields {
+          grid-template-columns: 1fr;
+        }
+        .toolbar {
+          margin-bottom: 24px;
+        }
+        .toolbar nav {
+          flex-wrap: wrap;
+          gap: 16px;
+        }
+        footer {
+          padding: 24px 16px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="masthead">
+      <span class="wordmark" role="img" aria-label="Concordium">$logo$</span
+      ><span class="lab-label">Test Identity Provider</span>
+    </header>
+    <main>
+      <div class="layout">
+        <aside class="context" aria-label="About identity issuance">
+          <span class="eyebrow">CONCORDIUM TEST NETWORKS</span>
+          <h1>Build your<br />test identity.</h1>
+          <p>
+            Normally, an identity provider collects documents and information to
+            verify your identity before approval. This form replaces that step
+            on test networks: enter test attributes instead of supplying
+            documents.
+          </p>
+          <a href="#test-form-heading">Go to the form</a>
+          <ol class="journey">
+            <li>
+              <span class="ordinal">01</span>
+              <div>
+                <b>Enter test attributes</b
+                ><small
+                  >Supply fictional personal or company information. No
+                  documents or real-world identity checks are required.</small
+                >
+              </div>
+            </li>
+            <li>
+              <span class="ordinal">02</span>
+              <div>
+                <b>Check and submit</b
+                ><small
+                  >Check the attributes, then select Create test
+                  identity.</small
+                >
+              </div>
+            </li>
+            <li>
+              <span class="ordinal">03</span>
+              <div>
+                <b>Receive your Concordium ID</b
+                ><small
+                  >The test identity provider issues an identity that your
+                  wallet can use to create accounts and interact with the chain
+                  on test networks.</small
+                >
+              </div>
+            </li>
+          </ol>
+          <details>
+            <summary>Identity, attributes, and credentials</summary>
+            <p class="details-copy">
+              Attributes describe a person or company. After verification and
+              approval, an identity provider issues a Concordium ID. This test
+              service skips those real-world checks and uses the attributes you
+              supply. Your wallet can then use the issued identity to create
+              account credentials for interacting with the chain on test
+              networks.
+            </p>
+          </details>
+          <details>
+            <summary>What happens to my entries here?</summary>
+            <p class="details-copy">
+              Your supplied attributes are submitted to the test verifier and
+              used to issue a Concordium ID containing that information. The
+              resulting test identity is returned to your wallet for use on
+              Concordium’s test networks. Use fictional information, not real
+              personal or company details.
+            </p>
+          </details>
+        </aside>
+        <div class="form-surface">
+          <div class="form-heading">
+            <span class="eyebrow">TEST IDENTITY PROVIDER</span>
+            <h2 id="test-form-heading" tabindex="-1">
+              $identity_label$ test identity
+            </h2>
+            <p>
+              This form collects $identity_kind$ attributes for issuing a test
+              identity on Concordium’s test networks. The test service accepts
+              these attributes without verifying them.
+            </p>
+          </div>
+          <form
+            class="single-page"
+            action="/api/submit"
+            method="post"
+            accept-charset="utf-8"
+            autocomplete="off"
+          >
+            <input type="hidden" name="id_cred_pub" value="$id_cred_pub$" />
+            <input
+              type="hidden"
+              name="endpoint_version"
+              value="$endpoint_version$"
+            />
+            <input
+              type="hidden"
+              name="id_cred_pub_signature"
+              value="$id_cred_pub_signature$"
+            />
+            $login_fields$
+            <section class="form-section" data-section="identity">
+              <h2>Identity attributes</h2>
+              <div class="attribute-tools" hidden>
+                <button class="button secondary" id="randomize" type="button">
+                  Fill random test values
+                </button>
+                <p class="helper">
+                  Generates format-valid test attributes. Click again to shuffle
+                  them. Login credentials and identity expiry stay unchanged.
+                </p>
+              </div>
+              <div class="fields">$attribute_fields$</div>
+              <fieldset class="expiry-field">
+                <legend>Identity expiry</legend>
+                <p class="helper">
+                  The month the test identity becomes invalid.
+                </p>
+                <div class="fields" id="expiry-pickers" hidden>
+                  <div class="field">
+                    <label for="expiry-year">Year</label
+                    ><select
+                      id="expiry-year"
+                      aria-describedby="expiry-year-error"
+                    >
+                      <option value="">Select year</option>
+                    </select>
+                    <p class="error" id="expiry-year-error" hidden></p>
+                  </div>
+                  <div class="field">
+                    <label for="expiry-month">Month</label
+                    ><select
+                      id="expiry-month"
+                      aria-describedby="expiry-month-error"
+                    >
+                      <option value="">Select month</option>
+                      <option value="01">January</option>
+                      <option value="02">February</option>
+                      <option value="03">March</option>
+                      <option value="04">April</option>
+                      <option value="05">May</option>
+                      <option value="06">June</option>
+                      <option value="07">July</option>
+                      <option value="08">August</option>
+                      <option value="09">September</option>
+                      <option value="10">October</option>
+                      <option value="11">November</option>
+                      <option value="12">December</option>
+                    </select>
+                    <p class="error" id="expiry-month-error" hidden></p>
+                  </div>
+                </div>
+                <div class="field" id="expiry-fallback">
+                  <label for="expiry">Expiry month</label
+                  ><input type="month" id="expiry" name="expiry" required />
+                </div>
+              </fieldset>
+            </section>
+            <section class="form-section">
+              <h2>Submit test identity</h2>
+              <p class="section-help">
+                Check the attributes before you submit them.
+              </p>
+              <details class="test-scenarios">
+                <summary>
+                  Test scenarios <span class="helper">/ optional</span>
+                </summary>
+                <p class="helper">
+                  Use these controls to test a failed identity request.
+                </p>
+                <label class="checkbox-label"
+                  ><input
+                    type="checkbox"
+                    id="fail"
+                    name="fail"
+                    value="True"
+                  />Simulate failed identity issuance</label
+                >
+                <div class="field">
+                  <label for="fail_delay">Delay before failure (seconds)</label
+                  ><input
+                    type="number"
+                    id="fail_delay"
+                    name="fail_delay"
+                    min="0"
+                    step="1"
+                    value="10"
+                    aria-describedby="fail_delay-hint fail_delay-error"
+                  /><span class="helper" id="fail_delay-hint"
+                    >The wait time before the request fails.</span
+                  >
+                  <p class="error" id="fail_delay-error" hidden></p>
+                </div>
+              </details>
+            </section>
+            <div class="actions">
+              <small>Use only fictional information.</small>
+              <button class="button" type="submit" id="submit">
+                Create test identity
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </main>
+    <footer>
+      <span>Concordium · Test Identity Provider</span>
+    </footer>
+    <script>
+      $script$;
+    </script>
+  </body>
 </html>

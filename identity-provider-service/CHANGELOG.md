@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.0
+
+- Redesign the test identity form with Concordium branding, responsive layouts, and guidance on test identity issuance.
+
 ## 0.7.0
 
 - Expand attribute form with support Company attributes.
