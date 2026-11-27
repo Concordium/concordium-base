@@ -813,6 +813,13 @@ instance ToJSON EChainParametersAndKeys where
                       "parameters" .= toJSON params,
                       "updateKeys" .= toJSON keys
                     ]
+            SChainParametersV4 ->
+                -- CPV4 uses the existing version-3 response format.
+                object
+                    [ "version" .= toJSON ChainParametersV3,
+                      "parameters" .= toJSON params,
+                      "updateKeys" .= toJSON keys
+                    ]
 
 -- | The committee information of a node which is configured with
 --  baker keys but is somehow is _not_ part of the current baking
