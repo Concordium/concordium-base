@@ -1,6 +1,7 @@
 use crate::common::cbor::{
     self, Bytes, CborArrayDecoder, CborArrayEncoder, CborDecoder, CborDeserialize, CborEncoder,
-    CborMapDecoder, CborMapEncoder, CborSerializationResult, CborSerialize, DataItemHeader,
+    CborMapDecoder, CborMapEncoder, CborSerializationResult, CborSerialize, CborTagDecoder,
+    DataItemHeader,
 };
 use anyhow::Context;
 use ciborium_ll::simple;
@@ -34,21 +35,21 @@ pub enum Value {
 }
 
 impl CborSerialize for Value {
-    fn serialize<C: CborEncoder>(&self, mut encoder: C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, mut encoder: C) -> Result<(), C::WriteError> {
         match self {
             Value::Positive(value) => encoder.encode_positive(*value),
             Value::Negative(value) => encoder.encode_negative(*value),
             Value::Bytes(value) => encoder.encode_bytes(&value.0),
             Value::Text(value) => encoder.encode_text(value),
             Value::Array(value) => {
-                let mut array_encoder = encoder.encode_array(value.len())?;
+                let mut array_encoder = encoder.encode_array()?;
                 for element in value {
                     array_encoder.serialize_element(element)?;
                 }
                 array_encoder.end()
             }
             Value::Map(value) => {
-                let mut map_encoder = encoder.encode_map(value.len())?;
+                let mut map_encoder = encoder.encode_map()?;
                 for entry in value {
                     map_encoder.serialize_entry(&entry.0, &entry.1)?;
                 }
@@ -76,11 +77,8 @@ impl CborSerialize for Value {
     }
 }
 
-impl CborDeserialize for Value {
-    fn deserialize<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self>
-    where
-        Self: Sized,
-    {
+impl Value {
+    fn deserialize_value<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self> {
         Ok(match decoder.peek_data_item_header()? {
             DataItemHeader::Positive(_) => Value::Positive(decoder.decode_positive()?),
             DataItemHeader::Negative(_) => Value::Negative(decoder.decode_negative()?),
@@ -105,14 +103,16 @@ impl CborDeserialize for Value {
                     map_decoder.size().unwrap_or_default(),
                 ));
 
-                while let Some(entry) = map_decoder.deserialize_entry()? {
-                    vec.push(entry);
+                while let Some(key) = map_decoder.deserialize_key()? {
+                    let value = map_decoder.deserialize_value()?;
+                    vec.push((key, value));
                 }
                 Value::Map(vec)
             }
             DataItemHeader::Tag(_) => {
-                let tag = decoder.decode_tag()?;
-                let value = Value::deserialize(decoder)?;
+                let tag_decoder = decoder.decode_tagged()?;
+                let tag = tag_decoder.tag();
+                let value = tag_decoder.deserialize()?;
                 Value::Tag(tag, Box::new(value))
             }
             DataItemHeader::Simple(_) => match decoder.decode_simple()? {
@@ -123,6 +123,15 @@ impl CborDeserialize for Value {
             },
             DataItemHeader::Float(_) => Value::Float(decoder.decode_float()?),
         })
+    }
+}
+
+impl CborDeserialize for Value {
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
+    where
+        Self: Sized,
+    {
+        Self::deserialize_value(decoder)
     }
 
     fn null() -> Option<Self>
@@ -136,13 +145,15 @@ impl CborDeserialize for Value {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::common::cbor::{cbor_decode, cbor_encode};
+    use crate::common::cbor::{
+        cbor_decode, cbor_decode_with_options, cbor_encode, SerializationOptions,
+    };
 
     #[test]
     fn test_positive() {
         let value = Value::Positive(3);
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "03");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -152,7 +163,7 @@ mod test {
     fn test_negative() {
         let value = Value::Negative(3);
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "23");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -162,14 +173,14 @@ mod test {
     fn test_bool() {
         let value = Value::Bool(false);
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "f4");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = Value::Bool(true);
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "f5");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -179,7 +190,7 @@ mod test {
     fn test_text() {
         let value = Value::Text("abcd".to_string());
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "6461626364");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -189,7 +200,7 @@ mod test {
     fn test_bytes() {
         let bytes = Value::Bytes(Bytes(vec![1, 2, 3, 4, 5]));
 
-        let cbor = cbor_encode(&bytes).unwrap();
+        let cbor = cbor_encode(&bytes);
         assert_eq!(hex::encode(&cbor), "450102030405");
         let bytes_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(bytes_decoded, bytes);
@@ -199,7 +210,7 @@ mod test {
     fn test_tag() {
         let value = Value::Tag(123, Box::new(Value::Positive(3)));
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "d87b03");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -209,7 +220,7 @@ mod test {
     fn test_null() {
         let value = Value::Null;
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "f6");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -219,14 +230,14 @@ mod test {
     fn test_simple() {
         let value = Value::Simple(15);
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "ef");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = Value::Simple(65);
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "f841");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -236,7 +247,7 @@ mod test {
     fn test_float() {
         let value = Value::Float(1.123);
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "fb3ff1f7ced916872b");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -246,7 +257,7 @@ mod test {
     fn test_array() {
         let value = Value::Array(vec![Value::Positive(1), Value::Positive(3)]);
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "820103");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -270,7 +281,7 @@ mod test {
     #[test]
     fn test_array_large_length() {
         let value = Value::Array(vec![Value::Positive(1u64); 10000]);
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
@@ -282,7 +293,7 @@ mod test {
             (Value::Positive(2), Value::Positive(4)),
         ]);
 
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         assert_eq!(hex::encode(&cbor), "a201030204");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
@@ -306,8 +317,57 @@ mod test {
     #[test]
     fn test_map_large_length() {
         let value = Value::Map(vec![(Value::Positive(1), Value::Positive(3)); 10000]);
-        let cbor = cbor_encode(&value).unwrap();
+        let cbor = cbor_encode(&value);
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
+    }
+
+    fn nested_array(depth: usize) -> Vec<u8> {
+        let mut cbor = vec![0x81; depth];
+        cbor.push(0);
+        cbor
+    }
+
+    fn nested_map(depth: usize) -> Vec<u8> {
+        let mut cbor = Vec::with_capacity(depth * 2 + 1);
+        for _ in 0..depth {
+            cbor.extend([0xa1, 0]);
+        }
+        cbor.push(0);
+        cbor
+    }
+
+    fn nested_tag(depth: usize) -> Vec<u8> {
+        let mut cbor = vec![0xc0; depth];
+        cbor.push(0);
+        cbor
+    }
+
+    #[test]
+    fn nesting_limit_accepts_128_structural_items() {
+        for cbor in [nested_array(128), nested_map(128), nested_tag(128)] {
+            assert!(cbor_decode::<Value>(cbor).is_ok());
+        }
+    }
+
+    #[test]
+    fn nesting_limit_rejects_129_structural_items() {
+        for cbor in [nested_array(129), nested_map(129), nested_tag(129)] {
+            assert!(cbor_decode::<Value>(cbor).is_err());
+        }
+    }
+
+    #[test]
+    fn nesting_limit_uses_custom_option() {
+        let options = SerializationOptions::default().max_nesting_depth(3);
+        assert!(cbor_decode_with_options::<Value>(nested_array(3), options).is_ok());
+        assert!(cbor_decode_with_options::<Value>(nested_array(4), options).is_err());
+    }
+
+    #[test]
+    fn nesting_limit_counts_mixed_structures() {
+        let options = SerializationOptions::default().max_nesting_depth(3);
+        assert!(cbor_decode_with_options::<Value>([0x81, 0xc0, 0x81, 0], options).is_ok());
+        assert!(cbor_decode_with_options::<Value>([0x81, 0xc0, 0x81, 0xc0, 0], options).is_err());
     }
 }

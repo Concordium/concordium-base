@@ -1,0 +1,509 @@
+use super::SimpleLockConfigV0;
+use crate::{
+    common::{
+        cbor::{
+            self, value, CborDecoder, CborDeserialize, CborEncoder, CborMapEncoder,
+            CborSerializationError, CborSerializationResult, CborSerialize, DataItemHeader,
+        },
+        types::TransactionTime,
+    },
+    protocol_level_tokens::{CborHolderAccount, RawCbor, TokenId},
+};
+use concordium_base_derive::{CborDeserialize, CborSerialize, Serialize};
+use std::collections::HashMap;
+
+/// Accounts that can receive funds controlled by a lock.
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum LockRecipients {
+    /// Any eligible account can receive funds from this lock.
+    Any,
+    /// Only the listed accounts can receive funds from this lock.
+    Limited(Vec<CborHolderAccount>),
+}
+
+impl CborSerialize for LockRecipients {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
+        match self {
+            Self::Any => encoder.encode_text("any"),
+            Self::Limited(accounts) => accounts.serialize(encoder),
+        }
+    }
+}
+
+impl CborDeserialize for LockRecipients {
+    fn deserialize<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self> {
+        match decoder.peek_data_item_header()? {
+            DataItemHeader::Text(_) => {
+                let value = String::deserialize(decoder)?;
+                if value == "any" {
+                    Ok(Self::Any)
+                } else {
+                    Err(CborSerializationError::invalid_data(format_args!(
+                        "unsupported lock recipients text value {value:?}"
+                    )))
+                }
+            }
+            DataItemHeader::Array(_) => Ok(Self::Limited(Vec::deserialize(decoder)?)),
+            header => Err(CborSerializationError::invalid_data(format_args!(
+                "lock recipients must be text \"any\" or an array of account addresses, was {header:?}"
+            ))),
+        }
+    }
+}
+
+/// User-facing metadata attached to a lock at creation time.
+#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize, Default)]
+pub struct LockMetadata {
+    /// Optional user-facing lock name.
+    pub name: Option<String>,
+    /// Optional user-facing lock description.
+    pub description: Option<String>,
+    /// Additional text-keyed fields preserved for user-defined metadata.
+    #[cbor(other)]
+    pub additional: HashMap<String, value::Value>,
+}
+
+impl LockMetadata {
+    /// Decode typed metadata, failing if the bytes do not encode a metadata map.
+    pub fn decode_raw_cbor(raw_cbor: &RawCbor) -> CborSerializationResult<Self> {
+        cbor::cbor_decode(raw_cbor.as_ref())
+    }
+
+    /// Encode typed metadata as opaque bytes.
+    pub fn encode_raw_cbor(&self) -> RawCbor {
+        RawCbor::from(cbor::cbor_encode(self))
+    }
+}
+
+/// Externally keyed lock creation input.
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cbor(map)]
+pub enum LockCreateConfig {
+    /// Simple lock with implicit holder funding permissions.
+    SimpleV0(SimpleLockConfigV0),
+}
+
+/// Known creation variant reported by an output configuration.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum LockVariant {
+    /// Simple lock created with `simpleV0`.
+    SimpleV0,
+}
+
+impl CborSerialize for LockVariant {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
+        encoder.encode_text("simpleV0")
+    }
+}
+
+impl CborDeserialize for LockVariant {
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self> {
+        match String::deserialize(decoder)?.as_str() {
+            "simpleV0" => Ok(Self::SimpleV0),
+            variant => Err(CborSerializationError::invalid_data(format_args!(
+                "unsupported lock configuration variant {variant:?}"
+            ))),
+        }
+    }
+}
+
+/// Effective operation capability in an output configuration.
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize)]
+pub enum LockCapability {
+    /// Authorizes funding the lock.
+    Fund,
+    /// Authorizes releasing funds to their owner.
+    Release,
+    /// Authorizes sending funds, subject to token policies.
+    Send,
+    /// Authorizes cancelling the lock before expiry.
+    Cancel,
+}
+
+impl CborSerialize for LockCapability {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
+        encoder.encode_text(match self {
+            Self::Fund => "fund",
+            Self::Release => "release",
+            Self::Send => "send",
+            Self::Cancel => "cancel",
+        })
+    }
+}
+
+impl CborDeserialize for LockCapability {
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self> {
+        match String::deserialize(decoder)?.as_str() {
+            "fund" => Ok(Self::Fund),
+            "release" => Ok(Self::Release),
+            "send" => Ok(Self::Send),
+            "cancel" => Ok(Self::Cancel),
+            capability => Err(CborSerializationError::invalid_data(format_args!(
+                "unsupported lock capability {capability:?}"
+            ))),
+        }
+    }
+}
+
+/// Effective capabilities for an account, including implicit holder funding.
+#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+pub struct LockRole {
+    /// Account receiving the capabilities.
+    pub account: CborHolderAccount,
+    /// Effective capabilities; output decoding permits an empty list.
+    pub roles: Vec<LockCapability>,
+}
+
+/// Versioned output configuration encoded as a flat CBOR map with a required numeric version.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum LockConfig {
+    /// Version zero with a required `simpleV0` variant on the wire.
+    V0(LockConfigV0),
+}
+
+/// Version-zero output configuration with effective operation permissions.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct LockConfigV0 {
+    /// Variant specified at creation.
+    pub variant: LockVariant,
+    /// Accounts permitted to receive locked funds.
+    pub recipients: LockRecipients,
+    /// Accounts permitted to hold locked funds.
+    pub holders: Vec<CborHolderAccount>,
+    /// Expiry time of the lock.
+    pub expiry: TransactionTime,
+    /// Effective operation permissions, independent of recipient membership.
+    pub roles: Vec<LockRole>,
+    /// Token identifiers permitted in the lock.
+    pub tokens: Vec<TokenId>,
+    /// Opaque metadata bytes, not checked for nested CBOR validity.
+    pub metadata: Option<RawCbor>,
+}
+
+impl CborSerialize for LockConfig {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> Result<(), C::WriteError> {
+        let Self::V0(config) = self;
+        let mut map = encoder.encode_map()?;
+        map.serialize_entry("version", &0u64)?;
+        map.serialize_entry("variant", &config.variant)?;
+        map.serialize_entry("recipients", &config.recipients)?;
+        map.serialize_entry("holders", &config.holders)?;
+        map.serialize_entry("expiry", &config.expiry)?;
+        map.serialize_entry("roles", &config.roles)?;
+        map.serialize_entry("tokens", &config.tokens)?;
+        if let Some(metadata) = &config.metadata {
+            map.serialize_entry("metadata", metadata)?;
+        }
+        map.end()
+    }
+}
+
+impl CborDeserialize for LockConfig {
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self> {
+        // Keep the wire map flat and pass decoder options through to all nested fields.
+        #[derive(CborDeserialize)]
+        struct WireConfig {
+            version: u64,
+            variant: LockVariant,
+            recipients: LockRecipients,
+            holders: Vec<CborHolderAccount>,
+            expiry: TransactionTime,
+            roles: Vec<LockRole>,
+            tokens: Vec<TokenId>,
+            metadata: Option<RawCbor>,
+        }
+
+        let wire = WireConfig::deserialize(decoder)?;
+        match wire.version {
+            0 => Ok(Self::V0(LockConfigV0 {
+                variant: wire.variant,
+                recipients: wire.recipients,
+                holders: wire.holders,
+                expiry: wire.expiry,
+                roles: wire.roles,
+                tokens: wire.tokens,
+                metadata: wire.metadata,
+            })),
+            version => Err(CborSerializationError::invalid_data(format_args!(
+                "unsupported lock configuration version {version}"
+            ))),
+        }
+    }
+}
+
+/// Canonical parameters used to price lock creation.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct LockComplexityParameters {
+    pub(crate) token_holders: u64,
+    pub(crate) tokens: u64,
+    pub(crate) role_accounts: u64,
+}
+
+impl LockCreateConfig {
+    /// Count unique holders, case-insensitive token identifiers, and unique accounts
+    /// that are holders, have explicit roles, or both.
+    pub(crate) fn get_creation_complexity_parameters(&self) -> LockComplexityParameters {
+        use crate::base::AccountAddressEq;
+        use std::collections::HashSet;
+
+        let Self::SimpleV0(config) = self;
+        let holders: HashSet<AccountAddressEq> = config
+            .holders
+            .iter()
+            .map(|holder| holder.address.into())
+            .collect();
+        let role_accounts: HashSet<AccountAddressEq> = holders
+            .iter()
+            .copied()
+            .chain(config.roles.iter().map(|role| role.account.address.into()))
+            .collect();
+        let tokens: HashSet<_> = config
+            .tokens
+            .iter()
+            .map(|token| token.as_ref().to_ascii_lowercase())
+            .collect();
+        LockComplexityParameters {
+            token_holders: holders.len() as u64,
+            tokens: tokens.len() as u64,
+            role_accounts: role_accounts.len() as u64,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        common::{cbor::value::Value, serialize_deserialize, to_bytes},
+        contracts_common::AccountAddress,
+        protocol_level_locks::{SimpleLockConfigCapability, SimpleLockConfigRoles},
+        protocol_level_tokens::test_fixtures::ADDRESS,
+    };
+
+    fn creation() -> LockCreateConfig {
+        LockCreateConfig::SimpleV0(SimpleLockConfigV0 {
+            recipients: LockRecipients::Any,
+            holders: vec![ADDRESS.into()],
+            expiry: TransactionTime::from_seconds(1804806000),
+            roles: vec![SimpleLockConfigRoles {
+                account: ADDRESS.into(),
+                roles: vec![SimpleLockConfigCapability::Send],
+            }],
+            tokens: vec!["tT".parse().unwrap()],
+            metadata: None,
+        })
+    }
+
+    fn output() -> LockConfig {
+        LockConfig::V0(LockConfigV0 {
+            variant: LockVariant::SimpleV0,
+            recipients: LockRecipients::Any,
+            holders: vec![ADDRESS.into()],
+            expiry: TransactionTime::from_seconds(1804806000),
+            roles: vec![LockRole {
+                account: ADDRESS.into(),
+                roles: vec![LockCapability::Fund, LockCapability::Send],
+            }],
+            tokens: vec!["tT".parse().unwrap()],
+            metadata: None,
+        })
+    }
+
+    #[test]
+    fn creation_and_output_match_fixed_fixtures() {
+        let creation_fixture = "a16873696d706c655630a565726f6c657381a265726f6c6573816473656e64676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066657870697279c11a6b93277066746f6b656e738162745467686f6c6465727381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f206a726563697069656e747363616e79";
+        let output_fixture = "a765726f6c657381a265726f6c6573826466756e646473656e64676163636f756e74d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066657870697279c11a6b93277066746f6b656e738162745467686f6c6465727381d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f206776617269616e746873696d706c6556306776657273696f6e006a726563697069656e747363616e79";
+        assert_eq!(
+            hex::encode(cbor::cbor_encode(&creation())),
+            creation_fixture
+        );
+        assert_eq!(
+            cbor::cbor_decode::<LockCreateConfig>(hex::decode(creation_fixture).unwrap()).unwrap(),
+            creation()
+        );
+        assert_eq!(hex::encode(cbor::cbor_encode(&output())), output_fixture);
+        assert_eq!(
+            cbor::cbor_decode::<LockConfig>(hex::decode(output_fixture).unwrap()).unwrap(),
+            output()
+        );
+    }
+
+    #[test]
+    fn recipient_modes_round_trip() {
+        for recipients in [
+            LockRecipients::Any,
+            LockRecipients::Limited(vec![]),
+            LockRecipients::Limited(vec![ADDRESS.into(), ADDRESS.into()]),
+        ] {
+            let LockCreateConfig::SimpleV0(mut simple) = creation();
+            simple.recipients = recipients.clone();
+            let input = LockCreateConfig::SimpleV0(simple);
+            let mut output = output();
+            let LockConfig::V0(config) = &mut output;
+            config.recipients = recipients;
+            assert_eq!(
+                cbor::cbor_decode::<LockCreateConfig>(cbor::cbor_encode(&input)).unwrap(),
+                input
+            );
+            assert_eq!(
+                cbor::cbor_decode::<LockConfig>(cbor::cbor_encode(&output)).unwrap(),
+                output
+            );
+        }
+        assert!(cbor::cbor_decode::<LockRecipients>(cbor::cbor_encode("all")).is_err());
+    }
+
+    #[test]
+    fn opaque_metadata_bytes_round_trip() {
+        for bytes in [
+            vec![0xff],
+            vec![1],
+            hex::decode("a1646e616d6501").unwrap(),
+            cbor::cbor_encode(&metadata()),
+        ] {
+            let raw = RawCbor::from(bytes);
+            let LockCreateConfig::SimpleV0(mut simple) = creation();
+            simple.metadata = Some(raw.clone());
+            let input = LockCreateConfig::SimpleV0(simple);
+            let mut output = output();
+            let LockConfig::V0(config) = &mut output;
+            config.metadata = Some(raw);
+            let options =
+                cbor::SerializationOptions::default().unknown_map_keys(cbor::UnknownMapKeys::Fail);
+            assert_eq!(
+                cbor::cbor_decode_with_options::<LockCreateConfig>(
+                    cbor::cbor_encode(&input),
+                    options
+                )
+                .unwrap(),
+                input
+            );
+            assert_eq!(
+                cbor::cbor_decode_with_options::<LockConfig>(cbor::cbor_encode(&output), options)
+                    .unwrap(),
+                output
+            );
+        }
+    }
+
+    #[test]
+    fn effective_capabilities_match_cbor_and_binary_fixtures() {
+        for (capability, cbor_fixture, binary_fixture) in [
+            (LockCapability::Fund, "6466756e64", "00"),
+            (LockCapability::Release, "6772656c65617365", "01"),
+            (LockCapability::Send, "6473656e64", "02"),
+            (LockCapability::Cancel, "6663616e63656c", "03"),
+        ] {
+            assert_eq!(hex::encode(cbor::cbor_encode(&capability)), cbor_fixture);
+            assert_eq!(
+                cbor::cbor_decode::<LockCapability>(hex::decode(cbor_fixture).unwrap()).unwrap(),
+                capability
+            );
+            assert_eq!(serialize_deserialize(&capability).unwrap(), capability);
+            assert_eq!(hex::encode(to_bytes(&capability)), binary_fixture);
+        }
+        assert!(cbor::cbor_decode::<LockCapability>(cbor::cbor_encode("recipient")).is_err());
+    }
+
+    #[test]
+    fn creation_complexity_normalizes_holders_roles_tokens_and_excludes_recipients() {
+        let address = |n| AccountAddress([n; 32]);
+        let mut alias = address(9);
+        alias.0[31] = 42;
+        let role = |account, roles| SimpleLockConfigRoles {
+            account: CborHolderAccount::from(account),
+            roles,
+        };
+        let LockCreateConfig::SimpleV0(mut simple) = creation();
+        simple.holders = vec![
+            address(9).into(),
+            address(1).into(),
+            alias.into(),
+            address(1).into(),
+        ];
+        simple.roles = vec![
+            role(alias, vec![SimpleLockConfigCapability::Send]),
+            role(address(5), vec![SimpleLockConfigCapability::Release]),
+            role(address(5), vec![SimpleLockConfigCapability::Cancel]),
+        ];
+        simple.tokens = vec![
+            "A".parse().unwrap(),
+            "B".parse().unwrap(),
+            "a".parse().unwrap(),
+        ];
+        let first = LockCreateConfig::SimpleV0(simple.clone());
+        assert_eq!(
+            first.get_creation_complexity_parameters(),
+            LockComplexityParameters {
+                token_holders: 2,
+                tokens: 2,
+                role_accounts: 3
+            }
+        );
+        assert_eq!(
+            crate::transactions::cost::plt_lock_create(&first).energy,
+            2130
+        );
+        simple.holders.reverse();
+        simple.roles.reverse();
+        simple.tokens.reverse();
+        simple.recipients = LockRecipients::Limited(vec![address(7).into(), address(8).into()]);
+        assert_eq!(
+            first.get_creation_complexity_parameters(),
+            LockCreateConfig::SimpleV0(simple.clone()).get_creation_complexity_parameters()
+        );
+        simple.holders = vec![address(1).into(), address(9).into()];
+        simple.roles = vec![
+            role(
+                address(5),
+                vec![
+                    SimpleLockConfigCapability::Release,
+                    SimpleLockConfigCapability::Cancel,
+                ],
+            ),
+            role(address(9), vec![SimpleLockConfigCapability::Send]),
+        ];
+        simple.tokens = vec!["a".parse().unwrap(), "B".parse().unwrap()];
+        assert_eq!(
+            crate::transactions::cost::plt_lock_create(&LockCreateConfig::SimpleV0(simple.clone()))
+                .energy,
+            2130
+        );
+        simple.roles.clear();
+        assert_eq!(
+            crate::transactions::cost::plt_lock_create(&LockCreateConfig::SimpleV0(simple)).energy,
+            2120
+        );
+    }
+
+    fn metadata() -> LockMetadata {
+        LockMetadata {
+            name: Some("Vesting lock".into()),
+            description: Some("Tokens locked by vesting schedule".into()),
+            additional: HashMap::from([
+                ("issuer".into(), Value::Text("Concordium".into())),
+                ("version".into(), Value::Positive(1)),
+            ]),
+        }
+    }
+
+    #[test]
+    fn metadata_matches_fixed_fixture() {
+        let expected = "a4646e616d656c56657374696e67206c6f636b666973737565726a436f6e636f726469756d6776657273696f6e016b6465736372697074696f6e7821546f6b656e73206c6f636b65642062792076657374696e67207363686564756c65";
+        assert_eq!(hex::encode(cbor::cbor_encode(&metadata())), expected);
+        assert_eq!(
+            LockMetadata::decode_raw_cbor(&RawCbor::from(hex::decode(expected).unwrap())).unwrap(),
+            metadata()
+        );
+    }
+
+    #[test]
+    fn metadata_raw_decode_rejects_invalid_and_noncanonical_input() {
+        assert!(LockMetadata::decode_raw_cbor(&RawCbor::from(vec![1])).is_err());
+        assert!(LockMetadata::decode_raw_cbor(&RawCbor::from(
+            hex::decode("b8646e616d656178").unwrap()
+        ))
+        .is_err());
+    }
+}

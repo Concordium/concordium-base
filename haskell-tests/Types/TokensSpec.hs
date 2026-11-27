@@ -10,9 +10,11 @@ import Control.Monad
 import qualified Data.Aeson as AE
 import Data.Bits
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Base16 as BS16
 import qualified Data.ByteString.Short as BSS
 import Data.Serialize
 import Data.Word
+import Text.Read (readMaybe)
 
 import Test.HUnit
 import Test.Hspec
@@ -151,6 +153,47 @@ testTokenAmountEncodeDecode :: Property
 testTokenAmountEncodeDecode = forAll genTokenAmount $ \a ->
     decodeFull get (encode a) == Right a
 
+-- | Tests for textual, binary serialization and deserialization of 'LockId'.
+-- The binary encoding is 3 x Word64 big-endian, 24 bytes total.
+testLockIdSerialize :: Spec
+testLockIdSerialize = describe "LockId" $ do
+    it "show fixture" $
+        show (LockId{liAccountIndex = 1, liSequenceNumber = 2, liCreationOrder = 3})
+            `shouldBe` "W9EXVYXZJq"
+    it "read fixture" $
+        readMaybe "W9EXVYXZJq"
+            `shouldBe` Just (LockId{liAccountIndex = 1, liSequenceNumber = 2, liCreationOrder = 3})
+    it "show and read round-trip via base58check text" $
+        (readMaybe . show) (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc})
+            `shouldBe` Just (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc})
+    it "read rejects invalid format" $
+        (readMaybe "not-a-lock-id" :: Maybe LockId) `shouldBe` Nothing
+    -- Fixture: account=0x1234, sequence=0x5678, order=0x9abc
+    -- Each Word64 big-endian: 8 bytes
+    it "encode fixture" $
+        BS16.encode (encode (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc}))
+            `shouldBe` "000000000000123400000000000056780000000000009abc"
+    it "decode fixture" $
+        decodeFull get (BS16.decodeLenient "000000000000123400000000000056780000000000009abc")
+            `shouldBe` Right (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc})
+    it "encode zero" $
+        BS16.encode (encode (LockId{liAccountIndex = 0, liSequenceNumber = 0, liCreationOrder = 0}))
+            `shouldBe` "000000000000000000000000000000000000000000000000"
+    it "encode max" $
+        BS16.encode (encode (LockId{liAccountIndex = maxBound, liSequenceNumber = maxBound, liCreationOrder = maxBound}))
+            `shouldBe` "ffffffffffffffffffffffffffffffffffffffffffffffff"
+    it "round-trip" $
+        decodeFull get (encode (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc}))
+            `shouldBe` Right (LockId{liAccountIndex = 0x1234, liSequenceNumber = 0x5678, liCreationOrder = 0x9abc})
+    it "rejects truncated input" $
+        case decodeFull (get @LockId) (BS16.decodeLenient "000000000000123400000000000056780000000000009a") of
+            Left _ -> return ()
+            Right _ -> assertFailure "Should fail on truncated input"
+    it "rejects trailing bytes" $
+        case decodeFull (get @LockId) (BS16.decodeLenient "000000000000123400000000000056780000000000009abc00") of
+            Left _ -> return ()
+            Right _ -> assertFailure "Should fail with trailing bytes"
+
 -- | Tests for token types.
 tests :: Spec
 tests = parallel $ do
@@ -170,3 +213,4 @@ tests = parallel $ do
         testTokenAmountJSONDecodeCases
         it "Binary Serialization and deserialization of valid TokenAmounts" $
             withMaxSuccess 10000 testTokenAmountEncodeDecode
+    testLockIdSerialize

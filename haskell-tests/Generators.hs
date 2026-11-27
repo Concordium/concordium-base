@@ -166,7 +166,7 @@ genPayload pv =
                     [ genPayloadConfigureBaker pv,
                       genPayloadConfigureDelegation
                     ]
-                        ++ [genPayloadToken | pv >= P9]
+                        ++ [genPayloadToken pv | pv >= P9]
 
 -- | Generate payloads that are valid for some protocol version, but may not be valid for all.
 genPayloadUnsafe :: Gen Payload
@@ -353,11 +353,19 @@ genPayloadConfigureDelegation = do
     return ConfigureDelegation{..}
 
 -- | Generate token transaction payloads.
-genPayloadToken :: Gen Payload
-genPayloadToken = do
-    tuTokenId <- genTokenId
-    tuOperations <- genTokenParameter
-    return TokenUpdate{..}
+genPayloadToken :: ProtocolVersion -> Gen Payload
+genPayloadToken pv =
+    oneof $
+        [ do
+            tokenId <- genTokenId
+            operations <- EncodedTokenOperations <$> genRawCbor
+            return $ TokenUpdate (ScopedTokenUpdate tokenId operations)
+        ]
+            ++ [ do
+                    operations <- EncodedOperations <$> genRawCbor
+                    return $ TokenUpdate (UnscopedTokenUpdate operations)
+               | pv >= P11
+               ]
 
 genCredentialId :: Gen CredentialRegistrationID
 genCredentialId = RegIdCred . generateGroupElementFromSeed globalContext <$> arbitrary
@@ -455,6 +463,7 @@ genChainParametersV0 = do
     _cpPoolParameters <- genPoolParametersV0
     let _cpFinalizationCommitteeParameters = NoParam
     let _cpValidatorScoreParameters = NoParam
+    let _cpMaxLockDuration = NoParam
     return ChainParameters{..}
 
 genChainParametersV1 :: Gen (ChainParameters' 'ChainParametersV1)
@@ -469,6 +478,7 @@ genChainParametersV1 = do
     _cpPoolParameters <- genPoolParametersV1
     let _cpFinalizationCommitteeParameters = NoParam
     let _cpValidatorScoreParameters = NoParam
+    let _cpMaxLockDuration = NoParam
     return ChainParameters{..}
 
 genFinalizationCommitteeParameters :: Gen FinalizationCommitteeParameters
@@ -499,6 +509,7 @@ genChainParametersV2 = do
     _cpPoolParameters <- genPoolParametersV1
     _cpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
     let _cpValidatorScoreParameters = NoParam
+    let _cpMaxLockDuration = NoParam
     return ChainParameters{..}
 
 genValidatorScoreParameters :: Gen ValidatorScoreParameters
@@ -506,6 +517,7 @@ genValidatorScoreParameters = do
     _vspMaxMissedRounds <- arbitrary
     return ValidatorScoreParameters{..}
 
+-- | CPV3 parameters for P8-P10.
 genChainParametersV3 :: Gen (ChainParameters' 'ChainParametersV3)
 genChainParametersV3 = do
     _cpConsensusParameters <- genConsensusParametersV1
@@ -518,6 +530,23 @@ genChainParametersV3 = do
     _cpPoolParameters <- genPoolParametersV1
     _cpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
     _cpValidatorScoreParameters <- SomeParam <$> genValidatorScoreParameters
+    let _cpMaxLockDuration = NoParam
+    return ChainParameters{..}
+
+-- | CPV4 parameters for P11, including the required max-lock duration.
+genChainParametersV4 :: Gen (ChainParameters' 'ChainParametersV4)
+genChainParametersV4 = do
+    _cpConsensusParameters <- genConsensusParametersV1
+    _cpExchangeRates <- genExchangeRates
+    _cpCooldownParameters <- genCooldownParametersV1
+    _cpTimeParameters <- SomeParam <$> genTimeParametersV1
+    _cpAccountCreationLimit <- arbitrary
+    _cpRewardParameters <- genRewardParameters
+    _cpFoundationAccount <- AccountIndex <$> arbitrary
+    _cpPoolParameters <- genPoolParametersV1
+    _cpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
+    _cpValidatorScoreParameters <- SomeParam <$> genValidatorScoreParameters
+    _cpMaxLockDuration <- SomeParam <$> genDuration
     return ChainParameters{..}
 
 genGenesisChainParametersV0 :: Gen (GenesisChainParameters' 'ChainParametersV0)
@@ -532,6 +561,7 @@ genGenesisChainParametersV0 = do
     gcpPoolParameters <- genPoolParametersV0
     let gcpFinalizationCommitteeParameters = NoParam
     let gcpValidatorScoreParameters = NoParam
+    let gcpMaxLockDuration = NoParam
     return GenesisChainParameters{..}
 
 genGenesisChainParametersV1 :: Gen (GenesisChainParameters' 'ChainParametersV1)
@@ -546,6 +576,7 @@ genGenesisChainParametersV1 = do
     gcpPoolParameters <- genPoolParametersV1
     let gcpFinalizationCommitteeParameters = NoParam
     let gcpValidatorScoreParameters = NoParam
+    let gcpMaxLockDuration = NoParam
     return GenesisChainParameters{..}
 
 genGenesisChainParametersV2 :: Gen (GenesisChainParameters' 'ChainParametersV2)
@@ -560,6 +591,7 @@ genGenesisChainParametersV2 = do
     gcpPoolParameters <- genPoolParametersV1
     gcpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
     let gcpValidatorScoreParameters = NoParam
+    let gcpMaxLockDuration = NoParam
     return GenesisChainParameters{..}
 
 genGenesisChainParametersV3 :: Gen (GenesisChainParameters' 'ChainParametersV3)
@@ -574,6 +606,22 @@ genGenesisChainParametersV3 = do
     gcpPoolParameters <- genPoolParametersV1
     gcpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
     gcpValidatorScoreParameters <- SomeParam <$> genValidatorScoreParameters
+    let gcpMaxLockDuration = NoParam
+    return GenesisChainParameters{..}
+
+genGenesisChainParametersV4 :: Gen (GenesisChainParameters' 'ChainParametersV4)
+genGenesisChainParametersV4 = do
+    gcpConsensusParameters <- genConsensusParametersV1
+    gcpExchangeRates <- genExchangeRates
+    gcpCooldownParameters <- genCooldownParametersV1
+    gcpTimeParameters <- SomeParam <$> genTimeParametersV1
+    gcpAccountCreationLimit <- arbitrary
+    gcpRewardParameters <- genRewardParameters
+    gcpFoundationAccount <- genAccountAddress
+    gcpPoolParameters <- genPoolParametersV1
+    gcpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
+    gcpValidatorScoreParameters <- SomeParam <$> genValidatorScoreParameters
+    gcpMaxLockDuration <- SomeParam <$> genDuration
     return GenesisChainParameters{..}
 
 genCooldownParametersV0 :: Gen (CooldownParameters' 'CooldownParametersVersion0)
@@ -742,6 +790,7 @@ genEvent spv =
             ++ maybeUpgrade
             ++ maybeSuspendEvents
             ++ maybeTokenEvents
+            ++ maybeLockEvents
         )
   where
     maybeUpgrade = if supportsUpgradableContracts spv then [Upgraded <$> genCAddress <*> genModuleRef <*> genModuleRef] else []
@@ -817,6 +866,21 @@ genEvent spv =
               TokenCreated <$> genCreatePLT
             ]
         | otherwise = []
+    maybeLockEvents
+        | supportsPLTLocks spv =
+            [ LockCreated <$> genLockId <*> genRawCbor,
+              LockDestroyed <$> genLockId,
+              LockAmount <$> genTokenHolder <*> genLockId <*> genTokenId <*> genTokenAmount,
+              UnlockAmount <$> genTokenHolder <*> genLockId <*> genTokenId <*> genTokenAmount
+            ]
+        | otherwise = []
+
+genTokenModuleRejectReason :: Gen TokenModuleRejectReason
+genTokenModuleRejectReason = do
+    tmrrTokenId <- genTokenId
+    tmrrType <- genTokenEventType
+    tmrrDetails <- oneof [return Nothing, Just <$> genTokenEventDetails]
+    return TokenModuleRejectReason{..}
 
 instance Arbitrary RejectReason where
     arbitrary =
@@ -874,7 +938,18 @@ instance Arbitrary RejectReason where
               DelegationTargetNotABaker <$> genBakerId,
               return StakeOverMaximumThresholdForPool,
               return PoolWouldBecomeOverDelegated,
-              return PoolClosed
+              return PoolClosed,
+              NonExistentTokenId <$> genTokenId,
+              TokenUpdateTransactionFailed <$> genTokenModuleRejectReason,
+              NonExistentLockId <$> genLockId,
+              LockExpired <$> genLockId,
+              LockFundNotAuthorized <$> genLockAccountRejectReasonDetails,
+              LockSendNotAuthorized <$> genLockAccountRejectReasonDetails,
+              LockReleaseNotAuthorized <$> genLockAccountRejectReasonDetails,
+              LockCancelNotAuthorized <$> genLockAccountRejectReasonDetails,
+              LockTokenNotPermitted <$> genLockTokenRejectReasonDetails,
+              LockRecipientNotPermitted <$> genLockAccountRejectReasonDetails,
+              LockDurationTooLong <$> genLockId
             ]
 
 genValidResult :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen ValidResult
@@ -1046,6 +1121,7 @@ genAuthorizations = do
     asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure (sing @auv)) genAccessStructure
     asTimeParameters <- conditionallyA (sSupportsTimeParameters (sing @auv)) genAccessStructure
     asCreatePLT <- conditionallyA (sSupportsCreatePLT (sing @auv)) genAccessStructure
+    asTokenParameters <- conditionallyA (sSupportsTokenParameters (sing @auv)) genAccessStructure
     return Authorizations{..}
 
 genProtocolUpdate :: Gen ProtocolUpdate
@@ -1112,10 +1188,8 @@ genGASRewards = do
     return GASRewards{..}
 
 -- | Generate a token parameter consisting of up to 1000 arbitrary bytes.
-genTokenParameter :: Gen TokenParameter
-genTokenParameter = do
-    n <- chooseBoundedIntegral (0, 1000)
-    TokenParameter <$> genShortByteStringLen n
+genRawCbor :: Gen RawCbor
+genRawCbor = rawCborFromBytes <$> Generators.genByteString
 
 -- | Generate an reference to a token module (always 32 bytes).
 genTokenModuleRef :: Gen TokenModuleRef
@@ -1205,6 +1279,19 @@ genTokenEventDetails = do
     len <- chooseBoundedIntegral (0, 1000)
     TokenEventDetails . BSS.pack <$> genUtf8String len
 
+-- | Generate an arbitrary 'LockId'. Although technically sequence numbers (nonces) start at 1,
+--  this generator can produce 'LockId's with sequence number 0.
+genLockId :: Gen LockId
+genLockId = LockId <$> arbitrary <*> arbitrary <*> arbitrary
+
+-- | Generate arbitrary lock reject reason details involving an account.
+genLockAccountRejectReasonDetails :: Gen LockAccountRejectReasonDetails
+genLockAccountRejectReasonDetails = LockAccountRejectReasonDetails <$> genLockId <*> genAccountAddress
+
+-- | Generate arbitrary lock reject reason details involving a token.
+genLockTokenRejectReasonDetails :: Gen LockTokenRejectReasonDetails
+genLockTokenRejectReasonDetails = LockTokenRejectReasonDetails <$> genLockId <*> genTokenId
+
 -- | Generate an arbitrary 'CreatePLT' chain update, consisting of:
 --   * Random token symbol up to 255 bytes valid UTF-8.
 --   * Token module reference from arbitrary bytes.
@@ -1217,7 +1304,7 @@ genCreatePLT = do
     _cpltTokenModule <- genTokenModuleRef
     _cpltGovernanceAccount <- genAccountAddress
     _cpltDecimals <- chooseBoundedIntegral (0, 255)
-    _cpltInitializationParameters <- genTokenParameter
+    _cpltInitializationParameters <- genRawCbor
     return CreatePLT{..}
 
 genHigherLevelKeys :: Gen (HigherLevelKeys a)
@@ -1237,6 +1324,7 @@ genRootUpdate sauv =
             SAuthorizationsVersion0 -> Level2KeysRootUpdate <$> genAuthorizations
             SAuthorizationsVersion1 -> Level2KeysRootUpdateV1 <$> genAuthorizations
             SAuthorizationsVersion2 -> Level2KeysRootUpdateV2 <$> genAuthorizations
+            SAuthorizationsVersion3 -> Level2KeysRootUpdateV3 <$> genAuthorizations
         ]
 
 genLevel1Update :: (IsAuthorizationsVersion auv) => SAuthorizationsVersion auv -> Gen Level1Update
@@ -1247,10 +1335,11 @@ genLevel1Update sauv =
             SAuthorizationsVersion0 -> Level2KeysLevel1Update <$> genAuthorizations
             SAuthorizationsVersion1 -> Level2KeysLevel1UpdateV1 <$> genAuthorizations
             SAuthorizationsVersion2 -> Level2KeysLevel1UpdateV2 <$> genAuthorizations
+            SAuthorizationsVersion3 -> Level2KeysLevel1UpdateV3 <$> genAuthorizations
         ]
 
-genLevel2UpdatePayload :: SChainParametersVersion cpv -> Gen UpdatePayload
-genLevel2UpdatePayload scpv =
+genLevel2UpdatePayloadForChainParameters :: SChainParametersVersion cpv -> Gen UpdatePayload
+genLevel2UpdatePayloadForChainParameters scpv =
     case scpv of
         SChainParametersV0 ->
             oneof
@@ -1310,11 +1399,33 @@ genLevel2UpdatePayload scpv =
                   BlockEnergyLimitUpdatePayload . Energy <$> arbitrary,
                   GASRewardsCPV2UpdatePayload <$> genGASRewards
                 ]
+        SChainParametersV4 ->
+            oneof
+                [ ProtocolUpdatePayload <$> genProtocolUpdate,
+                  EuroPerEnergyUpdatePayload <$> genExchangeRate,
+                  MicroGTUPerEuroUpdatePayload <$> genExchangeRate,
+                  FoundationAccountUpdatePayload <$> genAccountAddress,
+                  MintDistributionCPV1UpdatePayload <$> genMintDistribution,
+                  TransactionFeeDistributionUpdatePayload <$> genTransactionFeeDistribution,
+                  CooldownParametersCPV1UpdatePayload <$> genCooldownParametersV1,
+                  PoolParametersCPV1UpdatePayload <$> genPoolParametersV1,
+                  TimeParametersCPV1UpdatePayload <$> genTimeParametersV1,
+                  TimeoutParametersUpdatePayload <$> genTimeoutParameters,
+                  MinBlockTimeUpdatePayload <$> genDuration,
+                  BlockEnergyLimitUpdatePayload . Energy <$> arbitrary,
+                  GASRewardsCPV2UpdatePayload <$> genGASRewards
+                ]
+
+genLevel2UpdatePayload :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen UpdatePayload
+genLevel2UpdatePayload spv =
+    oneof $
+        [genLevel2UpdatePayloadForChainParameters $ sChainParametersVersionFor spv]
+            ++ [MaxLockDurationUpdatePayload <$> genDuration | supportsMaxLockDurationUpdate spv]
 
 genUpdatePayload :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen UpdatePayload
 genUpdatePayload spv =
     oneof
-        [ genLevel2UpdatePayload $ sChainParametersVersionFor spv,
+        [ genLevel2UpdatePayload spv,
           RootUpdatePayload <$> genRootUpdate (sAuthorizationsVersionFor spv),
           Level1UpdatePayload <$> genLevel1Update (sAuthorizationsVersionFor spv)
         ]
@@ -1332,7 +1443,7 @@ genLevel2RawUpdateInstruction scpv = do
     ruiSeqNumber <- Nonce <$> arbitrary
     ruiEffectiveTime <- oneof [return 0, TransactionTime <$> arbitrary]
     ruiTimeout <- TransactionTime <$> arbitrary
-    ruiPayload <- genLevel2UpdatePayload scpv
+    ruiPayload <- genLevel2UpdatePayloadForChainParameters scpv
     return RawUpdateInstruction{..}
 
 -- | Generate an 'Authorizations' structure and the list of key pairs.
@@ -1348,6 +1459,7 @@ genAuthorizationsAndKeys thr = do
             SAuthorizationsVersion0 -> fromIntegral thr * 12
             SAuthorizationsVersion1 -> fromIntegral thr * 14
             SAuthorizationsVersion2 -> fromIntegral thr * 15
+            SAuthorizationsVersion3 -> fromIntegral thr * 16
     kps <- vectorOf nKeys genSigSchemeKeyPair
     let asKeys = Vec.fromList $ correspondingVerifyKey <$> kps
     let genAccessStructure = do
@@ -1369,6 +1481,7 @@ genAuthorizationsAndKeys thr = do
     asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure (sing @auv)) genAccessStructure
     asTimeParameters <- conditionallyA (sSupportsTimeParameters (sing @auv)) genAccessStructure
     asCreatePLT <- conditionallyA (sSupportsCreatePLT (sing @auv)) genAccessStructure
+    asTokenParameters <- conditionallyA (sSupportsTokenParameters (sing @auv)) genAccessStructure
     return (Authorizations{..}, kps)
 
 genLevel1Keys ::

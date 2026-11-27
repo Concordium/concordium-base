@@ -9,6 +9,7 @@ copyright:           "Concordium AG"
 extra-source-files:
 - README.md
 - LICENSE
+- testdata/*.dat
 - ./concordium-grpc-api/v2/concordium/kernel.proto
 - ./concordium-grpc-api/v2/concordium/protocol-level-tokens.proto
 - ./concordium-grpc-api/v2/concordium/types.proto

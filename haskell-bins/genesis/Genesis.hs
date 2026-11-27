@@ -35,6 +35,7 @@ import qualified Concordium.Genesis.Data.Base as GDBase
 import qualified Concordium.Genesis.Data.BaseV1 as GDBaseV1
 import qualified Concordium.Genesis.Data.P1 as P1
 import qualified Concordium.Genesis.Data.P10 as P10
+import qualified Concordium.Genesis.Data.P11 as P11
 import qualified Concordium.Genesis.Data.P2 as P2
 import qualified Concordium.Genesis.Data.P3 as P3
 import qualified Concordium.Genesis.Data.P4 as P4
@@ -254,6 +255,8 @@ main =
                                 gd@(GDP9 P9.GDP9Initial{..}) -> printInitial SP9 (genesisBlockHash gd) (CGPV1 genesisCore) genesisInitialState
                             SP10 -> case gdata of
                                 gd@(GDP10 P10.GDP10Initial{..}) -> printInitial SP10 (genesisBlockHash gd) (CGPV1 genesisCore) genesisInitialState
+                            SP11 -> case gdata of
+                                gd@(GDP11 P11.GDP11Initial{..}) -> printInitial SP11 (genesisBlockHash gd) (CGPV1 genesisCore) genesisInitialState
 
 printInitial :: SProtocolVersion pv -> BlockHash -> VersionedCoreGenesisParameters -> GDBase.GenesisState pv -> IO ()
 printInitial spv gh vcgp GDBase.GenesisState{..} = do
@@ -434,7 +437,12 @@ printInitial spv gh vcgp GDBase.GenesisState{..} = do
                 Just acc -> show (gaAddress acc) ++ " (index " ++ show _cpFoundationAccount ++ ")"
         putStrLn $ "  - foundation account: " ++ foundAcc
 
-    printInitialChainParametersV3 :: ChainParameters' 'ChainParametersV3 -> IO ()
+    printInitialChainParametersV3 ::
+        ( CooldownParametersVersionFor cpv ~ 'CooldownParametersVersion1,
+          PoolParametersVersionFor cpv ~ 'PoolParametersVersion1,
+          ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion1
+        ) =>
+        ChainParameters' cpv -> IO ()
     printInitialChainParametersV3 ChainParameters{..} = do
         putStrLn ""
         putStrLn "Chain parameters: "
@@ -470,6 +478,9 @@ printInitial spv gh vcgp GDBase.GenesisState{..} = do
             SChainParametersV1 -> printInitialChainParametersV1 genesisChainParameters
             SChainParametersV2 -> printInitialChainParametersV2 genesisChainParameters
             SChainParametersV3 -> printInitialChainParametersV3 genesisChainParameters
+            SChainParametersV4 -> do
+                printInitialChainParametersV3 genesisChainParameters
+                putStrLn $ "  - maximum lock duration: " ++ show (unOParam (_cpMaxLockDuration genesisChainParameters))
 
 printCooldownParametersV1 ::
     CooldownParameters' 'CooldownParametersVersion1 ->
