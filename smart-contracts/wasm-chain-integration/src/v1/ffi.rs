@@ -20,13 +20,7 @@ use super::trie::{
 };
 use crate::v1::*;
 use concordium_contracts_common::OwnedReceiveName;
-use concordium_wasm::{
-    artifact::{BorrowedArtifact, CompiledFunction},
-    output::Output,
-    utils::{parse_artifact, InstantiatedModule},
-    validate::ValidationConfig,
-    CostConfigurationV0, CostConfigurationV1,
-};
+use concordium_wasm::{artifact::{BorrowedArtifact, CompiledFunction}, output::Output, utils::{parse_artifact, InstantiatedModule}, validate::ValidationConfig, CostConfigurationV0, CostConfigurationV1, CostConfigurationV2};
 
 use crate::v0::ffi::slice_from_c_bytes;
 
@@ -425,6 +419,12 @@ unsafe extern "C" fn validate_and_process_v1(
         1 => utils::instantiate_with_metering::<ProcessedImports>(
             validation_config,
             CostConfigurationV1,
+            allowed_imports,
+            wasm_bytes,
+        ),
+        2 => utils::instantiate_with_metering::<ProcessedImports>(
+            validation_config,
+            CostConfigurationV2,
             allowed_imports,
             wasm_bytes,
         ),

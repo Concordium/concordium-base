@@ -1,11 +1,5 @@
 use crate::v0::*;
-use concordium_wasm::{
-    artifact::CompiledFunctionBytes,
-    output::Output,
-    utils::{parse_artifact, InstantiatedModule},
-    validate::ValidationConfig,
-    CostConfigurationV0, CostConfigurationV1,
-};
+use concordium_wasm::{artifact::CompiledFunctionBytes, output::Output, utils::{parse_artifact, InstantiatedModule}, validate::ValidationConfig, CostConfigurationV0, CostConfigurationV1, CostConfigurationV2};
 use libc::size_t;
 
 /// All functions in this module operate on serialized artifact bytes. For
@@ -208,6 +202,12 @@ unsafe extern "C" fn validate_and_process_v0(
         1 => utils::instantiate_with_metering::<ProcessedImports>(
             ValidationConfig::V0,
             CostConfigurationV1,
+            &ConcordiumAllowedImports,
+            wasm_bytes,
+        ),
+        2 => utils::instantiate_with_metering::<ProcessedImports>(
+            ValidationConfig::V0,
+            CostConfigurationV2,
             &ConcordiumAllowedImports,
             wasm_bytes,
         ),

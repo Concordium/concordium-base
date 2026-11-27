@@ -372,9 +372,8 @@ pub(crate) mod cost_v0 {
     }
 }
 
-/// Cost configuration for the initial version of the execution engine used
-/// in node versions 1-6. This is more expensive compared to
-/// CostConfigurationV1.
+/// Cost configuration matching the register based version of the execution engine
+/// introduced on P7.
 pub struct CostConfigurationV1;
 
 impl CostConfiguration for CostConfigurationV1 {
@@ -665,6 +664,52 @@ pub(crate) mod cost_v1 {
     /// parameters.
     pub(crate) const fn invoke_after(num_locals: u32) -> Energy {
         (num_locals / 16) as Energy
+    }
+}
+
+/// Cost configuration with minor adjustments to [`CostConfigurationV1`]. Specifically,
+/// local set/get operations are no longer free, since they may compile to a copy operation.  
+pub struct CostConfigurationV2;
+
+impl CostConfiguration for CostConfigurationV2 {
+    fn get_cost(
+        &self,
+        instr: &OpCode,
+        labels: &[BlockType],
+        module: &impl HasTransformationContext,
+    ) -> TransformationResult<Energy> {
+        cost_v2::get_cost(instr, labels, module)
+    }
+
+    fn invoke_after(&self, num_locals: u32) -> Energy {
+        cost_v1::invoke_after(num_locals)
+    }
+
+    fn branch(&self, _label_arity: usize) -> Energy {
+        cost_v1::JUMP
+    }
+}
+
+/// Helpers related to cost assignment for [`CostConfigurationV2`].
+pub(crate) mod cost_v2 {
+    use super::*;
+
+    /// Charge 1 since setting
+    pub const SET_LOCAL: Energy = 1;
+    pub const TEE_LOCAL: Energy = 1;
+
+    pub(crate) fn get_cost(
+        instr: &OpCode,
+        labels: &[BlockType],
+        module: &impl HasTransformationContext,
+    ) -> TransformationResult<Energy> {
+        use crate::types::OpCode::*;
+        let res = match instr {
+            LocalSet(_) => SET_LOCAL,
+            LocalTee(_) => TEE_LOCAL,
+            _ => cost_v1::get_cost(instr, labels, module)?,
+        };
+        Ok(res)
     }
 }
 
