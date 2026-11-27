@@ -694,7 +694,7 @@ impl CostConfiguration for CostConfigurationV2 {
 pub(crate) mod cost_v2 {
     use super::*;
 
-    /// Charge 1 since setting
+    /// Charge 1 since setting locals, since they may be compiled to a copy operation.
     pub const SET_LOCAL: Energy = 1;
     pub const TEE_LOCAL: Energy = 1;
 
