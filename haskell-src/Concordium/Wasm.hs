@@ -182,7 +182,8 @@ import Concordium.Utils.Serialization
 -- | Version of the cost semantics to assign to modules. This cost assignment is
 -- indepenent of the module version below. It is defined by a protocol version.
 -- The new, reduced cost assignment @CSV1@ is introduced in protocol 7.
-data CostSemanticsVersion = CSV0 | CSV1
+-- In protocol 11 the cost assignment @CSV2@ makes adjustments to @CSV1@.
+data CostSemanticsVersion = CSV0 | CSV1 | CSV2
 
 pvCostSemanticsVersion :: SProtocolVersion pv -> CostSemanticsVersion
 pvCostSemanticsVersion = \case
@@ -196,7 +197,7 @@ pvCostSemanticsVersion = \case
     SP8 -> CSV1
     SP9 -> CSV1
     SP10 -> CSV1
-    SP11 -> CSV1
+    SP11 -> CSV2
 
 -- | Convert the version to a Word8. This is used when transferring information
 --  via FFI.
@@ -204,6 +205,7 @@ costSemanticsVersionToWord8 :: CostSemanticsVersion -> Word8
 costSemanticsVersionToWord8 = \case
     CSV0 -> 0
     CSV1 -> 1
+    CSV2 -> 2
 
 -- | Supported versions of Wasm modules. This version defines available host
 --  functions, their semantics, and limitations of contracts.

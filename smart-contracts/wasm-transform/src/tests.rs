@@ -90,7 +90,7 @@ fn test_sign_extension() -> anyhow::Result<()> {
 }
 
 /// Test that the interpreter rejects execution paths that executes too many copy instructions
-/// compared to the energy they tick.
+/// compared to the energy they tick, when `CopyMeteringEnabled::True` is set.
 #[test]
 fn test_copy_instruction_limit() {
     let source = include_bytes!("../testdata/copy-runtime-metering.wasm");

@@ -4,7 +4,7 @@ use concordium_wasm::{
     output::Output,
     utils::{parse_artifact, InstantiatedModule},
     validate::ValidationConfig,
-    CostConfigurationV0, CostConfigurationV1,
+    CostConfigurationV0, CostConfigurationV1, CostConfigurationV2,
 };
 use libc::size_t;
 
@@ -42,6 +42,7 @@ unsafe extern "C" fn call_init_v0(
     limit_logs_and_return_values: u8,
     energy: InterpreterEnergy,
     output_len: *mut size_t,
+    enable_copy_metering: u8, // Non-zero if runtime copy metering is enabled.
 ) -> *mut u8 {
     let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len);
     let artifact: BorrowedArtifactV0 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
@@ -57,6 +58,11 @@ unsafe extern "C" fn call_init_v0(
         let init_ctx =
             deserial_init_context(slice_from_c_bytes!(init_ctx_bytes, init_ctx_bytes_len))
                 .expect("Precondition violation: invalid init ctx given by host.");
+        let copy_metering_enabled = if enable_copy_metering != 0 {
+            CopyMeteringEnabled::True
+        } else {
+            CopyMeteringEnabled::False
+        };
         match std::str::from_utf8(init_name) {
             Ok(name) => {
                 let res = invoke_init(
@@ -69,6 +75,7 @@ unsafe extern "C" fn call_init_v0(
                         energy,
                     },
                     limit_logs_and_return_values,
+                    copy_metering_enabled,
                 );
                 match res {
                     Ok(result) => {
@@ -106,6 +113,7 @@ unsafe extern "C" fn call_receive_v0(
     limit_logs_and_return_values: u8,
     energy: InterpreterEnergy,
     output_len: *mut size_t,
+    enable_copy_metering: u8, // Non-zero if runtime copy metering is enabled.
 ) -> *mut u8 {
     let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len);
     let artifact: BorrowedArtifactV0 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
@@ -124,6 +132,11 @@ unsafe extern "C" fn call_receive_v0(
         let state = slice_from_c_bytes!(state_bytes, state_bytes_len);
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len);
         let limit_logs_and_return_values = limit_logs_and_return_values != 0;
+        let copy_metering_enabled = if enable_copy_metering != 0 {
+            CopyMeteringEnabled::True
+        } else {
+            CopyMeteringEnabled::False
+        };
         match std::str::from_utf8(receive_name) {
             Ok(name) => {
                 let res = invoke_receive(
@@ -138,6 +151,7 @@ unsafe extern "C" fn call_receive_v0(
                     state,
                     max_parameter_size,
                     limit_logs_and_return_values,
+                    copy_metering_enabled,
                 );
                 match res {
                     Ok(result) => {
@@ -208,6 +222,12 @@ unsafe extern "C" fn validate_and_process_v0(
         1 => utils::instantiate_with_metering::<ProcessedImports>(
             ValidationConfig::V0,
             CostConfigurationV1,
+            &ConcordiumAllowedImports,
+            wasm_bytes,
+        ),
+        2 => utils::instantiate_with_metering::<ProcessedImports>(
+            ValidationConfig::V0,
+            CostConfigurationV2,
             &ConcordiumAllowedImports,
             wasm_bytes,
         ),

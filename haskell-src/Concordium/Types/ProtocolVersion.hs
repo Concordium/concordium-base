@@ -307,6 +307,7 @@ module Concordium.Types.ProtocolVersion (
     omitCustomSectionFromSize,
     supportsAccountSignatureChecks,
     supportsContractInspectionQueries,
+    applyCopyMetering,
     supportsEncryptedTransfers,
     supportsUnscopedTokenUpdate,
     supportsPLTLocks,
@@ -1043,6 +1044,23 @@ supportsContractInspectionQueries = \case
     SP9 -> True
     SP10 -> True
     SP11 -> True
+
+-- | Whether to apply runtime copy instruction metering. This was a temporary solution
+-- before the cost configuration was changed on P11 to charge non-zero cost for local set/tee WASM
+-- instructions.
+applyCopyMetering :: SProtocolVersion pv -> Bool
+applyCopyMetering = \case
+    SP1 -> True
+    SP2 -> True
+    SP3 -> True
+    SP4 -> True
+    SP5 -> True
+    SP6 -> True
+    SP7 -> True
+    SP8 -> True
+    SP9 -> True
+    SP10 -> True
+    SP11 -> False
 
 -- | Whether the protocol version supports encrypting balances and sending encrypted transfers.
 --  (Disabled in 'P7' and onwards.)
