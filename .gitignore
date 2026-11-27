@@ -10,6 +10,7 @@ Concordium.cabal
 *.pdf
 *.csv
 *.svg
+!identity-provider-service/html/assets/concordium-logo-black.svg
 
 # CMake build folder
 build/

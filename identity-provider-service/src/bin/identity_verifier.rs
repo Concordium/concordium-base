@@ -108,15 +108,27 @@ fn render_attribute_form(
     let attributes = read_template(match identity_type {
         IdentityType::Personal => "personal_attributes.html",
         IdentityType::Company => "company_attributes.html",
-    })?;
+    })?
+    .replace("$country_options$", &read_template("country_options.html")?);
     let login = if require_login {
         read_template("login.html")?
     } else {
         String::new()
     };
+    let (identity_label, identity_kind) = match identity_type {
+        IdentityType::Personal => ("Personal", "personal"),
+        IdentityType::Company => ("Company", "company"),
+    };
     Ok(read_template("attribute_form.html")?
         .replace("$login_fields$", &login)
-        .replace("$attribute_fields$", &attributes))
+        .replace("$attribute_fields$", &attributes)
+        .replace("$identity_label$", identity_label)
+        .replace("$identity_kind$", identity_kind)
+        .replace(
+            "$logo$",
+            &read_template("assets/concordium-logo-black.svg")?,
+        )
+        .replace("$script$", &read_template("form.js")?))
 }
 
 /// A small binary that simulates an identity verifier that always verifies an
@@ -403,13 +415,27 @@ mod tests {
                 let is_company = *identity_type == IdentityType::Company;
                 assert_eq!(html.contains("name=\"legalName\""), is_company);
                 assert_eq!(html.contains("name=\"firstName\""), !is_company);
-                assert_eq!(html.contains("function validateCompany()"), is_company);
+                assert!(html.contains("function validateCompany()"));
                 assert_eq!(html.contains("name=\"username\""), *require_login);
                 assert_eq!(html.contains("name=\"password\""), *require_login);
                 assert!(html.contains("name=\"expiry\""));
                 assert!(!html.contains("identityType"));
                 assert!(!html.contains("$login_fields$"));
                 assert!(!html.contains("$attribute_fields$"));
+                for placeholder in &[
+                    "$country_options$",
+                    "$identity_label$",
+                    "$identity_kind$",
+                    "$logo$",
+                    "$script$",
+                ] {
+                    assert!(!html.contains(placeholder));
+                }
+                assert!(html.contains("action=\"/api/submit\""));
+                assert!(html.contains("method=\"post\""));
+                assert!(html.contains("<svg"));
+                assert!(html.contains("id=\"expiry-year\""));
+                assert!(!html.contains("Prototype settings"));
                 for placeholder in &[
                     "$id_cred_pub$",
                     "$id_cred_pub_signature$",
