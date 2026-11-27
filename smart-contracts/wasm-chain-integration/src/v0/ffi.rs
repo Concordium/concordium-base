@@ -42,7 +42,7 @@ unsafe extern "C" fn call_init_v0(
     limit_logs_and_return_values: u8,
     energy: InterpreterEnergy,
     output_len: *mut size_t,
-    enable_copy_metering: u8, // non-zero if runtime copy metering is supported.
+    enable_copy_metering: u8, // Non-zero if runtime copy metering is enabled.
 ) -> *mut u8 {
     let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len);
     let artifact: BorrowedArtifactV0 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
@@ -113,7 +113,7 @@ unsafe extern "C" fn call_receive_v0(
     limit_logs_and_return_values: u8,
     energy: InterpreterEnergy,
     output_len: *mut size_t,
-    enable_copy_metering: u8, // non-zero if runtime copy metering is supported.
+    enable_copy_metering: u8, // Non-zero if runtime copy metering is enabled.
 ) -> *mut u8 {
     let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len);
     let artifact: BorrowedArtifactV0 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)

@@ -2442,6 +2442,7 @@ pub fn invoke_receive_from_source<
 /// Invokes a receive-function from a given **serialized** Wasm module. Before
 /// execution the Wasm module is injected with cost metering.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+#[allow(clippy::too_many_arguments)]
 pub fn invoke_receive_with_metering_from_source<
     BackingStore: BackingStoreLoad,
     Ctx1: HasReceiveContext,
