@@ -1,5 +1,11 @@
 use crate::v0::*;
-use concordium_wasm::{artifact::CompiledFunctionBytes, output::Output, utils::{parse_artifact, InstantiatedModule}, validate::ValidationConfig, CostConfigurationV0, CostConfigurationV1, CostConfigurationV2};
+use concordium_wasm::{
+    artifact::CompiledFunctionBytes,
+    output::Output,
+    utils::{parse_artifact, InstantiatedModule},
+    validate::ValidationConfig,
+    CostConfigurationV0, CostConfigurationV1, CostConfigurationV2,
+};
 use libc::size_t;
 
 /// All functions in this module operate on serialized artifact bytes. For

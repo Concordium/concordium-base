@@ -20,7 +20,13 @@ use super::trie::{
 };
 use crate::v1::*;
 use concordium_contracts_common::OwnedReceiveName;
-use concordium_wasm::{artifact::{BorrowedArtifact, CompiledFunction}, output::Output, utils::{parse_artifact, InstantiatedModule}, validate::ValidationConfig, CostConfigurationV0, CostConfigurationV1, CostConfigurationV2};
+use concordium_wasm::{
+    artifact::{BorrowedArtifact, CompiledFunction},
+    output::Output,
+    utils::{parse_artifact, InstantiatedModule},
+    validate::ValidationConfig,
+    CostConfigurationV0, CostConfigurationV1, CostConfigurationV2,
+};
 
 use crate::v0::ffi::slice_from_c_bytes;
 

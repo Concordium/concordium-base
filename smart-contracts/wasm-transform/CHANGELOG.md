@@ -1,5 +1,10 @@
 # Changelog
 
+## unreleased
+
+- There is now a new cost configuration `CostConfigurationV2` that charges non-zero energy
+  for `LocalSet/Tee` WASM instructions.
+
 ## concordium-wasm 6.0.0 (2026-10-09)
 
 - A temporary option `CopyMeteringEnabled` has been added to `Machine::run`. It is set to `True`

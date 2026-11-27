@@ -667,7 +667,7 @@ pub(crate) mod cost_v1 {
     }
 }
 
-/// Cost configuration with minor adjustments to [`CostConfigurationV1`]. Specifically,
+/// Cost configuration with a minor adjustment to [`CostConfigurationV1`]. Specifically,
 /// local set/get operations are no longer free, since they may compile to a copy operation.  
 pub struct CostConfigurationV2;
 
